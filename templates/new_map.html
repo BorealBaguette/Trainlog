@@ -35,7 +35,13 @@
     </div>
 
     <div class="control-group" id="yearSelector" style="display: none;">
-        <label class="control-label">{{ selectYears }}</label>
+        <div class="control-label year-label-row">
+            <label for="yearSelect">{{ selectYears }}</label>
+            <span class="year-bulk">
+                <button type="button" onclick="selectAllYears()">{{ all }}</button>
+                <button type="button" onclick="clearYears()">{{ tsClearBtn }}</button>
+            </span>
+        </div>
         <div class="select-wrapper">
             <select id="yearSelect" onchange="addYear()">
                 <option value="">{{ addYear }}...</option>
@@ -133,24 +139,27 @@
 
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.5/js.cookie.min.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/map_trip_cache.js') }}"></script>
 
 <script>
 // Global variables
 
-const CACHE_VERSION = 'v2'; // Change this when you need to clear all caches
+// The previous cache (whole trips + paths per user in localforage) is replaced
+// by MapTripCache; free the space it held, which matters most on iPhones.
+localforage.keys().then(keys => {
+    keys.filter(k => k.startsWith('trips_') || k.startsWith('lastLocal_'))
+        .forEach(k => localforage.removeItem(k));
+}).catch(() => {});
 
-if (!Cookies.get(`cacheCleared_${CACHE_VERSION}`)) {
-    localforage.clear().then(function() {
-        Cookies.set(`cacheCleared_${CACHE_VERSION}`, 'true', { expires: 30 });
-        console.log(`Cache cleared to ${CACHE_VERSION}`)
-    }).catch(function(err) {
-        console.error('Failed to clear localforage cache:', err);
-    });
-}
+const tripLoader = MapTripCache.createLoader({
+    tripsUrl: '{{ url_for("public_get_map_trips", username=username) if public else url_for("get_map_trips", username=username) }}',
+    pathsUrl: '{{ url_for("public_get_map_paths", username=username) if public else url_for("get_map_paths", username=username) }}'
+});
 
 let map;
 let trips = [];
+let displayedFeatures = [];
 let selectedYears = new Set();
 let activeFilters = {
     viewMode: 'year',
@@ -197,7 +206,6 @@ async function initMap() {
         container: 'map',
         tileserver: serverType,
         useGlobe,
-        userLanguage: "{{langId}}",
         center,
         zoom
     });
@@ -228,80 +236,53 @@ function initializeTransportFilters() {
     });
 }
 
-// Load trips using localforage and API
-function loadTripsData() {
-    const username = "{{ username }}";
-    
-    // Clear cache if needed
-    if (!Cookies.get('cacheCleared')) {
-        localforage.clear().then(function() {
-            Cookies.set('cacheCleared', 'true', { expires: 30 });
-        }).catch(function(err) {
-            console.error('Failed to clear localforage cache:', err);
-        });
+// Draw the trips list kept on the device straight away, and only then ask the
+// server whether it is still current. Almost always it is and nothing else
+// happens; otherwise the map is updated in place (new, edited, deleted trips).
+async function loadTripsData() {
+    let cached = null;
+    try {
+        cached = await tripLoader.loadCached();
+    } catch (err) {
+        console.warn('Trips map: device cache unreadable', err);
     }
-    
-    // Check for cached data
-    localforage.getItem("lastLocal_" + username, function(error, lastLocal){
-        if (lastLocal === null) {
-            // No cache, fetch all
-            $.get('{{ url_for("public_getTripsPaths", username=username, lastLocal="all") if public else url_for("get_trip_paths", username=username, lastLocal="all") }}', function(data, status){
-                trips = data.trips;
-                processTrips();
-                localforage.setItem("trips_" + username, trips);
-                localforage.setItem("lastLocal_" + username, data.lastLocal);
-            });
-        } else {
-            // Cache exists, fetch updates
-            $.get('{{ url_for("public_getTripsPaths", username=username, lastLocal="") if public else url_for("get_trip_paths", username=username, lastLocal="") }}' + lastLocal, function(data, status){
-                localforage.getItem("trips_" + username, function(error, storedTrips){
-                    let currentTripIds = data.idList;
-                    trips = integrateChanges(storedTrips, data.trips, currentTripIds);
-                    processTrips();
-                    if (JSON.stringify(storedTrips) != JSON.stringify(trips)) {
-                        localforage.setItem("trips_" + username, trips);
-                        localforage.setItem("lastLocal_" + username, data.lastLocal);
-                    }
-                });
-            });
-        }
-    });
+    const fresh = tripLoader.revalidate();  // request goes out now, in parallel
+
+    if (cached) {
+        trips = cached;
+        processTrips();
+    }
+
+    let updated;
+    try {
+        updated = await fresh;
+    } catch (err) {
+        console.error('Failed to load trips:', err);
+        hideLoading();
+        return;
+    }
+    if (!updated) return;  // the cached list was current
+
+    trips = updated;
+    if (tripsProcessed) applyTripUpdate();
+    else processTrips();
 }
 
-// Integrate changes into existing data
-function integrateChanges(existingData, changes, currentTripIds) {
-    let dataMap = new Map();
-    for (let item of existingData) {
-        dataMap.set(item.trip.uid, item);
-    }
+// Set once the map has been set up for a non-empty trips list
+let tripsProcessed = false;
 
-    for (let item of changes) {
-        if (item.trip === null) {
-            dataMap.delete(item.trip.uid);
-        } else {
-            dataMap.set(item.trip.uid, item);
-        }
-    }
-
-    for (let [uid, item] of dataMap) {
-        if (!currentTripIds.includes(uid)) {
-            dataMap.delete(uid);
-        }
-    }
-
-    return Array.from(dataMap.values());
-}
-
-// Process trips and add to map
-function processTrips() {
+// Sort trips and fill the year / transport filters from them
+function prepareTrips() {
     const order = { past: 1, plannedFuture: 2, future: 3 };
+
+    trips.forEach(trip => MapLibreUtils.computeTimeStatus(trip));
 
     trips.sort((a, b) => {
         const timeOrder = order[a.time] - order[b.time];
         if (timeOrder !== 0) return timeOrder;
 
-        const dateA = a.utc_filtered_start_datetime;
-        const dateB = b.utc_filtered_start_datetime;
+        const dateA = a.trip.utc_filtered_start_datetime;
+        const dateB = b.trip.utc_filtered_start_datetime;
 
         if (dateA === -1) return 1;
         if (dateB === -1) return -1;
@@ -311,24 +292,23 @@ function processTrips() {
         return new Date(dateB) - new Date(dateA);
     });
 
-    if (trips.length === 0) {
-        hideLoading();
-        return;
-    }
-
     const years = new Set();
+    let hasUndatedPast = false;
     const visibleTypes = new Set();
 
     // Process trips to extract years and visible types
+    document.querySelectorAll('#transportFilters .filter-item').forEach(item => {
+        item.style.display = 'none';
+    });
     trips.forEach(trip => {
-        trip = MapLibreUtils.computeTimeStatus(trip);
-
         const checkbox = document.getElementById(`${trip.trip.type}Filter`);
         if (checkbox && checkbox.parentElement) {
             checkbox.parentElement.style.display = 'flex';
             visibleTypes.add(trip.trip.type);
         }
-        if (trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1)
+        if (trip.trip.start_datetime === -1)
+            hasUndatedPast = true;
+        else if (trip.trip.start_datetime !== 1)
             years.add(trip.trip.start_datetime.substring(0, 4));
     });
     
@@ -341,19 +321,75 @@ function processTrips() {
         option.textContent = year;
         yearSelect.appendChild(option);
     });
+    if (hasUndatedPast) {
+        const option = document.createElement('option');
+        option.value = 'undated';
+        option.textContent = yearLabel('undated');
+        yearSelect.appendChild(option);
+    }
+
+    tripYears = years;
+    tripTypes = visibleTypes;
+}
+
+// Years and transport types present in `trips` (set by prepareTrips)
+let tripYears = new Set();
+let tripTypes = new Set();
+
+// Zoom from which the map shows full-resolution paths (only for the trips in
+// view) instead of the ~22 m overview, which is under a pixel below it
+const DETAIL_ZOOM = 12;
+
+// The displayed trips go to the map as consecutive slices in time, each on
+// its own source with its own shadow + line layers, stacked oldest at the
+// bottom: a newer trip is drawn over older ones with its outline intact, and
+// inside a slice lines are drawn in time order too. Slices hold equal shares
+// of the points, so MapLibre processes each once (in parallel across its
+// workers) and the map fills in slice after slice, oldest first. One source
+// fed in steps would re-process everything at every step instead.
+const SLICE_COUNT = 10;
+const SLICE_SOURCES = Array.from({ length: SLICE_COUNT }, (_, i) => `trips-${i}`);
+
+// Layers on empty sources, oldest slice first so it ends up at the bottom.
+// Safe to call again — existing layers are kept.
+function buildSliceLayers() {
+    SLICE_SOURCES.forEach(sourceId => {
+        MapLibreUtils.addTripSliceLayers(map, sourceId, MapLibreUtils.MapConfig.transportTypes, {
+            onLayerClick: (e) => {
+                e.originalEvent.stopPropagation();
+                showPopup(e);
+            }
+        });
+    });
+}
+
+// Current trips blink: their line opacity reads this feature-state
+let pulseTargets = [];
+let pulseOn = false;
+setInterval(() => {
+    pulseOn = !pulseOn;
+    pulseTargets.forEach(target => map.setFeatureState(target, { pulse: pulseOn }));
+}, 1000);
+
+// Process trips and add to map
+function processTrips() {
+    if (trips.length === 0) {
+        hideLoading();
+        return;
+    }
+    tripsProcessed = true;
+
+    prepareTrips();
 
     // Load preferences BEFORE building layers
     loadPreferences();
 
-    const buildLayers = () => {
-        // Build trip layers using utilities
-        const features = MapLibreUtils.buildTripLayers(map, trips, MapLibreUtils.MapConfig.transportTypes, {
-            onLayerClick: (e) => {
-                e.originalEvent.stopPropagation();
-                showPopup(e);
-            },
-            visibleTypes: visibleTypes
-        });
+    const buildLayers = async () => {
+        // Reads tripYears/tripTypes now, not when scheduled: an update may
+        // have landed while the style was loading
+        const years = tripYears;
+        buildSliceLayers();
+        layersBuilt = true;
 
         // Handle year selection defaults ONLY if no preferences were loaded
         if (selectedYears.size === 0 && activeFilters.viewMode === 'year') {
@@ -368,21 +404,36 @@ function processTrips() {
             }
         }
 
-        // Update UI to match loaded preferences
+        // Update UI to match loaded preferences (also loads + draws the shown trips)
         updateSelectedYears();
         updateViewMode();
-
-        // Apply filters BEFORE fitting bounds
-        updateFilters();
-
-        // Fit bounds only to VISIBLE features after filters are applied
-        MapLibreUtils.fitBoundsToVisibleFeatures(map, features, activeFilters).then(({ center, zoom }) => {
-            localStorage.setItem('mapView', JSON.stringify({ lng: center.lng, lat: center.lat, zoom }));
+        // Frame the VISIBLE features before they go to the map, and without
+        // animation: the worker then tiles them once, for the final view,
+        // instead of re-tiling every zoom step of a fly-to
+        const firstDrawn = await refreshDisplayed(features => {
+            MapLibreUtils.fitBoundsToVisibleFeatures(map, features, activeFilters, null, { animate: false }).then(({ center, zoom }) => {
+                localStorage.setItem('mapView', JSON.stringify({ lng: center.lng, lat: center.lat, zoom }));
+            });
         });
 
-
-
+        // setData is asynchronous: keep the overlay until the first batch of
+        // lines is on screen; the others keep filling in behind it
+        await firstDrawn;
         hideLoading();
+
+        // Zoomed in, the full paths follow the view
+        let moveTimer = null;
+        map.on('moveend', () => {
+            clearTimeout(moveTimer);
+            moveTimer = setTimeout(() => {
+                if (map.getZoom() >= DETAIL_ZOOM || drawnLod === 'full') refreshDisplayed();
+            }, 250);
+        });
+
+        // Then every overview in the background, so switching filters is
+        // instant later (full paths are only ever fetched for the view)
+        await tripLoader.overview.ensure(trips);
+        tripLoader.prune();
     };
 
     if (map.isStyleLoaded()) {
@@ -390,6 +441,150 @@ function processTrips() {
     } else {
         map.once('load', buildLayers);
     }
+}
+
+let layersBuilt = false;
+
+// The server's list differs from the one drawn from the device cache: refresh
+// the filters and what's displayed, without moving the map
+function applyTripUpdate() {
+    prepareTrips();
+    if (!layersBuilt) return;  // buildLayers is still waiting for the style and will use the new list
+    updateSelectedYears();
+    updateFilters();
+    tripLoader.overview.ensure(trips);
+}
+
+// Resolves once MapLibre has processed a trips source's new data and drawn
+// it: the worker has tiled every tile of the current view (isSourceLoaded),
+// then one frame is rendered. Basemap tiles don't count.
+// Start it BEFORE setData. `maxMs` is only a safety net if no event comes.
+function tripsDrawn(sourceId, maxMs = 20000) {
+    return new Promise(resolve => {
+        const onData = (e) => {
+            if (e.sourceId !== sourceId || !map.isSourceLoaded(sourceId)) return;
+            done();
+            map.once('render', () => resolve());
+            map.triggerRepaint();
+        };
+        const done = () => {
+            clearTimeout(timer);
+            map.off('sourcedata', onData);
+        };
+        const timer = setTimeout(() => { done(); resolve(); }, maxMs);
+        map.on('sourcedata', onData);
+    });
+}
+
+// Whether a trip passes the current filters (mirrors updateLayerVisibility)
+function isDisplayed(trip) {
+    if (!activeFilters.transportTypes.has(trip.trip.type)) return false;
+    switch (activeFilters.viewMode) {
+        case 'past':
+            return trip.time === 'past';
+        case 'planned':
+            return trip.time === 'plannedFuture';
+        case 'projects':
+            return trip.time === 'future';
+        case 'year': {
+            const start = trip.trip.start_datetime;
+            const year = start === -1 ? 'undated' : start !== 1 ? start.substring(0, 4) : null;
+            return activeFilters.years.includes(year);
+        }
+        case 'all':
+        default:
+            return true;
+    }
+}
+
+// The view, widened by half its size on each side so that small pans at
+// detail zoom don't change which trips are loaded
+function viewBox() {
+    const b = map.getBounds();
+    const w = b.getEast() - b.getWest(), h = b.getNorth() - b.getSouth();
+    return [b.getWest() - w / 2, b.getSouth() - h / 2, b.getEast() + w / 2, b.getNorth() + h / 2];
+}
+
+// bbox / view as [west, south, east, north]; paths may run past ±180
+function intersects(bbox, view) {
+    if (!bbox || bbox[1] > view[3] || bbox[3] < view[1]) return false;
+    return [0, 360, -360].some(shift => bbox[0] + shift <= view[2] && bbox[2] + shift >= view[0]);
+}
+
+// Put the trips the filters show on the map, downloading any missing paths
+// first. The sources only ever hold what is displayed: hidden years cost the
+// map nothing. Zoomed out that is every shown trip's overview; from
+// DETAIL_ZOOM the full paths of those in view. A newer call supersedes one
+// still waiting. Resolves with a promise for the first batch being on screen
+// (null when nothing had to change).
+let refreshSeq = 0;
+let drawnKey = null;
+let drawnLod = null;
+// `beforeDraw(features)` gets the overview features before anything is
+// chosen or drawn, so it can move the camera (the detail set depends on it)
+async function refreshDisplayed(beforeDraw) {
+    const seq = ++refreshSeq;
+    const shown = trips.filter(isDisplayed);
+    await tripLoader.overview.ensure(shown);
+    if (seq !== refreshSeq) return null;
+    if (beforeDraw) beforeDraw(shown.map(t => tripLoader.overview.featureFor(t)).filter(f => f !== null));
+
+    let lod = 'overview', list = shown;
+    if (map.getZoom() >= DETAIL_ZOOM) {
+        const view = viewBox();
+        lod = 'full';
+        list = shown.filter(t => intersects(tripLoader.overview.bboxFor(t), view));
+        await tripLoader.full.ensure(list);
+        if (seq !== refreshSeq) return null;
+    }
+
+    const key = lod + list.map(t => t.trip.uid + ':' + t.v).join(',');
+    if (key === drawnKey) return null;
+    drawnKey = key;
+    drawnLod = lod;
+    displayedFeatures = [...list].sort(byTime)
+        .map(t => tripLoader[lod].featureFor(t)).filter(f => f !== null);
+    return drawSlices(displayedFeatures, seq);
+}
+
+// Oldest first: undated past trips (-1) before everything, projects (1) after
+function startTime(trip) {
+    const start = trip.trip.utc_filtered_start_datetime;
+    if (start === -1) return -Infinity;
+    if (start === 1) return Infinity;
+    return Date.parse(start.replace(' ', 'T') + 'Z');
+}
+function byTime(a, b) {
+    return (startTime(a) - startTime(b)) || (a.trip.uid - b.trip.uid);
+}
+
+// Cut the (time-ordered) features into SLICE_COUNT consecutive slices of
+// about equal point counts and hand them to MapLibre oldest first, yielding in
+// between so each slice is on its way to a worker (and on screen) while the
+// next is being serialised. Returns a promise for the first slice being drawn.
+async function drawSlices(features, seq) {
+    const total = features.reduce((n, f) => n + f.geometry.coordinates.length, 0);
+    const slices = SLICE_SOURCES.map(() => []);
+    let done = 0;
+    features.forEach(f => {
+        const i = Math.min(SLICE_COUNT - 1, Math.floor(done / total * SLICE_COUNT));
+        slices[i].push(f);
+        done += f.geometry.coordinates.length;
+    });
+
+    pulseTargets = [];
+    slices.forEach((slice, i) => slice.forEach(f => {
+        if (f.properties.time === 'current') pulseTargets.push({ source: SLICE_SOURCES[i], id: f.properties.id });
+    }));
+
+    const firstDrawn = tripsDrawn(SLICE_SOURCES[0]);
+    for (let i = 0; i < SLICE_COUNT; i++) {
+        if (seq !== refreshSeq) break;  // superseded: the newer call sets every source
+        const source = map.getSource(SLICE_SOURCES[i]);
+        if (source) source.setData({ type: 'FeatureCollection', features: slices[i] });
+        if (i < SLICE_COUNT - 1) await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return firstDrawn;
 }
 
 // Show popup for trip
@@ -484,16 +679,21 @@ function addYear() {
     select.value = '';
 }
 
+function yearLabel(year) {
+    return year === 'undated' ? {{ undatedPast|tojson }} : year;
+}
+
 // Update selected years display
 function updateSelectedYears() {
     const container = document.getElementById('selectedYears');
     container.innerHTML = '';
     
-    Array.from(selectedYears).sort().reverse().forEach(year => {
+    // Newest first, the 'undated' pseudo-year last
+    Array.from(selectedYears).sort((a, b) => (a === 'undated') - (b === 'undated') || b.localeCompare(a)).forEach(year => {
         const tag = document.createElement('div');
         tag.className = 'year-tag';
         tag.innerHTML = `
-            ${year}
+            ${yearLabel(year)}
             <button onclick="removeYear('${year}')">
                 <i class="fas fa-times"></i>
             </button>
@@ -502,6 +702,21 @@ function updateSelectedYears() {
     });
     
     activeFilters.years = Array.from(selectedYears);
+}
+
+// Select every year in the dropdown, so unwanted ones can then be removed one by one
+function selectAllYears() {
+    Array.from(document.getElementById('yearSelect').options).forEach(opt => {
+        if (opt.value) selectedYears.add(opt.value);
+    });
+    updateSelectedYears();
+    updateFilters();
+}
+
+function clearYears() {
+    selectedYears.clear();
+    updateSelectedYears();
+    updateFilters();
 }
 
 // Remove year from selection
@@ -531,8 +746,8 @@ function updateFilters() {
         return;
     }
     
-    // Use utility function to update layer visibility
-    MapLibreUtils.updateLayerVisibility(map, MapLibreUtils.MapConfig.transportTypes, activeFilters);
+    // The sources only ever hold the trips the filters show
+    if (trips.length) refreshDisplayed();
     
     savePreferences();
 }

@@ -25,7 +25,7 @@ INSERT INTO trips (
     notes,
     price,
     currency,
-    ticket_id,
+    ticket_ids,
     purchase_date,
     carbon,
     visibility,
@@ -33,6 +33,10 @@ INSERT INTO trips (
     arrival_delay,
     power_type,
     co2_override,
+    departure_platform,
+    arrival_platform,
+    origin_station_key,
+    destination_station_key,
     route_source
 )
 VALUES (
@@ -62,7 +66,7 @@ VALUES (
     :notes,
     :price,
     :currency,
-    :ticket_id,
+    CAST(:ticket_ids AS integer[]),
     :purchase_date,
     :carbon,
     :visibility,
@@ -70,6 +74,10 @@ VALUES (
     :arrival_delay,
     :power_type,
     :co2_override,
+    :departure_platform,
+    :arrival_platform,
+    :origin_station_key,
+    :destination_station_key,
     :route_source
 )
 RETURNING trip_id

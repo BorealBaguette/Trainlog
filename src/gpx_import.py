@@ -18,10 +18,9 @@ import gpxpy
 from werkzeug.datastructures import FileStorage
 
 from py.gps_cleaner import clean_gps_route
-from py.utils import get_flag_emoji, getDistance
+from py.utils import get_flag_emoji, getCountryFromCoordinates, getDistance
 from src.pg import pg_session
 from src.photon import photonRequest
-from src.routing import forward_routing_core
 from src.utils import getLocalDatetime
 
 logger = logging.getLogger(__name__)
@@ -46,6 +45,8 @@ def getAddressFromCoords(lat, lng):
 
     props = response_json["features"][0]["properties"]
     country_code = props.get("countrycode", "").upper()
+    if country_code in ("CN", "FI", "ES"):
+        country_code = getCountryFromCoordinates(lat, lng)["countryCode"]
     city = props.get("city") or props.get("county") or ""
     suburb = props.get("suburb") or props.get("district") or ""
 
@@ -384,7 +385,7 @@ def parse_trip_params(args):
         ("seat",),
         ("reg",),
         ("visibility",),
-        ("ticket_id",),
+        ("ticket_ids", "ticket_id"),
         ("currency",),
         ("notes",),
     ]:
@@ -414,7 +415,7 @@ def parse_trip_params(args):
     return params
 
 
-def build_trip_payload(row, trip_type, params, use_routing, flask_request):
+def build_trip_payload(row, trip_type, params, use_routing):
     """Build a ``(newTrip, path, altitude, timestamps, raw_waypoints)`` tuple ready
     for saveTripToDb from a parsed/staged GPX row, applying URL param overrides and
     optional smart routing. ``raw_waypoints`` is the untouched GPS trace, always
@@ -481,7 +482,7 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
         "seat",
         "reg",
         "visibility",
-        "ticket_id",
+        "ticket_ids",
     ):
         if params.get(key) is not None:
             newTrip[key] = params[key]
@@ -490,23 +491,13 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
     if params.get("co2Override") is not None:
         newTrip["co2Override"] = params["co2Override"]
 
+    newTrip["route_source"] = "gpx"
     if use_routing and trip_type in ROUTABLE_TRIP_TYPES:
-        cleaning_result = clean_gps_route(
-            raw_waypoints=raw_waypoints,
-            forwardRouting=lambda path, routingType, options=None: forward_routing_core(
-                routingType=routingType,
-                path=path,
-                flask_request=flask_request,
-                extra_args=options,
-            ),
-            trip_type=trip_type,
-            deviation_threshold=800,
-            max_search_points=75,
-        )
+        cleaning_result = clean_gps_route(raw_waypoints, trip_type)
         if cleaning_result["success"]:
             path = cleaning_result["path"]
             newTrip["trip_length"] = cleaning_result["distance"]
-            newTrip["estimated_trip_duration"] = cleaning_result["duration"]
+            newTrip["route_source"] = "gpx_routed"
             # clean_gps_route's "waypoints" is [origin, anchor1, ..., dest] — trim the
             # endpoints, since trips.waypoints holds only the intermediates (the
             # endpoints already live in paths.geom via `path` above). Storing them

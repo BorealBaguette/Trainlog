@@ -56,9 +56,8 @@ def invalidate_cache(cc):
     """Remove GeoPIP instance for cc and all ones that stitch together from this as the underlying data might has changed."""
     global _INSTANCE
 
-    for cc2 in _INSTANCE:
-        if cc.startswith(cc2):
-            del _INSTANCE[cc2]
+    for cc2 in [cc2 for cc2 in _INSTANCE if cc.startswith(cc2)]:
+        del _INSTANCE[cc2]
 
 
 def search(cc, lng, lat):

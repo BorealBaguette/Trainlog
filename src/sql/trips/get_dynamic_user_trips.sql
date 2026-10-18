@@ -32,12 +32,14 @@ WITH base AS (
         notes,
         price,
         currency,
-        ticket_id,
+        ticket_ids,
         purchase_date AS purchasing_date,
         carbon,
         visibility,
         departure_delay,
         arrival_delay,
+        departure_platform,
+        arrival_platform,
         power_type,
         COALESCE(utc_start_datetime, start_datetime) AS utc_filtered_start_datetime,
         COALESCE(utc_end_datetime, end_datetime) AS utc_filtered_end_datetime
@@ -149,7 +151,7 @@ trip_tags AS (
 -- empty search the predicate is absent, so Postgres can elide the airliners join
 -- (its columns are unused by the COUNT query) and there is no tickets join at all,
 -- roughly halving the count-query cost. The ticket-name match is done there as a
--- correlated EXISTS on ticket_id, so this CTE no longer needs to join tickets.
+-- correlated EXISTS on ticket_ids, so this CTE no longer needs to join tickets.
 -- (Keep this CTE last so the file ends with ')': the builder concatenates the final
 -- SELECT directly onto this template.)
 FilteredTrips AS (
@@ -172,6 +174,10 @@ FilteredTrips AS (
             WHEN sub.utc_filtered_start_datetime IS NULL AND sub.is_project
             THEN 1 ELSE 0
         END AS future,
+        CASE
+            WHEN NOW() BETWEEN sub.utc_filtered_start_datetime AND sub.utc_filtered_end_datetime
+            THEN 1 ELSE 0
+        END AS ongoing,
         trip_tags.tags AS tags
     FROM sub
     LEFT JOIN airliners ON sub.material_type = airliners.iata

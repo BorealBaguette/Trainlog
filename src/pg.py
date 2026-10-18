@@ -373,7 +373,8 @@ def load_base_data(pg, table_name, upsert=False):
             if upsert:
                 tmp = f"_load_{table_name}"
                 cursor.execute(
-                    f"CREATE TEMP TABLE {tmp} (LIKE {table_name}) ON COMMIT DROP"
+                    f"CREATE TEMP TABLE {tmp} (LIKE {table_name} INCLUDING DEFAULTS)"
+                    " ON COMMIT DROP"
                 )
                 cursor.copy_expert(
                     f"COPY {tmp} ({columns}) FROM STDIN WITH (FORMAT CSV, NULL '')",

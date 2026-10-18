@@ -7,6 +7,23 @@ from src.carbon import calculate_carbon_footprint_for_trip
 from src.paths import Path
 
 
+def ticket_id_list(raw):
+    """A trip's tickets, the main one first, as ids: from a list, a comma-separated text
+    ("12,34", as a form sends them), a single id, or nothing; each once."""
+    if raw in (None, ""):
+        return []
+    parts = raw if isinstance(raw, (list, tuple)) else str(raw).split(",")
+    ids = []
+    for part in parts:
+        try:
+            ticket_id = int(str(part).strip())
+        except ValueError:
+            continue
+        if ticket_id not in ids:
+            ids.append(ticket_id)
+    return ids
+
+
 def _strip_tags(value):
     """Strip HTML tags (e.g. <script>, <img onerror=...>) from a string.
     Lone < or > not forming a complete tag (e.g. '<3') are preserved."""
@@ -44,7 +61,7 @@ class Trip:
         price,
         currency,
         purchasing_date,
-        ticket_id,
+        ticket_ids,
         path,
         is_project,
         trip_id=None,
@@ -53,6 +70,10 @@ class Trip:
         arrival_delay=None,
         power_type=None,
         co2_override=None,
+        departure_platform=None,
+        arrival_platform=None,
+        origin_station_key=None,
+        destination_station_key=None,
         altitude=None,
         timestamps=None,
         route_source="router",
@@ -92,13 +113,19 @@ class Trip:
         if price not in (None, "") and purchasing_date in (None, ""):
             purchasing_date = datetime.date.today()
         self.purchasing_date = purchasing_date
-        self.ticket_id = ticket_id
+        self.ticket_ids = ticket_id_list(ticket_ids)
         self.is_project = is_project
         self.departure_delay = departure_delay
         self.arrival_delay = arrival_delay
         self.path = path
         self.power_type = power_type
         self.co2_override = co2_override
+        # The platform it left from / arrived at (migration 0076), free text.
+        self.departure_platform = (_strip_tags(departure_platform) or "").strip()[:20] or None
+        self.arrival_platform = (_strip_tags(arrival_platform) or "").strip()[:20] or None
+        # The quai station of each end (migration 0078), or None for a manual one.
+        self.origin_station_key = (origin_station_key or "").strip()[:100] or None
+        self.destination_station_key = (destination_station_key or "").strip()[:100] or None
         # Optional 3D flight track (JSON-string arrays, parallel to the geom
         # vertices): altitude in metres, timestamps in epoch seconds.
         self.altitude = altitude

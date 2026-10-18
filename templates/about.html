@@ -311,7 +311,7 @@
         <h5><i class="bi bi-geo-alt"></i>{{ translations['about_adv_manual_h'] }}</h5>
         <p>{{ translations['about_adv_manual_p'] }}</p>
         {% if username != "public" %}
-        <a class="about-cta" href="{{ url_for('userManualStations', username=username) }}"><i class="bi bi-geo-alt"></i>{{ translations['about_discover'] }}</a>
+        <a class="about-cta" href="{{ url_for('manual_stations.userManualStations', username=username) }}"><i class="bi bi-geo-alt"></i>{{ translations['about_discover'] }}</a>
         {% endif %}
       </div>
       <div class="about-block">

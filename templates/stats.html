@@ -34,6 +34,7 @@
 
     <select id="statsSelectYear" class="form-select statsSelect mr-2">
         <option value="all" {% if not statYear %}selected{% endif %}>{{all}}</option>
+        <option value="past" {% if statYear == 'past' %}selected{% endif %}>{{past}}</option>
         {% for year in distinctStatYears %}
             <option value="{{ year }}" {% if year == statYear %}selected{% endif %}>{{ year }}</option>
         {% endfor %}
@@ -358,7 +359,7 @@
     var tripType = "{{tripType}}";
     var username = "{{username}}";
     var statYear = "{{statYear if statYear else ''}}";
-    var yearDefined = "{{ 'true' if statYear is not none else 'false' }}";
+    var yearDefined = "{{ 'true' if statYear not in (none, 'past') else 'false' }}";
 
     var isCombinedMode = tripType === 'combined';
     
@@ -397,7 +398,7 @@
     var fullscreenWheelHandler = null;
     var bodyOverflowBeforeFullscreen = '';
 
-    var operatorImages = {{logosList | safe}};
+    var operatorImages = {{ logosList | tojson }};
     var staticLink = "{{ url_for('resize_image', max_width=240, target_height=40, image_path='')}}";
 
     // Which time bucket the time-series chart plots: months once a year is
@@ -419,10 +420,9 @@
 
     var WAGON_BASE = "{{ url_for('static', filename='images/wagons') }}";
 
-    // The lead vehicle stands in for the whole consist on the axis, exactly as a
-    // silhouette stands in for an aircraft type. A six-car rake would need some
-    // 400px at this artwork's proportions; the axis gutter has 110. The full
-    // strip is on hover instead.
+    // The lead vehicle stands in for the consist on the axis until the front
+    // of the train has been drawn (buildAxisStrip), and decides whether the row
+    // gets a picture at all. The full strip is on hover.
     function trainsetLeadImage(item) {
         const units = item.units || [];
         if (!units.length) return null;
@@ -631,6 +631,9 @@
             prepare: prepareStrip,
             axisImage: true,
             imageAspect: WAGON_ASPECT,
+            // Once built, the front of the whole consist replaces the lead car.
+            axisArtwork: axisStripReady,
+            loadAxisArtwork: buildAxisStrip,
             inlineLabel: value => value
         },
         {
@@ -1142,6 +1145,162 @@
         return { width: Math.round(width), height: Math.round(width / ratio) };
     }
 
+    // The front of the consist, for the axis. A lead car alone, stretched into
+    // the wagon-shaped box, squashed a shunter and crushed a coach; instead the
+    // first few cars are laid side by side at the artwork's shared scale and
+    // the box shows however much of the train fits. Every row keeps the same
+    // box, and a loco now comes with the start of what it pulls.
+    //
+    // Drawn into a canvas because the axis can only paint one picture per row.
+    // Built asynchronously (the cars have to load first), so the first render
+    // shows the lead car and the strip replaces it — see refreshAxisArtwork.
+    var AXIS_STRIP_CARS = 6;            // the shortest units are ~40px; 6 always fill the window
+    var AXIS_STRIP_HEIGHT = 41;         // the artwork's median height, in natural px
+    var WAGON_FALLBACK_PPM = 10;        // as normalizeStrip assumes for uncalibrated art
+    var axisStripCache = {};            // key -> { canvas, width, height } | null once built
+    var axisStripPending = {};          // key -> Promise
+
+    function loadImage(url) {
+        return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = url;
+        });
+    }
+
+    // The outline SVGs carry a viewBox and a width but no height, so their
+    // intrinsic size differs between browsers, and drawn into a box of the
+    // wrong shape the outline shrinks to fit and floats mid-row. Each is
+    // reloaded with its viewBox as its size: then a 44-unit-tall outline is
+    // 44px of art, the height normalizeStrip gives placeholders too.
+    var placeholderArt = {};    // url -> Promise<{ img, width, height } | null>
+
+    function loadPlaceholder(url) {
+        if (!placeholderArt[url]) {
+            placeholderArt[url] = fetch(url)
+                .then(response => response.ok ? response.text() : Promise.reject())
+                .then(text => {
+                    const viewBox = (text.match(/viewBox="([^"]+)"/) || [])[1];
+                    const [, , width, height] = (viewBox || '').trim().split(/[\s,]+/).map(Number);
+                    if (!width || !height) return null;
+                    const sized = text.replace(/<svg\b[^>]*>/, tag => tag
+                        .replace(/\s(width|height)="[^"]*"/g, '')
+                        .replace(/^<svg/, `<svg width="${width}" height="${height}"`));
+                    return loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(sized))
+                        .then(img => img && { img, width, height });
+                })
+                .catch(() => null);
+        }
+        return placeholderArt[url];
+    }
+
+    function axisStripSources(item) {
+        const units = item.units || [];
+        return units.slice(0, AXIS_STRIP_CARS).map((unit, index) => unit.image
+            ? { url: wagonImgSrc(WAGON_BASE, unit),
+                scale: unit.px_per_meter ? WAGON_FALLBACK_PPM / unit.px_per_meter : 1 }
+            : { url: placeholderSrc(unit, index === 0, index === units.length - 1),
+                placeholder: true });
+    }
+
+    function axisStripKey(item) {
+        return axisStripSources(item).map(src => src.url + '@' + (src.scale || '')).join('|');
+    }
+
+    function axisStripReady(item) {
+        return axisStripCache[axisStripKey(item)];
+    }
+
+    function buildAxisStrip(item) {
+        const key = axisStripKey(item);
+        if (key in axisStripCache) return Promise.resolve();
+        if (axisStripPending[key]) return axisStripPending[key];
+
+        const sources = axisStripSources(item);
+        axisStripPending[key] = Promise.all(sources.map(src => src.placeholder
+            ? loadPlaceholder(src.url)
+            : loadImage(src.url).then(img => img && {
+                img,
+                width: img.naturalWidth * src.scale,
+                height: img.naturalHeight * src.scale
+            })
+        )).then(loaded => {
+            const cars = loaded.filter(Boolean);
+            delete axisStripPending[key];
+            if (!cars.length) { axisStripCache[key] = null; return; }
+
+            const box = axisImageBox(WAGON_ASPECT);
+            // Tall artwork (pantograph headroom) sets the row's height so it
+            // isn't cut off at the top; the window keeps the box's shape.
+            const height = Math.max(AXIS_STRIP_HEIGHT, ...cars.map(car => car.height));
+            const windowWidth = height * box.width / box.height;
+            const total = cars.reduce((sum, car) => sum + car.width, 0);
+            const width = Math.min(windowWidth, total);
+
+            // At natural resolution, which is about twice the box: sharp on
+            // high-density screens.
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(width);
+            canvas.height = Math.ceil(height);
+            const ctx = canvas.getContext('2d');
+            let x = 0;
+            for (const car of cars) {
+                if (x >= width) break;
+                // Bottom-aligned: every car stands on the same rail.
+                ctx.drawImage(car.img, x, height - car.height, car.width, car.height);
+                x += car.width;
+            }
+            // A set shorter than the window draws narrower, at the same scale,
+            // rather than being blown up to fill it.
+            axisStripCache[key] = {
+                canvas,
+                width: Math.round(box.width * width / windowWidth),
+                height: box.height
+            };
+        });
+        return axisStripPending[key];
+    }
+
+    // How long the first render will wait for the strips. They can only start
+    // once the stats have arrived (the consists come with them), and a first
+    // visit loads up to sixty cars from cold; a slower one is left as an empty
+    // box for refreshAxisArtwork to fill rather than holding up every chart on
+    // the page.
+    var AXIS_ARTWORK_WAIT_MS = 1000;
+
+    // Starts the strips for the rows about to be drawn, and resolves once they
+    // are built or the wait runs out, whichever is first.
+    function prebuildAxisArtwork(data) {
+        const builds = [];
+        visibleCharts(data).forEach(spec => {
+            if (!spec.loadAxisArtwork) return;
+            // The rows a ranked chart shows outside fullscreen; groupData
+            // folds the rest into "others".
+            (data[spec.dataset] || []).slice(0, 10).forEach(item => {
+                if (spec.axisArtwork(item) === undefined) builds.push(spec.loadAxisArtwork(item));
+            });
+        });
+        if (!builds.length) return Promise.resolve();
+        return Promise.race([
+            Promise.all(builds),
+            new Promise(resolve => setTimeout(resolve, AXIS_ARTWORK_WAIT_MS))
+        ]);
+    }
+
+    // The first render draws whatever artwork is already built; once the rest
+    // is, the axis is redrawn with it. Skipped if the chart was rebuilt or
+    // closed meanwhile.
+    function refreshAxisArtwork(chart, spec, rows, plan, isCurrent) {
+        if (!spec.axisArtwork || plan.mode !== 'images') return;
+        const pending = rows.filter(item => spec.axisArtwork(item) === undefined);
+        if (!pending.length) return;
+        Promise.all(pending.map(item => spec.loadAxisArtwork(item))).then(() => {
+            if (!isCurrent() || chart.isDisposed()) return;
+            chart.setOption({ yAxis: { axisLabel: imageAxisLabelConfig(spec, rows) } });
+        });
+    }
+
     // Widest an axis label may get when it stands in for a missing picture.
     // About the width of the pictures beside it, so one nameless row can't
     // stretch the gutter past what the images already claim.
@@ -1151,7 +1310,7 @@
         const byCategory = {};
         rows.forEach(function (item, index) {
             const url = spec.image ? spec.image(item) : null;
-            if (url) byCategory[categoryOf(spec, item)] = { key: 'img_' + index, url: url };
+            if (url) byCategory[categoryOf(spec, item)] = { key: 'img_' + index, url: url, item: item };
         });
 
         return {
@@ -1173,6 +1332,22 @@
                 // The box is drawn to a fixed size, so it has to match the art
                 // in it. A placeholder outline is squarer than a real wagon and
                 // would be stretched by a third in the wagon-shaped box.
+                const art = spec.axisArtwork && spec.axisArtwork(entry.item);
+                if (art) {
+                    rich[entry.key] = {
+                        backgroundColor: { image: art.canvas },
+                        width: art.width,
+                        height: art.height
+                    };
+                    return rich;
+                }
+                // Still being built: hold the space empty rather than show the
+                // URL picture stretched into the box, only to swap it a moment
+                // later. Only a strip that failed outright (null) falls back.
+                if (art === undefined && spec.axisArtwork) {
+                    rich[entry.key] = axisImageBox(spec.imageAspect);
+                    return rich;
+                }
                 const aspect = /\.svg$/.test(entry.url)
                     ? PLACEHOLDER_ASPECT
                     : spec.imageAspect;
@@ -2712,6 +2887,7 @@
             grid: hGridConfig(plan.gutter),
             series: createSeries(rows, color, labelFormatter, undefined, barMaxWidth)
         });
+        refreshAxisArtwork(chart, spec, rows, plan, () => chartsInstances[spec.key] === chart);
 
         if (labelFormatter) applyInlineLabels(chart, rows, color, labelFormatter, barMaxWidth, axisBreak);
     }
@@ -2824,7 +3000,9 @@
                 if (!statsData) console.error('No data available');
                 airportCities = (statsData && statsData.airportCities) || {};
             }
-            renderCharts(currentDisplayData());
+            const display = currentDisplayData();
+            await prebuildAxisArtwork(display);
+            renderCharts(display);
         } catch (error) {
             console.error('Error processing data:', error);
         } finally {
@@ -2968,6 +3146,7 @@
         }
 
         chartInstance.setOption(option);
+        if (!spec.vertical) refreshAxisArtwork(chartInstance, spec, rows, plan, () => true);
         // Before the first label pass, so it only sizes up the rows on screen.
         chartInstance.__zoomWindow = {
             start: 0,

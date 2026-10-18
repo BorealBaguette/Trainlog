@@ -1,0 +1,24 @@
+{# How stations are named, as the settings' language dropdown (static/js/combo.js, langCombo):
+   combo_first (the user's language, or their settings), as written locally, in Latin letters,
+   then every language. Its value in the hidden input combo_id. #}
+<div class="settings2-combo" data-combo="{{ combo_id }}">
+  <div class="input-group">
+    <label class="input-group-text" id="{{ combo_id }}-icon"></label>
+    <button type="button" class="form-select text-start settings2-combo-btn" id="{{ combo_id }}-btn">
+      <span id="{{ combo_id }}-label"></span>
+    </button>
+  </div>
+  <input type="hidden" id="{{ combo_id }}" name="{{ combo_id }}" form="settingsForm" value="{{ combo_value }}">
+  <div class="settings2-combo-panel" id="{{ combo_id }}-panel">
+    <input type="text" class="form-control settings2-combo-search" id="{{ combo_id }}-search" autocomplete="off">
+    <div class="settings2-combo-list" id="{{ combo_id }}-list">
+      <button type="button" class="settings2-combo-item" data-value="" data-icon="fa-solid fa-language" data-label="{{ combo_first }}"></button>
+      <button type="button" class="settings2-combo-item" data-value="local" data-icon="fa-solid fa-location-dot" data-label="{{ stationNamesLocal }}"></button>
+      <button type="button" class="settings2-combo-item" data-value="int" data-icon="fa-solid fa-globe" data-label="{{ stationNamesInt }}"></button>
+      {% for language in station_name_langs %}
+      <button type="button" class="settings2-combo-item" data-value="{{ language.code }}" data-raw="{{ language.name }}"></button>
+      {% endfor %}
+    </div>
+    <div class="settings2-combo-empty" id="{{ combo_id }}-empty" style="display:none;">No results</div>
+  </div>
+</div>

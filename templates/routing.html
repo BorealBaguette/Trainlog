@@ -44,6 +44,9 @@ const texts = {
   "savingTripProgress": "{{saving_trip_progress}}",
   "fineTuneNote": "{{fineTuneNote}}",
   "fineTuneNoteNewRouter": "{{fineTuneNoteNewRouter}}",
+  "motisTrack": "{{motisTrack}}",
+  "motisStand": {{ motisStand|tojson }},
+  "motisPier": {{ motisPier|tojson }},
   "distanceTime": "{{distanceTime}}",
   "electrificationOsm": "{{electrificationOsm}}",
   "electrificationEstimate": "{{electrificationEstimate}}",
@@ -67,6 +70,29 @@ const texts = {
   "useLegacyRouterHint": "{{useLegacyRouterHint}}",
   "allWaypointsExact": "{{allWaypointsExact}}",
   "allWaypointsExactHint": "{{allWaypointsExactHint}}",
+  "routeFiltersAdvanced": {{ (routeFiltersAdvanced|default(""))|tojson }},
+  "routeFilterSpeedAny": {{ (routeFilterSpeedAny|default(""))|tojson }},
+  "routeFilterPowerAny": {{ (routeFilterPowerAny|default(""))|tojson }},
+  "routeFilterGaugeAny": {{ (routeFilterGaugeAny|default(""))|tojson }},
+  "routeFilterAvoidHighspeed": {{ (routeFilterAvoidHighspeed|default(""))|tojson }},
+  "routeFilterMaxSpeed": {{ (routeFilterMaxSpeed|default(""))|tojson }},
+  "routeFilterElectrifiedOnly": {{ (routeFilterElectrifiedOnly|default(""))|tojson }},
+  "routeFilterPower": {{ (routeFilterPower|default(""))|tojson }},
+  "routeFilterGauge": {{ (routeFilterGauge|default(""))|tojson }},
+  "routeGaugeIndian": {{ (routeGaugeIndian|default(""))|tojson }},
+  "routeGaugeIberian": {{ (routeGaugeIberian|default(""))|tojson }},
+  "routeGaugeIrish": {{ (routeGaugeIrish|default(""))|tojson }},
+  "routeGaugeFinnish": {{ (routeGaugeFinnish|default(""))|tojson }},
+  "routeGaugeRussian": {{ (routeGaugeRussian|default(""))|tojson }},
+  "routeGaugeStandard": {{ (routeGaugeStandard|default(""))|tojson }},
+  "routeGaugeNarrow": {{ (routeGaugeNarrow|default(""))|tojson }},
+  "routeFiltersNoRoute": {{ (routeFiltersNoRoute|default(""))|tojson }},
+  "ormLayerStandard": {{ (ormLayerStandard|default(""))|tojson }},
+  "ormLayerMaxspeed": {{ (ormLayerMaxspeed|default(""))|tojson }},
+  "ormLayerSignals": {{ (ormLayerSignals|default(""))|tojson }},
+  "ormLayerElectrified": {{ (ormLayerElectrified|default(""))|tojson }},
+  "ormLayerGauge": {{ (ormLayerGauge|default(""))|tojson }},
+  "routeOverlayNone": {{ (routeOverlayNone|default(""))|tojson }},
   "train": "{{train}}",
   "tram": "{{tram}}",
   "metro": "{{metro}}",
@@ -106,8 +132,17 @@ var origLabel = newTrip["originStation"][1];
 var destLabel = newTrip["destinationStation"][1];
 var viaStations = newTrip["viaStations"] || [];
 var wplist = [origCoord].concat(viaStations.map(function(v){ return v[0]; })).concat([destCoord]);
-// Via stations name their waypoints (routing.js); all start soft.
-window.routingWaypointMeta = viaStations.map(function(v){ return { name: v[1] }; });
+// Via stations name their waypoints (routing.js). They start soft, but for timetable stops
+// placed on their platform's track (new.html's matchStopTracks), which are exact.
+// Those the page made exact itself (v[4] 'auto', put on their direction's stop position) are
+// kept exact only where that does not lengthen the route (routing.js, createCustomRouter).
+window.routingWaypointMeta = viaStations.map(function(v){
+  return v[3] === true ? { name: v[1], stop: v[2], hard: true, auto: v[4] === 'auto' } : { name: v[1], stop: v[2] };
+});
+// Ends picked on a station's track or line are stop positions on the track: exact (new.html).
+window.routingEndpointMeta = ["originExact", "destinationExact"].map(function(k){
+  return newTrip[k] === "1" ? { hard: true } : newTrip[k] === "auto" ? { hard: true, auto: true } : {};
+});
 var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
 var errorContent = '<h4 id="routing-error">{{routingError}}<h4><p>{{routingErrorDetails}}</p><p><button onclick=\"location.reload()\">{{retry}}</button></p>';
 var saveErrorContent = '<h4 id="save-error">{{saveError}}</h4><p>{{saveErrorDetails}}</p><p><button onclick=\"location.reload();\">{{retry}}</button></p>';

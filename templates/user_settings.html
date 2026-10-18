@@ -4,6 +4,8 @@
 
 {% include "includes/trip_cards.html" %}
 
+<link rel="stylesheet" href="{{ static_autoversion(filename='styles/combo.css') }}">
+<script src="{{ static_autoversion(filename='js/combo.js') }}"></script>
 <style>
   .settings2 { max-width: 1000px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
   .settings2-title {
@@ -103,6 +105,14 @@
     font-size: 0.82rem; font-weight: 600;
   }
 
+  /* As the map background picker's (tileserver_tabs.html .ts-beta), inline. */
+  .settings2-beta {
+    margin-left: 0.3rem; padding: 0.3em 0.5em 0.2em; border-radius: 1em;
+    background: #fd7e14; color: white; vertical-align: middle;
+    font-size: 0.6rem; font-weight: 600; line-height: 1.2; text-transform: uppercase;
+    /* Room above for accented capitals (BÊTA). */
+  }
+
   .settings2-danger-card { border-color: #f5c2c7; min-height: 0; }
 
   /* Visually masked like a password field, but deliberately type="text" with a
@@ -113,30 +123,6 @@
      to not look like a login field in the first place. */
   .settings2-masked-field { -webkit-text-security: disc; }
 
-  /* Searchable combo (custom dropdown): flag stays in the left icon box only,
-     never in the collapsed button text; the open list shows a flag per row
-     plus a real search box, since flag-in-list/no-flag-collapsed can't be
-     done with a native <select>. */
-  .settings2-combo { position: relative; }
-  .settings2-combo-btn { display: flex; align-items: center; cursor: pointer; }
-  .settings2-combo-panel {
-    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
-    background: #fff; border: 1px solid #dee2e6; border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden;
-  }
-  .settings2-combo-panel.show { display: block; }
-  .settings2-combo-search { border: none; border-bottom: 1px solid #e9ecef; border-radius: 0; }
-  .settings2-combo-search:focus { box-shadow: none; border-color: #0d6efd; }
-  .settings2-combo-list { max-height: 260px; overflow-y: auto; padding: 4px; }
-  .settings2-combo-item {
-    display: flex; align-items: center; gap: 10px; width: 100%;
-    padding: 8px 10px; border: none; background: none; border-radius: 6px;
-    text-align: left; font-size: 0.9rem; color: #212529;
-  }
-  .settings2-combo-item:hover { background: #f1f3f5; }
-  .settings2-combo-item.active { background: #e7f0ff; color: #0d6efd; font-weight: 600; }
-  .settings2-combo-flag { width: 1.3em; text-align: center; flex: none; }
-  .settings2-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }
 
   /* Mobile: nav becomes a compact wrapping grid of pills above the content,
      so every section is visible at once without horizontal scrolling. */
@@ -187,20 +173,23 @@
           <button class="settings2-navlink active" data-bs-toggle="pill" data-bs-target="#tab-preferences" type="button" role="tab">
             <i class="fa-solid fa-sliders"></i><span>{{ settingsSectionGeneral }}</span>
           </button>
-          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-privacy" type="button" role="tab">
-            <i class="fa-solid fa-shield-halved"></i><span>{{ settingsSectionPrivacy }}</span>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-trips" type="button" role="tab">
+            <i class="fa-solid fa-route"></i><span>{{ settingsSectionTrips }}</span>
           </button>
           <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-appearance" type="button" role="tab">
-            <i class="fa-solid fa-palette"></i><span>{{ settingsSectionAppearance }}</span>
+            <i class="fa-solid fa-map"></i><span>{{ settingsSectionAppearance }}</span>
           </button>
-          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-account" type="button" role="tab">
-            <i class="fa-solid fa-user"></i><span>{{ settingsSectionAccount }}</span>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-privacy" type="button" role="tab">
+            <i class="fa-solid fa-shield-halved"></i><span>{{ settingsSectionPrivacy }}</span>
           </button>
           <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-integrations" type="button" role="tab">
             <i class="fa-solid fa-plug"></i><span>{{ settingsSectionIntegrations }}</span>
           </button>
           <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-data" type="button" role="tab">
-            <i class="fa-solid fa-database"></i><span>{{ settingsSectionData }}</span>
+            <i class="fa-solid fa-right-left"></i><span>{{ settingsSectionData }}</span>
+          </button>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-account" type="button" role="tab">
+            <i class="fa-solid fa-user"></i><span>{{ settingsSectionAccount }}</span>
           </button>
         </div>
       </div>
@@ -259,14 +248,26 @@
                 </label>
               </div>
             </div>
+            {% if is_premium %}
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="live_tracking" name="live_tracking" form="settingsForm" {{ live_tracking_checked }}>
+              <label class="form-check-label" for="live_tracking">
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ liveTrackingSetting }}
+              </label>
+            </div>
+            {% endif %}
+
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            </div>
 
           </div>
         </div>
 
-        <!-- Appearance & map -->
+        <!-- Map & display -->
         <div class="tab-pane fade" id="tab-appearance" role="tabpanel">
           <div class="settings2-card">
-            <h3 class="settings2-card-title"><i class="fa-solid fa-palette"></i> {{ settingsSectionAppearance }}</h3>
+            <h3 class="settings2-card-title"><i class="fa-solid fa-map"></i> {{ settingsSectionAppearance }}</h3>
 
             <div class="settings2-toggle-row">
               <div class="form-check form-switch">
@@ -280,36 +281,68 @@
                 <input class="form-check-input" type="checkbox" id="globe" name="globe" form="settingsForm" {% if user_globe %}checked{% endif %}>
                 <label class="form-check-label" for="globe">{{ globeLabel }}</label>
               </div>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="exact_waypoints" name="exact_waypoints" form="settingsForm" {{ exact_waypoints_checked }}>
-                <label class="form-check-label" for="exact_waypoints" title="{{ allWaypointsExactHint }}">{{ allWaypointsExact }}</label>
-              </div>
             </div>
 
             <hr class="settings2-hr">
 
             <label class="settings2-label">{{ tilesetLabel }}</label>
-            <button type="button" class="form-select text-start" id="tileserverPickerBtn" style="cursor:pointer;">
-              <i class="fa-solid fa-map me-2" id="tileserverPickerIcon"></i><span id="tileserverPickerLabel"></span>
-            </button>
+            <div class="input-group">
+              <label class="input-group-text" for="tileserverPickerBtn"><i class="fa-solid fa-map" id="tileserverPickerIcon"></i></label>
+              <button type="button" class="form-select text-start settings2-combo-btn" id="tileserverPickerBtn">
+                <span id="tileserverPickerLabel"></span>
+              </button>
+            </div>
             <input type="hidden" id="tileserver" name="tileserver" form="settingsForm" value="{{ user_tileserver }}">
+
+            <label class="settings2-label" for="map_lang">{{ mapLangLabel }}</label>
+            <div class="settings2-combo" data-combo="map_lang">
+              <div class="input-group">
+                <label class="input-group-text" id="map_lang-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="map_lang-btn">
+                  <span id="map_lang-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="map_lang" name="map_lang" form="settingsForm" value="{{ user_map_lang }}">
+              <div class="settings2-combo-panel" id="map_lang-panel">
+                <input type="text" class="form-control settings2-combo-search" id="map_lang-search" autocomplete="off">
+                <div class="settings2-combo-list" id="map_lang-list">
+                  <button type="button" class="settings2-combo-item" data-value="" data-icon="fa-solid fa-language" data-label="{{ mapLangSite }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="native" data-icon="fa-solid fa-map-pin" data-label="{{ mapLangNative }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="local" data-icon="fa-solid fa-location-dot" data-label="{{ mapLangLocal }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="int" data-icon="fa-solid fa-globe" data-label="{{ mapLangInt }}"></button>
+                  {% for l in langs %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ l.code }}" data-raw="{{ l.name }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="map_lang-empty" style="display:none;">No results</div>
+              </div>
+            </div>
 
             {% if is_premium %}
             <div class="form-check form-switch mt-3">
               <input class="form-check-input" type="checkbox" id="orm-enabled" name="orm_enabled" form="settingsForm">
               <label class="form-check-label" for="orm-enabled">
-                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> Enable OpenRailwayMap overlay
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ ormOverlayEnable }}
               </label>
             </div>
 
             <div id="orm-options" class="mt-2 p-3 bg-light rounded" style="display: none;">
-              <label class="settings2-label mt-0" for="orm-type">Railway Layer Type</label>
+              <label class="settings2-label mt-0" for="orm-type">{{ ormLayerType }}</label>
               <select class="form-select" name="orm_type" id="orm-type" form="settingsForm">
-                <option value="standard">Standard</option>
-                <option value="maxspeed">Max Speed</option>
-                <option value="signals">Signals</option>
-                <option value="electrified">Electrified</option>
-                <option value="gauge">Track Gauge</option>
+                <optgroup label="Trainlog">
+                  <option value="standard">{{ ormLayerStandard }}</option>
+                  <option value="maxspeed">{{ ormLayerMaxspeed }}</option>
+                  <option value="signals">{{ ormLayerSignals }}</option>
+                  <option value="electrified">{{ ormLayerElectrified }}</option>
+                  <option value="gauge">{{ ormLayerGauge }}</option>
+                </optgroup>
+                <optgroup label="openrailwaymap.org">
+                  <option value="org-standard">{{ ormLayerStandard }}</option>
+                  <option value="org-maxspeed">{{ ormLayerMaxspeed }}</option>
+                  <option value="org-signals">{{ ormLayerSignals }}</option>
+                  <option value="org-electrification">{{ ormLayerElectrified }}</option>
+                  <option value="org-gauge">{{ ormLayerGauge }}</option>
+                </optgroup>
               </select>
             </div>
 
@@ -317,13 +350,6 @@
               <input class="form-check-input" type="checkbox" id="flight_3d" name="flight_3d" form="settingsForm" {{ flight_3d_checked }}>
               <label class="form-check-label" for="flight_3d">
                 <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ flight3dSetting }}
-              </label>
-            </div>
-
-            <div class="form-check form-switch mt-3">
-              <input class="form-check-input" type="checkbox" id="live_tracking" name="live_tracking" form="settingsForm" {{ live_tracking_checked }}>
-              <label class="form-check-label" for="live_tracking">
-                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ liveTrackingSetting }}
               </label>
             </div>
             {% endif %}
@@ -338,6 +364,47 @@
         <div class="tab-pane fade show active" id="tab-preferences" role="tabpanel">
           <div class="settings2-card">
             <h3 class="settings2-card-title"><i class="fa-solid fa-sliders"></i> {{ settingsSectionGeneral }}</h3>
+
+            <label class="settings2-label" for="lang">{{language}}</label>
+            <div class="settings2-combo" data-combo="lang">
+              <div class="input-group">
+                <label class="input-group-text" id="lang-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="lang-btn">
+                  <span id="lang-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="lang" name="lang" form="settingsForm" value="{{ langs[0].code }}">
+              <div class="settings2-combo-panel" id="lang-panel">
+                <input type="text" class="form-control settings2-combo-search" id="lang-search" autocomplete="off">
+                <div class="settings2-combo-list" id="lang-list">
+                  {% for lang in langs %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ lang.code }}" data-raw="{{ lang.name }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="lang-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+
+
+            <label class="settings2-label" for="user_currency">{{currency}}</label>
+            <div class="settings2-combo" data-combo="user_currency">
+              <div class="input-group">
+                <label class="input-group-text" id="user_currency-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="user_currency-btn">
+                  <span id="user_currency-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="user_currency" name="user_currency" form="settingsForm" value="{{ user_currency }}">
+              <div class="settings2-combo-panel" id="user_currency-panel">
+                <input type="text" class="form-control settings2-combo-search" id="user_currency-search" autocomplete="off">
+                <div class="settings2-combo-list" id="user_currency-list">
+                  {% for currency in currencyOptions %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="user_currency-empty" style="display:none;">No results</div>
+              </div>
+            </div>
 
             <label class="settings2-label" for="default_landing">{{defaultLanding}}</label>
             <div class="settings2-combo" data-combo="default_landing">
@@ -361,44 +428,56 @@
               </div>
             </div>
 
-            <label class="settings2-label" for="lang">{{language}}</label>
-            <div class="settings2-combo" data-combo="lang">
-              <div class="input-group">
-                <label class="input-group-text" id="lang-icon"></label>
-                <button type="button" class="form-select text-start settings2-combo-btn" id="lang-btn">
-                  <span id="lang-label"></span>
-                </button>
-              </div>
-              <input type="hidden" id="lang" name="lang" form="settingsForm" value="{{ langs[0].code }}">
-              <div class="settings2-combo-panel" id="lang-panel">
-                <input type="text" class="form-control settings2-combo-search" id="lang-search" autocomplete="off">
-                <div class="settings2-combo-list" id="lang-list">
-                  {% for lang in langs %}
-                  <button type="button" class="settings2-combo-item" data-value="{{ lang.code }}" data-raw="{{ lang.name }}"></button>
-                  {% endfor %}
-                </div>
-                <div class="settings2-combo-empty" id="lang-empty" style="display:none;">No results</div>
-              </div>
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
             </div>
+          </div>
+        </div>
 
-            <label class="settings2-label" for="user_currency">{{currency}}</label>
-            <div class="settings2-combo" data-combo="user_currency">
-              <div class="input-group">
-                <label class="input-group-text" id="user_currency-icon"></label>
-                <button type="button" class="form-select text-start settings2-combo-btn" id="user_currency-btn">
-                  <span id="user_currency-label"></span>
-                </button>
-              </div>
-              <input type="hidden" id="user_currency" name="user_currency" form="settingsForm" value="{{ user_currency }}">
-              <div class="settings2-combo-panel" id="user_currency-panel">
-                <input type="text" class="form-control settings2-combo-search" id="user_currency-search" autocomplete="off">
-                <div class="settings2-combo-list" id="user_currency-list">
-                  {% for currency in currencyOptions %}
-                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"></button>
-                  {% endfor %}
-                </div>
-                <div class="settings2-combo-empty" id="user_currency-empty" style="display:none;">No results</div>
-              </div>
+        <!-- Adding trips -->
+        <div class="tab-pane fade" id="tab-trips" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-route"></i> {{ settingsSectionTrips }}</h3>
+
+            <label class="settings2-label" for="new_station_search">{{ stationSearchLabel }}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="new_station_search" name="new_station_search" form="settingsForm" {{ 'checked' if new_station_search_checked }}>
+              <label class="form-check-label" for="new_station_search">{{ newStationSearch }}
+                <span class="settings2-beta">{{ beta }}</span></label>
+            </div>
+            <p class="settings2-hint">{{ newStationSearchHint }}</p>
+
+            {# Only quai's stations are named per language and searched across rail modes. #}
+            <div id="newStationSearchSettings" {{ 'hidden' if not new_station_search_checked }}>
+            <label class="settings2-label" for="station_names">{{ stationNamesLabel }}</label>
+            {% with combo_id="station_names", combo_value=station_names, combo_first=stationNamesMine %}
+              {% include "includes/station_names_combo.html" %}
+            {% endwith %}
+            {% with switch_id="station_script", switch_name="station_script", switch_checked=station_script_checked,
+                    heading_class="settings2-label" %}
+              {% include "includes/station_script_switch.html" %}
+            {% endwith %}
+
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="all_rail_stations" name="all_rail_stations" form="settingsForm" {{ 'checked' if all_rail_stations_checked }}>
+              <label class="form-check-label" for="all_rail_stations">{{ allRailStations }}</label>
+            </div>
+            </div>
+            <script>
+              document.getElementById('new_station_search').addEventListener('change', function () {
+                document.getElementById('newStationSearchSettings').hidden = !this.checked;
+              });
+            </script>
+
+            <label class="settings2-label" for="exact_waypoints">{{ routingLabel }}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="exact_waypoints" name="exact_waypoints" form="settingsForm" {{ exact_waypoints_checked }}>
+              <label class="form-check-label" for="exact_waypoints">{{ allWaypointsExact }}</label>
+            </div>
+            <p class="settings2-hint">{{ allWaypointsExactHint }}</p>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="exact_tracks" name="exact_tracks" form="settingsForm" {{ 'checked' if exact_tracks_checked }}>
+              <label class="form-check-label" for="exact_tracks">{{ exactTracks }}</label>
             </div>
 
             <div class="settings2-save">
@@ -790,10 +869,10 @@
           </div>
         </div>
 
-        <!-- Data -->
+        <!-- Import & export -->
         <div class="tab-pane fade" id="tab-data" role="tabpanel">
           <div class="settings2-card">
-            <h3 class="settings2-card-title"><i class="fa-solid fa-database"></i> {{ settingsSectionData }}</h3>
+            <h3 class="settings2-card-title"><i class="fa-solid fa-right-left"></i> {{ settingsSectionData }}</h3>
 
             <div class="settings2-integration-row">
               <div>
@@ -908,79 +987,6 @@
 </script>
 
 <script>
-  // Searchable combo: flag box + button (closed state, no flag in the text)
-  // and a filterable list panel (open state, flag per row + real search).
-  function normalizeSearch(s) {
-    return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  }
-
-  function initCombo(id, { onApply } = {}) {
-    const wrap = document.querySelector(`[data-combo="${id}"]`);
-    const btn = document.getElementById(`${id}-btn`);
-    const label = document.getElementById(`${id}-label`);
-    const icon = document.getElementById(`${id}-icon`);
-    const hidden = document.getElementById(id);
-    const panel = document.getElementById(`${id}-panel`);
-    const search = document.getElementById(`${id}-search`);
-    const empty = document.getElementById(`${id}-empty`);
-    const items = Array.from(document.getElementById(`${id}-list`).children);
-    if (!wrap || !btn || !hidden) return null;
-
-    function apply(item) {
-      if (!item) return;
-      hidden.value = item.dataset.value;
-      label.textContent = item.dataset.label;
-      icon.innerHTML = item.dataset.flag || '';
-      items.forEach(i => i.classList.toggle('active', i === item));
-      if (onApply) onApply(item);
-    }
-
-    function select(item) {
-      apply(item);
-      close();
-    }
-
-    function open() {
-      panel.classList.add('show');
-      search.value = '';
-      filter('');
-      search.focus();
-      document.addEventListener('click', onDocClick);
-    }
-    function close() {
-      panel.classList.remove('show');
-      document.removeEventListener('click', onDocClick);
-    }
-    function onDocClick(e) {
-      if (!wrap.contains(e.target)) close();
-    }
-    function filter(query) {
-      const q = normalizeSearch(query.trim());
-      let anyVisible = false;
-      items.forEach(item => {
-        const match = !q || item.dataset.search.includes(q);
-        item.style.display = match ? '' : 'none';
-        anyVisible = anyVisible || match;
-      });
-      if (empty) empty.style.display = anyVisible ? 'none' : '';
-    }
-
-    btn.addEventListener('click', () => {
-      panel.classList.contains('show') ? close() : open();
-    });
-    search.addEventListener('input', () => filter(search.value));
-    search.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { close(); btn.focus(); }
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        select(items.find(i => i.style.display !== 'none'));
-      }
-    });
-    items.forEach(item => item.addEventListener('click', () => select(item)));
-
-    return { apply, items };
-  }
-
   // Currency: lead with the human-readable name so typing "norwegian" finds
   // NOK; the flag only ever shows in the icon box and the open list rows.
   let currencyNames = null;
@@ -1003,40 +1009,11 @@
     currencyCombo.apply(currencyCombo.items.find(i => i.dataset.value === document.getElementById('user_currency').value));
   }
 
-  // Language: translations ship as "🇫🇷 Français" — split the flag out into
-  // the icon box / list rows and leave the button text as just the name.
-  const langCombo = initCombo('lang');
-  if (langCombo) {
-    langCombo.items.forEach(item => {
-      const chars = Array.from(item.dataset.raw);
-      let flag = '', name = item.dataset.raw;
-      if (chars.length && /\p{Regional_Indicator}/u.test(chars[0])) {
-        flag = chars.slice(0, 2).join('');
-        name = chars.slice(2).join('').trim();
-      }
-      name = name.charAt(0).toUpperCase() + name.slice(1);
-      item.dataset.label = name;
-      item.dataset.flag = flag;
-      item.dataset.search = normalizeSearch(`${name} ${item.dataset.value}`);
-      item.innerHTML = `<span class="settings2-combo-flag">${flag}</span><span>${name}</span>`;
-    });
-    langCombo.apply(langCombo.items.find(i => i.dataset.value === document.getElementById('lang').value));
-  }
-
-  // Shared setup for combos whose items already carry a static data-icon
-  // (FA class) and data-label from the template — just wire up search/flag.
-  function initStaticCombo(id, opts) {
-    const combo = initCombo(id, opts);
-    if (!combo) return null;
-    combo.items.forEach(item => {
-      item.dataset.flag = `<i class="${item.dataset.icon}"></i>`;
-      item.dataset.search = normalizeSearch(item.dataset.label);
-      item.innerHTML = `<span class="settings2-combo-flag">${item.dataset.flag}</span><span>${item.dataset.label}</span>`;
-    });
-    combo.apply(combo.items.find(i => i.dataset.value === document.getElementById(id).value));
-    return combo;
-  }
-
+  // Language: translations ship as "🇫🇷 Français" (combo.js, langCombo).
+  langCombo('lang');
+  // How stations are named: the same languages, after the ways that are no language.
+  langCombo('station_names', { onApply: (item) => stationScriptFor(item.dataset.value) });
+  langCombo('map_lang');
   initStaticCombo('default_landing');
 
   initStaticCombo('share_level', {
@@ -1049,7 +1026,17 @@
 
   // Clear cache
   document.getElementById("clear-cache").addEventListener("click", function () {
-    localforage.clear().then(() => alert("{{cacheCleared}}")).catch(() => alert("{{cacheError}}"));
+    // 'trainlog-map' is the trips map's own IndexedDB (static/js/map_trip_cache.js)
+    const clearMapCache = new Promise(resolve => {
+      try {
+        const req = indexedDB.deleteDatabase('trainlog-map');
+        req.onsuccess = req.onerror = req.onblocked = () => resolve();
+      } catch (e) {
+        resolve();
+      }
+    });
+    Promise.all([localforage.clear(), clearMapCache])
+      .then(() => alert("{{cacheCleared}}")).catch(() => alert("{{cacheError}}"));
   });
 
   // Remember which settings tab was active across a save (full page reload)

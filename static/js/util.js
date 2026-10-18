@@ -78,32 +78,44 @@ function getFlagEmoji(countryCode) {
     return String.fromCodePoint(...codePoints);
   }
 
-function getTooltipSVG(countryCode, gb=false) {
-  if (gb){
-    var imagePath = `/static/images/flags/${gb.toLowerCase()}.svg`;
+// The deepest flag there is for a code: gb-eng-h has none of its own, so it takes
+// gb-eng's. The sprite index lists exactly the flags in static/images/flags, so it
+// answers for the SVGs too. null when not even the country has one.
+function resolveFlagCode(code, positions) {
+  let lookup = code.toLowerCase();
+  while (!positions[lookup] && lookup.includes("-")) {
+    lookup = lookup.substring(0, lookup.lastIndexOf("-"));
   }
-  else{
-    var imagePath = `/static/images/flags/${countryCode.toLowerCase()}.svg`;
-  }
-  var CountryName = regionNames.of(countryCode);
-  return `<img class="flagPNG" src="${imagePath}" alt="${CountryName} flag"/>`
+  return positions[lookup] ? lookup : null;
 }
 
+function getTooltipSVG(countryCode, gb=false) {
+  var code = (gb || countryCode).toLowerCase();
+  // flagPositions is the sprite index layout.html defines; "" if it failed to load.
+  var positions = typeof flagPositions !== 'undefined' && flagPositions ? flagPositions : null;
+  var imageCode = (positions && resolveFlagCode(code, positions)) || code;
+  var CountryName = regionNames.of(countryCode);
+
+  return `<img class="flagPNG" src="/static/images/flags/${imageCode}.svg" alt="${CountryName} flag">`;
+}
 
 function getTooltipSprite(countryCode, positions, gb = false) {
   var CountryName = regionNames.of(countryCode);
+
   if (gb) {
-      countryCode = gb;
+    countryCode = gb;
   }
 
-  const position = positions[countryCode.toLowerCase()];
+  const lookupCode = resolveFlagCode(countryCode, positions);
+  const position = lookupCode && positions[lookupCode];
 
   if (!position) {
-      return `<div class="flagPNG" style="background: red;" alt="${CountryName} flag">Flag not found</div>`;
+    return `<div class="flagPNG" style="background: red;" alt="${CountryName} flag">Flag not found</div>`;
   }
 
   const imagePath = '/static/images/flags/sprite/sprite.png';
   const backgroundPosition = `-${position.x}px -${position.y}px`;
+
   return `<div class="flagPNG" style="background-image: url(${imagePath}); background-position: ${backgroundPosition}; width: 30px; height: 20px;" alt="${CountryName} flag"></div>`;
 }
 
@@ -465,8 +477,10 @@ function getFlagEmojiListNew(countriesString, tripType, powerType){
   // metro/tram/aerialway/funicular have no power_type and are always electric
   // (matching force_electric=True in carbon.py), so force ⚡ for them.
   var alwaysElectric = ['metro', 'tram', 'aerialway', 'funicular'].includes(tripType);
+  // Muscle-powered types are never 🛢️, whatever power_type got stored with them.
+  var humanPowered = ['walk', 'cycle', 'scooter'].includes(tripType);
   var powerIcon = (powerType === 'electric' || alwaysElectric) ? '⚡'
-                : powerType === 'manual'   ? '🦵'
+                : (powerType === 'manual' || humanPowered) ? '🦵'
                 : powerType === 'thermic'  ? '🛢️'
                 : null;
   function totalMeters(d) {
@@ -496,7 +510,7 @@ function getFlagEmojiListNew(countriesString, tripType, powerType){
             parts.push(`⚡${mToKm(countryData.elec)}km`);
           }
           if (countryData.nonelec) {
-            var nonelecIcon = (tripType === 'cycle' || tripType === 'scooter') ? '🦵' : '🛢️';
+            var nonelecIcon = humanPowered ? '🦵' : '🛢️';
             parts.push(`${nonelecIcon}${mToKm(countryData.nonelec)}km`);
           }
           title = `${CountryName} - ${parts.join(' ')}`;
@@ -516,6 +530,17 @@ function toRouting(data, routingUrl, type){
   var newTrip = Object.assign({}, ...data.map((x) => ({[x.name]: x.value})));
 
   newTrip = processFormDates(newTrip);
+
+  // What the station fields held (the trip keeps the entries instead), for Back.
+  var stationState = {};
+  // Manual ends are no quai station.
+  ["origin", "destination"].forEach(function (end) {
+    var label = newTrip[end + "Station"], entry = globalStationDict[label] || {};
+    stationState[end] = { value: label, key: globalStationKeys[label], tracks: globalStationTracks[label],
+                          lines: globalStationLines[label], point: entry.stationPoint };
+    var manual = (end + "ManualToggle") in newTrip && (newTrip[end + "ManualName"] || "").trim() != "";
+    newTrip[end + "StationKey"] = manual ? "" : (globalStationKeys[newTrip[end + "Station"]] || "");
+  });
 
   if ("originManualToggle" in  newTrip && newTrip["originManualName"].trim()!=""){
     label = newTrip["originManualName"];
@@ -538,10 +563,16 @@ function toRouting(data, routingUrl, type){
   }
   // Collect intermediate "via" waypoints (resolved label -> [coord, label])
   newTrip["viaStations"] = [];
+  var viaState = [];
   $(".viaStation").each(function(){
-    var val = $(this).val();
-    if (val && globalStationDict[val]){
-      newTrip["viaStations"].push(globalStationDict[val]);
+    // A timetable's stop has its own entry (two stops of a run can share a name).
+    var val = $(this).val(), entry = $(this).data('stationEntry') || globalStationDict[val];
+    if (val && entry){
+      newTrip["viaStations"].push(entry);
+      // The row's times and tracks, for Back.
+      var $row = $(this).closest('.via-row');
+      viaState.push({ time: $row.hasClass('has-time') ? $row.data('viaText') : null, tracks: globalStationTracks[val],
+                      lines: globalStationLines[val], point: entry.stationPoint });
     }
   });
   // Carry FR24-imported flight data through (set by the FR24 import on the air form)
@@ -584,9 +615,81 @@ function toRouting(data, routingUrl, type){
     var id = performance.now().toString(36)+Math.random().toString(36).replace(/\./g,"");
     // Store data locally with ID
     sessionStorage.setItem(id, JSON.stringify(newTrip));
+    sessionStorage.setItem("lastNewTripId", id);
+    try {
+      if (window.motisState) sessionStorage.setItem("lastMotis", JSON.stringify(window.motisState.get()));
+      sessionStorage.setItem("lastStations", JSON.stringify(stationState));
+      sessionStorage.setItem("lastVias", JSON.stringify(viaState));
+    } catch (e) {}
     // Redirect with ID as param
     location.href = `${routingUrl}?id=${id}&type=${type}`;
   } 
+}
+
+// On browser Back from the routing page, refill the new-trip form from the trip
+// toRouting() stashed in sessionStorage.
+function restoreNewTripForm(){
+  var nav = performance.getEntriesByType("navigation")[0];
+  if (!nav || nav.type !== "back_forward") return;
+  var id = sessionStorage.getItem("lastNewTripId");
+  var t = id && JSON.parse(sessionStorage.getItem(id) || "null");
+  if (!t) return;
+  var $f = $('#newTripForm');
+
+  // Radios and checkboxes first so dependent panels are shown before values land.
+  $f.find(':radio, :checkbox').each(function(){
+    var on = this.type === 'radio' ? t[this.name] === this.value : this.name in t;
+    this.checked = on;
+    if (on || this.type === 'checkbox') $(this).trigger('change');
+  });
+  $f.find(':input').not(':radio, :checkbox, :button').each(function(){
+    var v = t[this.name];
+    if (this.name && (typeof v === 'string' || typeof v === 'number')) {
+      $(this).val(v);
+      if (this.tagName === 'SELECT') $(this).trigger('change');
+    }
+  });
+
+  var st = {};
+  try { st = JSON.parse(sessionStorage.getItem("lastStations") || "{}"); } catch (e) {}
+  ["origin", "destination"].forEach(function(end){
+    var entry = t[end + "Station"];
+    if (!entry || (end + "ManualToggle") in t) return;
+    var s = st[end] || {}, label = s.value || entry[1];
+    if (s.point) entry.stationPoint = s.point;
+    globalStationDict[label] = entry;
+    if (s.key) globalStationKeys[label] = s.key;
+    globalStationTracks[label] = s.tracks || [];
+    globalStationLines[label] = s.lines || [];
+    $('#' + end + 'Station').val(label);
+    // The track (or line) dropdown, with what was picked.
+    if (typeof endSlots !== "undefined") {
+      var slot = endSlots[end];
+      slot.selected = (stopKind(label) === 'track' ? t[end === 'origin' ? 'departurePlatform' : 'arrivalPlatform'] : t.lineName) || null;
+      renderStops(slot, label);
+    }
+  });
+  if (typeof addViaRow === "function") {
+    var viaState = [];
+    try { viaState = JSON.parse(sessionStorage.getItem("lastVias") || "[]"); } catch (e) {}
+    (t.viaStations || []).forEach(function(v, i){
+      var vs = viaState[i] || {}, time = vs.time || {}, label = v[1];
+      if (vs.point) v.stationPoint = vs.point;
+      globalStationDict[label] = v;
+      globalStationTracks[label] = vs.tracks || [];
+      globalStationLines[label] = vs.lines || [];
+      var slot = addViaRow(label, time.time, time.track, v).data('stopSlot');
+      if (stopKind(label) === 'track') slot.selected = (v[2] && (v[2].platform_rt || v[2].platform)) || null;
+      renderStops(slot, label);
+    });
+    setViaCollapsed(true);
+    updateViaSummary();
+  }
+  try {
+    var m = JSON.parse(sessionStorage.getItem("lastMotis") || "null");
+    if (m && m.departures && m.departures.length && window.motisState) window.motisState.set(m);
+  } catch (e) {}
+  window.restoredTagIds = t.tag_ids || [];
 }
 
 function getCountriesCodeList(lang = 'en') {
@@ -670,69 +773,235 @@ function getCompositeScore(station, term) {
   return (occurrenceScore * 0.3) + (similarityScore * 0.5) + (positionScore * 0.8);
 }
 
+// The numbered tracks and the lines of each station picked from the autocomplete, by label:
+// [{ref, lat, lng, on_track}] (lines also have colour), from quai. Empty when the source
+// has none.
+var globalStationTracks = {};
+var globalStationLines = {};
+// The quai station each label stands for, saved with the trip so it stays tied to the
+// station whatever it is called.
+var globalStationKeys = {};
+// How many of the user's trips start or end at each quai station, by key (getManAndOps): a
+// station they know comes first among those matching alike, whatever their trips called it.
+var visitedStationKeys = {};
+
+// Stations asked for first (enough to fill the list), then at a time, and at most (quai
+// answers 50 at most): nearing the end of the list asks for the next ones.
+var STATION_SEARCH_FIRST = 20;
+var STATION_SEARCH_PAGE = 10;
+var STATION_SEARCH_MAX = 50;
+
 function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
-  var currentXhr = null;
-  
+  // The first `limit` stations named like `term`, as autocomplete items, given to done(items,
+  // count) with how many the server sent. One request at a time per input.
+  function fetchStations(widget, term, limit, done) {
+    var inputElement = widget.element;
+    if (widget.stationXhr) {
+      widget.stationXhr.abort();
+    }
+    inputElement.addClass("spinning loading");
+    // A page may give a point to search around (window.stationSearchBias(input) -> [lat, lng]),
+    // such as the trip's other end: of the stops sharing a name, the nearby ones come first.
+    var query = { q: term, limit: limit };
+    var bias = typeof window.stationSearchBias === 'function' ? window.stationSearchBias(inputElement) : null;
+    if (bias) { query.lat = bias[0]; query.lon = bias[1]; }
+    widget.stationXhr = $.ajax({
+      url: url,
+      dataType: "json",
+      data: query,
+      // Cleared first, as done() may already ask for more (loadMore).
+      success: function (data, status, xhr) {
+        if (widget.stationXhr === xhr) {
+          widget.stationXhr = null;
+        }
+        var stationList = [];
+        data.features.forEach(function (item) {
+          // What a station is across requests, as its label can change: a homonym coming
+          // with more results gets it a place or a letter.
+          var id = item.properties.station_key
+            || (item.properties.osm_type ? item.properties.osm_type + item.properties.osm_id : null)
+            || item.geometry.coordinates.join(",");
+          flag = getFlagEmoji(item.properties.countrycode);
+          label = `${flag} ${item.properties.name}`;
+          disambiguation = item.properties.homonymy_order ? [item.properties.street, item.properties.locality, item.properties.district, item.properties.city].filter(e => (e)).join(", ") : null;
+          // A quai station's place, shown in the list only (not part of its name), unless
+          // the name says it already ("Lyon Part-Dieu", "Poste (Villepinte)").
+          if (item.properties.source === 'quai') {
+            var place = item.properties.city || item.properties.state;
+            disambiguation = place && item.properties.name.toLowerCase().indexOf(place.toLowerCase()) === -1 ? place : null;
+          }
+          displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
+          stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation,
+                             "source": item.properties.source, "tier": item.properties.tier, "id": id,
+                             // TEMPORARY: written in the forced script by ICU, not by OSM, or
+                             // named in Trainlog (the station explorer).
+                             "transliterated": item.properties.transliterated,
+                             "namedInTrainlog": item.properties.named_by === 'trainlog',
+                             "placeTransliterated": item.properties.place_transliterated,
+                             // Another mode's station (keyless, a key being its mode's own),
+                             // which the list marks with its icon.
+                             "mode": item.properties.source === 'quai' && !item.properties.station_key
+                               ? item.properties.mode : null });
+          globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
+          globalStationTracks[displayLabel] = item.properties.tracks || [];
+          globalStationLines[displayLabel] = item.properties.lines || [];
+          if (item.properties.source === 'quai' && item.properties.station_key) {
+            globalStationKeys[displayLabel] = item.properties.station_key;
+          } else {
+            delete globalStationKeys[displayLabel];
+          }
+        });
+        inputElement.removeClass("spinning");
+        done(stationList, data.features.length);
+      },
+      error: function (xhr, status) {
+        if (widget.stationXhr === xhr) {
+          widget.stationXhr = null;
+        }
+        inputElement.removeClass("spinning");
+        if (status !== 'abort') {
+          inputElement.addClass("error");
+        }
+      }
+    });
+  }
+
+  // The stations in the order to show them, after the user's manual stations matching `term`.
+  function rankStations(stationList, manStationList, term) {
+    // Add occurrences, similarity, and position scores to station objects
+    function score(station) {
+      station.occurrences = visitedStations[station.label] || 0;
+      station.similarity = getSimilarity(term, station.label);
+      station.positionScore = getPositionScore(term, station.label);
+      station.compositeScore = getCompositeScore(station, term);
+    }
+    function byScore(a, b) { return b.compositeScore - a.compositeScore; }
+    var combinedList;
+    if (stationList.length && stationList.every(function (s) { return s.source === 'quai'; })) {
+      // quai ranks by how well the name matches, then by importance and distance: its
+      // order stays, but for the stations the user has been to, which go first among
+      // those matching as well (same tier). Their own manual stations lead.
+      manStationList.forEach(score);
+      manStationList.sort(byScore);
+      stationList.forEach(function (station, i) {
+        station.rank = i;
+        // By name, or by station for trips saved with one: the same trips, so the larger.
+        station.occurrences = Math.max(visitedStations[station.label] || 0,
+                                       (station.source === 'quai' && visitedStationKeys[station.id]) || 0);
+      });
+      stationList.sort(function (a, b) {
+        return (a.tier - b.tier) || (b.occurrences - a.occurrences) || (a.rank - b.rank);
+      });
+      combinedList = manStationList.concat(stationList);
+    } else {
+      // Photon's order is no use as it is: sort by composite score
+      combinedList = manStationList.concat(stationList);
+      combinedList.forEach(score);
+      combinedList.sort(byScore);
+    }
+    return combinedList;
+  }
+
+  // Whether a request for `limit` stations that brought `count` (`previous` before it) got
+  // them all: quai sends as many as there are up to the limit, Photon fewer once its
+  // duplicates are dropped, so for it only a request bringing nothing new tells.
+  function gotAll(stationList, count, previous, limit) {
+    var allQuai = stationList.every(function (s) { return s.source === 'quai'; });
+    return limit >= STATION_SEARCH_MAX || count <= previous || (allQuai && count < limit);
+  }
+
+  // The next stations, once the list is scrolled to within a screen of its end (or does not
+  // fill its height), so that they are there before it is reached: those shown keep their
+  // place, the new ones follow.
+  function loadMore(widget) {
+    var ul = widget.menu.element;
+    if (!widget.stationTerm || widget.stationAll || widget.stationXhr || !ul.is(":visible")) {
+      return;
+    }
+    if (ul[0].scrollTop + 2 * ul[0].clientHeight < ul[0].scrollHeight) {
+      return;
+    }
+    var term = widget.stationTerm;
+    var limit = Math.min(widget.stationLimit + STATION_SEARCH_PAGE, STATION_SEARCH_MAX);
+    fetchStations(widget, term, limit, function (stationList, count) {
+      if (widget.stationTerm !== term) {
+        return;
+      }
+      var ranked = rankStations(stationList, [], term);
+      var fresh = {};
+      ranked.forEach(function (s) { fresh[s.id] = s; });
+      var shown = {};
+      var relabelled = false;
+      var kept = widget.stationItems.map(function (s) {
+        if (s.id === undefined) {
+          return s;
+        }
+        shown[s.id] = true;
+        relabelled = relabelled || (fresh[s.id] && fresh[s.id].label !== s.label);
+        return fresh[s.id] || s;
+      });
+      var added = ranked.filter(function (s) { return !shown[s.id]; });
+      widget.stationAll = gotAll(stationList, count, widget.stationCount, limit);
+      widget.stationLimit = limit;
+      widget.stationCount = count;
+      widget.stationItems = kept.concat(added);
+      if (relabelled) {
+        // Redrawn where it was, with the same item active for the keyboard.
+        var scrollTop = ul.scrollTop();
+        var active = widget.menu.active ? widget.menu.active.index() : -1;
+        widget._suggest(widget.stationItems);
+        if (active >= 0) {
+          widget.menu.focus(null, ul.children().eq(active));
+        }
+        ul.scrollTop(scrollTop);
+      } else if (added.length) {
+        // Only the new ones drawn, below the others, which stay as they are.
+        added.forEach(function (item) { widget._renderItemData(ul, item); });
+        widget.menu.refresh();
+      }
+      loadMore(widget);
+    });
+  }
+
   $(autoClass).autocomplete({
     minLength: 2,
     delay: 300,
     source: function (request, response) {
-      var inputElement = this.element;
-      
-      // Abort previous request
-      if (currentXhr) {
-        currentXhr.abort();
-      }
-      
-      // Show spinner
-      inputElement.addClass("spinning loading");
-      var manStationList = $.ui.autocomplete.filter(manualStationsList, request.term);
-      currentXhr = $.ajax({
-        url: url,
-        dataType: "json",
-        data: {
-          q: request.term
-        },
-        success: function (data) {
-          var stationList = [];
-          data.features.forEach(function (item) {
-            flag = getFlagEmoji(item.properties.countrycode);
-            label = `${flag} ${item.properties.name}`;
-            disambiguation = item.properties.homonymy_order ? [item.properties.street, item.properties.locality, item.properties.district, item.properties.city].filter(e => (e)).join(", ") : null;
-            displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
-            stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation });
-            globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
-          });
-          // Combine manual stations and fetched stations
-          var combinedList = manStationList.concat(stationList);
-          // Add occurrences, similarity, and position scores to station objects
-          combinedList.forEach(function (station) {
-            station.occurrences = visitedStations[station.label] || 0;
-            station.similarity = getSimilarity(request.term, station.label);
-            station.positionScore = getPositionScore(request.term, station.label);
-            station.compositeScore = getCompositeScore(station, request.term);
-          });
-          // Sort the list by composite score
-          combinedList.sort(function (a, b) {
-            return b.compositeScore - a.compositeScore;
-          });
-          // Limit the results to a maximum of 20 elements
-          var limitedList = combinedList.slice(0, 20);
-          // Hide spinner
-          inputElement.removeClass("spinning");
-          response(limitedList);
-        },
-        error: function (xhr, status) {
-          // Hide spinner on error (optional)
-          inputElement.removeClass("spinning");
-          if (status !== 'abort') {
-            inputElement.addClass("error");
-          }
+      var widget = this;
+      // The user's manual stations, on the pages that load them (not the edit page).
+      var manStationList = $.ui.autocomplete.filter(
+        typeof manualStationsList !== 'undefined' ? manualStationsList : [], request.term);
+      widget.stationTerm = request.term;
+      widget.stationLimit = STATION_SEARCH_FIRST;
+      widget.stationAll = false;
+      fetchStations(widget, request.term, STATION_SEARCH_FIRST, function (stationList, count) {
+        if (widget.stationTerm !== request.term) {
+          return;
         }
+        widget.stationAll = gotAll(stationList, count, 0, STATION_SEARCH_FIRST);
+        widget.stationCount = count;
+        widget.stationItems = rankStations(stationList, manStationList, request.term);
+        response(widget.stationItems);
       });
     },
+    open: function () {
+      loadMore($(this).autocomplete("instance"));
+    },
   }).each(function() {
-    $(this).data("ui-autocomplete")._renderItem = function(ul, item) {
+    var widget = $(this).autocomplete("instance");
+    widget.menu.element.addClass("stationSearchMenu").on("scroll", function () {
+      loadMore(widget);
+    });
+    // `text` with each of `parts` in it as a span.transliterated, escaped.
+    function markParts(text, parts) {
+      var html = sanitize(text);
+      parts.forEach(function (part) {
+        var escaped = sanitize(part);
+        if (escaped) html = html.split(escaped).join('<span class="transliterated">' + escaped + '</span>');
+      });
+      return html;
+    }
+    widget._renderItem = function(ul, item) {
       if ('manual' in item) {
         return $("<li>")
           .addClass("manualStationSelect")
@@ -740,12 +1009,36 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
           .append("<div>" + sanitize(item.label) + "</div>")
           .appendTo(ul);
       } else {
-        var disambiguation = "";
-        if (item.disambiguation) {
-          disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>"
+        // Where the result comes from, faintly (style2.css): quai's stations, else Photon.
+        var source = item.source === 'quai' ? 'quai' : 'photon';
+        var $row;
+        if (item.disambiguation && source === 'quai') {
+          // A quai station's place is only a hint, not part of the name saved: on the same
+          // line, small and faint, and cut short (whole in its tooltip) where the name leaves
+          // too little room, never pushed onto the next result's line.
+          $row = $("<div class='station-item'>").append(
+            $("<span class='station-name'>").text(item.label),
+            $("<span class='station-place'>").text(item.disambiguation).attr("title", item.disambiguation)
+              .toggleClass("transliterated", !!item.placeTransliterated));
+        } else {
+          // Photon's homonyms keep their own line, which tells them apart.
+          $row = $("<div>" + sanitize(item.label) + (item.disambiguation
+            ? " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>" : "") + "</div>");
+        }
+        var $name = $row.children(".station-name");
+        if (!$name.length) $name = $row;
+        $name.toggleClass("named-in-trainlog", !!item.namedInTrainlog);
+        // Only the parts ICU wrote: "ベルゲン - オラヴ クイッレス ガテ" has Bergen's from OSM.
+        if ((item.transliterated || []).length) $name.html(markParts(item.label, item.transliterated));
+        if (item.mode) {
+          $name.prepend($("<img class='station-mode'>").attr({ src: "/static/images/icons/trip_logos/" + item.mode + ".png",
+                                                                alt: item.mode, title: item.mode }));
         }
         return $("<li>")
-          .append("<div>" + sanitize(item.label) + disambiguation + "</div>")
+          .addClass("stationSource-" + source)
+          .attr("title", source + (item.namedInTrainlog ? ", named in Trainlog" : "")
+                + ((item.transliterated || []).length || item.placeTransliterated ? ", transliterated" : ""))
+          .append($row)
           .appendTo(ul);
       }
     };
@@ -859,7 +1152,7 @@ function getReadableAge(creationDate) {
   }
 }
 
-function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
+function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
@@ -889,15 +1182,17 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
         response(sortedOperatorNames);
     },
     select: function (event, ui) {
-        var selectedOperator = ui.item.value;
-        var logoUrl = manAndOps.operators[selectedOperator] 
-                      ? logos_url + manAndOps.operators[selectedOperator] 
-                      : no_logo_url;
+        if (logos_url && no_logo_url) {
+          var selectedOperator = ui.item.value;
+          var logoUrl = manAndOps.operators[selectedOperator]
+                        ? logos_url + manAndOps.operators[selectedOperator]
+                        : no_logo_url;
 
-        $.ajax(logoUrl)
-            .done(function () {
-                $(".operatorLogo").attr("src", logoUrl);
-            })
+          $.ajax(logoUrl)
+              .done(function () {
+                  $(".operatorLogo").attr("src", logoUrl);
+              })
+        }
     }
   });
 }
@@ -952,18 +1247,32 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   pillContainer.find('.op-pill-placeholder').show();
   // Built once: every known spelling in its normalised form, so a pill can find its
   // logo without rescanning thousands of names on each render.
+  // opts.more: a second pool (same shape as manAndOps) searched only once the user asks
+  // for it from the menu, under opts.moreLabel. Its names still get their logos.
+  var more = opts.more || null;
+  var moreOn = false;
+  var pools = more ? [manAndOps, more] : [manAndOps];
+  function fromPools(field, name) {
+    for (var i = 0; i < pools.length; i++) {
+      var map = pools[i][field] || {};
+      if (Object.prototype.hasOwnProperty.call(map, name)) return map[name];
+    }
+    return undefined;
+  }
+
   var logosByNormalized = {};
-  Object.keys(manAndOps.operators).forEach(function (name) {
-    var key = normalizeOperatorName(name);
-    if (key && !(key in logosByNormalized)) logosByNormalized[key] = manAndOps.operators[name];
+  pools.forEach(function (pool) {
+    Object.keys(pool.operators).forEach(function (name) {
+      var key = normalizeOperatorName(name);
+      if (key && !(key in logosByNormalized)) logosByNormalized[key] = pool.operators[name];
+    });
   });
 
   function logoFor(name) {
     // Exact spelling first, then the normalised form — the user may have typed a
     // punctuated or accented variant of a name we know.
-    if (Object.prototype.hasOwnProperty.call(manAndOps.operators, name)) {
-      return manAndOps.operators[name];
-    }
+    var exact = fromPools('operators', name);
+    if (exact !== undefined) return exact;
     var key = normalizeOperatorName(name);
     return key && key in logosByNormalized ? logosByNormalized[key] : null;
   }
@@ -1031,56 +1340,79 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
       // loose form rather than replacing it: stripping spaces would stop a
       // multi-word term like "sncf nouvelle" matching "SNCF TER Nouvelle-Aquitaine".
       var strictTerm = normalizeOperatorName(request.term);
-      var canonicalMap = manAndOps.operatorCanonical || {};
 
       // The suggestion for a match is the operator's canonical (short) name, not the
       // spelling that matched — so typing "Eth" collapses ETHIAD and "Ethiad airways"
       // into the single "Etihad Airways" rather than listing every alias. Matching
       // still happens against every spelling, so an alias-only term ("ETHIAD") still
       // finds its operator. An unresolved free-text spelling is its own canonical.
-      function canonical(name) { return canonicalMap[name] || name; }
+      function canonical(name) { return fromPools('operatorCanonical', name) || name; }
 
       var chosen = names.map(function (n) { return normalizeOperatorName(canonical(n)); });
 
       // Best match per canonical operator, keyed by its normalised name.
       var best = {};
+      var taken = [];
       function offer(canonName, rank, len) {
         var key = normalizeOperatorName(canonName);
         if (chosen.indexOf(key) !== -1) return;            // operator already a pill
+        if (taken.indexOf(key) !== -1) return;             // offered by the first pool
         var prev = best[key];
         if (!prev || rank < prev.rank || (rank === prev.rank && len < prev.len)) {
           best[key] = { label: canonName, value: canonName, rank: rank, len: len };
         }
       }
 
-      Object.keys(manAndOps.operators).forEach(function (name) {
-        var canonName = canonical(name);
-        var canonLen = normalizeForSearch(canonName).length;
-        var norm = normalizeForSearch(name);
-        var at = norm.indexOf(term);
-        if (at === -1) {
-          // No loose match: fall back to the punctuation-free comparison.
-          var strictName = normalizeOperatorName(name);
-          if (!strictTerm || strictName.indexOf(strictTerm) === -1) return;
-          offer(canonName, strictName === strictTerm ? 0 : 3, canonLen);
-          return;
-        }
-        // Rank: exact, then prefix, then start-of-word, then anywhere. Within a
-        // rank prefer the shorter operator name, so "SNCF" beats "SNCF Intercités".
-        var rank;
-        if (norm === term) rank = 0;
-        else if (at === 0) rank = 1;
-        else if (norm[at - 1] === ' ' || norm[at - 1] === '-') rank = 2;
-        else rank = 3;
-        offer(canonName, rank, canonLen);
-      });
+      function collect(pool) {
+        best = {};
+        Object.keys(pool.operators).forEach(function (name) {
+          var canonName = canonical(name);
+          var canonLen = normalizeForSearch(canonName).length;
+          var norm = normalizeForSearch(name);
+          var at = norm.indexOf(term);
+          if (at === -1) {
+            // No loose match: fall back to the punctuation-free comparison.
+            var strictName = normalizeOperatorName(name);
+            if (!strictTerm || strictName.indexOf(strictTerm) === -1) return;
+            offer(canonName, strictName === strictTerm ? 0 : 3, canonLen);
+            return;
+          }
+          // Rank: exact, then prefix, then start-of-word, then anywhere. Within a
+          // rank prefer the shorter operator name, so "SNCF" beats "SNCF Intercités".
+          var rank;
+          if (norm === term) rank = 0;
+          else if (at === 0) rank = 1;
+          else if (norm[at - 1] === ' ' || norm[at - 1] === '-') rank = 2;
+          else rank = 3;
+          offer(canonName, rank, canonLen);
+        });
 
-      var matches = Object.keys(best).map(function (k) { return best[k]; });
-      matches.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.label.localeCompare(b.label); });
-      // The operator list runs to thousands of names; an uncapped menu is unusable.
-      response(matches.slice(0, 10));
+        var matches = Object.keys(best).map(function (k) { return best[k]; });
+        matches.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.label.localeCompare(b.label); });
+        // The operator list runs to thousands of names; an uncapped menu is unusable.
+        return matches.slice(0, 10);
+      }
+
+      var matches = collect(manAndOps);
+      if (more) {
+        taken = matches.map(function (m) { return normalizeOperatorName(m.value); });
+        if (moreOn) {
+          var extra = collect(more);
+          if (extra.length) extra[0].firstMore = true;
+          matches = matches.concat(extra);
+        } else {
+          matches.push({ label: opts.moreLabel || 'More', value: '', more: true });
+        }
+      }
+      response(matches);
     },
     select: function (event, ui) {
+      if (ui.item.more) {
+        // Search again, the second pool included, keeping the menu open.
+        moreOn = true;
+        setTimeout(function () { searchInput.autocomplete('search', searchInput.val()); });
+        return false;
+      }
       add(ui.item.value);
       return false;   // don't write the raw value back into the search box
     },
@@ -1092,8 +1424,14 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
     // Show the logo next to each suggestion, so the right operator is pickable by
     // sight when several spellings look alike.
     instance._renderItem = function (ul, item) {
+      if (item.more) {
+        return $('<li class="op-suggestion op-suggestion-more"></li>')
+          .append($('<div></div>').append($('<i class="bi bi-search"></i>'), ' ', $('<span></span>').text(item.label)))
+          .appendTo(ul);
+      }
       var logo = logoFor(item.value);
       var $li = $('<li class="op-suggestion"></li>');
+      if (item.firstMore) $li.addClass('op-suggestion-first-more');
       var $div = $('<div></div>');
       if (logo) {
         $div.append($('<img class="op-suggestion-logo">').attr('src', logosUrl + logo).attr('alt', ''));
@@ -1104,7 +1442,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
       // The operator's other name, so a spelling says what it maps to: "SBB" is
       // followed by Schweizerische Bundesbahnen, an alias by the operator it
       // resolves to. Absent for names that would only repeat themselves.
-      var hint = (manAndOps.operatorHints || {})[item.value];
+      var hint = fromPools('operatorHints', item.value);
       if (hint) $div.append($('<span class="op-suggestion-hint"></span>').text(hint));
       return $li.append($div).appendTo(ul);
     };
@@ -1118,8 +1456,8 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
       searchInput.autocomplete('close');
     } else if (e.key === 'Enter') {
       // Only swallow Enter when there is text to commit, so an empty field still
-      // submits the form as before.
-      if (searchInput.val().trim()) {
+      // submits the form as before. A menu item chosen with it has been handled.
+      if (searchInput.val().trim() && !e.isDefaultPrevented()) {
         e.preventDefault();
         add(searchInput.val());
         searchInput.autocomplete('close');
@@ -1183,6 +1521,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   // as focus leaves the field on that click. Clicking an autocomplete suggestion does
   // not blur the input (jQuery UI suppresses it), so this cannot double-add.
   searchInput.on('blur.opPills', function () {
+    moreOn = false;
     if (searchInput.val().trim()) add(searchInput.val());
   });
 
@@ -1197,7 +1536,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   };
 }
 
-function materialTypeAutocomplete(select, manAndOps, type) {
+function materialTypeAutocomplete(select, manAndOps) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
@@ -1242,7 +1581,7 @@ function getRegionFromCode(region_code){
     'CN-BJ': 'Beijing', 'CN-TJ': 'Tianjin', 'CN-HE': 'Hebei', 'CN-SX': 'Shanxi', 'CN-NM': 'Inner Mongolia', 'CN-LN': 'Liaoning', 'CN-JL': 'Jilin', 'CN-HL': 'Heilongjiang', 'CN-SH': 'Shanghai', 'CN-JS': 'Jiangsu', 'CN-ZJ': 'Zhejiang', 'CN-AH': 'Anhui', 'CN-FJ': 'Fujian', 'CN-JX': 'Jiangxi', 'CN-SD': 'Shandong', 'CN-HA': 'Henan', 'CN-HB': 'Hubei', 'CN-HN': 'Hunan', 'CN-GD': 'Guangdong', 'CN-GX': 'Guangxi', 'CN-HI': 'Hainan', 'CN-CQ': 'Chongqing', 'CN-SC': 'Sichuan', 'CN-GZ': 'Guizhou', 'CN-YN': 'Yunnan', 'CN-XZ': 'Tibet', 'CN-SN': 'Shaanxi', 'CN-GS': 'Gansu', 'CN-QH': 'Qinghai', 'CN-NX': 'Ningxia', 'CN-XJ': 'Xinjiang', 'CN-HK': 'Hong Kong', 'CN-MO': 'Macao',
     'AT-2': 'Kärnten', 'AT-4': 'Oberösterreich', 'AT-6': 'Steiermark', 'AT-8': 'Vorarlberg', 'AT-5': 'Salzburg', 'AT-1': 'Burgenland', 'AT-3': 'Niederösterreich', 'AT-7': 'Tirol', 'AT-9': 'Wien',
     "CZ-41": "Karlovarský kraj", "CZ-42": "Ústecký kraj", "CZ-51": "Liberecký kraj", "CZ-52": "Královéhradecký kraj", "CZ-53": "Pardubický kraj", "CZ-63": "Kraj Vysočina", "CZ-64": "Jihomoravský kraj", "CZ-71": "Olomoucký kraj", "CZ-72": "Zlínský kraj", "CZ-80": "Moravskoslezský kraj", "CZ-10": "Praha, Hlavní město", "CZ-20": "Středočeský kraj", "CZ-31": "Jihočeský kraj", "CZ-32": "Plzeňský kraj",
-    "GB-NIR": "Northern Ireland", "GB-SCT": "Scotland", "GB-WLS": "Wales" ,"GB-ENG": "England",
+    "GB-ENG": "England", "GB-NIR": "Northern Ireland", "GB-SCT": "Scotland", "GB-WLS": "Wales" , "GB-ENG-C": "North East England", "GB-ENG-D": "North West England", "GB-ENG-E": "Yorkshire and The Humber", "GB-ENG-F": "East Midlands", "GB-ENG-G": "West Midlands", "GB-ENG-H": "East of England", "GB-ENG-I": "London", "GB-ENG-J": "South East England", "GB-ENG-K": "South West England",
     "IE-L": "Leinster", "IE-M": "Munster", "IE-C": "Connacht", "IE-U": "Ulster",
     "SE-K": "Blekinge", "SE-W": "Dalarna", "SE-I": "Gotland", "SE-X": "Gävleborg", "SE-N": "Halland", "SE-Z": "Jämtland", "SE-F": "Jönköping", "SE-H": "Kalmar", "SE-G": "Kronoberg", "SE-BD": "Norrbotten", "SE-M": "Skåne", "SE-AB": "Stockholm", "SE-D": "Södermanland", "SE-C": "Uppsala", "SE-S": "Värmland", "SE-AC": "Västerbotten", "SE-Y": "Västernorrland", "SE-U": "Västmanland", "SE-O": "Västra Götaland", "SE-T": "Örebro", "SE-E": "Östergötland",
     "FI-02": "Etelä-Karjala", "FI-03": "Etelä-Pohjanmaa", "FI-04": "Etelä-Savo", "FI-05": "Kainuu", "FI-06": "Kanta-Häme", "FI-07": "Keski-Pohjanmaa", "FI-08": "Keski-Suomi", "FI-09": "Kymenlaakso", "FI-10": "Lappi", "FI-11": "Pirkanmaa", "FI-12": "Österbotten", "FI-13": "Pohjois-Karjala", "FI-14": "Pohjois-Pohjanmaa", "FI-15": "Pohjois-Savo", "FI-16": "Päijät-Häme", "FI-17": "Satakunta", "FI-18": "Uusimaa", "FI-19": "Varsinais-Suomi",
@@ -1251,7 +1590,7 @@ function getRegionFromCode(region_code){
     "NO-03": "Oslo", "NO-11": "Rogaland", "NO-15": "Møre og Romsdal", "NO-18": "Nordland", "NO-30": "Viken", "NO-34": "Innlandet", "NO-38": "Vestfold og Telemark", "NO-42": "Agder", "NO-46": "Vestland", "NO-50": "Trøndelag",
     "PL-02": "Dolnośląskie", "PL-04": "Kujawsko-Pomorskie", "PL-06": "Lubelskie", "PL-08": "Lubuskie", "PL-10": "Łódzkie", "PL-12": "Małopolskie", "PL-14": "Mazowieckie", "PL-16": "Opolskie", "PL-18": "Podkarpackie", "PL-20": "Podlaskie", "PL-22": "Pomorskie", "PL-24": "Śląskie", "PL-26": "Świętokrzyskie", "PL-28": "Warmińsko-Mazurskie", "PL-30": "Wielkopolskie", "PL-32": "Zachodniopomorskie",
     "JP-01": "Hokkaido", "JP-02": "Aomori", "JP-03": "Iwate", "JP-04": "Miyagi", "JP-05": "Akita", "JP-06": "Yamagata", "JP-07": "Fukushima", "JP-08": "Ibaraki", "JP-09": "Tochigi", "JP-10": "Gunma", "JP-11": "Saitama", "JP-12": "Chiba", "JP-13": "Tokyo", "JP-14": "Kanagawa", "JP-15": "Niigata", "JP-16": "Toyama", "JP-17": "Ishikawa", "JP-18": "Fukui", "JP-19": "Yamanashi", "JP-20": "Nagano", "JP-21": "Gifu", "JP-22": "Shizuoka", "JP-23": "Aichi", "JP-24": "Mie", "JP-25": "Shiga", "JP-26": "Kyoto", "JP-27": "Osaka", "JP-28": "Hyogo", "JP-29": "Nara", "JP-30": "Wakayama", "JP-31": "Tottori", "JP-32": "Shimane", "JP-33": "Okayama", "JP-34": "Hiroshima", "JP-35": "Yamaguchi", "JP-36": "Tokushima", "JP-37": "Kagawa", "JP-38": "Ehime", "JP-39": "Kochi", "JP-40": "Fukuoka", "JP-41": "Saga", "JP-42": "Nagasaki", "JP-43": "Kumamoto", "JP-44": "Oita", "JP-45": "Miyazaki", "JP-46": "Kagoshima", "JP-47": "Okinawa",
-    "CA-AB": "Alberta", "CA-BC": "British Columbia", "CA-MB": "Manitoba", "CA-NB": "New Brunswick", "CA-NL": "Newfoundland and Labrador", "CA-NS": "Nova Scotia", "CA-ON": "Ontario", "CA-PE": "Prince Edward Island", "CA-QC": "Quebec", "CA-SK": "Saskatchewan",
+    "CA-AB": "Alberta", "CA-BC": "British Columbia", "CA-MB": "Manitoba", "CA-NB": "New Brunswick", "CA-NL": "Newfoundland and Labrador", "CA-NS": "Nova Scotia", "CA-ON": "Ontario", "CA-PE": "Prince Edward Island", "CA-QC": "Quebec", "CA-SK": "Saskatchewan", "CA-YT": "Yukon",
     "MX-BCN": "Baja California", "MX-CAM": "Campeche", "MX-CHH": "Chihuahua", "MX-CHP": "Chiapas", "MX-CMX": "Mexico City", "MX-JAL": "Jalisco", "MX-MEX": "State of Mexico", "MX-OAX": "Oaxaca", "MX-ROO": "Quintana Roo", "MX-SIN": "Sinaloa", "MX-TAB": "Tabasco", "MX-VER": "Veracruz", "MX-YUC": "Yucatán",
     "AU-ACT": "Australian Capital Territory", "AU-NSW": "New South Wales", "AU-NT": "Northern Territory", "AU-QLD": "Queensland", "AU-SA": "South Australia", "AU-TAS": "Tasmania", "AU-VIC": "Victoria", "AU-WA": "Western Australia",
     "ES-AN": "Andalucía", "ES-AR": "Aragón", "ES-AS": "Asturias", "ES-CB": "Cantabria", "ES-CE": "Ceuta", "ES-CL": "Castilla y León", "ES-CM": "Castilla-La Mancha", "ES-CN": "Canarias", "ES-CT": "Cataluña", "ES-EX": "Extremadura", "ES-GA": "Galicia", "ES-IB": "Islas Baleares", "ES-MC": "Región de Murcia", "ES-MD": "Comunidad de Madrid", "ES-ML": "Melilla", "ES-NC": "Navarra", "ES-PV": "País Vasco", "ES-RI": "La Rioja", "ES-VC": "Comunidad Valenciana",
@@ -1295,47 +1634,22 @@ function formatNumber(locale, value) {
   }).format(value);
 }
 
-function fetchTickets(url, none_text, ticket_id=null) {
-  fetch(url)
-    .then(response => response.json())
-    .then(data => {
-      const ticketSearchInput = document.getElementById('ticketSearchInput');
-      ticketSearchInput.innerHTML = '';
+// A ticket's name with its operator, which the name itself may leave out ("Zone A" of Skyss).
+function ticketLabel(ticket) {
+  const name = ticket.name || '';
+  const operator = ticket.operator || '';
+  return operator && !normalizeForSearch(name).includes(normalizeForSearch(operator))
+    ? `${operator} ${name}` : name;
+}
 
-      // Create a "None" option
-      const noneOption = document.createElement('option');
-      noneOption.textContent = none_text; // Set text from function parameter
-      noneOption.value = ""; 
-      ticketSearchInput.add(noneOption);
-
-      // Create an option element for each ticket
-      data.tickets.forEach(ticket => {
-        if (ticket.active || ticket.uid == ticket_id)
-          {
-            const option = document.createElement('option');
-            option.value = ticket.uid;
-            option.setAttribute('data-price', ticket.price);
-            option.setAttribute('data-currency', ticket.currency);
-            option.setAttribute('data-purchasing-date', ticket.purchasing_date);
-            if (ticket.uid == ticket_id){
-              option.selected = true; 
-            }
-    
-            // Construct complex HTML for the option's inner HTML
-            const optionText = `
-              <span class="d-flex align-items-center">
-                <i class="bi bi-ticket-perforated me-2"></i>
-                <span>${sanitize(String(ticket.name || ''))}</span>
-                <span class="ms-auto">${sanitize(String(ticket.price || ''))} ${sanitize(String(ticket.currency || ''))} (${sanitize(String(ticket.purchasing_date || ''))})</span>
-              </span>
-            `;
-            option.innerHTML = optionText;
-    
-            ticketSearchInput.add(option);
-          }
-      });
-    })
-    .catch(error => console.error('Error:', error));
+// A trip's ticket icon, with how many tickets it rides on when more than one. Styled inline:
+// the pages showing it do not share a stylesheet.
+function ticketIcon(iconHtml, count) {
+  if (!(count > 1)) return iconHtml;
+  return '<span style="position:relative;display:inline-block;">' + iconHtml
+    + '<span style="position:absolute;top:-.55em;right:-.75em;min-width:1.3em;padding:0 .25em;'
+    + 'border-radius:1em;background:#198754;color:#fff;font:600 .6rem/1.3em sans-serif;'
+    + 'text-align:center;">' + count + '</span></span>';
 }
 
 function getTextColor(bgColor) {
@@ -1401,6 +1715,10 @@ function setupTagAutocomplete(url, tripId, createOpts) {
     .then(response => response.json())
     .then(data => {
       tags = data.tags;
+      (window.restoredTagIds || []).forEach(uid => {
+        const t = tags.find(x => String(x.uid) === String(uid));
+        if (t) $('#tagList').append(makeTagChip(t));
+      });
       if (tripId != null) {
         tags.filter(t => {
           const ids = t.trip_ids ? t.trip_ids.split(',') : [];
@@ -1606,7 +1924,7 @@ function renderOperators(data, type, row) {
     }
 
     // Fallback to operator name
-    return sanitize(row.operator || '');
+    return row.operator ? `<span class="operatorName">${sanitize(row.operator)}</span>` : '';
 }
 
 // Function to calculate CO2 per kilometer

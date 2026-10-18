@@ -11,7 +11,6 @@ from src.pg import pg_session
 from src.sql.trips import (
     attach_ticket_query,
     change_visibility_query,
-    update_ticket_null_query,
     update_trip_type_query,
 )
 from src.utils import get_user_id
@@ -50,19 +49,18 @@ def _own_all_trips(pg, user_id, trip_ids):
     return count == len(trip_ids)
 
 
-def attach_ticket_to_trips(username, ticket_id, trip_ids):
+def attach_ticket_to_trips(username, ticket_ids, trip_ids, replace=False):
+    """The tickets added to each trip's, or, replacing, in place of them."""
     try:
         last_modified = datetime.datetime.now()
         user_id = get_user_id(username)
         with pg_session() as pg:
             # Ticket ownership
-            if (
-                pg.execute(
-                    "SELECT 1 FROM tickets WHERE username = :username AND uid = :ticket_id",
-                    {"username": username, "ticket_id": ticket_id},
-                ).fetchone()
-                is None
-            ):
+            owned = pg.execute(
+                "SELECT count(*) FROM tickets WHERE username = :username AND uid = ANY(:ticket_ids)",
+                {"username": username, "ticket_ids": ticket_ids},
+            ).scalar()
+            if owned != len(set(ticket_ids)):
                 abort(401)
             # Trip ownership
             if not _own_all_trips(pg, user_id, trip_ids):
@@ -72,7 +70,8 @@ def attach_ticket_to_trips(username, ticket_id, trip_ids):
                     attach_ticket_query(),
                     {
                         "trip_id": trip_id,
-                        "ticket_id": ticket_id,
+                        "ticket_ids": ticket_ids,
+                        "replace": replace,
                         "last_modified": last_modified,
                     },
                 )
@@ -270,15 +269,11 @@ def delete_ticket_from_db(username, ticket_id):
                 abort(401)
 
             # Detach the ticket from all of the user's trips
-            trip_ids = [
-                row[0]
-                for row in pg.execute(
-                    "SELECT trip_id FROM trips WHERE user_id = :user_id AND ticket_id = :ticket_id",
-                    {"user_id": get_user_id(username), "ticket_id": ticket_id},
-                ).fetchall()
-            ]
-            for trip_id in trip_ids:
-                pg.execute(update_ticket_null_query(), {"trip_id": trip_id})
+            pg.execute(
+                "UPDATE trips SET ticket_ids = array_remove(ticket_ids, CAST(:ticket_id AS integer))"
+                " WHERE user_id = :user_id AND ticket_ids @> ARRAY[CAST(:ticket_id AS integer)]",
+                {"user_id": get_user_id(username), "ticket_id": ticket_id},
+            )
 
             pg.execute(
                 "DELETE FROM tickets WHERE username = :username AND uid = :ticket_id",

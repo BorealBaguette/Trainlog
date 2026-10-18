@@ -81,14 +81,14 @@ function renderTripCards(trips, containerId, opts) {
     html += `<div class="flex-grow-1">`;
     html += `<div class="trip-header${isError ? ' text-danger' : ''}">`;
     if (isError) html += `<i class="bi bi-exclamation-triangle me-1"></i>`;
-    html += `${d.origin || '?'} → ${d.destination || '?'}</div>`;
+    html += `${sanitize(d.origin || '?')} → ${sanitize(d.destination || '?')}</div>`;
 
     if (isError) {
-      html += `<div class="text-danger small mt-1">${t.error}</div>`;
+      html += `<div class="text-danger small mt-1">${sanitize(String(t.error))}</div>`;
     } else {
       if (d.line_name || d.operator) {
         const sub = [d.line_name, d.operator].filter(Boolean).join(' · ');
-        html += `<div class="text-muted" style="font-size:0.85em;margin-top:0.2rem;">${sub}</div>`;
+        html += `<div class="text-muted" style="font-size:0.85em;margin-top:0.2rem;">${sanitize(sub)}</div>`;
       }
     }
     html += `</div>`;
@@ -111,14 +111,14 @@ function renderTripCards(trips, containerId, opts) {
         html += `<div class="col-12">`;
       }
       const details = [];
-      if (d.date) details.push(d.date);
-      if (d.distance) details.push(d.distance);
+      if (d.date) details.push(sanitize(String(d.date)));
+      if (d.distance) details.push(sanitize(String(d.distance)));
       if (d.duration) details.push(formatDuration(d.duration));
-      if (!showType && d.type) details.push(`<span class="badge bg-secondary">${d.type}</span>`);
+      if (!showType && d.type) details.push(`<span class="badge bg-secondary">${sanitize(d.type)}</span>`);
       html += details.join(' · ');
       html += `</div></div>`;
       if (d.notes) {
-        html += `<div class="mt-2"><small class="text-muted">${d.notes}</small></div>`;
+        html += `<div class="mt-2"><small class="text-muted" style="white-space: pre-line">${sanitize(d.notes)}</small></div>`;
       }
       html += `</div>`;
     }

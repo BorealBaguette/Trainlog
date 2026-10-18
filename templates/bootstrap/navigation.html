@@ -37,7 +37,7 @@
                   <a class="dropdown-item" href="{{ url_for('bmc.pending') }}"><i class="fa-solid fa-mug-hot"></i>{{stalePremiumIcon | safe}} Pending BMC </a>
                   <a class="dropdown-item" href="{{ url_for('adminManual') }}"><i class="bi bi-sign-stop-lights"></i> Manual Stations</a>
                   {% endif %}
-                  <a class="dropdown-item" href="{{ url_for('stations') }}"><i class="fa-solid fa-globe"></i> Stations</a>
+                  <a class="dropdown-item" href="{{ url_for('admin.station_explorer') }}"><i class="fa-solid fa-magnifying-glass-location"></i> Station explorer</a>
                   <a class="dropdown-item" href="{{ url_for('ships') }}"><i class="fa fa-ship"></i> Ships </a>
                   <a class="dropdown-item" href="{{ url_for('editCountriesList') }}"><i class="bi bi-flag"></i> Coverage edit</a>
                   <a class="dropdown-item" href="{{ url_for('show_operators') }}"><i class="bi bi-images"></i> Operators</a>
@@ -176,37 +176,35 @@
         <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
           <a class="dropdown-item" href="{{ url_for('ai.new_trip_ai', username=username) }}"><i class="fa-solid fa-wand-magic-sparkles"></i> {{smart_logging}} ᵦ</a>
           <hr class="dropdown-divider">
-          <!-- Tickets Section -->
-          <h6 class="dropdown-header">{{nav_tickets}}</h6>
-          <a class="dropdown-item" href="{{ url_for('new_ticket', username=username) }}">
-            <i class="bi bi-ticket-perforated"></i><i class="plus-icon bi bi-plus"></i> <span class="after-plus-icon">{{new_ticket}}</span>
+          <a class="dropdown-item" href="{{ url_for('tickets.ticket_list', username=username) }}">
+            <i class="bi bi-ticket-detailed"></i> {{nav_tickets}}
           </a>
-          <a class="dropdown-item" href="{{ url_for('ticket_list', username=username) }}">
-            <i class="bi bi-ticket-detailed"></i> {{ticket_list}}
-          </a>
-          <div class="dropdown-divider"></div>
-          <!-- Tags Section -->
-          <h6 class="dropdown-header">{{tags}}</h6>
           <a class="dropdown-item" href="{{ url_for('tag_list', username=username) }}">
-            <i class="bi bi-tags"></i>{{tagInvitesIcon | safe}} {{manage_tags}}
-          </a>
-          <div class="dropdown-divider"></div>
-          <!-- GPX Section -->
-          <h6 class="dropdown-header">GPX</h6>
-          <a class="dropdown-item" href="{{ url_for('upload_gpx', username=username) }}">
-            <i class="bi bi-cloud-upload"></i> {{upload_gpx_files}}
+            <i class="bi bi-tags"></i>{{tagInvitesIcon | safe}} {{tags}}
           </a>
           <a class="dropdown-item" href="{{ url_for('list_gpx', username=username) }}">
-            <i class="bi bi-list"></i> {{manage_gpx_files}}
+            <i class="fa-solid fa-route"></i> GPX
           </a>
           <div class="dropdown-divider"></div>
+          <!-- Stations Section -->
+          <h6 class="dropdown-header">{{navStations}}</h6>
+          <a class="dropdown-item" href="{{ url_for('manual_stations.userManualStations', username=username) }}"><i class="bi bi-sign-stop-lights"></i> {{ manage_manual_stations }}</a>
+          <a class="dropdown-item" href="{{ url_for('station_explorer.station_explorer') }}">
+            <i class="fa-solid fa-magnifying-glass-location"></i> {{stationExplorer}}
+          </a>
+          <div class="dropdown-divider"></div>
+          <!-- Maps and views -->
+          {% if request.endpoint != 'user_settings' %}
+          <a class="dropdown-item" href="#" id="mapBgNav" style="display:none"><i class="fa-solid fa-map"></i> {{ tilesetLabel }}</a>
+          {% endif %}
           <a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a>
           <a class="dropdown-item" href="{{ url_for('timeline.timeline', username=username) }}"><i class="bi bi-calendar3"></i> {{ timeline }}</a>
           <a class="dropdown-item" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
-          <a class="dropdown-item" href="{{ url_for('userManualStations', username=username) }}"><i class="bi bi-sign-stop-lights"></i> {{ manage_manual_stations }}</a>
+          <div class="dropdown-divider"></div>
           <a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a>
-          <a class="dropdown-item" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i>{{tsBuilderTitle}}</a>
+          <a class="dropdown-item" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i> {{tsBuilderTitle}}</a>
           {% if is_alpha %}
+          <div class="dropdown-divider"></div>
           <!-- Automated Routers Section -->
           <h6 class="dropdown-header">{{automatedRouters}}</h6>
             <a class="dropdown-item" href="{{ url_for('new_auto', username=username, type='here') }}"><i class="fa-solid fa-caret-down"></i> Autorouting (Here)α</a>
@@ -313,6 +311,7 @@
 
   </div>
 </nav>
+{% if request.endpoint != 'user_settings' %}{% include "includes/map_background_modal.html" %}{% endif %}
 
 <style>
   .scrollable-dropdown {
@@ -400,26 +399,50 @@
       }
     });
 
-    // Sort the countries within each group
+    // Sort by name, each subdivision straight under its parent (GB-ENG-H under
+    // GB-ENG), and indent it one step per level below the group's top level.
     sortedGroups.forEach(function (group) {
-      group.countries.sort(function (a, b) {
-        return (a.name || a.iso || '').localeCompare(b.name || b.iso || '');
-      });
+        var byIso = {};
+        group.countries.forEach(function (c) { byIso[c.iso] = c; });
+
+        // Names of the entry and of its ancestors present in the group, top first:
+        // ["England", "London"] for gb-eng-i.
+        group.countries.forEach(function (c) {
+            var parts = c.iso.split("-");
+            c.path = [];
+            for (var i = 1; i <= parts.length; i++) {
+                var ancestor = byIso[parts.slice(0, i).join("-")];
+                if (ancestor) c.path.push(ancestor.name || ancestor.iso);
+            }
+        });
+
+        group.countries.sort(function (a, b) {
+            for (var i = 0; i < Math.min(a.path.length, b.path.length); i++) {
+                var cmp = a.path[i].localeCompare(b.path[i]);
+                if (cmp) return cmp;
+            }
+            return a.path.length - b.path.length;
+        });
+
+        var top = Math.min.apply(null, group.countries.map(function (c) { return c.path.length; }));
+        group.countries.forEach(function (c) { c.level = c.path.length - top; });
     });
 
-    // Reattach the sorted groups to the DOM
-    sortedGroups.forEach(function (group, index) {
-      group.header.appendTo(group.header.parent());
-      group.countries.forEach(function (country) {
-        country.element.html(country.html);
-        country.element.appendTo(country.element.parent());
+        // Reattach the sorted groups to the DOM
+        sortedGroups.forEach(function (group, index) {
+          group.header.appendTo(group.header.parent());
+          group.countries.forEach(function (country) {
+            if (country.level > 0) {
+              country.element.css('padding-left', (1 + country.level) + 'rem');
+            }
+            country.element.html(country.html);
+            country.element.appendTo(country.element.parent());
+          });
+          if (group.separator) {
+            group.separator.appendTo(group.separator.parent());
+          }
+        });
       });
-      if (group.separator) {
-        group.separator.appendTo(group.separator.parent());
-      }
-    });
-  });
-
 
    $(function(){
       var current = location.pathname;

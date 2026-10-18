@@ -61,7 +61,7 @@ def get_coverage_geojson_dict_from_regions(cc):
     reference_crs = None
     first_payload = True
 
-    offset = 10**6
+    offset = 10**7
     merged_features = []
 
     for file_index, file_path in enumerate(region_file_paths):

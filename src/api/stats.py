@@ -33,6 +33,9 @@ CATEGORY_DATASETS = {
     "trainsets": (stats_sql.stats_trainsets, "trainset"),
 }
 
+# Year segment that selects every past trip instead of one year.
+PAST = "past"
+
 # Datasets `fetch_stats` produces when the caller doesn't ask for a subset.
 ALL_DATASETS = tuple(CATEGORY_DATASETS) + ("countries", "years", "months")
 
@@ -580,7 +583,7 @@ def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
             )
 
         # Months only mean something once a year has been picked.
-        if "months" in datasets and year:
+        if "months" in datasets and year and year != PAST:
             stats["months"] = get_stats_months(
                 pg=pg, user_id=user_id, trip_type=trip_type, year=year
             )

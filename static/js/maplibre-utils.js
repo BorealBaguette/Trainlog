@@ -29,33 +29,25 @@ const MapConfig = {
         "jawg-lagoon-v2":'/getVectorStyle/{language}/jawg-lagoon.json',
         "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json',
         "dark-train":       '/getVectorStyle/{language}/trainlog-dark.json',
+        "trainlog-rail":    '/getVectorStyle/{language}/trainlog-rail.json',
         "ofm-liberty": 'https://tiles.openfreemap.org/styles/liberty',
         "ofm-bright": 'https://tiles.openfreemap.org/styles/bright',
         "ofm-positron": 'https://tiles.openfreemap.org/styles/positron'
     }
 };
 
-// Map initialization function with vector tile support
-async function initializeMapLibre(options = {}) {
-    const {
-        container = 'map',
-        tileserver = 'osm',
-        useGlobe = false,
-        userLanguage = 'en',
-        center = [10, 50],
-        zoom = 5,
-        styleUrl = null,
-        preserveDrawingBuffer = false,
-        pixelRatio = null
-    } = options;
-
+// Resolves a tileserver value (incl. orm-vector-<type>.<base>) into a MapLibre style
+// Map labels default to the user's map language setting (window.MAP_LANG, set by the layouts)
+async function resolveBackground(tileserver, { styleUrl = null, userLanguage = window.MAP_LANG || 'en', useGlobe = false } = {}) {
     let mapStyle;
 
-    // Parse orm-vector overlay
+    // Parse the OpenRailwayMap overlay. It is always the vector one, over raster and vector
+    // bases alike; openrailwaymap-<type>.<base> is the old raster overlay, still saved in
+    // some users' settings, with the same type names
     let ormVectorBase = null;
     let ormVectorType = 'standard';
     let effectiveTileserver = tileserver;
-    const ormVectorMatch = tileserver && tileserver.match(/^orm-vector-([^.]+)\.(.+)$/);
+    const ormVectorMatch = tileserver && tileserver.match(/^(?:orm-vector-|openrailwaymap-)([^.]+)\.(.+)$/);
     if (ormVectorMatch) {
         ormVectorType = ormVectorMatch[1];
         ormVectorBase = ormVectorMatch[2];
@@ -94,6 +86,26 @@ async function initializeMapLibre(options = {}) {
         mapStyle = createRasterStyle(effectiveTileserver, userLanguage, useGlobe);
     }
 
+    return { mapStyle, ormVectorBase, ormVectorType };
+}
+
+// Map initialization function with vector tile support
+async function initializeMapLibre(options = {}) {
+    const {
+        container = 'map',
+        useGlobe = false,
+        userLanguage = window.MAP_LANG || 'en',
+        center = [10, 50],
+        zoom = 5,
+        styleUrl = null,
+        preserveDrawingBuffer = false,
+        pixelRatio = null
+    } = options;
+
+    const tileserver = options.tileserver || 'osm';
+    const { mapStyle, ormVectorBase, ormVectorType } =
+        await resolveBackground(tileserver, { styleUrl, userLanguage, useGlobe });
+
     // Create map
     // preserveDrawingBuffer/pixelRatio are only needed to export the canvas as an
     // image (e.g. the print poster) — left off by default since they cost extra
@@ -108,6 +120,15 @@ async function initializeMapLibre(options = {}) {
         ...(pixelRatio ? { pixelRatio } : {})
     });
 
+    map._tlOptions = { styleUrl, userLanguage, useGlobe, tileserver };
+    map._currentTileserver = tileserver;
+    map._baseIds = { sources: Object.keys(mapStyle.sources || {}), layers: mapStyle.layers.map(l => l.id) };
+
+    // Remember page-added images (pins etc.): a style swap drops them
+    map._userImages = new Set();
+    const addImage = map.addImage.bind(map);
+    map.addImage = (id, ...rest) => { map._userImages.add(id); return addImage(id, ...rest); };
+
     // Add a sentinel layer that trip layers will sit above
     map.once('load', () => {
         map.addLayer({ id: 'orm-sentinel', type: 'background', paint: { 'background-opacity': 0 } });
@@ -115,77 +136,239 @@ async function initializeMapLibre(options = {}) {
 
     // Add OpenRailwayMap vector overlay after style loads
     if (ormVectorBase) {
-        const ormTypeMap = {
-            standard:    'standard',
-            maxspeed:    'speed',
-            signals:     'signals',
-            electrified: 'electrification',
-            gauge:       'track',
-        };
-        const ormStyleName = ormTypeMap[ormVectorType] || 'standard';
-
-        map.once('load', async () => {
-            try {
-                const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json`);
-                const ormStyle = await ormStyleResp.json();
-
-                const skipSources = new Set(['dem', 'search', 'route', 'route_stops', 'openhistoricalmap']);
-                const addedSources = new Set();
-
-                // Fix sources: convert relative url/tiles to absolute tiles array
-                for (const [name, source] of Object.entries(ormStyle.sources)) {
-                    if (skipSources.has(name)) continue;
-                    try {
-                        const fixedSource = { ...source };
-                        if (fixedSource.url) {
-                            const path = fixedSource.url.startsWith('/') ? fixedSource.url : `/${fixedSource.url}`;
-                            fixedSource.tiles = [`https://openrailwaymap.app${path}/{z}/{x}/{y}`];
-                            delete fixedSource.url;
-                        } else if (fixedSource.tiles) {
-                            fixedSource.tiles = fixedSource.tiles.map(t =>
-                                t.startsWith('/') ? `https://openrailwaymap.app${t}/{z}/{x}/{y}` : t
-                            );
-                        } else {
-                            continue; // no tiles, skip
-                        }
-                        map.addSource(`orm_${name}`, fixedSource);
-                        addedSources.add(name);
-                    } catch (e) {
-                        console.warn(`[ORM] skipping source ${name}:`, e.message);
-                    }
-                }
-
-                // Add all ORM line layers below text labels but above base map geometry
-                // Skip text/symbol/background layers — they cause gritty artifacts and CORS issues
-                const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
-                const skipTypes = new Set(['symbol', 'background', 'raster']);
-                const firstSymbolId = map.getStyle().layers.find(l => l.type === 'symbol')?.id || 'orm-sentinel';
-                for (const layer of ormStyle.layers) {
-                    if (skipLayers.has(layer.id) || !layer.source) continue;
-                    if (skipSources.has(layer.source) || !addedSources.has(layer.source)) continue;
-                    if (skipTypes.has(layer.type)) continue;
-                    if (layer.id.includes('_casing') || layer.id.includes('_cover')) continue;
-                    try {
-                        const newLayer = { ...layer, source: `orm_${layer.source}` };
-                        // Strip layout.visibility expressions — unsupported by MapLibre, default to visible
-                        if (newLayer.layout?.visibility && typeof newLayer.layout.visibility !== 'string') {
-                            newLayer.layout = { ...newLayer.layout, visibility: 'visible' };
-                        }
-                        map.addLayer(newLayer, firstSymbolId);
-                    } catch (e) {
-                        console.warn(`[ORM] skipping layer ${layer.id}:`, e.message);
-                    }
-                }
-            } catch (e) {
-                console.error('[ORM] failed to load style:', e);
-            }
-        });
+        map.once('load', () => addOrmOverlay(map, ormVectorType));
     }
 
     // Add navigation controls
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+    // Zoom readout, for the owner only (TRAINLOG_OWNER, set by the layouts)
+    if (window.TRAINLOG_OWNER) {
+        const zoomBox = document.createElement('div');
+        zoomBox.style.cssText = 'position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:5;padding:2px 6px;'
+            + 'background:rgba(0,0,0,.6);color:#fff;font:12px monospace;border-radius:4px;pointer-events:none';
+        map.getContainer().appendChild(zoomBox);
+        const showZoom = () => { zoomBox.textContent = `z${map.getZoom().toFixed(2)}`; };
+        map.on('zoom', showZoom);
+        showZoom();
+    }
+
     return map;
+}
+
+// Adds the OpenRailwayMap vector overlay under the base map's labels. What it adds is
+// remembered on map._ormIds so a background change can tell it apart from trip layers.
+async function addOrmOverlay(map, ormVectorType) {
+    const ormTypeMap = {
+        standard:    'standard',
+        maxspeed:    'speed',
+        signals:     'signals',
+        electrified: 'electrification',
+        gauge:       'track',
+    };
+    const ormStyleName = ormTypeMap[ormVectorType] || 'standard';
+
+    const ormIds = map._ormIds = { sources: [], layers: [], type: ormStyleName };
+
+    // "org-<style>" types: openrailwaymap.org's own raster tiles, offered as an alternative to
+    // ours now that it serves Trainlog again. It may block us again, hence kept separate
+    if (ormVectorType.startsWith('org-')) {
+        const id = 'orm-overlay_org';
+        map.addSource(id, {
+            type: 'raster',
+            tiles: [`https://tiles.openrailwaymap.org/${ormVectorType.slice(4)}/{z}/{x}/{y}.png`],
+            tileSize: 256,
+            maxzoom: 19,
+            attribution: '© <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>'
+        });
+        const baseLayers = [];
+        for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
+        const firstLabelId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
+        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstLabelId)?.id || firstLabelId;
+        map.addLayer({ id, type: 'raster', source: id }, anchorId);
+        ormIds.sources.push(id);
+        ormIds.layers.push(id);
+        return;
+    }
+
+    setupOrmPopup(map);
+    try {
+        const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json`);
+        const ormStyle = await ormStyleResp.json();
+
+        const skipSources = new Set(['dem', 'search', 'route', 'route_stops', 'openhistoricalmap']);
+        const addedSources = new Set();
+
+        // Fix sources: convert relative url/tiles to absolute tiles array
+        for (const [name, source] of Object.entries(ormStyle.sources)) {
+            if (skipSources.has(name)) continue;
+            try {
+                const fixedSource = { ...source };
+                if (fixedSource.url) {
+                    const path = fixedSource.url.startsWith('/') ? fixedSource.url : `/${fixedSource.url}`;
+                    fixedSource.tiles = [`https://openrailwaymap.app${path}/{z}/{x}/{y}`];
+                    delete fixedSource.url;
+                } else if (fixedSource.tiles) {
+                    fixedSource.tiles = fixedSource.tiles.map(t =>
+                        t.startsWith('/') ? `https://openrailwaymap.app${t}/{z}/{x}/{y}` : t
+                    );
+                } else {
+                    continue; // no tiles, skip
+                }
+                // Not orm_: Trainlog Rail has its own orm_high/orm_low sources
+                map.addSource(`orm-overlay_${name}`, fixedSource);
+                ormIds.sources.push(`orm-overlay_${name}`);
+                addedSources.add(name);
+            } catch (e) {
+                console.warn(`[ORM] skipping source ${name}:`, e.message);
+            }
+        }
+
+        // Add all ORM line layers below text labels but above base map geometry
+        // Skip symbol/background layers but the line labels — they cause gritty artifacts and CORS issues
+        const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
+        const skipTypes = new Set(['symbol', 'background', 'raster']);
+        // Only look below the sentinel: after a background change trip layers sit above it
+        const baseLayers = [];
+        for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
+        // First label, not first symbol: oneway arrow layers sit down among the tunnels and would bury it under the roads
+        const firstSymbolId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
+        // Under 3D buildings too, where the base has them: drawn after them the lines showed through
+        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstSymbolId)?.id || firstSymbolId;
+        // Labels along the lines ("25kV 50Hz", speeds, refs) need a font from the map's one glyph
+        // source: raster bases have none, so they get OpenFreeMap's
+        if (!map.getStyle().glyphs) map.setGlyphs(OFM_GLYPHS);
+        const labelFont = map.getStyle().glyphs.includes('jawg') ? ['Noto Bold'] : ['Noto Sans Bold'];
+        for (const layer of ormStyle.layers) {
+            if (skipLayers.has(layer.id) || !layer.source) continue;
+            if (skipSources.has(layer.source) || !addedSources.has(layer.source)) continue;
+            const lineLabel = layer.type === 'symbol' && layer.id.endsWith('_text')
+                && layer.layout?.['symbol-placement'] === 'line';
+            // orm-raster: the overlay below zoom 6, as images (build_style)
+            if (skipTypes.has(layer.type) && !lineLabel && layer.id !== 'orm-raster') continue;
+            if (layer.id.includes('_cover')) continue;
+            // Dash lengths follow line-width, so a wider dashed casing drifts out of step with its fill
+            if (layer.id.includes('_casing') && layer.paint?.['line-dasharray']) continue;
+            try {
+                const newLayer = { ...layer, source: `orm-overlay_${layer.source}` };
+                if (lineLabel) newLayer.layout = { ...layer.layout, 'text-font': labelFont };
+                // Strip layout.visibility expressions — unsupported by MapLibre, default to visible
+                if (newLayer.layout?.visibility && typeof newLayer.layout.visibility !== 'string') {
+                    newLayer.layout = { ...newLayer.layout, visibility: 'visible' };
+                }
+                map.addLayer(newLayer, anchorId);
+                ormIds.layers.push(newLayer.id);
+            } catch (e) {
+                console.warn(`[ORM] skipping layer ${layer.id}:`, e.message);
+            }
+        }
+    } catch (e) {
+        console.error('[ORM] failed to load style:', e);
+    }
+}
+
+// What an overlay line's colour stands for in each mode, from the tile properties behind it
+function describeOrmLine(p, type) {
+    const list = (...values) => values.filter(v => v != null && v !== '');
+    switch (type) {
+        case 'speed':
+            return p.maxspeed != null ? `${p.maxspeed} km/h` : null;
+        case 'electrification':
+            if (!p.voltage) return p.electrification_state || null;
+            return `${p.voltage >= 1000 ? `${p.voltage / 1000} kV` : `${p.voltage} V`} ${p.frequency ? `${p.frequency} Hz` : 'DC'}`;
+        case 'signals':
+            return list(p.train_protection0, p.train_protection1, p.train_protection2).join(', ').toUpperCase() || null;
+        case 'track':
+            return String(p.gauges || p.gauge0 || '').split(/[;,]\s*/).filter(Boolean)
+                .map(g => /^\d+$/.test(g) ? `${g} mm` : g).join(' / ') || null;
+        default:
+            return list(p.usage, p.highspeed ? 'HSL' : null).join(' · ') || null;
+    }
+}
+
+// The overlay line under a point and what to tell about it, or null. Anything the page draws
+// above the sentinel (trips, stops) has its own click and cursor, so a hit on one of those wins
+function ormLineAt(map, point) {
+    const orm = map._ormIds;
+    if (!orm?.layers.length) return null;
+    // Lines are a few px wide: search around the point rather than under it
+    const box = [[point.x - 6, point.y - 6], [point.x + 6, point.y + 6]];
+    const order = map.getLayersOrder();
+    const pageLayers = order.slice(order.indexOf('orm-sentinel') + 1);
+    if (pageLayers.length && map.queryRenderedFeatures(box, { layers: pageLayers }).length) return null;
+    for (const f of map.queryRenderedFeatures(box, { layers: orm.layers })) {
+        if (!f.sourceLayer?.includes('railway_line')) continue;
+        const p = f.properties;
+        // Lines not in service carry no speed, voltage…: their state is what sets them apart
+        const meaning = describeOrmLine(p, orm.type) ?? (p.state !== 'present' ? p.state : null);
+        const title = [p.ref, p.name].filter(Boolean).join(' ');
+        const text = [title, meaning].filter(Boolean).join('\n');
+        if (text) return text;
+    }
+    return null;
+}
+
+// Clicking an overlay line tells what its colour means; hovering one shows the pointer
+function setupOrmPopup(map) {
+    if (map._ormPopup) return;
+    map._ormPopup = true;
+    map.on('click', (e) => {
+        if (e.originalEvent.target !== map.getCanvas()) return;
+        const text = ormLineAt(map, e.point);
+        if (!text) return;
+        const el = document.createElement('div');
+        el.style.whiteSpace = 'pre-line';
+        el.textContent = text;
+        new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat).setDOMContent(el).addTo(map);
+    });
+    // Once per frame at most, and the cursor is only reset when set here: trip layers set theirs
+    let pending = null, pointing = false;
+    map.on('mousemove', (e) => {
+        if (pending) { pending = e.point; return; }
+        pending = e.point;
+        requestAnimationFrame(() => {
+            const over = !!ormLineAt(map, pending);
+            pending = null;
+            if (over === pointing) return;
+            pointing = over;
+            map.getCanvas().style.cursor = over ? 'pointer' : '';
+        });
+    });
+}
+
+// Swaps the background of a live map, keeping everything the page added on top
+// (trip sources/layers, the sentinel, images). Not persisted anywhere.
+async function changeBackground(map, tileserver, { useGlobe } = {}) {
+    const o = map._tlOptions;
+    map._currentTileserver = tileserver;
+    // The globe can be switched with the background (map background modal); otherwise keep the current one
+    if (useGlobe !== undefined) map._currentGlobe = useGlobe;
+    const globe = map._currentGlobe ?? o.useGlobe;
+    const { mapStyle, ormVectorBase, ormVectorType } = await resolveBackground(tileserver, { ...o, useGlobe: globe });
+    const orm = map._ormIds || { sources: [], layers: [] };
+    const baseSources = new Set(map._baseIds.sources);
+    const baseLayers = new Set(map._baseIds.layers);
+    const ormSources = new Set(orm.sources);
+    const ormLayers = new Set(orm.layers);
+
+    const prev = map.getStyle();
+    const keepSources = Object.entries(prev.sources).filter(([id]) => !baseSources.has(id) && !ormSources.has(id));
+    const keepLayers = prev.layers.filter(l => !baseLayers.has(l.id) && !ormLayers.has(l.id));
+    const images = [...map._userImages].filter(id => map.hasImage(id)).map(id => [id, map.getImage(id)]);
+
+    map._baseIds = { sources: Object.keys(mapStyle.sources || {}), layers: mapStyle.layers.map(l => l.id) };
+    map._ormIds = null;
+    // Layers sit before the base's first symbol layer only for ORM; trip layers go on top.
+    for (const [id, src] of keepSources) mapStyle.sources[id] = src;
+    mapStyle.layers.push(...keepLayers);
+    map.setStyle(mapStyle, { diff: false });
+
+    map.once('style.load', () => {
+        for (const [id, img] of images) {
+            if (!map.hasImage(id)) map.addImage(id, img.data, { pixelRatio: img.pixelRatio, sdf: img.sdf });
+        }
+        if (ormVectorBase) addOrmOverlay(map, ormVectorType);
+    });
 }
 
 // Check if tileserver is a vector tile server
@@ -195,6 +378,7 @@ function isVectorTileServer(tileserver) {
         'jawg-lagoon-v2',
         'trainlog-lagoon-v2',
         'dark-train',
+        'trainlog-rail',
         'ofm-liberty',
         'ofm-bright',
         'ofm-positron'
@@ -204,15 +388,28 @@ function isVectorTileServer(tileserver) {
 
 // Styles served from OpenFreeMap tiles, whose per-language name fields let the
 // labels be localised client-side (Jawg instead gets its language server-side).
-const OFM_SOURCED_STYLES = ['dark-train', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
+const OFM_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 
+const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
+
+// "native" labels places as written locally (北京); "local" the same with the
+// Latin spelling below a non-Latin name (北京 / Beijing); "int" in Latin letters
+// only (Beijing); a language code in that language.
 function applyStyleLanguage(style, userLanguage) {
     const code = userLanguage === 'gsw' ? 'de' : userLanguage.split('-')[0];
+    const textField = code === 'local'
+        ? ['case', ['has', 'name:nonlatin'],
+            ['concat', ['get', 'name:nonlatin'], '\n', ['get', 'name:latin']],
+            ['coalesce', ['get', 'name'], ['get', 'name:latin']]]
+        : code === 'native'
+        ? ['coalesce', ['get', 'name'], ['get', 'name:latin']]
+        : code === 'int'
+        ? ['coalesce', ['get', 'name:latin'], ['get', 'name']]
+        : ['coalesce', ['get', `name:${code}`], ['get', 'name:latin'], ['get', 'name']];
     for (const layer of style.layers) {
         if (layer.type !== 'symbol' || !layer.layout || !layer.layout['text-field']) continue;
         if (!JSON.stringify(layer.layout['text-field']).includes('name')) continue;
-        layer.layout['text-field'] = ['coalesce',
-            ['get', `name:${code}`], ['get', 'name:latin'], ['get', 'name']];
+        layer.layout['text-field'] = textField;
     }
 }
 
@@ -280,20 +477,11 @@ function getTileServerConfig(serverType, userLanguage) {
             } else if (serverType === 'thunderforest-transport') {
                 tileUrl = `https://tiles.trainlog.me/tile/${serverType}/{x}/{y}/{z}`;
                 attribution = '© Thunderforest, © OpenStreetMap contributors';
-            } else if (serverType && serverType.startsWith("orm-vector-")) {
-                // Vector ORM is handled by initializeMapLibre; fall back to base raster
-                const m = serverType.match(/^orm-vector-([^.]+)\.(.+)$/);
+            } else if (serverType && /^(orm-vector-|openrailwaymap-)/.test(serverType)) {
+                // The ORM overlay is added by resolveBackground; here just the base raster
+                const m = serverType.match(/^(?:orm-vector-|openrailwaymap-)([^.]+)\.(.+)$/);
                 serverType = (m ? m[2] : null) || "osm";
                 return getTileServerConfig(serverType, userLanguage);
-            } else if (serverType && serverType.startsWith("openrailwaymap-")) {
-                var baseStyle = "osm"; // default
-                if (serverType.includes(".")) {
-                    var parts = serverType.split(".");
-                    serverType = parts[0];
-                    baseStyle = parts[1];
-                }
-                tileUrl = `https://tiles.trainlog.me/tile/${serverType}/{x}/{y}/{z}?base_style=${baseStyle}`;
-                attribution = '© Openrailwaymap, © OpenStreetMap contributors, © Jawg';
             }
     }
 
@@ -465,6 +653,45 @@ function applyLiveTracks(trips, liveTracks, features) {
     });
 }
 
+// One trip -> its GeoJSON feature, or null when the path is unusable.
+// Takes the path either as trip.path ([[lat, lng], ...], as the trip endpoints
+// return it) or as trip.coords ([[lng, lat], ...], already decoded — the
+// trips map builds those from encoded polylines and skips the swap).
+function tripToFeature(trip) {
+    trip = computeTimeStatus(trip);
+    if (trip.trip.type == 'helicopter'){
+        trip.trip.type = 'air';
+    }
+
+    try {
+        let coords = trip.coords || trip.path.map(c => [c[1], c[0]]);
+        coords = normalizePathCoords(coords);
+        if ((trip.trip.type === 'air') && coords.length === 2) {
+            coords = createGeodesicLine(coords[0], coords[1]);
+        }
+
+        return {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords },
+            properties: {
+                id: trip.trip.uid,
+                type: trip.trip.type,
+                time: trip.time,
+                // -1 = undated past trip, matched by the 'undated' pseudo-year
+                year: trip.trip.start_datetime === -1 ? 'undated'
+                    : trip.trip.start_datetime !== 1
+                    ? trip.trip.start_datetime.substring(0, 4)
+                    : null,
+                origin: trip.trip.origin_station,
+                destination: trip.trip.destination_station
+            }
+        };
+    } catch (error) {
+        console.warn('Broken trip:', trip.trip.uid);
+        return null;
+    }
+}
+
 // Build trip layers for the map
 function buildTripLayers(map, trips, transportTypes, options = {}) {
     const {
@@ -474,38 +701,7 @@ function buildTripLayers(map, trips, transportTypes, options = {}) {
     } = options;
 
     // Create features from trips
-    const features = trips.map(trip => {
-        trip = computeTimeStatus(trip);
-        if (trip.trip.type == 'helicopter'){
-            trip.trip.type = 'air';
-        }
-
-        try {
-            let coords = trip.path.map(c => [c[1], c[0]]);
-            coords = normalizePathCoords(coords);
-            if ((trip.trip.type === 'air') && coords.length === 2) {
-                coords = createGeodesicLine(coords[0], coords[1]);
-            }
-            
-            return {
-                type: 'Feature',
-                geometry: { type: 'LineString', coordinates: coords },
-                properties: {
-                    id: trip.trip.uid,
-                    type: trip.trip.type,
-                    time: trip.time,
-                    year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
-                        ? trip.trip.start_datetime.substring(0, 4)
-                        : null,
-                    origin: trip.trip.origin_station,
-                    destination: trip.trip.destination_station
-                }
-            };
-        } catch (error) {
-            console.warn('Broken trip:', trip.trip.uid);
-            return null;
-        }
-    }).filter(feature => feature !== null);
+    const features = trips.map(tripToFeature).filter(feature => feature !== null);
 
     // Add source
     if (!map.getSource('trips')) {
@@ -636,6 +832,85 @@ function buildTripLayers(map, trips, transportTypes, options = {}) {
     return features;
 }
 
+// Layers for one time slice of trips on its own source (the trips map draws
+// its trips as consecutive slices in time, oldest at the bottom). Unlike
+// buildTripLayers there is one layer per role, styled per feature, so lines
+// stack in data order across transport types: the slice's shadows, then its
+// lines (features in time order), then the dashes of planned trips. The
+// source holds only the trips to display, so nothing is filtered here.
+// Features need `type` and `time` properties; ids are promoted from `id` so
+// feature-state (the pulse of current trips) can address them.
+function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
+    const { onLayerClick = null } = options;
+    const time = ['get', 'time'];
+    const isAir = ['==', ['get', 'type'], 'air'];
+    const typeColor = ['match', ['get', 'type']];
+    transportTypes.forEach(type => typeColor.push(type.id, type.color));
+    typeColor.push('#888888');
+
+    if (!map.getSource(sourceId)) {
+        map.addSource(sourceId, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+            promoteId: 'id'
+        });
+    }
+
+    const layout = { 'line-join': 'round', 'line-cap': 'round' };
+    const layers = [
+        {
+            id: `${sourceId}-shadow`,
+            paint: {
+                'line-color': '#000000',
+                'line-width': ['case', isAir, 3, 5],
+                'line-opacity': ['case', ['==', time, 'future'], 0.3, 0.8],
+                'line-blur': 0.5
+            }
+        },
+        {
+            id: `${sourceId}-line`,
+            clickable: true,
+            paint: {
+                'line-color': ['case',
+                    ['==', time, 'current'], '#ff0000',
+                    ['==', time, 'future'], '#ffffff',
+                    typeColor
+                ],
+                'line-width': ['case', ['==', time, 'current'], 4, isAir, 1, 3],
+                'line-opacity': ['case',
+                    ['==', time, 'current'],
+                    ['case', ['boolean', ['feature-state', 'pulse'], false], 0.3, 1],
+                    0.8
+                ]
+            }
+        },
+        {
+            // Planned trips: their line in the type colour, white dashes on top
+            id: `${sourceId}-planned-overlay`,
+            filter: ['==', time, 'plannedFuture'],
+            clickable: true,
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': ['case', isAir, 1, 3],
+                'line-opacity': 0.8,
+                'line-dasharray': [3, 3]
+            }
+        }
+    ];
+
+    layers.forEach(layer => {
+        if (map.getLayer(layer.id)) return;
+        const spec = { id: layer.id, type: 'line', source: sourceId, layout, paint: layer.paint };
+        if (layer.filter) spec.filter = layer.filter;
+        map.addLayer(spec);
+        if (layer.clickable) {
+            if (onLayerClick) map.on('click', layer.id, onLayerClick);
+            map.on('mouseenter', layer.id, () => { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', layer.id, () => { map.getCanvas().style.cursor = ''; });
+        }
+    });
+}
+
 // Update layer visibility based on filters
 function updateLayerVisibility(map, transportTypes, filters) {
     transportTypes.forEach(type => {
@@ -712,7 +987,18 @@ function updateLayerVisibility(map, transportTypes, filters) {
 }
 
 // Fit map bounds to visible features
-function fitBoundsToVisibleFeatures(map, features, filters, type=null) {
+// `fitOptions` is merged into the fitBounds options, e.g. { animate: false }.
+function fitBoundsToVisibleFeatures(map, features, filters, type=null, fitOptions={}) {
+    // Listen before moving: without animation, moveend fires inside fitBounds
+    const moved = new Promise(resolve => {
+        map.once('moveend', () => {
+            resolve({
+                center: map.getCenter(),
+                zoom: map.getZoom()
+            });
+        });
+    });
+
     const visibleFeatures = features.filter(feature => {
         const type = feature.properties.type;
         const time = feature.properties.time;
@@ -751,26 +1037,20 @@ function fitBoundsToVisibleFeatures(map, features, filters, type=null) {
         if (type == 'public_trip'){
             if (window.innerWidth <= 600) {
                 // Mobile: smaller padding
-                map.fitBounds(bounds, { padding: 50 });
+                map.fitBounds(bounds, { padding: 50, ...fitOptions });
             } else {
                 // Desktop: large padding with offset
                 map.fitBounds(bounds, {
                     padding: 300,
-                    offset: [-100, 0]
+                    offset: [-100, 0],
+                    ...fitOptions
                 });
             }
         } else {
-            map.fitBounds(bounds, { padding: 50 });
+            map.fitBounds(bounds, { padding: 50, ...fitOptions });
         }
     }
-    return new Promise(resolve => {
-        map.once('moveend', () => {
-            resolve({
-                center: map.getCenter(),
-                zoom: map.getZoom()
-            });
-        });
-    });
+    return moved;
 }
 
 // Utility function to modify vector style sources
@@ -1121,6 +1401,7 @@ window.MapLibreUtils = {
     MapConfig,
     build3DFlightLayer,
     initializeMapLibre,
+    changeBackground,
     isVectorTileServer,
     getVectorStyleUrl,
     createRasterStyle,
@@ -1129,7 +1410,9 @@ window.MapLibreUtils = {
     liveOriginBridge,
     computeTimeStatus,
     applyLiveTracks,
+    tripToFeature,
     buildTripLayers,
+    addTripSliceLayers,
     updateLayerVisibility,
     fitBoundsToVisibleFeatures,
     modifyVectorStyle

@@ -4,6 +4,54 @@
 {% include nav %}
 
 <style>
+    /* Stops in the detail row (renderStops): folded, then a timeline like the edit
+       page's stops dialog — a line down the left, a dot per stop, the ends ringed. Plain
+       rows, nothing of the page's table chrome (no header bar, no borders, no stripes). */
+    /* The fold: its own ▸/▾ just before the count, so a caption put in front of it
+       (cards, processHiddenData) reads "STOPS: ▸ 1 stop" */
+    #dataTable td.child details.trip-stops > summary { cursor: pointer; list-style: none; user-select: none; }
+    #dataTable td.child details.trip-stops > summary::-webkit-details-marker { display: none; }
+    #dataTable td.child details.trip-stops .ts-toggle { color: #3b63b8; }
+    #dataTable td.child details.trip-stops .ts-toggle::before { content: "\25B8\00a0"; }
+    #dataTable td.child details.trip-stops[open] .ts-toggle::before { content: "\25BE\00a0"; }
+    #dataTable td.child tr.trip-stops-row details.trip-stops > summary > strong { margin-right: 10px; }
+    #dataTable td.child table.trip-stops-table {
+        border-collapse: collapse; margin: 4px 0 2px; width: auto; background: none;
+    }
+    #dataTable td.child table.trip-stops-table tr { background: none !important; }
+    #dataTable td.child table.trip-stops-table td {
+        padding: 2px 14px 2px 0; vertical-align: middle; border: 0 !important; background: none !important;
+        white-space: nowrap; font-size: 0.875rem; line-height: 1.5;
+    }
+    #dataTable td.child table.trip-stops-table td.ts-time { font-variant-numeric: tabular-nums; color: #374151; }
+    #dataTable td.child table.trip-stops-table td.ts-platform { color: #8a93a2; font-size: 0.8rem; }
+    #dataTable td.child table.trip-stops-table tr.ts-stop td.ts-name { color: #4b5563; }
+    #dataTable td.child table.trip-stops-table tr.ts-end td.ts-name { font-weight: 600; color: #1f2733; }
+    #dataTable td.child table.trip-stops-table td.ts-mark { position: relative; width: 14px; padding: 0 10px 0 0; }
+    #dataTable td.child table.trip-stops-table td.ts-mark::before {
+        content: ""; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: #e2e6eb;
+    }
+    #dataTable td.child table.trip-stops-table tbody tr:first-child td.ts-mark::before { top: 50%; }
+    #dataTable td.child table.trip-stops-table tbody tr:last-child td.ts-mark::before { bottom: 50%; }
+    #dataTable td.child table.trip-stops-table td.ts-mark > span {
+        position: relative; display: block; width: 6px; height: 6px; margin-left: 4px;
+        border-radius: 50%; background: #b3bac4;
+    }
+    #dataTable td.child table.trip-stops-table tr.ts-end td.ts-mark > span {
+        width: 10px; height: 10px; margin-left: 2px; background: #fff; border: 2px solid #3b63b8;
+    }
+    /* Station names wrap; times and platforms don't */
+    #dataTable td.child table.trip-stops-table td.ts-name { white-space: normal; }
+    /* Times and platforms stay on one line whatever the card's cell rules say */
+    #dataTable td.child table.trip-stops-table td.ts-time,
+    #dataTable td.child table.trip-stops-table td.ts-platform { white-space: nowrap !important; }
+    /* On a card: one cell across, caption above (processHiddenData), the timeline at
+       full width with the names taking what the times and platforms leave. */
+    #dataTable td.child tr.trip-stops-row > td { display: table-cell; }
+    #dataTable td.child tr.trip-stops-row table.trip-stops-table { width: 100%; }
+    #dataTable td.child tr.trip-stops-row table.trip-stops-table td { padding-right: 8px; }
+    #dataTable td.child tr.trip-stops-row table.trip-stops-table td.ts-name { width: 100%; }
+
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
@@ -72,8 +120,22 @@
         opacity: 0.9;
     }
 
+    /* The flag picker's offsets are tuned for the new-trip form's 32px inputs; next to a
+       38px .form-control it would sit high. */
+    #massEditModal .flagDropdownWrapper { height: 38px; flex: none; border-radius: 4px; }
+    #massEditModal .flagDropdownWrapper select { transform: translateY(-50%); }
+    /* A station typed while the trips' countries differ needs one picked first. */
+    #massEditModal .flagDropdownWrapper.flag-missing { outline: 2px solid #dc3545; outline-offset: 2px; }
+
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
+
+    tr.ongoing-trip > td.col-date::after {
+        content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 6px;
+        border-radius: 50%; background: #2ecc71; vertical-align: middle;
+        animation: ongoing-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes ongoing-pulse { 50% { opacity: 0.3; } }
 
     /* Where that same listing crosses the present: the class goes on the first past
        row below an upcoming one. A hairline and nothing else — the timeline either
@@ -434,6 +496,19 @@
             align-items: center;
             justify-content: center;
             padding: 0 8px 40px;
+        }
+        /* A trip with no logo shows the operator's name instead: small, centred, and cut
+           to three lines so a long name cannot spill out of the gutter. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorName {
+            font-size: 0.65rem;
+            line-height: 1.15;
+            text-align: center;
+            overflow-wrap: anywhere;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            overflow: hidden;
+            max-width: 60px;
         }
         /* The operator cell carries logos sized for a full-height table row, and the
            multi-operator grid sizes its own box and items inline, so both the box and
@@ -1098,7 +1173,7 @@
         <ul class="dropdown-menu" style="min-width: 12rem;">
             <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</li>
             {% if not isPublic %}
-            <li class="dropdown-item" onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
+            <li class="dropdown-item" onclick="bulkTicketPicker.open();"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
             <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot"></i>  {{ moveToPlan|default('Move to a plan') }}</li>
             <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</li>
             {% endif %}
@@ -1144,6 +1219,8 @@
                 <th data-orderable="false" class="none">{{seat}}</th>
                 <th data-orderable="false" class="none">{{notes}}</th>
                 <th data-orderable="false" class="none">{{tags}}</th>
+                {# Always in the detail row, and folded there too: renderStops #}
+                <th data-orderable="false" class="none">{{tripStops}}</th>
                 <th data-orderable="false" data-priority="1" data-orderable="false"></th>
             </tr>
         </thead>
@@ -1152,25 +1229,7 @@
     </table>
 </div>
 
-<div class="modal fade" id="ticketSearchModal" tabindex="-1" role="dialog" aria-labelledby="ticketSearchModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="ticketSearchModalLabel">{{associate_ticket}}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="ticketSearchInput" class="form-label">{{ select_ticket }}</label>
-          <select id="ticketSearchInput" class="form-select"></select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" onclick="attachSelectedTrips($('#ticketSearchInput').val())">{{submit}}</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include "ticket_picker.html" %}
 
 <div class="modal fade" id="planSearchModal" tabindex="-1" role="dialog" aria-labelledby="planSearchModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
@@ -1351,6 +1410,7 @@
           <div class="d-flex align-items-center gap-2">
             <div class="flagDropdownWrapper">
               <select id="massEditOriginCountry" class="custom-select-flag">
+                <option value="" hidden>🌐</option>
                 {% for code, emoji in country_list.items() %}
                 <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
                 {% endfor %}
@@ -1364,6 +1424,7 @@
           <div class="d-flex align-items-center gap-2">
             <div class="flagDropdownWrapper">
               <select id="massEditDestCountry" class="custom-select-flag">
+                <option value="" hidden>🌐</option>
                 {% for code, emoji in country_list.items() %}
                 <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
                 {% endfor %}
@@ -1976,6 +2037,14 @@ function processHiddenData(rowIdx, columns){
                 : stationCols.indexOf(col.columnIndex) !== -1
                     ? stationsBelow
                     : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
+            // On a card the stops' timeline needs the card's width, not what the label
+            // column leaves of it: the caption above it instead, in one cell.
+            if (show && col.data != "" && cardMode && col.title == "{{tripStops}}") {
+                // The caption goes into the fold's own line: "STOPS: ▸ 1 stop".
+                return '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'" class="trip-stops-row">'+
+                    '<td colspan="2">'+displayData.replace('<summary>', '<summary><strong>'+label+':</strong> ')+'</td>'+
+                '</tr>';
+            }
             return show && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
                 '<td><strong>'+label+':</strong>'+'</td> '+
@@ -2050,6 +2119,85 @@ function renderDelayBadge(delaySecs) {
     const sign = minutes > 0 ? '+' : '';
     const cls = minutes > 0 ? 'delay-late' : minutes < 0 ? 'delay-early' : 'delay-ontime';
     return ` <span class="delay-badge ${cls}">${sign}${minutes}'</span>`;
+}
+
+// The stops of a trip picked from a timetable (its waypoints' `stop` records: name,
+// country, scheduled and live UTC times, time zone, platforms; see routing.js), as a
+// folded line in the detail row: "12 stops", opening onto a timeline from the origin to
+// the destination. Read like the row itself: the scheduled time (both, when it waits),
+// a delay badge, the platform; a flag only where the country changes. Nothing for trips
+// without stops, so the line isn't there at all.
+var STOPS_TEXT = {
+    count: {{ motisStops|tojson }},
+    // A stop's platform: a track by train, a stand by bus, a pier by ferry.
+    track: {{ platform_text('train')|tojson }},
+    bus: {{ platform_text('bus')|tojson }},
+    ferry: {{ platform_text('ferry')|tojson }}
+};
+function escapeStopText(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function stopClock(iso, tz) {
+    if (!iso) return '';
+    try {
+        return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz || undefined })
+            .format(new Date(iso));
+    } catch (e) { return ''; }
+}
+function bareTrack(t) {
+    return String(t || '').replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '').trim();
+}
+// "Pl. 9", in red only when it really moved from the scheduled one
+function stopPlatformHtml(platform, live, type) {
+    var shown = bareTrack(live || platform);
+    if (!shown) return '';
+    var pattern = (type === 'bus' || type === 'ferry') ? STOPS_TEXT[type] : STOPS_TEXT.track;
+    var text = escapeStopText(pattern.replace('{track}', shown));
+    var moved = live && platform && bareTrack(live) !== bareTrack(platform);
+    return moved ? '<span class="delay-late">' + text + '</span>' : text;
+}
+// The leading flag of a station label ("🇩🇪 Berlin Hbf" → "🇩🇪")
+function labelFlag(label) {
+    var m = /^(\uD83C[\uDDE6-\uDDFF]){2}/.exec(label || '');
+    return m ? m[0] : '';
+}
+function renderStops(data, type, row) {
+    if (type !== 'display' || !data) return '';
+    var waypoints;
+    try { waypoints = typeof data === 'string' ? JSON.parse(data) : data; } catch (e) { return ''; }
+    var stops = (waypoints || []).filter(function (wp) { return wp && wp.stop; }).map(function (wp) { return wp.stop; });
+    if (!stops.length) return '';
+
+    function line(kind, name, time, platform) {
+        return '<tr class="ts-' + kind + '"><td class="ts-mark"><span></span></td>' +
+            '<td class="ts-name">' + name + '</td><td class="ts-time">' + time + '</td>' +
+            '<td class="ts-platform">' + platform + '</td></tr>';
+    }
+    function badge(secs) { return secs ? renderDelayBadge(secs) : ''; }
+
+    var lastFlag = labelFlag(row.origin_station);
+    var rows = [line('end', escapeStopText(row.origin_station),
+        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform, null, row.type))];
+    stops.forEach(function (st) {
+        var flag = st.cc && st.cc !== 'UN' && typeof getFlagEmoji === 'function' ? getFlagEmoji(st.cc) : '';
+        var showFlag = flag && flag !== lastFlag;
+        if (flag) lastFlag = flag;
+        var arr = stopClock(st.arr, st.tz), dep = stopClock(st.dep, st.tz);
+        var time = arr && dep && arr !== dep ? arr + '–' + dep : (dep || arr);
+        // The delay where it leaves (or arrives, at a stop it doesn't leave)
+        var rt = st.dep_rt || st.arr_rt, sched = st.dep_rt ? st.dep : st.arr;
+        var delay = rt && sched ? (Date.parse(rt) - Date.parse(sched)) / 1000 : 0;
+        rows.push(line('stop', escapeStopText((showFlag ? flag + ' ' : '') + (st.name || '')),
+            escapeStopText(time) + badge(delay), stopPlatformHtml(st.platform, st.platform_rt, row.type)));
+    });
+    rows.push(line('end', escapeStopText(row.destination_station),
+        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform, null, row.type)));
+
+    var count = typeof pluralize === 'function' ? pluralize(STOPS_TEXT.count, stops.length) : String(stops.length);
+    return '<details class="trip-stops"><summary><span class="ts-toggle">' + escapeStopText(count) + '</span></summary>' +
+        '<table class="trip-stops-table"><tbody>' + rows.join('') + '</tbody></table></details>';
 }
 
 function addSecsToDisplayTime(timeStr, secs) {
@@ -2154,7 +2302,8 @@ function renderCarbon(data, type, row) {
     const co2PerKm = calculateCO2PerKm(data, row.trip_length);
     const color = getCarbonColor(co2PerKm);
     const tooltip = `${formatCarbonFootprint(data)} (${formatCO2PerKm(co2PerKm)})`;
-    return `<span data-toggle="tooltip" data-placement="top" title="${tooltip}" style="cursor:context-menu; color:${color};"><i class="fas fa-leaf"></i></span>`;
+    // Also as a variable, for a selected row to pale it (style2.css).
+    return `<span data-toggle="tooltip" data-placement="top" title="${tooltip}" style="cursor:context-menu; color:${color}; --carbon-color:${color};"><i class="fas fa-leaf"></i></span>`;
 }
 
 function renderFlags(data, type, row) {
@@ -2299,7 +2448,7 @@ function renderPrices(data, type, row) {
             }
             formattedTicketInfo =  $('<span>')
             .append($('<span>').attr("style", "display:none;").text(row.ticket_price_in_user_currency))
-            .append(`<span data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${formattedTicketPrice}"><i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i></span>`);
+            .append(`<span data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${formattedTicketPrice}">${ticketIcon('<i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i>', row.ticket_count)}</span>`);
         }
         if (isNumber(row.price)) {
             let formattedPriceText = formatCurrency("{{langId}}", row.price_in_user_currency, row.user_currency);
@@ -2338,6 +2487,11 @@ function _formatTrainsetStr(mat) {
 
 function renderPlainText(data, type, row) {
     if (type === 'display') return sanitize(data || '');
+    return data;
+}
+
+function renderNotes(data, type, row) {
+    if (type === 'display') return `<span style="white-space: pre-line">${sanitize(data || '')}</span>`;
     return data;
 }
 
@@ -2637,8 +2791,9 @@ var table = $('#tripRows');
         },
         { data: 'reg', render: renderReg },
         { data: 'seat', render: renderPlainText },
-        { data: 'notes', render: renderPlainText },
+        { data: 'notes', render: renderNotes },
         { data: 'tags' },
+        { data: 'waypoints', render: renderStops, defaultContent: "" },
         {
             data: null,
             render: renderButton,
@@ -2669,6 +2824,9 @@ var table = $('#tripRows');
         $(row).attr('id', data.uid).attr("origDest", `${data.origin_station} - ${data.destination_station}`);
         if (isPast && data.plannedFuture == 1) {
             $(row).addClass('upcoming-trip');
+        }
+        if (data.ongoing == 1) {
+            $(row).addClass('ongoing-trip');
         }
     },
     order: [],
@@ -3540,18 +3698,26 @@ function deleteTrip(tripId){
 const massEditDirtyFields = new Set();
 
 function _massEditPrefillStation(countrySelId, stationInputId, trips, field) {
-    const values = new Set(trips.map(function(t) { return t[field] ?? ''; }));
     const stationInput = document.getElementById(stationInputId);
     const countrySel = document.getElementById(countrySelId);
-    if (values.size === 1) {
-        const full = [...values][0];
+    const flagValues = new Set([...countrySel.options].map(function(o) { return o.value; }).filter(Boolean));
+    // "🇫🇷 Paris Nord" -> ["🇫🇷", "Paris Nord"]; a name with no known flag in front stays whole.
+    const split = function(full) {
         const spaceIdx = full.indexOf(' ');
-        if (spaceIdx > 0) {
-            countrySel.value = full.slice(0, spaceIdx);
-            stationInput.value = full.slice(spaceIdx + 1);
-        } else {
-            stationInput.value = full;
-        }
+        const flag = spaceIdx > 0 ? full.slice(0, spaceIdx) : '';
+        return flagValues.has(flag) ? [flag, full.slice(spaceIdx + 1)] : ['', full];
+    };
+    const parts = trips.map(function(t) { return split(t[field] ?? ''); });
+    const flags = new Set(parts.map(function(p) { return p[0]; }));
+    const names = new Set(parts.map(function(p) { return p[1]; }));
+
+    // One country for all the trips shows its flag even when the stations differ;
+    // otherwise the neutral globe, rather than whichever country comes first (Aruba).
+    countrySel.value = flags.size === 1 ? [...flags][0] : '';
+    countrySel.closest('.flagDropdownWrapper').classList.remove('flag-missing');
+
+    if (names.size === 1) {
+        stationInput.value = [...names][0];
         stationInput.placeholder = '';
     } else {
         stationInput.value = '';
@@ -3738,6 +3904,18 @@ function openMassEdit() {
         powerSection.style.display = 'none';
     }
 
+    // Fetch autocomplete data for material types
+    Promise.all(uniqueTypes.map(function(type) {
+        return $.get(`{{url_for("getManAndOps", username=username, station_type="" )}}` + type);
+    })).then(function(results) {
+        var manAndOps = { materialTypes: {} };
+        results.forEach(function(result) {
+            Object.assign(manAndOps.materialTypes, result.materialTypes || {});
+        });
+
+        materialTypeAutocomplete( $("#massEditMaterialType"), manAndOps);
+    });
+
     $('#massEditModal').modal('show');
 }
 
@@ -3750,6 +3928,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Populate country names in flag dropdowns
     updateCountryNames(document.getElementById('massEditOriginCountry'));
     updateCountryNames(document.getElementById('massEditDestCountry'));
+
+    ['massEditOriginCountry', 'massEditDestCountry'].forEach(function(id) {
+        document.getElementById(id).addEventListener('change', function() {
+            this.closest('.flagDropdownWrapper').classList.remove('flag-missing');
+        });
+    });
 
     // Station dirty tracking
     ['massEditOriginCountry', 'massEditOriginStation'].forEach(function(id) {
@@ -3781,6 +3965,20 @@ function openMassEditTsb() {
 }
 
 function submitMassEdit() {
+    // A station typed while the globe is showing has no country to go with it.
+    for (const [field, selId, inputId] of [
+        ['origin_station', 'massEditOriginCountry', 'massEditOriginStation'],
+        ['destination_station', 'massEditDestCountry', 'massEditDestStation'],
+    ]) {
+        const countrySel = document.getElementById(selId);
+        if (massEditDirtyFields.has(field) && !countrySel.value
+                && document.getElementById(inputId).value.trim()) {
+            countrySel.closest('.flagDropdownWrapper').classList.add('flag-missing');
+            countrySel.focus();
+            return;
+        }
+    }
+
     const fields = {};
     massEditDirtyFields.forEach(function(fieldName) {
         if (fieldName === 'origin_station') {
@@ -3901,14 +4099,20 @@ function exportGpx(){
     window.open(url);
 }
 
-function attachSelectedTrips(ticket_id){
-    url=`{{ url_for('attachSelected', username=username)}}`;
+// The tickets picked added to the selected trips', or in place of them.
+function attachSelectedTrips(ticket_ids, replace){
+    url=`{{ url_for('tickets.attachSelected', username=username)}}`;
 
     const urlParams = new URLSearchParams();
     urlParams.append('trips', checkedTrips);
-    urlParams.append('ticket_id', ticket_id);
+    urlParams.append('ticket_ids', ticket_ids.join(','));
+    if (replace) urlParams.append('replace', '1');
 
-    window.open(`${url}?${urlParams.toString()}`);
+    fetch(`${url}?${urlParams.toString()}`).finally(() => {
+        // false keeps the current page: the rows stay, only their tickets change.
+        tableObject.ajax.reload(null, false);
+        $('#ticketPickerModal').modal('hide');
+    });
 }
 
 function moveSelectedToPlan(plan_uuid){
@@ -3981,8 +4185,14 @@ if (planSearchModal) {
     });
 }
 
-const ticketSearchModal = document.getElementById('ticketSearchModal');
-ticketSearchModal.addEventListener('show.bs.modal', fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}"));
+const bulkTicketPicker = ticketPicker({
+    url: {{ url_for("tickets.get_all_tickets", username=username)|tojson }},
+    staticUrl: {{ url_for('static', filename='')|tojson }},
+    lang: {{ langId|tojson }},
+    texts: { add: {{ ticketPickerAdd|tojson }}, none: {{ ticketNone|tojson }} },
+    title: {{ associate_ticket|tojson }},
+    onSubmit: attachSelectedTrips
+});
 
 let tags = [];
 // Fetch all tags once when the page loads

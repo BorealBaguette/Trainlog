@@ -1,18 +1,25 @@
+-- A clipping card's uses, and whether used up it is still active, are counted in Python
+-- (src/tickets.py): a use can span several trips.
 SELECT
-    tickets.uid,
-    tickets.name,
-    tickets.price,
-    tickets.currency,
-    to_char(tickets.purchasing_date, 'YYYY-MM-DD') AS purchasing_date,
-    tickets.notes,
-    tickets.active,
-    tickets.active_countries,
-    COUNT(trips.ticket_id) AS trip_count,
-    tickets.price / NULLIF(COUNT(trips.ticket_id), 0) AS price_per_trip,
-    tickets.price / NULLIF(SUM(trips.trip_length / 1000.0), 0) AS price_per_km,
-    string_agg(trips.trip_id::text, ',') AS trip_ids
+    uid,
+    name,
+    price,
+    currency,
+    to_char(purchasing_date, 'YYYY-MM-DD') AS purchasing_date,
+    to_char(valid_from, 'YYYY-MM-DD') AS valid_from,
+    to_char(valid_until, 'YYYY-MM-DD') AS valid_until,
+    uses,
+    use_minutes,
+    CASE
+        WHEN valid_from IS NULL AND valid_until IS NULL THEN active
+        ELSE CURRENT_DATE BETWEEN COALESCE(valid_from, CURRENT_DATE) AND COALESCE(valid_until, CURRENT_DATE)
+    END AS active,
+    auto_renew,
+    operator,
+    secondary_operators,
+    product,
+    active_countries,
+    notes
 FROM tickets
-LEFT JOIN trips ON tickets.uid = trips.ticket_id
-WHERE tickets.username = :username
-GROUP BY tickets.uid
-ORDER BY tickets.purchasing_date DESC;
+WHERE username = :username AND (CAST(:uid AS integer) IS NULL OR uid = :uid)
+ORDER BY COALESCE(valid_from, purchasing_date) DESC, uid DESC;

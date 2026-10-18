@@ -306,45 +306,48 @@ def get_currency_leaderboard(pg=None):
     Flag/name display is left to the frontend (same Intl.DisplayNames + getFlagEmoji
     logic already used by the picker on this page)."""
     with get_or_create_pg_session(pg) as session:
-        # A trip's spend can come from its own price and/or from a ticket that
-        # covers several trips (its price is split evenly across them). When both
-        # exist in the same currency they're the same expense recorded twice, so
-        # only the ticket share counts; in different currencies they're treated as
-        # two separate charges (e.g. a pass plus a separately-paid seat fee) and
-        # both count.
+        # A trip's spend can come from its own price and/or from the tickets that
+        # cover it (each one's price split evenly across its trips). When the trip's
+        # price is in the currency of one of its tickets they're the same expense
+        # recorded twice, so only the ticket share counts; otherwise they're treated
+        # as separate charges (e.g. a pass plus a separately-paid seat fee) and both
+        # count.
         # Sums are grouped per (currency, day) before calling price_to_eur so the
         # plpgsql rate lookup runs once per distinct day rather than once per row.
         rows = session.execute(
             """
-            WITH base AS (
+            WITH shares AS (
+                -- One row per trip and priced ticket it rides on.
                 SELECT
                     t.trip_id,
-                    t.price AS trip_price,
-                    t.currency AS trip_currency,
-                    COALESCE(t.purchase_date, t.start_datetime, t.created)::date AS trip_date,
                     tk.price AS ticket_price,
                     tk.currency AS ticket_currency,
                     tk.purchasing_date::date AS ticket_date,
                     COUNT(*) OVER (PARTITION BY tk.uid) AS ticket_trip_count
                 FROM trips t
-                LEFT JOIN tickets tk
-                    ON tk.uid = t.ticket_id
+                CROSS JOIN LATERAL unnest(t.ticket_ids) AS tid(uid)
+                JOIN tickets tk
+                    ON tk.uid = tid.uid
                     AND tk.price IS NOT NULL AND tk.price != 0
                     AND tk.currency IS NOT NULL AND tk.currency != ''
             ),
             priced AS (
                 SELECT ticket_currency AS currency, ticket_date AS d,
                        ticket_price / ticket_trip_count AS price
-                FROM base
-                WHERE ticket_currency IS NOT NULL
+                FROM shares
 
                 UNION ALL
 
-                SELECT trip_currency AS currency, trip_date AS d, trip_price AS price
-                FROM base
-                WHERE trip_price IS NOT NULL AND trip_price != 0
-                    AND trip_currency IS NOT NULL AND trip_currency != ''
-                    AND (ticket_currency IS NULL OR ticket_currency != trip_currency)
+                SELECT t.currency AS currency,
+                       COALESCE(t.purchase_date, t.start_datetime, t.created)::date AS d,
+                       t.price AS price
+                FROM trips t
+                WHERE t.price IS NOT NULL AND t.price != 0
+                    AND t.currency IS NOT NULL AND t.currency != ''
+                    AND NOT EXISTS (
+                        SELECT 1 FROM shares s
+                        WHERE s.trip_id = t.trip_id AND s.ticket_currency = t.currency
+                    )
             ),
             per_day AS (
                 SELECT currency, d, COUNT(*) AS n, SUM(price) AS total,

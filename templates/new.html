@@ -5,6 +5,7 @@
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
 {% endif %}
 <script src="{{ url_for('static', filename='js/currency_combo.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/stop_slots.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -27,19 +28,26 @@
     }
     .power-type-group label:hover { background-color: #f8f9fa; color: #444; }
 
-    .via-row { position: relative; }
-    .via-row input.viaStation { padding-right: 36px; }
-    .via-row .via-remove {
-        position: absolute; top: 0; right: 0; height: 32px; width: 32px;
-        border: 0; background: transparent; cursor: pointer;
+    /* A via: its field, then its times and track dropdown, then its remove button, side by side
+       on the field's grey, so a long name ends ("…") where they start. #form to outrank
+       style2.css's #form input[type=text]. */
+    #form .via-row { display: flex; align-items: center; background-color: #f3f3f3; margin-bottom: 1rem; }
+    #form .via-row input.viaStation {
+        flex: 1 1 auto; min-width: 0; margin: 0; padding-right: 6px;
+        background: transparent; text-overflow: ellipsis;
+    }
+    #form .via-row .via-tail { flex: 0 0 auto; display: flex; align-items: center; height: 32px; }
+    #form .via-row .via-time {
+        line-height: 32px; font-size: 0.8rem; color: #888; font-variant-numeric: tabular-nums;
+        pointer-events: none; white-space: nowrap;
+    }
+    #form .via-row .via-tail .track-dropdown { position: static; }
+    #form .via-row .via-tail .track-toggle { padding: 0 6px 0 8px; }
+    #form .via-row .via-remove {
+        flex: 0 0 32px; height: 32px; border: 0; background: transparent; cursor: pointer;
         color: #999; font-size: 1.2rem; line-height: 1; padding: 0;
     }
-    .via-row .via-remove:hover { color: #333; }
-    .via-row .via-time {
-        position: absolute; top: 0; right: 32px; height: 32px; line-height: 32px;
-        font-size: 0.8rem; color: #888; font-variant-numeric: tabular-nums; pointer-events: none;
-    }
-    .via-row.has-time input.viaStation { padding-right: 130px; }
+    #form .via-row .via-remove:hover { color: #333; }
 
     /* More than a few vias (a timetable service's stops): fold them into one summary row */
     .via-summary {
@@ -123,6 +131,17 @@
         display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
     }
     #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #motisGroup .motis-bus { margin-left: 4px; color: #b45309; }
+    #motisGroup .motis-type { height: 14px; margin-left: 4px; vertical-align: -2px; }
+    #motisGroup .motis-more {
+        display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+        padding: 6px 12px; border: 0; background: #fafafa; color: #4b78d6;
+        font-size: 0.8rem; cursor: pointer;
+    }
+    #motisGroup .motis-more:hover { background: #f0f3fa; }
+    #motisGroup .motis-more[disabled] { color: #999; cursor: default; }
+    #motisGroup li:first-child > .motis-more { border-bottom: 1px solid #eee; }
+    #motisGroup li:nth-last-child(2) > .motis-more { border-top: 1px solid #eee; }
     #motisGroup .motis-source { padding: 4px 12px; font-size: 0.7rem; color: #999; text-align: right; border-top: 1px solid #eee; }
     /* Phones: the third column is too narrow for the line badge and headsign, so each
        entry stacks into rows — times + journey info, then line → headsign at full
@@ -137,6 +156,11 @@
         #motisGroup .motis-day { grid-column: 2 / 4; grid-row: 3; }
     }
     #motisGroup .motis-source a { color: inherit; }
+
+    /* A station's tracks or lines, in a dropdown at the end of its field: shown once a station
+       that has some is picked, without moving anything around it */
+    #originStationAuto, #destinationStationAuto { position: relative; }
+    #form input.has-stops { padding-right: 76px; text-overflow: ellipsis; }
 </style>
 
 {% if vehicle_type == 'air' %}
@@ -245,12 +269,69 @@
       </div>
       <br>
       {% endif %}
+      {# Testing how stations are named, over the user's settings (src/quai.py user_lang,
+         forced_script): only with ?stationnames in the address, for this page load only. #}
+      {% if request.args.get('stationnames') is not none %}
+      <link rel="stylesheet" href="{{ static_autoversion(filename='styles/combo.css') }}">
+      <script src="{{ static_autoversion(filename='js/combo.js') }}"></script>
+      <div class="station-names-panel non_manual">
+        <div class="station-names-title">
+          <span><i class="fa-solid fa-flask"></i> {{ stationNamesLabel }}</span>
+          <a href="#" class="station-names-reset"><i class="fa-solid fa-rotate-left"></i> {{ stationNamesSettings }}</a>
+        </div>
+        {% with combo_id="quai_lang", combo_value='', combo_first=stationNamesSettings %}
+          {% include "includes/station_names_combo.html" %}
+        {% endwith %}
+        {% with switch_id="quaiForceScript", switch_name=None, heading_class="station-names-title",
+                switch_checked=station_script_setting %}
+          {% include "includes/station_script_switch.html" %}
+        {% endwith %}
+      </div>
+      <script>
+        (function () {
+          var savedLanguage = {{ (station_names_setting or langId)|tojson }};
+          var savedScript = {{ station_script_setting|tojson }};
+          var language = '', forceScript = null;
+          var script = document.getElementById('quaiForceScript');
+          // Remove cookies left by the old panel; never save new test preferences.
+          ['quai_lang', 'quai_force_script'].forEach(function (name) {
+            document.cookie = name + '=; path=/; max-age=0';
+          });
+          // Headers apply only to station requests made by this page, not other tabs.
+          $.ajaxPrefilter(function (options, originalOptions, xhr) {
+            var url = new URL(options.url, location.href);
+            if (url.origin !== location.origin ||
+                ['/stationAutocomplete', '/stationTracks'].indexOf(url.pathname) === -1) return;
+            if (language) xhr.setRequestHeader('X-Trainlog-Station-Lang', language);
+            if (forceScript !== null) xhr.setRequestHeader('X-Trainlog-Station-Script', forceScript);
+          });
+          var combo = langCombo('quai_lang', { onApply: function (item) {
+            language = item.dataset.value;
+            stationScriptFor(language || savedLanguage);
+          } });
+          script.addEventListener('change', function () {
+            forceScript = this.checked ? '1' : '0';
+          });
+          // Restore both saved settings without reloading or losing the trip form.
+          document.querySelector('.station-names-reset').addEventListener('click', function (e) {
+            e.preventDefault();
+            forceScript = null;
+            script.checked = savedScript;
+            combo.apply(combo.items.find(function (item) { return item.dataset.value === ''; }));
+          });
+        })();
+      </script>
+      {% endif %}
       <label for="originManualToggle" class="checkboxLabel non_manual">{{manualOrigin}}</label>
       <input type="checkbox" id="originManualToggle" name="originManualToggle" class="non_manual" />
 
       <group id="originStationAuto">
         <label for="originStation" class="sr-only">{{originTerminal}}</label>
         <input type="text" class="stationSearch" id="originStation" name="originStation" placeholder="{{originTerminal}}" />
+        <div class="dropdown track-dropdown" id="originTracks" hidden>
+          <button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>
+          <div class="dropdown-menu dropdown-menu-end track-menu"></div>
+        </div>
       </group>
 
       <group id="originStationManual" class="non_manual">
@@ -262,12 +343,20 @@
         <input type="float" class="" name="originManualLng" id="originManualLng" placeholder="Lng" />
       </group>
 
+      {# Swaps the two ends: for the way back. Over the gap between them, taking no room. #}
+      <div class="swap-ends non_poi">
+        <button type="button" id="swapEnds" title="{{swapEnds}}" aria-label="{{swapEnds}}"><i class="bi bi-arrow-down-up"></i></button>
+      </div>
       <label id="destinationManualToggleLabel" for="destinationManualToggle" class="checkboxLabel non_poi non_manual">{{manDestination}}</label>
       <input type="checkbox" id="destinationManualToggle" name="destinationManualToggle" class="non_poi non_manual"/>
 
       <group id="destinationStationAuto" class="non_poi">
         <label for="destinationStation" class="sr-only">{{destinationTerminal}}</label>
         <input type="text" class="stationSearch" id="destinationStation" name="destinationStation" placeholder="{{destinationTerminal}}"/>
+        <div class="dropdown track-dropdown" id="destinationTracks" hidden>
+          <button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>
+          <div class="dropdown-menu dropdown-menu-end track-menu"></div>
+        </div>
       </group>
       <group id="destinationStationManual" class="non_poi" class="non_manual">
         <label for="destinationManualName" class="sr-only">{{destinationTerminalName}}</label>
@@ -293,7 +382,7 @@
       {# The Via button and, where there is a timetable, the departures bar share a row. #}
       <div class="via-motis-row non_poi">
         <button type="button" id="addViaBtn" class="ts-btn"><i class="fas fa-plus"></i> {{via}}</button>
-      {% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+      {% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular', 'rail') %}
       {# Direct services between the two stations around the chosen time, from MOTIS.
          Filled by initMotisDepartures() below; hidden until there is something to say. #}
       <group id="motisGroup" class="non_poi" style="display:none">
@@ -346,9 +435,28 @@
                  placeholder="{{operator}}" autocomplete="off"/>
         </div>
       </group>
+      {% if not plan_uuid %}
+      {# A ticket valid that day with the trip's operator, offered rather than picked: the
+         ticket picker is out of sight under the details. #}
+      <style>
+        #ticketSuggestion { display: none; margin: -8px 0 14px; }
+        #ticketSuggestion.chosen { background: #198754; border-color: #198754; color: #fff; }
+      </style>
+      <button type="button" id="ticketSuggestion" class="btn btn-outline-success btn-sm rounded-pill non_poi">
+        <i class="bi bi-ticket-perforated"></i> <span></span>
+      </button>
+      {% endif %}
 
       <label for="lineName" class="sr-only">{{lineName}}</label>
       <input type="text" name="lineName" id="lineName" class="non_poi" placeholder="{{lineName}}"/>
+      {# The platforms of a timetable run picked above (initMotisDepartures), saved as the trip's
+         departure_platform / arrival_platform; edited in the edit page's stops dialog. #}
+      <input type="hidden" name="departurePlatform" id="departurePlatform"/>
+      <input type="hidden" name="arrivalPlatform" id="arrivalPlatform"/>
+      {# "1" when the origin / destination point is a stop position picked from the station's
+         tracks or lines: it sits on the track, so the router passes exactly there. #}
+      <input type="hidden" name="originExact" id="originExact"/>
+      <input type="hidden" name="destinationExact" id="destinationExact"/>
       <br class="non_poi">
 
       <label for="detailsToggle" class="checkboxLabel">{{details}}</label>
@@ -385,10 +493,12 @@
         <input type="text" class="non_poi" name="seat" id="seat" placeholder="{{seat}}">
         <input type="hidden" name="seat_car" id="seat_car">
         <label for="notes" class="sr-only">{{notes}}</label>
-        <input type="text" name="notes" id="notes" placeholder="{{notes}}">
-        <label for="tagSearchInput">{{tags|default('Tags')}}</label>
-        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
-        <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+        <textarea name="notes" id="notes" rows="2" placeholder="{{notes}}"></textarea>
+        <div id="tagsGroup"{% if plan_uuid %} style="display:none"{% endif %}>
+          <label for="tagSearchInput">{{tags|default('Tags')}}</label>
+          <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
+          <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+        </div>
 
         <!-- Price Details Subgroup -->
         <fieldset class="fieldset-fixed fieldset-price">
@@ -415,9 +525,9 @@
         </fieldset>
 
         {% if not plan_uuid %}
-        <label for="ticketSearchInput" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
-        <select id="ticketSearchInput" name="ticket_id" class="form-select">
-        </select>
+<label for="ticketPickerField" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
+        <input type="hidden" id="ticketIds" name="ticket_ids">
+        <div id="ticketPickerField" class="ticket-picker-field" role="button" tabindex="0"></div>
         {% endif %}
         <!-- Power Type Toggle -->
         {% if vehicle_type == 'train' %}
@@ -656,10 +766,12 @@
         <input type="number" step="any" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
       </fieldset>
 
-      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), ['helicopter', 'air'].includes('{{vehicle_type}}') ? airRoutingURL : routingURL, '{{vehicle_type}}');">{{submit}}</button>
+      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), ['helicopter', 'air'].includes('{{vehicle_type}}') ? airRoutingURL : routingURL, routingType);">{{submit}}</button>
     </form>
   </div>
 </div>
+
+{% if not plan_uuid %}{% include "ticket_picker.html" %}{% endif %}
 
 <script>
 
@@ -745,14 +857,19 @@
   function setOperatorValue(value) {
     $('#operator').val(value);
     if (operatorPills) operatorPills.set(value);
+    // Set from code, it fires no change: the ticket suggestion is refreshed by hand.
+    if (typeof refreshTickets === 'function') refreshTickets();
   }
   var visitedStations = {};
   var routingURL = "{{url_for('routing', username=username)}}";
   var airRoutingURL = "{{url_for('air_routing', username=username, type=('air' if vehicle_type == 'air' else 'helicopter'))}}";
+  // Becomes "bus" while a rail replacement bus is picked from the timetable.
+  var routingType = "{{ vehicle_type }}";
 
   $.get('{{url_for("getManAndOps", username=username, station_type=vehicle_type)}}', function(manAndOps, status){
     Object.assign(globalStationDict, manAndOps.manualStations);
     Object.assign(visitedStations, manAndOps.visitedStations);
+    Object.assign(visitedStationKeys, manAndOps.visitedKeys || {});
   
     Object.keys(manAndOps.manualStations).forEach(function (station){
       manualStationsList.push({"label":station, "value":station, "manual":true})
@@ -766,7 +883,7 @@
         plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
         pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
     {% if vehicle_type != 'air' %}
-    materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
+    materialTypeAutocomplete( $("#material_type"), manAndOps);
     {% endif %}
   });
 
@@ -873,60 +990,182 @@
     }
   });
   var URLs = {
-    "bus": "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop",
-    "train": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-    "tram": "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt",
-    "metro": "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance",
-    "funicular": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-    "rail": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-    "ferry": "/stationAutocomplete?osm_tag=amenity:ferry_terminal",
+    "bus": "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop&type=bus",
+    "train": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=train",
+    "tram": "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt&type=tram",
+    "metro": "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance&type=metro",
+    "funicular": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=funicular",
+    "rail": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=rail",
+    "ferry": "/stationAutocomplete?osm_tag=amenity:ferry_terminal&type=ferry",
     "helicopter": "/stationAutocomplete?osm_tag=aeroway:helipad&osm_tag=aeroway:heliport&osm_tag=aeroway:aerodrome",
     "accommodation": "/stationAutocomplete?osm_tag=tourism:alpine_hut&osm_tag=tourism:apartment&osm_tag=tourism:chalet&osm_tag=tourism:guest_house&osm_tag=tourism:hostel&osm_tag=tourism:hotel&osm_tag=tourism:motel&osm_tag=tourism:wilderness_hut",
     "poi": "/stationAutocomplete?osm_tag=tourism&osm_tag=!tourism:alpine_hut&osm_tag=!tourism:apartment&osm_tag=!tourism:chalet&osm_tag=!tourism:guest_house&osm_tag=!tourism:hostel&osm_tag=!tourism:hotel&osm_tag=!tourism:motel&osm_tag=!tourism:wilderness_hut",
     "restaurant":  "/stationAutocomplete?osm_tag=amenity:restaurant&osm_tag=amenity:pub&osm_tag=amenity:biergarten&osm_tag=amenity:cafe&osm_tag=amenity:bar",
-    "aerialway":  "/stationAutocomplete?osm_tag=aerialway:station",
-    "ski":  "/stationAutocomplete?osm_tag=aerialway:station",
+    "aerialway":  "/stationAutocomplete?osm_tag=aerialway:station&type=aerialway",
+    "ski":  "/stationAutocomplete?osm_tag=aerialway:station&type=ski",
     "car":  "/stationAutocomplete",
     "walk":  "/stationAutocomplete",
     "cycle":  "/stationAutocomplete",
     "scooter":  "/stationAutocomplete",
   }
-  var specialURLs = {
-    "metro": "/stationAutocomplete?osm_tag=railway:station&osm_tag=!train",
-    "tram": "/stationAutocomplete?osm_tag=railway:tram_stop",
-    "no-filter": "/stationAutocomplete",
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  const special = params.get('special');
 
 {% if vehicle_type != 'air' %}
-  var stationSearchUrl;
-  if("{{vehicle_type}}" == "train" && special){
-    stationSearchUrl = specialURLs[special];
-  }
-  else{
-    stationSearchUrl = URLs["{{vehicle_type}}"];
-  }
+  var stationSearchUrl = URLs["{{vehicle_type}}"];
+  // Where to look first for a station (util.js): around the trip's other end, once picked.
+  window.stationSearchBias = function (input) {
+    function pointOf(selector) {
+      var entry = globalStationDict[$(selector).val()];
+      return entry ? (entry.stationPoint || entry[0]) : null;
+    }
+    var id = $(input).attr('id');
+    if (id === 'destinationStation') return pointOf('#originStation');
+    if (id === 'originStation') return pointOf('#destinationStation');
+    return pointOf('#originStation') || pointOf('#destinationStation');
+  };
   stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{manual}}");
+
+  // ---------- Tracks and lines (static/js/stop_slots.js) ----------
+  var preferLines = ['metro', 'tram'].indexOf("{{ vehicle_type }}") !== -1;
+  window.stopSlotOptions = { preferLines: preferLines,
+                            texts: { track: {{ platform_text(vehicle_type, 'word')|tojson }}, line: {{ lineName|tojson }} } };
+  var endSlots = {
+    origin: stopSlot({
+      $input: $('#originStation'), $dropdown: $('#originTracks'), fillsLine: true,
+      setPlatform: function (ref) { $('#departurePlatform').val(ref || ''); },
+      // '1' made exact by the user, 'auto' by the page (checked by the router, routing.js).
+      setExact: function (on, auto) { $('#originExact').val(on ? (auto ? 'auto' : '1') : ''); },
+      shown: function (on) { $('#originStation').toggleClass('has-stops', on); }
+    }),
+    destination: stopSlot({
+      $input: $('#destinationStation'), $dropdown: $('#destinationTracks'), fillsLine: true,
+      setPlatform: function (ref) { $('#arrivalPlatform').val(ref || ''); },
+      setExact: function (on, auto) { $('#destinationExact').val(on ? (auto ? 'auto' : '1') : ''); },
+      shown: function (on) { $('#destinationStation').toggleClass('has-stops', on); }
+    })
+  };
+  // The timetable picker's way in: the platform a departure gives at either end.
+  function pickTrack(role, ref) { pickStop(endSlots[role], 'track', ref, true); }
+
+  watchStopSlot(endSlots.origin);
+  watchStopSlot(endSlots.destination);
+  // Each end with the line where it stops going that way (stop_slots.js).
+  function placeLinesByDirection() { placeLineByDirection(endSlots.origin, endSlots.destination, routingType); }
+  $('#originStation, #destinationStation').on('stoppicked', function (e, byDirection) {
+    if (!byDirection) placeLinesByDirection();
+  }).on('autocompleteselect', function () { setTimeout(placeLinesByDirection, 0); });
+  $('#lineName').on('change', placeLinesByDirection);
+
+  // "Save & continue": the origin, the last trip's destination, comes as a point and a label
+  // only (prevDest). Its station's key, tracks and lines are those the last trip's form kept
+  // (lastStations, util.js), back on the station's own point rather than its arrival track;
+  // else, in another tab, the station there (/stationTracks). Its platform is not carried over.
+  (function loadPrevDestStops() {
+    var label = $('#originStation').val(), entry = globalStationDict[label];
+    if (!searchParams.has('prevDest') || !entry) return;
+    var s = {};
+    try { s = (JSON.parse(sessionStorage.getItem("lastStations") || "{}").destination) || {}; } catch (e) {}
+    // Its label in the field there, which a homonym's " (b)" follows.
+    var same = s.value && (s.value === label || (s.value.indexOf(label) === 0 && /^ \(\w\)$/.test(s.value.slice(label.length))));
+    if (same && (s.tracks || s.lines)) {
+      if (s.point) entry[0] = s.point;
+      if (s.key) globalStationKeys[label] = s.key;
+      globalStationTracks[label] = s.tracks || [];
+      globalStationLines[label] = s.lines || [];
+      renderStops(endSlots.origin, label);
+      return;
+    }
+    $.ajax({
+      url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
+      data: JSON.stringify({ type: routingType, stops: [{ lat: entry[0][0], lng: entry[0][1],
+        name: label.replace(/^[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '') }] }),
+      success: function (data) {
+        var station = (data.stops || [])[0];
+        if (!station || $('#originStation').val() !== label) return;   // retyped meanwhile
+        globalStationTracks[label] = station.tracks || [];
+        globalStationLines[label] = station.lines || [];
+        if (station.alike) globalStationKeys[label] = station.station_key;
+        renderStops(endSlots.origin, label);
+      }
+    });
+  })();
+
+  // The way back: the two ends swapped, stations or points entered by hand. Not their tracks
+  // or platforms (where one leaves A is not where one arrives at it), nor a point put on one
+  // direction's stop position (back on the station's own). Vias added by hand go the other
+  // way round; a run picked goes, its stops with it (the ends changed, see forgetRun).
+  $('#swapEnds').on('click', function () {
+    function swap(a, b) { var x = $(a).val(); $(a).val($(b).val()); $(b).val(x); }
+    ['origin', 'destination'].forEach(function (end) {
+      var slot = endSlots[end], entry = globalStationDict[slot.$input.val()];
+      if (entry && entry.stationPoint) entry[0] = entry.stationPoint;
+      forgetStop(slot);
+    });
+    swap('#originStation', '#destinationStation');
+    ['ManualName', 'ManualLat', 'ManualLng'].forEach(function (f) { swap('#origin' + f, '#destination' + f); });
+    var originManual = $('#originManualToggle').prop('checked');
+    $('#originManualToggle').prop('checked', $('#destinationManualToggle').prop('checked'));
+    $('#destinationManualToggle').prop('checked', originManual);
+    $('#viaContainer').append($('#viaContainer .via-row').get().reverse());
+    updateViaSummary();
+    renderStops(endSlots.origin);
+    renderStops(endSlots.destination);
+    $('#originStation, #destinationStation, #originManualToggle').trigger('change');
+  });
 
   // ---------- Via (intermediate waypoint) stations ----------
   var viaPlaceholder = "{{via}}";
   // `time` is an optional "07:22 – 07:23" shown at the end of the row (timetable
-  // stops). It is display only and goes away once the station is changed.
-  function addViaRow(value, time) {
+  // stops), followed by `track` ("Voie 4") unless the track dropdown shows it. Display only:
+  // both go once the station is changed. Returns the row.
+  // `entry` is the row's own station entry, a timetable's stop's (see stopSlotEntry).
+  function addViaRow(value, time, track, entry) {
     var $row = $(
       '<div class="via-row">' +
         '<input type="text" class="stationSearch viaStation" placeholder="' + viaPlaceholder + '" />' +
+        '<span class="via-tail">' +
+          '<span class="via-time"></span>' +
+          '<div class="dropdown track-dropdown" hidden>' +
+            '<button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>' +
+            '<div class="dropdown-menu dropdown-menu-end track-menu"></div>' +
+          '</div>' +
+        '</span>' +
         '<button type="button" class="via-remove" title="{{remove}}">&times;</button>' +
       '</div>'
     );
     $('#viaContainer').append($row);
     // Initialise autocomplete on the newly added input
     stationSearchAutocomplete($row.find('.viaStation'), visitedStations, stationSearchUrl, "{{manual}}");
-    if (time) {
-      $row.addClass('has-time').append($('<span class="via-time">').text(time));
+    // Once the station is changed by hand the row loses has-time, and its times for good.
+    function showTime() {
+      if (!$row.hasClass('has-time')) { $row.find('.via-time').empty(); return; }
+      $row.find('.via-time').text(
+        $row.hasClass('has-stops') || !track ? time : [time, track].filter(Boolean).join(' \u00b7 '));
     }
+    if (time) $row.addClass('has-time');
+    $row.data('viaText', { time: time, track: track });
+    showTime();
+    // A via's choice goes with its station: the platform into a timetable stop's record (the
+    // one picked by hand over the timetable's), exact as the 4th item (see routing.html).
+    var slot = stopSlot({
+      $input: $row.find('.viaStation'), $dropdown: $row.find('.track-dropdown'),
+      setPlatform: function (ref) {
+        var record = (stopSlotEntry(slot) || [])[2];
+        // Already the platform the stop is at: its scheduled / live pair stays as it is.
+        if (!record || (ref && stopKey(ref) === stopKey(record.platform_rt || record.platform))) return;
+        delete record.platform_rt;
+        if (ref) record.platform = ref; else delete record.platform;
+      },
+      setExact: function (on, auto) {
+        var entry = stopSlotEntry(slot);
+        if (entry) { entry[3] = on; entry[4] = on && auto ? 'auto' : undefined; }
+      },
+      shown: function (on) { $row.toggleClass('has-stops', on); showTime(); }
+    });
+    $row.data('stopSlot', slot);
+    // Its own entry until another station is typed or picked there.
+    if (entry) slot.$input.data('stationEntry', entry);
+    slot.$input.on('input autocompleteselect', function () { slot.$input.removeData('stationEntry'); });
+    watchStopSlot(slot);
     if (typeof value === 'string') {
       $row.find('.viaStation').val(value);
     } else {
@@ -935,6 +1174,7 @@
       $row.find('.viaStation').focus();
     }
     updateViaSummary();
+    return $row;
   }
 
   // Once there are vias, a summary row ("Renens VD · Morges · … · Coppet  12") heads
@@ -969,7 +1209,7 @@
     setTimeout(updateViaSummary);
   });
   $('#viaContainer').on('input', '.viaStation', function() {
-    $(this).closest('.via-row').removeClass('has-time').find('.via-time').remove();
+    $(this).closest('.via-row').removeClass('has-time').find('.via-time').empty();
   });
   $('#viaSummary').on('click', function() {
     setViaCollapsed(!$('#viaGroup').hasClass('via-collapsed'));
@@ -981,7 +1221,7 @@
   });
 {% endif %}
 
-{% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+{% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular', 'rail') %}
   // ---------- Timetable departures (MOTIS) ----------
   // Once both ends are known, list the direct services between them around the
   // chosen start time; picking one fills in the times, line, operator and stops.
@@ -989,12 +1229,19 @@
     var url = "{{ url_for('motis.motis_departures', username=username) }}";
     var logosBase = "{{ url_for('static', filename='') }}";
     var typeIcon = "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}";
+    var tripLogos = "{{ url_for('static', filename='images/icons/trip_logos/') }}";
+    var typeNames = { train: {{ (train|default('Train'))|tojson }}, metro: {{ (metro|default('Metro'))|tojson }}, tram: {{ (tram|default('Tram'))|tojson }},
+                    funicular: {{ (funicular|default('Funicular'))|tojson }} };
     var texts = {
       title: {{ motisDepartures|tojson }},
       searching: {{ motisSearching|tojson }},
       none: {{ motisNone|tojson }},
       line: {{ motisLine|tojson }},
-      stops: {{ motisStops|tojson }}
+      stops: {{ motisStops|tojson }},
+      track: {{ platform_text(vehicle_type)|tojson }},
+      earlier: {{ motisEarlier|tojson }},
+      later: {{ motisLater|tojson }},
+      replacementBus: {{ motisReplacementBus|tojson }}
     };
     // Journey time in the page's language without a lang key: Intl's unit formats
     // ("26 min", "1 h 05 min", "26分").
@@ -1012,10 +1259,20 @@
       // A lone letter only: two-letter names are often service classes (IC, RE, EC).
       return /^(\d+[a-z]{0,3}|[A-Z])$/i.test(line) ? texts.line.replace('{line}', line) : line;
     }
+    // "Voie 4" / "Gl. 4" / "4番線" from a stop's platform; some feeds already put their own
+    // word in front ("Gl. 3" from DB), which goes so it isn't said twice.
+    function trackLabel(track) {
+      if (!track) return '';
+      var bare = String(track).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
+      return texts.track.replace('{track}', bare || track);
+    }
     var dayFmt = new Intl.DateTimeFormat("{{ langId }}" || 'en',
       { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
     var $group = $('#motisGroup'), $toggle = $('#motisToggle'), $menu = $('#motisMenu');
     var timer = null, xhr = null, lastKey = null, departures = [];
+    // The list's Earlier/Later buttons (loadMore): the request in flight, and what the
+    // current list was searched for, which they extend.
+    var moreXhr = null, searchParams = null;
     // The run last picked, and what it put in the form (see forgetRun).
     var applied = null;
 
@@ -1025,8 +1282,10 @@
         var lng = parseFloat($('#' + which + 'ManualLng').val());
         return isFinite(lat) && isFinite(lng) ? [lat, lng] : null;
       }
+      // The station's own point: not where a track, or the run picked (its direction's stop
+      // position), moved it, which would read as another end and drop the run for a new search.
       var entry = globalStationDict[$('#' + which + 'Station').val()];
-      return entry ? entry[0] : null;
+      return entry ? (entry.stationPoint || entry[0]) : null;
     }
 
     function endsKey() {
@@ -1045,11 +1304,23 @@
       updateViaSummary();
       if (run.line && $('#lineName').val() === run.line) $('#lineName').val('');
       if (run.operator && $('#operator').val() === run.operator) setOperatorValue('');
+      // Its platforms, unless picked again by hand since.
+      [['origin', '#departurePlatform', run.fromPlatform], ['destination', '#arrivalPlatform', run.toPlatform]]
+        .forEach(function (end) {
+          if (!end[2] || $(end[1]).val() !== end[2]) return;
+          if (typeof pickTrack === 'function') pickTrack(end[0], ''); else $(end[1]).val('');
+        });
       if (run.delays) {
         setDelay('departureDelayMinutes', 0);
         setDelay('arrivalDelayMinutes', 0);
       }
       $menu.find('.motis-item').removeClass('active');
+      setRoutingType("{{ vehicle_type }}");
+    }
+
+    function setRoutingType(type) {
+      routingType = type;
+      $('#typeSwitchIcon').attr('src', "{{ url_for('static', filename='images/icons/trip_logos/') }}" + type + '.png');
     }
 
     // What a search depends on, so the same lookup isn't repeated.
@@ -1070,6 +1341,7 @@
 
     function hide() {
       if (xhr) xhr.abort();
+      if (moreXhr) moreXhr.abort();
       departures = [];
       $menu.empty();
       $group.hide();
@@ -1089,9 +1361,9 @@
       lastKey = key;
       if (xhr) xhr.abort();
       setToggle(texts.searching, null, false, true);
-      xhr = $.getJSON(url, {
-        from: origin.join(','), to: destination.join(','), date: date, time: time, type: "{{ vehicle_type }}"
-      }).done(function (res) {
+      if (moreXhr) moreXhr.abort();
+      searchParams = { from: origin.join(','), to: destination.join(','), type: "{{ vehicle_type }}" };
+      xhr = $.getJSON(url, $.extend({ date: date, time: time }, searchParams)).done(function (res) {
         // A date Transitous has no timetables for (a past year): nothing to offer, say nothing.
         if (res.outside_timetable) { hide(); return; }
         departures = res.departures || [];
@@ -1116,18 +1388,80 @@
       return dayFmt.format(new Date(Date.UTC(p[0], p[1] - 1, p[2])));
     }
 
+    // One run, whichever page of the list it came from.
+    function runKey(d) {
+      return [d.departure, d.line, d.headsign, d.agency].join('|');
+    }
+
+    // "Earlier" / "Later" at the ends of the list.
+    function moreButton(direction) {
+      return $('<button type="button" class="motis-more">').attr('data-direction', direction)
+        .append($('<i class="fa-solid">').addClass(direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'))
+        .append($('<span>').text(direction === 'earlier' ? texts.earlier : texts.later));
+    }
+
+    // Extend the list by a page: from its last departure on, or the stretch before its
+    // first one as long as the list already spans (a few minutes on a busy line, hours on
+    // a sparse one). New runs merge in; the menu stays open.
+    function loadMore(direction, $btn) {
+      if (!searchParams || !departures.length || moreXhr) return;
+      var first = departures[0].departure, last = departures[departures.length - 1].departure;
+      var at = direction === 'earlier' ? first : last;
+      var span = Math.max(10, Math.round((Date.parse(last) - Date.parse(first)) / 60000));
+      var key = lastKey;
+      $btn.prop('disabled', true).find('i').attr('class', 'fa-solid fa-circle-notch fa-spin');
+      moreXhr = $.getJSON(url, $.extend({
+        date: at.slice(0, 10), time: at.slice(11, 16), page: direction, span: span
+      }, searchParams)).done(function (res) {
+        if (key !== lastKey) return;   // the form has moved on
+        var known = {};
+        departures.forEach(function (d) { known[runKey(d)] = true; });
+        var added = (res.departures || []).filter(function (d) { return !known[runKey(d)]; });
+        departures = departures.concat(added).sort(function (a, b) {
+          return a.departure < b.departure ? -1 : a.departure > b.departure ? 1 : 0;
+        });
+        var scroll = $menu.scrollTop(), height = $menu[0].scrollHeight;
+        render();
+        // Earlier runs go above what was in view: keep it in view.
+        $menu.scrollTop(direction === 'earlier' ? scroll + $menu[0].scrollHeight - height : scroll);
+      }).always(function () {
+        moreXhr = null;
+        $btn.prop('disabled', false).find('i').attr('class', 'fa-solid ' + (direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'));
+      });
+    }
+
+    // The lines picked at the ends (a tram or metro station's), each ref a word of the run's
+    // line ("B" of "CTS B").
+    function pickedLines() {
+      return ['origin', 'destination'].map(function (end) {
+        var slot = endSlots[end];
+        return stopKind(stopSlotLabel(slot)) === 'line' && slot.selected;
+      }).filter(Boolean);
+    }
+    function onLines(d, lines) {
+      var words = (d.line || '').toLowerCase().split(/\s+/);
+      return lines.every(function (ref) { return words.indexOf(ref.toLowerCase()) >= 0; });
+    }
+
     function render() {
       $menu.empty();
       if (!departures.length) {
         setToggle(texts.none, null, false);
         return;
       }
+      // Only the picked line's runs, where the timetable has any.
+      var lines = pickedLines();
+      var shown = lines.length && departures.some(function (d) { return onLines(d, lines); })
+        ? departures.filter(function (d) { return onLines(d, lines); }) : departures;
+      $('<li>').append(moreButton('earlier')).appendTo($menu);
       departures.forEach(function (d, i) {
+        if (shown.indexOf(d) < 0) return;
         var depDate = d.departure.slice(0, 10), arrDate = d.arrival.slice(0, 10);
         var dayDiff = Math.round((Date.parse(arrDate) - Date.parse(depDate)) / 86400000);
         var $item = $('<a href="#" class="dropdown-item motis-item">').attr('data-i', i)
           .attr('title', [d.from_name, d.to_name].filter(Boolean).join(' \u2192 '));
         if (d.color) $item.css('--line-color', d.color);
+        if (applied && applied.key === runKey(d)) $item.addClass('active');
         $('<img class="motis-logo" alt="">')
           .attr('src', d.logo_url ? logosBase + d.logo_url : typeIcon)
           .on('error', function () { if (this.src !== typeIcon) this.src = typeIcon; })
@@ -1148,11 +1482,95 @@
             d.stops.length ? pluralize(texts.stops, d.stops.length) : '',
             d.logo_url ? '' : d.operator,
           ].filter(Boolean).join(' · '))
+          .append(d.replacement_bus ? $('<i class="fa-solid fa-bus motis-bus">').attr('title', texts.replacementBus) : null)
+          // A run its feed files as another type (a tram-train as a tram on a train search).
+          .append(!d.replacement_bus && d.type && d.type !== "{{ vehicle_type }}" ? $('<img class="motis-type">')
+            .attr({ src: tripLogos + d.type + '.png', alt: typeNames[d.type] || d.type, title: typeNames[d.type] || d.type }) : null)
           .appendTo($item);
         $('<li>').append($item).appendTo($menu);
       });
+      $('<li>').append(moreButton('later')).appendTo($menu);
       $('<li class="motis-source">').html('<a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>').appendTo($menu);
-      setToggle(texts.title, departures.length, true);
+      // A picked run keeps its "10:53 → 12:21 · IR35" (apply) when the list is extended.
+      setToggle(applied && applied.label || texts.title, shown.length, true);
+    }
+
+    // What the trip keeps of a stop of the picked run: the via entry's third item, carried
+    // to the routing page as its waypoint's `stop` and saved with it (routing.js). Times are
+    // UTC (scheduled), tz shows them locally again, lat/lng is the stop itself (the entry's
+    // own coordinates may have been moved onto the run's path); id and trip are Transitous's
+    // stop and run ids, to fetch the actual times once the run is over.
+    function stopRecord(stop, run) {
+      // Scheduled arr/dep/platform, and the live ones (*_rt) only where they differ.
+      var platform = stop[15] || stop[6];
+      var record = { name: stop[2], cc: stop[3], platform: platform, arr: stop[7], dep: stop[8],
+                    arr_rt: stop[13], dep_rt: stop[14], platform_rt: stop[6] !== platform ? stop[6] : null,
+                    tz: stop[9], lat: stop[10], lng: stop[11], id: stop[12], trip: run.trip_id };
+      Object.keys(record).forEach(function (k) { if (record[k] == null || record[k] === '') delete record[k]; });
+      return record;
+    }
+
+    // The station at each of the run's stops and at its two ends, from quai: their tracks and
+    // lines become the dropdowns' choices, and the platform the run gives there is picked,
+    // which moves the point onto that track (exact when it is a stop position). A stop
+    // whose station has no such track keeps the timetable's point, approximate.
+    function matchStopTracks(d, $rows) {
+      var ends = [['origin', d.from_platform, d.from_point, d.from_id], ['destination', d.to_platform, d.to_point, d.to_id]].map(function (end) {
+        var slot = endSlots[end[0]], entry = globalStationDict[slot.$input.val()];
+        // Where the run is boarded or left (on its track), for the end to be put there as its
+        // stops are; else the station's point.
+        var point = end[2] || (entry && (entry.stationPoint || entry[0]));
+        // Its name, without the flag, for quai to pick the station of that name nearby.
+        var name = slot.$input.val().replace(/^\S*[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '');
+        return { slot: slot, platform: end[1], point: point, name: name, id: end[3] || null };
+      });
+      var places = ends.slice(0, 1).concat(d.stops.map(function (stop, i) {
+        // The platform it calls at: the live one (stop[6]), else the scheduled one.
+        return { slot: $rows[i] && $rows[i].data('stopSlot'), platform: stop[6] || stop[15],
+                 point: [stop[0], stop[1]], name: stop[2] || null, id: stop[12] || null };
+      }), ends.slice(1));
+      var key = runKey(d);
+      $.ajax({
+        url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
+        data: JSON.stringify({ type: routingType, line: d.line || null, stops: places.map(function (p) {
+          return p.point ? { lat: p.point[0], lng: p.point[1], platform: p.platform || null, name: p.name || null,
+                             id: p.id || null } : {};
+        }) }),
+        success: function (data) {
+          if (!applied || applied.key !== key) return;   // another run picked meanwhile
+          (data.stops || []).forEach(function (station, i) {
+            var place = places[i], slot = place.slot;
+            if (!station || !slot) return;
+            var label = slot.$input.val();
+            if (!stopSlotEntry(slot)) return;
+            // A station picked by hand already has its own (quai's, or none from Photon).
+            if (!(globalStationTracks[label] || []).length && !(globalStationLines[label] || []).length) {
+              globalStationTracks[label] = station.tracks;
+              globalStationLines[label] = station.lines;
+            }
+            // The trip is saved as at that station only when it is named alike, not just near.
+            if (station.alike && !globalStationKeys[label]) globalStationKeys[label] = station.station_key;
+            // The platform the timetable's stop id names, as OSM numbers it ("2", where the
+            // feed says "75"), over the timetable's own, unless another was picked by hand.
+            var byHand = slot.selected && stopKey(slot.selected) !== stopKey(place.platform);
+            var platform = (!byHand && station.platform) || slot.selected || place.platform;
+            // The timetable's (or its stop id's) track: the page's choice, checked by the
+            // router; one picked by hand stays the user's.
+            if (platform) pickStop(slot, 'track', platform, !byHand); else renderStops(slot);
+            // Not placed on a track of the station's: where the line stops there going this
+            // way, from OSM's route relations (one per direction), exact, so that the route
+            // takes that direction's track and not the other's a few metres off (Bordeaux's,
+            // Brest's trams; src/quai.py, stops_by_direction).
+            var placed = platform && findStop(globalStationTracks[label], platform);
+            var entry = stopSlotEntry(slot);
+            if (!placed && station.snap && entry) {
+              if (!entry.stationPoint) entry.stationPoint = entry[0];
+              entry[0] = station.snap;
+              slot.setExact(true, true);
+            }
+          });
+        }
+      });
     }
 
     function setDelay(minutesId, minutes) {
@@ -1170,16 +1588,26 @@
       $('#newTripStartDate, #newTripStartTime').trigger('focusout');
       if (d.operator) setOperatorValue(d.operator);
       if (d.line) $('#lineName').val(d.line);
+      // Only the platforms the departure gives: a track picked by hand stays otherwise.
+      if (d.from_platform) $('#departurePlatform').val(d.from_platform);
+      if (d.to_platform) $('#arrivalPlatform').val(d.to_platform);
+      if (typeof pickTrack === 'function') {
+        if (d.from_platform) pickTrack('origin', d.from_platform);
+        if (d.to_platform) pickTrack('destination', d.to_platform);
+      }
 
       // The service's stops become the via waypoints the route is drawn through.
       $('#viaContainer').empty();
+      var $rows = [];
       d.stops.forEach(function (stop) {
         var name = stop[2] || (stop[0] + ', ' + stop[1]);
         // Same "🇨🇭 Name" shape as a station picked from the autocomplete.
         var label = stop[3] && stop[3] !== 'UN' ? getFlagEmoji(stop[3]) + ' ' + name : name;
-        globalStationDict[label] = [[stop[0], stop[1]], label];
+        // Each stop its own entry: a run can call at a stop twice (a loop line).
+        var entry = globalStationDict[label] = [[stop[0], stop[1]], label, stopRecord(stop, d)];
         var arr = stop[4], dep = stop[5];
-        addViaRow(label, arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep));
+        var times = arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep);
+        $rows.push(addViaRow(label, times, trackLabel(stop[6]), entry));
       });
       setViaCollapsed(true);
       updateViaSummary();
@@ -1191,24 +1619,44 @@
         setDelay('arrivalDelayMinutes', d.arrival_delay);
         $('#delayToggle').prop('checked', true).trigger('change');
       }
-      applied = { ends: endsKey(), line: d.line, operator: d.operator, delays: !!delays };
+      setRoutingType(d.replacement_bus ? 'bus' : "{{ vehicle_type }}");
+      applied = { ends: endsKey(), key: runKey(d), line: d.line, operator: d.operator, delays: !!delays,
+                  fromPlatform: d.from_platform || null, toPlatform: d.to_platform || null };
+      matchStopTracks(d, $rows);
 
       // The form now reflects this departure; don't search again for its own time.
       lastKey = formKey();
       $menu.find('.motis-item').removeClass('active');
       $menu.find('.motis-item[data-i="' + departures.indexOf(d) + '"]').addClass('active');
-      $('#motisToggleLabel').text(dep[1] + ' → ' + arr[1] + (d.line ? ' · ' + lineLabel(d.line) : ''));
+      applied.label = dep[1] + ' → ' + arr[1] + (d.line ? ' · ' + lineLabel(d.line) : '');
+      $('#motisToggleLabel').text(applied.label);
     }
 
+    $menu.on('click', '.motis-more', function (e) {
+      e.preventDefault();
+      e.stopPropagation();   // Bootstrap would close the menu
+      loadMore($(this).attr('data-direction'), $(this));
+    });
     $menu.on('click', '.motis-item', function (e) {
       e.preventDefault();
       apply(departures[+$(this).attr('data-i')]);
     });
 
     $('#originStation, #destinationStation').on('autocompleteselect autocompletechange change', schedule);
+    $('#originStation, #destinationStation').on('stoppicked', function () { if (departures.length) render(); });
     $('#newTripStartDate, #newTripStartTime, #originManualToggle, #destinationManualToggle, ' +
       '#originManualLat, #originManualLng, #destinationManualLat, #destinationManualLng').on('change', schedule);
     $('input[name="precision"]').on('change', schedule);
+    // Lets the routing round trip (toRouting / restoreNewTripForm) keep the list and the picked run.
+    window.motisState = {
+      get: function () { return { departures: departures, applied: applied, searchParams: searchParams, routingType: routingType }; },
+      set: function (s) {
+        departures = s.departures; applied = s.applied; searchParams = s.searchParams;
+        lastKey = formKey();
+        setRoutingType(s.routingType);
+        render();
+      }
+    };
     schedule();
   })();
 {% endif %}
@@ -1241,7 +1689,36 @@
       }
   }).trigger('input'); // Trigger on load to apply initial state
   {% if not plan_uuid %}
-  fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}");
+  // One click takes the suggested ticket, another leaves it.
+  var suggestedTicket = null;
+  function showTicketSuggestion(ticket) {
+    suggestedTicket = ticket;
+    var $chip = $('#ticketSuggestion');
+    if (!ticket) { $chip.hide(); return; }
+    var chosen = ticketPickerField.has(ticket.uid);
+    $chip.toggleClass('chosen', chosen).css('display', 'inline-block');
+    $chip.find('i').attr('class', chosen ? 'bi bi-check2' : 'bi bi-ticket-perforated');
+    $chip.find('span').text(chosen ? ticketLabel(ticket) : {{ ticketUse|tojson }} + ' ' + ticketLabel(ticket));
+  }
+  var ticketPickerField = ticketPicker({
+    url: {{ url_for("tickets.get_all_tickets", username=username)|tojson }},
+    staticUrl: {{ url_for('static', filename='')|tojson }},
+    lang: {{ langId|tojson }},
+    texts: { add: {{ ticketPickerAdd|tojson }}, none: {{ ticketNone|tojson }} },
+    input: '#ticketIds',
+    field: '#ticketPickerField',
+    context: function () {
+      var precision = $('input[name="precision"]:checked').val();
+      var date = precision === 'preciseDates' ? $('#newTripStartDate').val()
+               : precision === 'onlyDate' ? $('#newTripStartOnlyDate').val() : null;
+      return { date: date, operators: $('#operator').val() };
+    },
+    onSuggest: showTicketSuggestion
+  });
+  var refreshTickets = ticketPickerField.refresh;
+  $('#newTripStartDate, #newTripStartOnlyDate, #operator, input[name="precision"]').on('change', refreshTickets);
+  $('#ticketSuggestion').on('click', function () { ticketPickerField.toggle(suggestedTicket.uid); });
+  $('#ticketIds').on('change', function () { showTicketSuggestion(suggestedTicket); });
   {% endif %}
   setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`, null, {
     url: `{{ url_for("quick_create_tag", username=username) }}`,
@@ -1800,6 +2277,8 @@
   // vessel_field.js), with the ship named on the hint line under it.
   initVesselField('#reg', '#regVesselName', "{{ url_for('vesselAutocomplete') }}");
 {% endif %}
+
+  restoreNewTripForm();
 </script>
 
 {% if vehicle_type in ('train', 'metro', 'tram') %}

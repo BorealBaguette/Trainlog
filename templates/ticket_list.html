@@ -2,421 +2,303 @@
 
 {% block content %}
 {% include "bootstrap/navigation.html" %}
+{% from "ticket_flags.html" import flags with context %}
 
 <style>
-    @media (min-width: 1400px) {
-        .container-xxl{
-            max-width: 1800px;
-        }
+    .ticket-logo {
+        width: 56px;
+        height: 40px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .ticket-logo img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    .ticket-progress {
+        height: 4px;
+        max-width: 220px;
+    }
+    /* Fixed widths, so the columns line up from one row to the next whatever their labels. */
+    .ticket-year-toggle .bi {
+        display: inline-block;
+        transition: transform .15s;
+    }
+    .ticket-year-toggle[aria-expanded="true"] .bi {
+        transform: rotate(90deg);
+    }
+    .ticket-stat {
+        width: 90px;
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .ticket-stat-wide {
+        width: 150px;
+    }
+    .ticket-table-logo {
+        width: 40px;
+        height: 24px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .ticket-table-logo img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
     }
 </style>
 
-<div class="container-xxl">
-    <h1 class="mt-3">{{nav_tickets}}</h1>
+{% macro status(ticket) %}
+    {% if ticket.state == 'valid' %}
+        <span class="badge bg-success">{{active}}</span>
+        {% if ticket.valid_until %}<span class="ticket-date" data-date="{{ ticket.valid_until }}" data-format="{{ ticketUntil }}"></span>{% endif %}
+        {% if ticket.uses %}· {{ ticket.used }} / {{ ticket.uses }} {{ticketUsesUnit}}{% endif %}
+    {% elif ticket.state == 'upcoming' %}
+        <span class="badge bg-info text-dark">{{ticketUpcoming}}</span>
+        <span class="ticket-date" data-date="{{ ticket.valid_from }}" data-format="{{ ticketFrom }}"></span>
+    {% elif ticket.state == 'active' %}
+        <span class="badge bg-success">{{active}}</span>
+        {% if ticket.uses %}{{ ticket.used }} / {{ ticket.uses }} {{ticketUsesUnit}}{% endif %}
+    {% elif ticket.state == 'used' %}
+        <span class="badge bg-secondary">{{ticketUsedUp}}</span>
+    {% elif ticket.state == 'expired' %}
+        <span class="badge bg-secondary">{{ticketExpired}}</span>
+        <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
+    {% else %}
+        <span class="badge bg-secondary">{{ticketInactive}}</span>
+        <span class="ticket-date" data-date="{{ ticket.purchasing_date }}"></span>
+    {% endif %}
+{% endmacro %}
 
-    <!-- NEW: toggle inactive tickets (DataTables-native filtering; no CSS hide) -->
-    <div>
-        <button id="toggleInactiveTickets" type="button" class="btn btn-outline-secondary btn-sm">
-            <i class="fa-regular fa-eye"></i> {{show_inactive_tickets}}
+{# A group of the current tickets, or of a year's: that year's page, and no renewing. #}
+{% macro group_row(group, year=none) %}
+    {# The ticket in use, or else the latest. #}
+    {% set shown = (group.tickets|selectattr('state', 'in', ['valid', 'active', 'upcoming'])|list or [group.latest])|first %}
+    {% set logo = group.latest.logo %}
+    <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3 ticket-row" data-search="{{ group.name }} {{ group.tickets|map(attribute='name')|unique|join(' ') }} {{ group.operators|map('first')|join(' ') }} {{ group.secondary_operators|join(' ') }} {{ group.countries.replace(',', ' ') }}">
+        <div class="ticket-logo">
+            {% if logo %}
+                <img src="{{ url_for('static', filename=logo) }}" alt="">
+            {% else %}
+                <i class="bi bi-ticket-perforated fs-3 text-muted"></i>
+            {% endif %}
+        </div>
+        <div class="flex-grow-1" style="min-width: 0;">
+            <div class="d-flex align-items-center gap-2" style="min-width: 0;">
+                <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.latest.uid, year=year) }}" class="stretched-link text-reset text-decoration-none fw-bold text-truncate">{{ group.name }}</a>
+                {% if group.countries %}
+                    {# Above the row's link, for their names on hover. #}
+                    <span class="ticket-flags position-relative text-nowrap ms-1" style="z-index: 2;">
+                        {{ flags(group.countries) }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="small text-muted text-truncate">
+                {% if group.ticket_name %}{{ group.ticket_name }} · {% endif %}
+                {%- if group.latest.operator and not logos.get(group.latest.operator) %}{{ group.latest.operator }} · {% endif %}{{ status(shown) }}{% if group.latest.auto_renew %} <i class="bi bi-arrow-repeat text-success" title="{{ticketAutoRenew}}"></i>{% endif %}
+                {#- Above the row's link, which opens the year only. #}
+                {%- if year and group.whole %} · <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.whole.latest.uid) }}" class="position-relative text-decoration-none" style="z-index: 2;">{{ticketAllYears}} ({{ group.whole.tickets|length }})</a>{% endif %}
+            </div>
+            {% if shown.elapsed %}
+                <div class="progress ticket-progress mt-2" role="progressbar" aria-valuenow="{{ shown.elapsed }}" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar bg-success" style="width: {{ shown.elapsed }}%"></div>
+                </div>
+            {% endif %}
+        </div>
+        <div class="d-none d-md-flex gap-4 text-end small">
+            <div class="ticket-stat">
+                <div class="text-muted">{{nav_tickets}}</div>
+                <div class="fw-medium">{{ group.tickets|length }}</div>
+            </div>
+            <div class="ticket-stat">
+                <div class="text-muted">{{trips}}</div>
+                <div class="fw-medium">{{ group.trips }}</div>
+            </div>
+            <div class="ticket-stat ticket-stat-wide">
+                <div class="text-muted">{{ticketSpent}}</div>
+                <div class="fw-medium money" data-value="{{ group.spent }}" data-currency="{{ user_currency }}"></div>
+            </div>
+            <div class="ticket-stat ticket-stat-wide">
+                <div class="text-muted">{{ ticketPricePerUse if group.latest.uses else price_per_trip }}</div>
+                <div class="fw-medium">{% if group.per_trip is not none %}<span class="money" data-value="{{ group.per_trip }}" data-currency="{{ user_currency }}"></span>{% else %}–{% endif %}</div>
+            </div>
+        </div>
+        {% if not year %}
+        <button type="button" class="btn btn-outline-primary btn-sm position-relative renew-button" style="z-index: 2;" data-ticket='{{ group.latest|tojson }}'>
+            <i class="bi bi-arrow-repeat"></i><span class="d-none d-sm-inline"> {{ticketRenew}}</span>
+        </button>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+<div class="container-xl py-3">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <h1 class="h2 mb-0 me-auto">{{nav_tickets}}</h1>
+        {% if live_groups or years %}
+            <div class="btn-group btn-group-sm" role="group">
+                <input type="radio" class="btn-check" name="ticketView" id="ticketViewGroups" value="groups" autocomplete="off" checked>
+                <label class="btn btn-outline-secondary" for="ticketViewGroups"><i class="bi bi-collection"></i> {{ticketViewGroups}}</label>
+                <input type="radio" class="btn-check" name="ticketView" id="ticketViewAll" value="all" autocomplete="off">
+                <label class="btn btn-outline-secondary" for="ticketViewAll"><i class="bi bi-list-ol"></i> {{ticketViewAll}}</label>
+            </div>
+            <input type="search" id="ticketSearch" class="form-control form-control-sm" style="width: 220px;" placeholder="{{ticketSearch}}">
+        {% endif %}
+        <button id="newTicketButton" type="button" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-plus"></i> {{new_ticket}}
         </button>
     </div>
 
-    <div class="table-responsive">
-        <table id="ticketsTable" class="table table-hover w-100">
-            <thead class="table-light">
+    {% if not live_groups and not years %}
+        <p class="text-muted">{{ticketNone}}</p>
+    {% endif %}
+
+    <div class="ticket-view" data-view="groups">
+    {% if live_groups %}
+        <section class="ticket-section">
+            <h2 class="h6 text-uppercase text-muted mt-4">{{ticketCurrent}}</h2>
+            <div class="list-group mb-4">
+                {% for group in live_groups %}{{ group_row(group) }}{% endfor %}
+            </div>
+        </section>
+    {% endif %}
+
+    {# Each year closed, with the groups of its tickets: a pass is in every year it was used. #}
+    {% for year, groups in years %}
+        <section class="ticket-section">
+            <h3 class="h6 mt-3 mb-2">
+                <button type="button" class="btn btn-link text-muted text-decoration-none p-0 fw-bold ticket-year-toggle" data-bs-toggle="collapse" data-bs-target="#tickets{{ year }}" aria-expanded="false" aria-controls="tickets{{ year }}">
+                    <i class="bi bi-chevron-right"></i> {{ year }} ({{ groups|length }})
+                </button>
+            </h3>
+            <div class="collapse ticket-year" id="tickets{{ year }}">
+                <div class="list-group">
+                    {% for group in groups %}{{ group_row(group, year=year) }}{% endfor %}
+                </div>
+            </div>
+        </section>
+    {% endfor %}
+    </div>
+
+    {# Every ticket on its own, to set them side by side by what they cost a trip or a km. #}
+    {% if all_tickets %}
+    <div class="ticket-view mt-3 d-none" data-view="all">
+    {% if years|length > 1 %}
+        <select id="ticketYear" class="form-select form-select-sm mb-2" style="width: auto;">
+            <option value="">{{all}}</option>
+            {% for year, _ in years %}<option value="{{ year }}">{{ year }}</option>{% endfor %}
+        </select>
+    {% endif %}
+    <div class="ticket-table-card table-responsive">
+        <table id="allTicketsTable" class="ticket-table table table-hover align-middle">
+            <thead>
                 <tr>
-                    <th data-priority="1" class="px-3 py-3 border-0">{{ticket_name}}</th>
-                    <th class="px-3 py-3 border-0">{{price}}</th>
-                    <th data-priority="2" class="px-3 py-3 border-0">{{purchasing_date}}</th>
-                    <th class="px-3 py-3 border-0">{{trips}}</th>
-                    <th class="px-3 py-3 border-0">{{price_per_trip}}</th>
-                    <th class="px-3 py-3 border-0">{{price_per_km}}</th>
-                    <th data-orderable="false" data-priority="1" class="px-3 py-3 text-center border-0">{{active}}</th>
-                    <th data-orderable="false" class="px-3 py-3 text-center border-0">{{ticketCountries}}</th>
-                    <th class="px-3 py-3 border-0">{{notes}}</th>
-                    <th data-orderable="false" data-priority="1" class="px-3 py-3 text-center border-0"></th>
+                    <th data-sort="text">{{ticket_name}}</th>
+                    <th data-sort="text" aria-sort="descending">{{ticketValidity}}</th>
+                    <th data-sort="number" class="text-end">{{price}}</th>
+                    <th data-sort="number" class="text-end">{{trips}}</th>
+                    <th data-sort="number" class="text-end">{{ticketDistance}}</th>
+                    <th data-sort="number" class="text-end">{{price_per_trip}}</th>
+                    <th data-sort="number" class="text-end">{{price_per_km}}</th>
                 </tr>
             </thead>
             <tbody>
-                {% for ticket in tickets %}
-                <!-- CHANGED: add inactive marker class only -->
-                <tr id="row_{{ ticket.uid }}" class="{% if not ticket.active %}ticket-inactive{% endif %}">
-                    <td class="px-3 py-3 fw-medium border-0">{{ ticket.name }}</td>
-                    <td class="px-3 py-3 price-format border-0" data-price="{{ ticket.price }}" data-currency="{{ ticket.currency }}" data-user-price="{{ ticket.price_in_user_currency }}" data-user-currency="{{ ticket.user_currency }}">
-                        <span><span style="display:none;" class="price-format-hidden" data-price="{{ ticket.price }}" data-currency="{{ ticket.currency }}" data-user-price="{{ ticket.price_in_user_currency }}" data-user-currency="{{ ticket.user_currency }}">{{ ticket.price_in_user_currency }}</span></span>
-                    </td>
-                    <td class="px-3 py-3 border-0">{{ ticket.purchasing_date }}</td>
-                    <td class="px-3 py-3 border-0">
-                        {% if ticket.trip_ids %}
-                            <a class="leaderboardLink link-dark text-decoration-none fw-medium" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price">{{ ticket.trip_count }}</a>
-                        {% else %}
-                            {{ ticket.trip_count }}
-                        {% endif %}
-                    </td>
-                    <td class="px-3 py-3 border-0">
-                        {% if ticket.price_per_trip %}
-                            <span class="price-format" data-price="{{ ticket.price_per_trip }}" data-currency="{{ ticket.currency }}" data-user-price="{{ ticket.price_per_trip_in_user_currency }}" data-user-currency="{{ ticket.user_currency }}">
-                                <span style="display:none;" class="price-format-hidden" data-price="{{ ticket.price_per_trip }}" data-currency="{{ ticket.currency }}" data-user-price="{{ ticket.price_per_trip_in_user_currency }}" data-user-currency="{{ ticket.user_currency }}">{{ ticket.price_per_trip_in_user_currency }}</span>
+                {% for ticket in all_tickets %}
+                {% set logo = ticket.logo %}
+                {% set per_km = ticket.user_price / ticket.km if ticket.km and ticket.user_price is not none else none %}
+                <tr class="ticket-flat-row" data-year="{{ (ticket.valid_from or ticket.purchasing_date)[:4] }}" data-search="{{ ticket.name }} {{ ticket.product or '' }} {{ ticket.operator or '' }} {{ ticket.secondary_operators or '' }} {{ (ticket.active_countries or '').replace(',', ' ') }}">
+                    <td class="ticket-cell-validity ticket-cell-wide" data-order="{{ ticket.name|lower }}">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="ticket-table-logo">
+                                {% if logo %}<img src="{{ url_for('static', filename=logo) }}" alt="">{% else %}<i class="bi bi-ticket-perforated text-muted"></i>{% endif %}
                             </span>
-                        {% endif %}
-                    </td>
-                    <td class="px-3 py-3 border-0">
-                        {% if ticket.price_per_km %}
-                            <span class="price-format" data-price="{{ ticket.price_per_km }}" data-currency="{{ ticket.currency }}" data-user-price="{{ ticket.price_per_km_in_user_currency }}" data-user-currency="{{ ticket.user_currency }}">
-                                <span style="display:none;" class="price-format-hidden" data-price="{{ ticket.price_per_km }}" data-currency="{{ ticket.currency }}" data-user-price="{{ ticket.price_per_km_in_user_currency }}" data-user-currency="{{ ticket.user_currency }}">{{ ticket.price_per_km_in_user_currency }}</span>
-                            </span>
-                        {% endif %}
-                    </td>
-                    <td class="px-3 py-3 text-center border-0">
-                        <div class="form-check form-switch d-flex justify-content-center">
-                            <input class="form-check-input ticket-active-checkbox"
-                                    type="checkbox"
-                                    role="switch"
-                                    data-ticket-id="{{ ticket.uid }}"
-                                    {% if ticket.active %}
-                                        checked
-                                    {%endif%}
-                                    >
+                            <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=ticket.uid, only=1) }}" class="text-reset text-decoration-none fw-medium">{{ ticket.name }}</a>
+                            {% if ticket.active_countries %}
+                                {{ flags(ticket.active_countries) }}
+                            {% endif %}
                         </div>
                     </td>
-                    <td class="px-3 py-3 text-center border-0">
-                        {% if ticket.active_countries %}
-                            <div class="country-flags-container">
-                                {% for country in ticket.active_countries.split(',') %}
-                                    <span class="flag me-1" data-bs-toggle="tooltip" style="cursor:context-menu;" data-bs-placement="top" title="{{ country }}">{{ country_list[country] }}</span>
-                                {% endfor %}
-                            </div>
+                    <td class="ticket-cell-stat ticket-cell-wide text-nowrap" data-label="{{ticketValidity}}" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
+                        <span class="ticket-date" data-date="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}"></span>
+                        {% if ticket.valid_from and ticket.valid_until and ticket.valid_from != ticket.valid_until %}
+                            → <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
                         {% endif %}
                     </td>
-                    <td class="px-3 py-3 border-0">
-                        {% if ticket.notes %}
-                            <span class="text-muted">{{ ticket.notes }}</span>
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{price}}" data-order="{{ ticket.user_price if ticket.user_price is not none else ticket.price }}">
+                        <span class="money" data-value="{{ ticket.price }}" data-currency="{{ ticket.currency }}"></span>
+                        {% if ticket.currency != user_currency and ticket.user_price is not none %}
+                            <div class="small text-muted"><span class="money" data-value="{{ ticket.user_price }}" data-currency="{{ user_currency }}"></span></div>
                         {% endif %}
                     </td>
-                    <td class="px-3 py-3 text-center border-0">
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button class="btn btn-warning editButton" data-ticket-id="{{ ticket.uid }}" data-ticket-name="{{ ticket.name }}" data-ticket-price="{{ ticket.price }}" data-ticket-currency="{{ ticket.currency }}" data-ticket-date="{{ ticket.purchasing_date }}" data-ticket-notes="{{ ticket.notes }}" data-ticket-active-countries="{{ ticket.active_countries }}">
-                                <i class="fa-regular fa-pen-to-square"></i>
-                            </button>
-                            <button class="btn btn-danger deleteButton" data-ticket-id="{{ ticket.uid }}">
-                                <i class="fa-regular fa-trash-can"></i>
-                            </button>
-                        </div>
+                    <td class="ticket-cell-stat text-end" data-label="{{trips}}" data-order="{{ ticket.trip_ids|length }}">{{ ticket.trip_ids|length }}</td>
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{ticketDistance}}" data-order="{{ ticket.km }}">{{ '%d km'|format(ticket.km) }}</td>
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{price_per_trip}}" data-order="{{ ticket.per_trip if ticket.per_trip is not none else '' }}">
+                        {% if ticket.per_trip is not none %}<span class="money" data-value="{{ ticket.per_trip }}" data-currency="{{ user_currency }}"></span>{% else %}–{% endif %}
+                    </td>
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{price_per_km}}" data-order="{{ per_km if per_km is not none else '' }}">
+                        {% if per_km is not none %}<span class="money" data-value="{{ per_km }}" data-currency="{{ user_currency }}"></span>{% else %}–{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-</div>
-
-<!-- Edit Ticket Modal -->
-<div class="modal fade" id="editTicketModal" tabindex="-1" aria-labelledby="editTicketModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="editTicketModalLabel">Edit Ticket</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="editTicketForm">
-                    <div class="mb-3">
-                        <label for="editTicketName" class="form-label">Name</label>
-                        <input type="text" class="form-control" id="editTicketName" name="name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="editTicketPrice" class="form-label">Price</label>
-                        <input type="number" step="0.01" class="form-control" id="editTicketPrice" name="price" required>
-                    </div>
-                     <div class="mb-3">
-                        <label for="editTicketCurrency" class="form-label">Currency</label>
-                        <select class="form-control" id="editTicketCurrency" name="currency">
-                            {% for currency in currencyOptions %}
-                            <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}">
-                                {{ currency['currency'] }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="editTicketDate" class="form-label">Purchasing Date</label>
-                        <input type="date" class="form-control" id="editTicketDate" name="purchasing_date" required>
-                    </div>
-                    <div class="form-group mb-3">
-                        <label for="ticket_countries">{{ticketCountries}} : </label>
-                        <select class="form-control selectpicker" id="ticket_countries" name="active_countries[]" data-none-selected-text="{{countriesNoneSelectedText}}" data-count-selected-text="{{countriesCountSelectedText}}" multiple data-live-search="true" data-selected-text-format="count > 5" title="{{select_countries}}">
-                            {% for code, emoji in country_list.items() %}
-                                <option value="{{ code }}" data-code="{{ code }}">
-                                    {{ emoji }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="editTicketNotes" class="form-label">Notes</label>
-                        <textarea class="form-control" id="editTicketNotes" name="notes" rows="3"></textarea>
-                    </div>
-                    <input type="hidden" id="editTicketId" name="ticket_id">
-                    <button type="submit" class="btn btn-primary">Save changes</button>
-                </form>
-            </div>
-        </div>
     </div>
+    {% endif %}
 </div>
 
-<style>
-/* Fix DataTables responsive control positioning */
-table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control,
-table.dataTable.dtr-inline.collapsed > tbody > tr > th.dtr-control {
-    position: relative;
-    padding-left: 40px !important;
-    cursor: pointer;
-}
-table > :not(:first-child) {
-    border-top: none !important;
-}
-</style>
+{% include "ticket_form.html" %}
 
 <script>
-$(document).ready(function () {
+$(function () {
+    formatTicketPage();
+    $('#newTicketButton').on('click', function () { openTicketForm(null, 'new'); });
+    $('.renew-button').on('click', function () { openTicketForm($(this).data('ticket'), 'renew'); });
+    sortableTicketTable($('#allTicketsTable'));
 
-    /* NEW: DataTables native filtering for inactive rows (so they DON'T take paging space) */
-    var showInactiveTickets = false;
-    $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-        if (settings.nTable.id !== 'ticketsTable') return true;
-        if (showInactiveTickets) return true;
-
-        var rowNode = settings.aoData[dataIndex].nTr;
-        return !$(rowNode).hasClass('ticket-inactive');
+    // The view last chosen, kept for this browser.
+    function showView(view) {
+        $('.ticket-view').each(function () { $(this).toggleClass('d-none', this.dataset.view !== view); });
+        $('#ticketView' + (view === 'all' ? 'All' : 'Groups')).prop('checked', true);
+    }
+    var savedView = null;
+    try { savedView = localStorage.getItem('ticketView'); } catch (e) {}
+    if (savedView === 'all') showView('all');
+    $('input[name="ticketView"]').on('change', function () {
+        showView(this.value);
+        try { localStorage.setItem('ticketView', this.value); } catch (e) {}
     });
 
-    var table = $('#ticketsTable').DataTable({
-        responsive: {
-            details: {
-                renderer: function (api, rowIdx, columns) {
-                    var data = $.map(columns, function (col, i) {
-                        if (col.hidden) {
-                            var orig_content = $(col.data).children();
-                            var content = '';
-                            if (orig_content.hasClass('price-format-hidden')) {
-                                var price = orig_content.data('price');
-                                var currency = orig_content.data('currency');
-                                var userPrice = orig_content.data('user-price');
-                                var userCurrency = orig_content.data('user-currency');
-                                var formattedPrice = formatCurrency("{{ langId }}", price, currency);
-                                var formattedUserPrice = formatCurrency("{{ langId }}", userPrice, userCurrency);
-                                if (Math.abs(price) == 0.0){
-                                    content = '<span class="text-success">{{free}}</span>';
-                                }
-                                else if (price != userPrice) {
-                                    content = '<span class="text-primary">' + formattedUserPrice + '</span> <span class="text-muted">(' + formattedPrice + ')</span>';
-                                } else {
-                                    content = '<span class="fw-medium">' + formattedPrice + '</span>';
-                                }
-                            } else {
-                                content = col.data;
-                            }
-
-                            return content ?
-                                '<tr data-dt-row="' + col.rowIndex + '" data-dt-column="' + col.columnIndex + '">' +
-                                '<td><b>' + col.title + '</b>:' + '</td> ' +
-                                '<td>' + content + '</td>' +
-                                '</tr>' :
-                                '';
-                        } else {
-                            return '';
-                        }
-                    }).join('');
-
-                    return data ?
-                        $('<table class="table table-sm"/>').append(data) :
-                        false;
-                }
-            }
-        },
-        language: {
-            info: "{{dtInfo}}",
-            paginate: {
-                next: "{{dtNext}}",
-                previous: "{{dtPrevious}}",
-            },
-            emptyTable: "{{dtEmptyTable}}",
-            select: {
-                rows: {
-                    "_": "{{dtMultipleLineSelected}}",
-                    "0": "",
-                    "1": "{{dtOneLineSelected}}"
-                },
-            },
-            lengthMenu: "{{dtLengthMenu}}",
-            search: "{{dtSearch}}"
-        },
-    });
-
-    /* NEW: button toggles filter and redraws */
-    $('#toggleInactiveTickets').off('click').on('click', function () {
-        showInactiveTickets = !showInactiveTickets;
-
-        if (showInactiveTickets) {
-            $(this).html('<i class="fa-regular fa-eye-slash"></i> {{hide_inactive_tickets}}');
-        } else {
-            $(this).html('<i class="fa-regular fa-eye"></i> {{show_inactive_tickets}}');
-        }
-
-        table.draw(); // recalculates paging correctly
-    });
-
-    function updateTable() {
-        // Update tooltips with country names
-        $('.flag[data-bs-toggle="tooltip"]').each(function() {
-            const countryCode = $(this).attr('title');
-            if (typeof countryCode === "string" && countryCode.length === 2) {
-                $(this).attr('title', regionNames.of(countryCode));
-            }
+    // Rows shown by the search, and by the year picked for the tickets. Searching opens the
+    // years; cleared, they close again.
+    $('.ticket-row, .ticket-flat-row').each(function () { this.dataset.search = normalizeForSearch(this.dataset.search); });
+    function filter() {
+        var query = normalizeForSearch($('#ticketSearch').val() || ''), year = $('#ticketYear').val() || '';
+        $('.ticket-row').each(function () {
+            $(this).toggleClass('d-none', Boolean(query) && !this.dataset.search.includes(query));
         });
-        
-        // Initialize tooltips
-        $('[data-bs-toggle="tooltip"]').tooltip();
-
-        // Format price cells
-        $('.price-format').each(function () {
-            var price = $(this).data('price');
-            var currency = $(this).data('currency');
-            var userPrice = $(this).data('user-price');
-            var userCurrency = $(this).data('user-currency');
-            var formattedPrice = formatCurrency("{{ langId }}", price, currency);
-            var formattedUserPrice = formatCurrency("{{ langId }}", userPrice, userCurrency);
-            
-            if (Math.abs(price) == 0.0){
-                $(this).html('<span class="text-success">{{free}}</span>');
-            }
-            else if (price != userPrice) {
-                $(this).html('<span class="text-primary">' + formattedUserPrice + '</span> <span class="text-muted">(' + formattedPrice + ')</span>');
-            } else {
-                $(this).html('<span class="fw-medium">' + formattedPrice + '</span>');
-            }
+        $('.ticket-flat-row').each(function () {
+            var shown = (!query || this.dataset.search.includes(query)) && (!year || this.dataset.year === year);
+            $(this).toggleClass('d-none', !shown);
         });
-
-        // Delete button functionality
-        $('.deleteButton').off('click').on('click', function () {
-            var ticketId = $(this).data('ticket-id');
-            var row = $('#row_' + ticketId);
-
-            if (confirm('Are you sure you want to delete this ticket?')) {
-                $.ajax({
-                    url: '/u/{{ username }}/delete_ticket/' + ticketId,
-                    type: 'GET',
-                    success: function (response) {
-                        if (response.success) {
-                            row.fadeOut(400, function () {
-                                $(this).remove(); // Remove the row from the table after fade out
-                            });
-                        } else {
-                            alert('Error: ' + response.error);
-                        }
-                    },
-                    error: function () {
-                        alert('Failed to delete the ticket. Please try again.');
-                    }
-                });
-            }
-        });
-
-        // Active checkbox functionality
-        $('.ticket-active-checkbox').off('change').on('change', function () {
-            var ticketId = $(this).data('ticket-id');
-            var isActive = $(this).is(':checked');
-            var row = $('#row_' + ticketId);
-
-            $.ajax({
-                url: '/u/{{ username }}/toggle_ticket_active/' + ticketId,
-                type: 'GET',
-                data: JSON.stringify({ active: isActive }),
-                contentType: 'application/json',
-                success: function (response) {
-                    if (!response.success) {
-                        alert('Error: ' + response.error);
-                        // Revert the checkbox state if the update failed
-                        $(this).prop('checked', !isActive);
-                        return;
-                    }
-
-                    /* NEW: keep row class in sync and redraw to apply filter */
-                    if (isActive) {
-                        row.removeClass('ticket-inactive');
-                    } else {
-                        row.addClass('ticket-inactive');
-                    }
-                    table.draw(false);
-                },
-                error: function () {
-                    alert('Failed to update the ticket status. Please try again.');
-                    // Revert the checkbox state if the update failed
-                    $(this).prop('checked', !isActive);
-                }
-            });
-        });
-
-        // Edit button functionality
-        $('.editButton').off('click').on('click', function () {
-            var ticketId = $(this).data('ticket-id');
-            var ticketName = $(this).data('ticket-name');
-            var ticketPrice = $(this).data('ticket-price');
-            var ticketCurrency = $(this).data('ticket-currency');
-            var ticketDate = $(this).data('ticket-date');
-            var ticketNotes = $(this).data('ticket-notes');
-            var ticketActiveCountries = $(this).data('ticket-active-countries');
-
-            $('#editTicketId').val(ticketId);
-            $('#editTicketName').val(ticketName);
-            $('#editTicketPrice').val(ticketPrice);
-            $('#editTicketCurrency').val(ticketCurrency);
-            $('#editTicketDate').val(ticketDate);
-            $('#editTicketNotes').val(ticketNotes);
-            $('#ticket_countries').selectpicker('val', ticketActiveCountries.split(","));
-
-            $('#editTicketModal').modal('show');
+        $('.ticket-section').each(function () {
+            $(this).toggleClass('d-none', !$(this).find('.ticket-row:not(.d-none)').length);
         });
     }
-
-    updateTable(); // Initial call to format the first page
-
-    table.on('draw', function () {
-        updateTable(); // Call updateTable on each draw event
-    });
-
-    // Submit edit ticket form
-    $('#editTicketForm').on('submit', function (e) {
-        e.preventDefault();
-        var formData = $(this).serialize();
-
-        $.ajax({
-            url: '/u/{{ username }}/edit_ticket',
-            type: 'POST',
-            data: formData,
-            success: function (response) {
-                if (response.success) {
-                    location.reload(); // Reload the page to see the updated ticket details
-                } else {
-                    alert('Error: ' + response.error);
-                }
-            },
-            error: function () {
-                alert('Failed to update the ticket. Please try again.');
-            }
+    $('#ticketSearch').on('input', function () {
+        filter();
+        var open = Boolean(normalizeForSearch(this.value));
+        $('.ticket-year').each(function () {
+            $(this).toggleClass('show', open);
+            $('[data-bs-target="#' + this.id + '"]').attr('aria-expanded', String(open));
         });
     });
+    $('#ticketYear').on('change', filter);
 });
-
-    const ticketCountriesSelect = $("#ticket_countries");
-    updateCountryNames(ticketCountriesSelect.get(0), true);
-    ticketCountriesSelect.selectpicker();
-
-    const currencySelect = document.getElementById('editTicketCurrency');
-    for (let option of currencySelect.options) {
-        const emoji = option.dataset.emoji || getFlagEmoji(option.dataset.country);
-        option.text = `${option.text} ${emoji}`; // Prepend the emoji to the option text
-    }
 </script>
 
 {% endblock %}

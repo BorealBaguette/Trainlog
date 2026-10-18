@@ -5,9 +5,9 @@ from src.utils import get_user_id
 from .trip import Trip
 
 
-def get_current_trip_id() -> Trip | None:
+def get_current_trip_id(username: str | None = None) -> Trip | None:
     with pg_session() as pg:
         trip = pg.execute(
-            get_current_trip_query(), {"user_id": get_user_id()}
+            get_current_trip_query(), {"user_id": get_user_id(username)}
         ).fetchone()
         return trip["trip_id"] if trip is not None else None

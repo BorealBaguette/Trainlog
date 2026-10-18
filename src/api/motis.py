@@ -7,6 +7,7 @@ operator resolved to a Trainlog operator so its logo can be shown.
 """
 
 import contextvars
+import json
 import logging
 import math
 import re
@@ -23,7 +24,7 @@ import polyline
 import requests
 from flask import Blueprint, abort, jsonify, request
 
-from py.utils import getCountryFromCoordinates
+from py.utils import get_flag_emoji, getCountryFromCoordinates
 from src.pg import pg_session
 from src.utils import _timezone_finder, login_required
 
@@ -34,14 +35,19 @@ motis_blueprint = Blueprint("motis", __name__)
 MOTIS_PLAN_URL = "https://api.transitous.org/api/v5/plan"
 MOTIS_STOPS_URL = "https://api.transitous.org/api/v1/reverse-geocode"
 MOTIS_BOARD_URL = "https://api.transitous.org/api/v5/stoptimes"
+MOTIS_TRIP_URL = "https://api.transitous.org/api/v5/trip"
 USER_AGENT = "Trainlog/1.0 (https://trainlog.me; admin@trainlog.me; trip form timetable suggestions)"
 
 # Search from a little before the time on the form to a few days after it: the form
-# time is often just "now" or a rough guess, and a service that doesn't run every day
+# time is often just "now" or a rough guess (the list's Earlier/Later buttons go further,
+# see page in _search), and a service that doesn't run every day
 # (a train a few days a week) should still show a couple of runs. Busy lines don't
 # fill those days: each search returns a count of results (below), so a metro line
 # stops after an hour or so, while Oslo–Bergen (6 a day) reaches 4 days ahead.
-WINDOW_BEFORE = timedelta(hours=1)
+# Not more: each search returns a count of results, which a busy line fills before even
+# reaching the form's time (Tallinn's buses, one every minute or two, ended at 14:15 for
+# 14:19 with an hour).
+WINDOW_BEFORE = timedelta(minutes=20)
 WINDOW_AHEAD = timedelta(days=4)
 WINDOW_LENGTH = WINDOW_BEFORE + WINDOW_AHEAD
 # The list is never cut before this (see _departures)...
@@ -70,6 +76,16 @@ TRANSIT_MODES = {
     "funicular": "FUNICULAR",
 }
 RAIL_MODES = set(TRANSIT_MODES["train"].split(","))
+BUS_MODES = set(TRANSIT_MODES["bus"].split(","))
+# Rail lines are filed under whichever mode their feed picked, and logged as whatever they
+# feel like: Karlsruhe's Stadtbahn and Roslagsbanan as regional rail, Paris's tram-trains and
+# Köln's Stadtbahn as trams, Hannover's Stadtbahn and Hong Kong's Airport Express as subway,
+# the Wuppertal Schwebebahn as a funicular. So these types take every rail mode; only direct
+# runs between the two stations come up anyway. "Other rail" (monorails, suspension railways)
+# has no mode of its own: Wuppertal's and Dortmund's come as funiculars, Kuala Lumpur's as subway.
+RAIL_FAMILY = ("train", "metro", "tram", "funicular", "rail")
+# The trip type a run's mode is, for a run of another type to say so.
+MODE_TYPES = {mode: trip_type for trip_type, modes in TRANSIT_MODES.items() for mode in modes.split(",")}
 
 # How far the service's first/last stop may be from the stations on the form. OSM
 # station points and GTFS stops of a big station can sit a few hundred metres apart,
@@ -82,9 +98,24 @@ URBAN_MODES = {"SUBWAY", "METRO", "TRAM", "BUS", "COACH"}
 
 def _reach(modes):
     return URBAN_STOP_DISTANCE_M if modes <= URBAN_MODES else MAX_STOP_DISTANCE_M
+
+
+def _leg_reach(leg):
+    """_reach for one service, by its own mode. Coaches (GTFS 200-299) and rail replacement buses (714)
+    call at train stations, whose stops sit as far apart as the station's own: SNCF's
+    replacement buses leave from its Montparnasse stop, not the bus stops on OSM."""
+    route_type = leg.get("routeType") or 0
+    return MAX_STOP_DISTANCE_M if 200 <= route_type < 300 or route_type == 714 else _reach({leg.get("mode")})
+
+
 # Fallback searches from timetable stops (see _stop_places): at most this many stops
 # per end, so at most (n + 1)^2 - 1 extra requests.
 MAX_FALLBACK_STOPS = 2
+
+# A departure-board run's stop counts as the destination only this much further from it than
+# its nearest timetable stop: within reach, a tram stop of another line can be the next one
+# (Ancienne Synagogue, 267 m from Alt Winmärik, whose own stop is 16 m off).
+NEAREST_STOP_SLACK_M = 150
 
 # The same lookup is fired again whenever the user nudges the date or time back and
 # forth, so keep answers for a few minutes rather than asking Transitous each time.
@@ -94,9 +125,10 @@ _STOPS_CACHE_TTL = 24 * 3600
 _CACHE_MAX = 256
 _cache = {}
 
-# Searches start on the half hour before the form's time minus WINDOW_BEFORE, so moving
+# Searches start on the 10 minutes before the form's time minus WINDOW_BEFORE, so moving
 # the time by a few minutes asks Transitous the same thing again (and hits the cache).
-START_STEP = timedelta(minutes=30)
+# Not coarser: on a busy line every minute of lead is results that never reach the time.
+START_STEP = timedelta(minutes=10)
 
 # Transitous refuses bursts from one address: 6 plan requests at once got half of them a
 # 429 straight away (no Retry-After), while 3 at once or back to back went through. So
@@ -281,9 +313,25 @@ def _line_name(leg):
 COORD_DIGITS = 6
 
 
+def _utc(value):
+    """MOTIS's ISO time as 'YYYY-MM-DDTHH:MM:SSZ', or None."""
+    dt = _parse_utc(value)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if dt else None
+
+
 def _stop(stop):
-    """[lat, lng, name, country code, arrival 'HH:MM', departure 'HH:MM'] — the
-    country so the form can flag it like a picked station, the times as shown there."""
+    """[lat, lng, name, country code, arrival 'HH:MM', departure 'HH:MM', platform,
+    scheduled arrival UTC, scheduled departure UTC, time zone, stop lat, stop lng,
+    Transitous stop id, live arrival UTC, live departure UTC, scheduled platform].
+
+    The country so the form can flag it like a picked station; the local times as shown
+    there; the platform (track) when the feed has it, the real-time one if it changed.
+    The rest is what the trip keeps of the stop (the waypoint's `stop`, see routing.js):
+    UTC times, for the live map and current trip, the zone to show them in local time
+    again, and the stop's own position, which [0]/[1] leave once moved onto the run's
+    path (_snap_stops), and its id, to match it against Transitous later. The live times
+    only when the feed has them and they differ from the schedule; the scheduled platform
+    beside the live one shown in [6]."""
     tz = ZoneInfo(stop["tz"]) if stop.get("tz") else _tz(stop["lat"], stop["lon"])
 
     def clock(field):
@@ -297,7 +345,23 @@ def _stop(stop):
         getCountryFromCoordinates(stop["lat"], stop["lon"])["countryCode"],
         clock("Arrival"),
         clock("Departure"),
+        _tracks(stop)[0] or _tracks(stop)[1],
+        _utc(stop.get("scheduledArrival") or stop.get("arrival")),
+        _utc(stop.get("scheduledDeparture") or stop.get("departure")),
+        getattr(tz, "key", None),
+        round(stop["lat"], COORD_DIGITS),
+        round(stop["lon"], COORD_DIGITS),
+        stop.get("stopId"),
+        _live(stop, "Arrival"),
+        _live(stop, "Departure"),
+        _tracks(stop)[1],
     ]
+
+
+def _live(stop, field):
+    """The stop's live arrival/departure (UTC), when it differs from the scheduled one."""
+    live, scheduled = _utc(stop.get(field.lower())), _utc(stop.get("scheduled" + field))
+    return live if live and scheduled and live != scheduled else None
 
 
 def _distance_m(lat1, lng1, lat2, lng2):
@@ -318,15 +382,16 @@ def _direct_leg(itinerary, modes, origin, destination):
         leg
         for leg in itinerary.get("legs", [])
         if leg.get("mode") in modes
-        and _distance_m(leg["from"]["lat"], leg["from"]["lon"], *origin) <= _reach(modes)
-        and _distance_m(leg["to"]["lat"], leg["to"]["lon"], *destination) <= _reach(modes)
+        and _distance_m(leg["from"]["lat"], leg["from"]["lon"], *origin) <= _leg_reach(leg)
+        and _distance_m(leg["to"]["lat"], leg["to"]["lon"], *destination) <= _leg_reach(leg)
     ]
     return legs[0] if len(legs) == 1 else None
 
 
-def _board_legs(stop_id, modes, start, destination):
+def _board_legs(stop_id, modes, start, destination, nearest_m=None):
     """Direct services from the origin stop's departure board: those that later call
-    within reach (_reach) of the destination, shaped like plan legs.
+    within reach (_reach) of the destination, and about as near it as its nearest stop
+    (nearest_m, NEAREST_STOP_SLACK_M), shaped like plan legs.
 
     The planner only returns the best journeys, and drops a direct service whenever
     another way is faster: Opéra → République on metro line 8 comes back as "ride to
@@ -352,7 +417,10 @@ def _board_legs(stop_id, modes, start, destination):
             for i, stop in enumerate(following)
             if stop.get("dropoffType") != "NOT_ALLOWED"
         ]
-        near = [(d, i) for d, i in near if d <= _reach(modes)]
+        reach = _leg_reach(dep)
+        if nearest_m is not None:
+            reach = min(reach, nearest_m + NEAREST_STOP_SLACK_M)
+        near = [(d, i) for d, i in near if d <= reach]
         arrival_at = min(near)[1] if near else None
         if arrival_at is None or dep.get("mode") not in modes:
             continue
@@ -360,7 +428,7 @@ def _board_legs(stop_id, modes, start, destination):
         legs.append(
             {
                 **{k: dep.get(k) for k in (
-                    "mode", "headsign", "displayName", "routeShortName", "tripShortName",
+                    "mode", "routeType", "headsign", "displayName", "routeShortName", "tripShortName",
                     "agencyName", "routeColor", "realTime", "tripId", "tripTo",
                 )},
                 "cancelled": dep.get("cancelled") or dep.get("tripCancelled"),
@@ -377,14 +445,15 @@ def _board_legs(stop_id, modes, start, destination):
 
 
 def _stop_places(lat, lng, modes):
-    """IDs of the timetable stops near a point served by one of `modes`, nearest first.
+    """The timetable stops near a point served by one of `modes`, nearest first, as
+    {id, distance_m}.
 
     Searching from a point relies on MOTIS walking to a stop, and some stops are cut
     off from its footpath network: the SNCF stop at Paris Austerlitz, 160 m from the
     station, is only "reachable" by bus, so nothing direct is found from the station.
     Searching from the stop itself does not need that walk."""
     stops = [
-        stop
+        {"id": stop["id"], "distance_m": _distance_m(stop["lat"], stop["lon"], lat, lng)}
         for stop in _fetch(
             MOTIS_STOPS_URL,
             {"place": f"{lat:.6f},{lng:.6f}", "type": "STOP"},
@@ -393,10 +462,10 @@ def _stop_places(lat, lng, modes):
         )
         if stop.get("id")
         and modes & set(stop.get("modes") or ())
-        and _distance_m(stop["lat"], stop["lon"], lat, lng) <= _reach(modes)
+        and _distance_m(stop["lat"], stop["lon"], lat, lng) <= _reach(modes & set(stop.get("modes") or ()))
     ]
-    stops.sort(key=lambda stop: _distance_m(stop["lat"], stop["lon"], lat, lng))
-    return [stop["id"] for stop in stops[:MAX_FALLBACK_STOPS]]
+    stops.sort(key=lambda stop: stop["distance_m"])
+    return stops[:MAX_FALLBACK_STOPS]
 
 
 # A stop is moved onto the run's path only when this close: further than that, the path is
@@ -477,11 +546,22 @@ def _delay_minutes(actual, scheduled):
     return round((a - s).total_seconds() / 60) if a and s else 0
 
 
+def _rail_replacement(leg):
+    """A bus run as part of a rail service: GTFS's rail replacement bus type, or one of
+    SNCF's road services (its train runs are "…FERRE_…", its buses "…ROUTIER_…")."""
+    return leg.get("routeType") == 714 or "ROUTIER_" in (leg.get("tripId") or "")
+
+
+def _modes(trip_type):
+    types = RAIL_FAMILY if trip_type in RAIL_FAMILY else (trip_type,)
+    return {mode for t in types if t in TRANSIT_MODES for mode in TRANSIT_MODES[t].split(",")}
+
+
 def _search(args):
     """The search the form asks for (from, to, date, time, type), as
     (trip type, origin, destination, start, window, plan parameters, modes)."""
     trip_type = args.get("type", "train")
-    if trip_type not in TRANSIT_MODES:
+    if trip_type not in TRANSIT_MODES and trip_type not in RAIL_FAMILY:
         abort(400)
     origin = _parse_coords(args.get("from"))
     destination = _parse_coords(args.get("to"))
@@ -491,11 +571,28 @@ def _search(args):
         abort(400)
     try:
         clock = datetime.strptime(args.get("time") or "", "%H:%M").time()
-        start, window = day.replace(hour=clock.hour, minute=clock.minute) - WINDOW_BEFORE, WINDOW_LENGTH
+        at = day.replace(hour=clock.hour, minute=clock.minute)
     except ValueError:
+        clock, at = None, day
+    page = args.get("page")
+    if page == "later":
+        # "Later" in the list: from its last departure (date/time), as far ahead as usual.
+        start, window = at, WINDOW_AHEAD
+    elif page == "earlier":
+        # "Earlier": the stretch just before its first departure (date/time), as long as
+        # the list already covers (span, minutes): a few minutes on a busy line, hours
+        # on a sparse one.
+        try:
+            span = timedelta(minutes=min(max(int(args.get("span") or 60), 10), 24 * 60))
+        except ValueError:
+            abort(400)
+        start, window = at - span, span - timedelta(minutes=1)
+    elif clock:
+        start, window = at - WINDOW_BEFORE, WINDOW_LENGTH
+        start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
+    else:
         # No time on the form: from the start of the day.
         start, window = day, WINDOW_AHEAD
-    start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
     start = start.replace(tzinfo=_tz(*origin)).astimezone(timezone.utc)
 
     params = {
@@ -504,7 +601,7 @@ def _search(args):
         "time": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "searchWindow": int(min(window, SEARCH_WINDOW).total_seconds()),
         "maxTransfers": 0,
-        "transitModes": TRANSIT_MODES[trip_type],
+        "transitModes": ",".join(sorted(_modes(trip_type))),
         "directModes": "WALK",
         "numItineraries": ITINERARIES,
         "maxItineraries": ITINERARIES,
@@ -514,7 +611,7 @@ def _search(args):
         # RE11): Pareto-optimal results drop them, but people do take them.
         "slowDirect": "true",
     }
-    modes = set(TRANSIT_MODES[trip_type].split(","))
+    modes = _modes(trip_type)
     return trip_type, origin, destination, start, window, params, modes
 
 
@@ -594,9 +691,23 @@ def _quietly(search, *args):
 @motis_blueprint.route("/u/<username>/motis/departures")
 @login_required
 def motis_departures(username):
-    _, origin, destination, start, window, params, modes = _search(request.args)
+    return _departures_for(request.args)
+
+
+def _departures_for(args):
+    """The departures list for a search (from, to, date, time, type, page…), as the
+    JSON response the forms get."""
+    payload, status = departures_payload(args)
+    return (jsonify(payload), status) if payload is not None else ("", status)
+
+
+def departures_payload(args):
+    """The departures list for a search, as (payload, HTTP status): payload None when
+    nobody waits for it any more (cancelled). Also what the MCP's search_departures
+    answers from."""
+    trip_type, origin, destination, start, window, params, modes = _search(args)
     if _outside_timetable(start, window):
-        return jsonify({"departures": [], "outside_timetable": True})
+        return {"departures": [], "outside_timetable": True}, 200
 
     def direct_legs(from_place, to_place):
         plan = _fetch(MOTIS_PLAN_URL, dict(params, fromPlace=from_place, toPlace=to_place))
@@ -604,6 +715,18 @@ def motis_departures(username):
             leg
             for it in plan.get("itineraries", [])
             if (leg := _direct_leg(it, modes, origin, destination))
+        ]
+
+    # Rail replacement buses are buses in most feeds, so a train search looks for them
+    # among the buses too.
+    def replacement_legs(from_place, to_place):
+        plan = _fetch(MOTIS_PLAN_URL, dict(
+            params, fromPlace=from_place, toPlace=to_place, transitModes=TRANSIT_MODES["bus"]
+        ))
+        return [
+            dict(leg, replacementBus=True)
+            for it in plan.get("itineraries", [])
+            if (leg := _direct_leg(it, BUS_MODES, origin, destination)) and _rail_replacement(leg)
         ]
 
     points = (params["fromPlace"], params["toPlace"])
@@ -630,16 +753,19 @@ def motis_departures(username):
     try:
         # From the points, and at the same time look up the stops near them.
         from_points = submit(direct_legs, *points)
+        replacements = submit(_quietly, replacement_legs, *points) if trip_type == "train" else None
         from_stops = submit(_quietly, _stop_places, *origin, modes)
         to_stops = submit(_quietly, _stop_places, *destination, modes)
         from_stops, to_stops = result(from_stops), result(to_stops)
+        to_nearest_m = to_stops[0]["distance_m"] if to_stops else None
+        from_stops, to_stops = [s["id"] for s in from_stops], [s["id"] for s in to_stops]
         # Always also from the nearest stop at each end: walking from the point can
         # reach only some of a big station's platforms (Oslo S: RE11 and L1 are
         # missing from the point search, there from the stop's).
         nearest = (from_stops[0] if from_stops else points[0], to_stops[0] if to_stops else points[1])
         from_nearest = submit(_quietly, direct_legs, *nearest) if nearest != points else None
         board = (
-            submit(_quietly, _board_legs, from_stops[0], modes, start, destination)
+            submit(_quietly, _board_legs, from_stops[0], modes, start, destination, to_nearest_m)
             if from_stops else None
         )
         searches = [result(f) for f in (from_points, from_nearest, board) if f]
@@ -653,23 +779,45 @@ def motis_departures(username):
                 if (f, t) not in (points, nearest)
             ]
             searches = [result(f) for f in [submit(_quietly, direct_legs, *pair) for pair in pairs]]
+        if replacements:
+            searches.append(result(replacements))
     except OutsideTimetable:
         # A date outside the loaded timetables: nothing to look up, not a failure.
-        return jsonify({"departures": [], "outside_timetable": True})
+        return {"departures": [], "outside_timetable": True}, 200
     except Cancelled:
         # Nobody is waiting for this answer any more.
-        return "", 204
+        return None, 204
     except RateLimited:
-        return jsonify({"error": "rate_limited", "departures": []}), 503
+        return {"error": "rate_limited", "departures": []}, 503
     except (requests.RequestException, ValueError) as e:
         logger.warning("MOTIS request failed: %s", e)
-        return jsonify({"error": "unavailable", "departures": []}), 502
+        return {"error": "unavailable", "departures": []}, 502
     finally:
         # Don't wait for requests already sent: they finish in the background, and
         # whatever hasn't started yet is dropped.
         pool.shutdown(wait=False, cancel_futures=True)
 
-    return jsonify({"departures": _departures(searches, start, window, destination)})
+    return {"departures": _departures(searches, start, window, destination)}, 200
+
+
+# A stop this close to where a run was boarded is the same stop (the other direction's side).
+SAME_STOP_M = 150
+
+
+def _passes_again(leg):
+    """Whether the run comes back through where it was boarded before arriving: out to the
+    terminus and back (Brest's tram A, Place de Strasbourg → Porte de Gouesnou → Place de
+    Strasbourg → Jean Jaurès). Nobody rides that; the same vehicle boarded as it comes back
+    is a departure of its own."""
+    frm = leg.get("from") or {}
+    if frm.get("lat") is None or frm.get("lon") is None:
+        return False
+    return any(
+        (stop.get("name") and stop.get("name") == frm.get("name"))
+        or (stop.get("lat") is not None and stop.get("lon") is not None
+            and _distance_m(stop["lat"], stop["lon"], frm["lat"], frm["lon"]) <= SAME_STOP_M)
+        for stop in leg.get("intermediateStops") or []
+    )
 
 
 def _departures(searches, start, window, destination):
@@ -691,7 +839,7 @@ def _departures(searches, start, window, destination):
         end = min(end, max(min(horizons), start + WINDOW_BEFORE + MIN_HORIZON))
     departures, seen = [], {}
     for leg in legs:
-        if not leg or leg.get("cancelled"):
+        if not leg or leg.get("cancelled") or _passes_again(leg):
             continue
         dep_utc = _departure_utc(leg)
         if not dep_utc or not (start <= dep_utc <= end):
@@ -705,8 +853,10 @@ def _departures(searches, start, window, destination):
         # The line's first word too: RER A and RER E share the agency name "RER" and can
         # leave the same minute; the SNCF and Trenitalia copies of a Frecciarossa still
         # agree on it ("FR 6441" / "FR").
+        # The agency's first word only: two feeds can name it differently ("Bibus" and
+        # "Bibus (Brest Métropole)" for Brest's trams).
         trip_key = (
-            (leg.get("agencyName") or "").strip().lower(),
+            ((leg.get("agencyName") or "").strip().lower().split() or [""])[0],
             leg.get("scheduledStartTime"),
             ((leg.get("displayName") or leg.get("routeShortName") or "").split() or [""])[0].lower(),
         )
@@ -726,9 +876,30 @@ def _departures(searches, start, window, destination):
             "headsign": _headsign(leg),
             "agency": (leg.get("agencyName") or "").strip(),
             "mode": leg.get("mode"),
+            # The trip type its mode is: the list marks a run of another type than the
+            # search's (a tram-train, filed as a tram, on a train search).
+            "type": MODE_TYPES.get(leg.get("mode")),
+            # Entur files its rail replacement buses under the train's route, as rail.
+            "replacement_bus": leg.get("replacementBus", False)
+            or ":ServiceJourney:BUS-" in (leg.get("tripId") or ""),
+            # Transitous's id of the run, to fetch its actual times once it has run
+            # (while the feed still has them): kept with each saved stop (stopRecord).
+            "trip_id": leg.get("tripId"),
             "color": _hex_colour(leg.get("routeColor")),
             "from_name": frm.get("name"),
             "to_name": to.get("name"),
+            # Where the run is boarded and left, [lat, lng]: its path's ends where it has one
+            # (on the track it takes, as its stops are moved, _snap_stops), else the stops'.
+            "from_point": [round(frm["lat"], COORD_DIGITS), round(frm["lon"], COORD_DIGITS)],
+            "to_point": [round(to["lat"], COORD_DIGITS), round(to["lon"], COORD_DIGITS)],
+            # Transitous's ids of the stops it is boarded and left at, as the stops' (the
+            # platform's own id in some feeds: DELFI's DHIDs, see src/quai.py stop_point_id).
+            "from_id": frm.get("stopId"),
+            "to_id": to.get("stopId"),
+            # Where it leaves from and arrives (the live platform if it was changed): the
+            # trip's departure_platform / arrival_platform when picked.
+            "from_platform": _tracks(frm)[0] or _tracks(frm)[1],
+            "to_platform": _tracks(to)[0] or _tracks(to)[1],
             "stops": [_stop(s) for s in stops],
             "_sort": dep_utc,
             "_path": _leg_path(leg),
@@ -738,7 +909,7 @@ def _departures(searches, start, window, destination):
         if kept:
             # Keep the arrival at the stop nearest the destination...
             if entry["_dest_m"] < kept["_dest_m"] - 50:
-                for field in ("arrival", "arrival_delay", "duration", "to_name", "stops", "_dest_m"):
+                for field in ("arrival", "arrival_delay", "duration", "to_name", "to_platform", "stops", "_dest_m"):
                     kept[field] = entry[field]
             # ...and, for the rest, whatever each copy has that the other lacks (one
             # feed the train number, the other the headsign).
@@ -768,6 +939,9 @@ def _departures(searches, start, window, destination):
         d.pop("_dest_m")
         path = d.pop("_path")
         _snap_stops(d["stops"], path)
+        if path and len(path) >= 2:
+            d["from_point"] = [round(path[0][0], COORD_DIGITS), round(path[0][1], COORD_DIGITS)]
+            d["to_point"] = [round(path[-1][0], COORD_DIGITS), round(path[-1][1], COORD_DIGITS)]
 
     if departures:
         try:
@@ -783,3 +957,298 @@ def _departures(searches, start, window, destination):
             d["logo_url"] = info.get("logo_url")
 
     return departures
+
+
+# Live times are what this is for, so not the plan's few minutes of cache.
+_TRIP_CACHE_TTL = 30
+
+
+def _run_leg(trip_id):
+    """A run's leg, as /api/v5/trip gives it, or None for an id Transitous doesn't know
+    (left the feed). Raises what _fetch raises."""
+    try:
+        trip = _fetch(MOTIS_TRIP_URL, {"tripId": trip_id}, ttl=_TRIP_CACHE_TTL)
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code in (400, 404, 422):
+            return None
+        raise
+    legs = [leg for leg in trip.get("legs") or [] if leg.get("mode") != "WALK"]
+    return legs[0] if legs else None
+
+
+def _run_places(leg):
+    return [
+        place
+        for place in [leg.get("from") or {}, *(leg.get("intermediateStops") or []), leg.get("to") or {}]
+        if place.get("lat") is not None
+    ]
+
+
+# A stop's description naming its track, as DELFI's do ("Bahnsteig Gleis 2", where the feed's
+# own platform code is "75", its transport association's numbering): that number is the track.
+TRACK_IN_DESCRIPTION = re.compile(
+    r"\b(?:gleis|voie|track|binario|spor|spår|vía|perron|platform)\s+([0-9]+[a-z]?(?:\s*[-/]\s*[0-9]+[a-z]?)?)\b",
+    re.IGNORECASE)
+
+
+def _tracks(place):
+    """A stop's (live, scheduled) track, each or None: the one its description names where it
+    names one (DELFI) and the live track has not changed (the description is the scheduled
+    stop point's), else the feed's own."""
+    live = (place.get("track") or "").strip() or None
+    scheduled = (place.get("scheduledTrack") or "").strip() or None
+    named = TRACK_IN_DESCRIPTION.search(place.get("description") or "")
+    if named and (live is None or scheduled is None or live == scheduled):
+        return named.group(1), named.group(1)
+    return live, scheduled
+
+
+def _place_record(place):
+    return {
+        "id": place.get("stopId"),
+        "name": place.get("name"),
+        "lat": round(place["lat"], COORD_DIGITS),
+        "lng": round(place["lon"], COORD_DIGITS),
+        "arr": _utc(place.get("scheduledArrival")),
+        "dep": _utc(place.get("scheduledDeparture")),
+        "arr_rt": _live(place, "Arrival"),
+        "dep_rt": _live(place, "Departure"),
+        "platform": _tracks(place)[1] or _tracks(place)[0],
+        "platform_rt": _tracks(place)[0],
+        "tz": place.get("tz"),
+        "cc": getCountryFromCoordinates(place["lat"], place["lon"])["countryCode"],
+    }
+
+
+def _run_stops(trip_id):
+    """A run's stops, first to last, scheduled and live, and whether Transitous has live
+    data for it. Raises what _fetch raises; an id it doesn't know (left the feed) is
+    no stops."""
+    leg = _run_leg(trip_id)
+    if not leg:
+        return [], False
+    return [_place_record(place) for place in _run_places(leg)], bool(leg.get("realTime"))
+
+
+# How far the stops a run is boarded and left at can be from the trip's two ends.
+RUN_END_MAX_M = 1500
+
+
+def run_segment(trip_id, origin, destination):
+    """The part of a run ridden from origin to destination ((lat, lng) each): the stops
+    nearest them, in that order, within RUN_END_MAX_M. What a departure picked on the
+    new trip form fills in, for a trip made elsewhere (the MCP's add_trip):
+
+    {"line", "agency", "operator", "board", "alight", "stops"}, where board and alight
+    are the two end stops' records and stops the via waypoints between them, as the form
+    saves them ({lat, lng, name, stop}, the stop record as stopRecord() makes it).
+    Raises ValueError for a run Transitous doesn't know or that doesn't pass there."""
+    leg = _run_leg(trip_id)
+    if not leg:
+        raise ValueError("Transitous doesn't know this run (anymore). Search departures again.")
+    places = _run_places(leg)
+
+    def nearest(point, candidates):
+        return min(
+            ((_distance_m(places[i]["lat"], places[i]["lon"], *point), i) for i in candidates),
+            default=(None, None),
+        )
+
+    # Boarding can't be the last stop, nor alighting before it.
+    board_m, board = nearest(origin, range(len(places) - 1))
+    alight_m, alight = nearest(destination, range(board + 1, len(places))) if board is not None else (None, None)
+    if board is None or alight is None or board_m > RUN_END_MAX_M or alight_m > RUN_END_MAX_M:
+        raise ValueError(
+            "That run doesn't call near both the origin and the destination "
+            "(in that order). Check the coordinates or pick another run."
+        )
+
+    stops = [_stop(place) for place in places[board + 1:alight]]
+    _snap_stops(stops, _leg_path(leg))
+    waypoints = []
+    for stop in stops:
+        record = {
+            "name": stop[2], "cc": stop[3], "platform": stop[15] or stop[6],
+            "arr": stop[7], "dep": stop[8], "arr_rt": stop[13], "dep_rt": stop[14],
+            "platform_rt": stop[6] if stop[6] != (stop[15] or stop[6]) else None,
+            "tz": stop[9], "lat": stop[10], "lng": stop[11], "id": stop[12], "trip": trip_id,
+        }
+        name = stop[2] or f"{stop[0]}, {stop[1]}"
+        flag = get_flag_emoji(stop[3]) if stop[3] and stop[3] != "UN" else None
+        waypoints.append({
+            "lat": stop[0],
+            "lng": stop[1],
+            "name": f"{flag} {name}" if flag else name,
+            "stop": {k: v for k, v in record.items() if v not in (None, "")},
+        })
+
+    agency = (leg.get("agencyName") or "").strip()
+    try:
+        departure = _parse_utc(places[board].get("scheduledDeparture") or places[board].get("departure"))
+        operator = _resolve_operators({agency}, departure.date()).get(agency, {}).get("operator") if agency else None
+    except Exception:
+        logger.exception("Operator lookup for a MOTIS agency failed")
+        operator = None
+    return {
+        "line": _line_name(leg),
+        "agency": agency,
+        "operator": operator or agency or None,
+        "board": _place_record(places[board]),
+        "alight": _place_record(places[alight]),
+        "stops": waypoints,
+    }
+
+
+@motis_blueprint.route("/u/<username>/motis/trip")
+@login_required
+def motis_trip(username):
+    """A run's stops with their current times, by the Transitous id saved with a trip's
+    stops (stopRecord in new.html): what the stops dialog of the edit page refreshes the
+    live times and platforms from, while Transitous still has the run (usually not long
+    after it ends). Every stop of the run, first to last, scheduled and live."""
+    trip_id = (request.args.get("id") or "").strip()
+    if not trip_id or len(trip_id) > 300:
+        abort(400)
+    try:
+        stops, realtime = _run_stops(trip_id)
+    except RateLimited:
+        return jsonify({"error": "rate_limited", "stops": []}), 503
+    except OutsideTimetable:
+        return jsonify({"stops": []})
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("MOTIS trip request failed: %s", e)
+        return jsonify({"error": "unavailable", "stops": []}), 502
+    return jsonify({"stops": stops, "realtime": realtime})
+
+
+def trip_runs(waypoints_json):
+    """The Transitous runs a trip's stops were picked from, when every stop says which
+    (a stop typed in by hand has none: its times can't be refreshed, so neither can the
+    trip's); else []."""
+    try:
+        waypoints = json.loads(waypoints_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(waypoints, list):
+        return []
+    stops = [wp["stop"] for wp in waypoints if isinstance(wp, dict) and isinstance(wp.get("stop"), dict)]
+    if not stops or not all(st.get("trip") for st in stops):
+        return []
+    return list(dict.fromkeys(st["trip"] for st in stops))
+
+
+def _seconds_between(actual, scheduled):
+    if not actual or not scheduled:
+        return None
+    return int((_parse_utc(actual) - _parse_utc(scheduled)).total_seconds())
+
+
+def _live_update(trip_row, path):
+    """What the runs' live data says now about a trip in progress: its delays at its two
+    ends (the runs' stops nearest them), platforms there, and its stops' live times.
+    None when there is nothing live to go by."""
+    runs = trip_runs(trip_row["waypoints"])
+    if not runs or len(path) < 2:
+        return None
+    run_stops, live = [], False
+    by_id = {}
+    for run in runs:
+        stops, realtime = _run_stops(run)
+        live = live or realtime
+        run_stops.extend(stops)
+        by_id.update({(run, st["id"]): st for st in stops if st.get("id")})
+    if not live or not run_stops:
+        return None
+
+    def nearest(point):
+        found = min(
+            ((_distance_m(st["lat"], st["lng"], *point), i) for i, st in enumerate(run_stops)),
+            default=None,
+        )
+        return run_stops[found[1]] if found and found[0] <= 1500 else None
+
+    start, end = nearest(path[0]), nearest(path[-1])
+    if not start and not end:
+        return None
+    waypoints = json.loads(trip_row["waypoints"])
+    for wp in waypoints:
+        stop = wp.get("stop") if isinstance(wp, dict) else None
+        fresh = isinstance(stop, dict) and by_id.get((stop.get("trip"), stop.get("id")))
+        if not fresh:
+            continue
+        for field in ("arr", "dep"):
+            if fresh[field]:
+                stop[field] = fresh[field]
+            if fresh[field + "_rt"]:
+                stop[field + "_rt"] = fresh[field + "_rt"]
+            else:
+                stop.pop(field + "_rt", None)
+        if fresh["platform"]:
+            stop["platform"] = fresh["platform"]
+        if fresh["platform_rt"] and fresh["platform_rt"] != stop.get("platform"):
+            stop["platform_rt"] = fresh["platform_rt"]
+        else:
+            stop.pop("platform_rt", None)
+
+    def platform(st):
+        return st and (st["platform_rt"] or st["platform"])
+
+    dep = start and _seconds_between(start["dep_rt"], start["dep"])
+    arr = end and _seconds_between(end["arr_rt"], end["arr"])
+    return {
+        "departure_delay": dep if dep is not None else trip_row["departure_delay"],
+        "arrival_delay": arr if arr is not None else trip_row["arrival_delay"],
+        "departure_platform": platform(start) or trip_row["departure_platform"],
+        "arrival_platform": platform(end) or trip_row["arrival_platform"],
+        "waypoints": json.dumps(waypoints, ensure_ascii=False),
+    }
+
+
+@motis_blueprint.route("/u/<username>/current/live", methods=["GET", "POST"])
+@login_required
+def current_trip_live(username):
+    """The trip in progress against its runs' live data (GTFS-RT through Transitous):
+    GET says whether there is any, and the delays it gives; POST also saves them (and
+    the stops' live times and the platforms) to the trip. The dashboard's refresh."""
+    from src.trips.utils import get_current_trip_id  # noqa: PLC0415 (import cycle)
+
+    trip_id = get_current_trip_id(username)
+    if trip_id is None:
+        return jsonify({"available": False})
+    with pg_session() as pg:
+        row = pg.execute(
+            """SELECT t.waypoints, t.departure_delay, t.arrival_delay,
+                      t.departure_platform, t.arrival_platform,
+                      (SELECT json_agg(json_build_array(ST_Y(dp.geom), ST_X(dp.geom)) ORDER BY dp.path)
+                       FROM paths p, ST_DumpPoints(p.geom) AS dp WHERE p.trip_id = t.trip_id) AS path
+               FROM trips t WHERE t.trip_id = :trip_id""",
+            {"trip_id": trip_id},
+        ).fetchone()
+    if row is None:
+        return jsonify({"available": False})
+    row = row._mapping
+    try:
+        update = _live_update(row, row["path"] or [])
+    except RateLimited:
+        return jsonify({"available": False, "error": "rate_limited"}), 503
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("MOTIS live refresh failed: %s", e)
+        return jsonify({"available": False, "error": "unavailable"}), 502
+    if update is None:
+        return jsonify({"available": False})
+    if request.method == "POST":
+        with pg_session() as pg:
+            pg.execute(
+                """UPDATE trips SET departure_delay = :departure_delay, arrival_delay = :arrival_delay,
+                          departure_platform = :departure_platform, arrival_platform = :arrival_platform,
+                          waypoints = :waypoints, last_modified = :last_modified
+                   WHERE trip_id = :trip_id""",
+                {**update, "trip_id": trip_id, "last_modified": datetime.now()},
+            )
+    return jsonify({
+        "available": True,
+        "saved": request.method == "POST",
+        "departure_delay": update["departure_delay"],
+        "arrival_delay": update["arrival_delay"],
+        "waypoints": update["waypoints"],
+    })

@@ -2,11 +2,21 @@
 {% block content %}
 
 {% include "bootstrap/navigation.html" %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<style>
+  #addStationMap { height: 260px; border-radius: 8px; cursor: crosshair; }
+</style>
 
 <div class="container mt-4">
   <div class="row">
     <div>
       <h2 class="mb-3 text-center">{{ manage_manual_stations }}</h2>
+      <div class="text-end mb-2">
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addStationModal">
+          <i class="fa-solid fa-plus"></i> {{ addManualStation }}
+        </button>
+      </div>
 
       <table id="manualStationsTable">
         <thead>
@@ -40,7 +50,7 @@
                   <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                  <form action="{{ url_for('updateUserManualStation', username=username, id=station.uid) }}" method="post" autocomplete="off">
+                  <form action="{{ url_for('manual_stations.updateUserManualStation', username=username, id=station.uid) }}" method="post" autocomplete="off">
                     <div class="form-group mb-3">
                       <label for="name{{ station.uid }}">{{ originStationName }}</label>
                       <input type="text" class="form-control" id="name{{ station.uid }}" name="name" value="{{ station.name }}" required>
@@ -62,6 +72,47 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Station Modal -->
+<div class="modal fade" id="addStationModal" tabindex="-1" aria-labelledby="addStationModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addStationModalLabel">{{ addManualStation }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form action="{{ url_for('manual_stations.addUserManualStation', username=username) }}" method="post" autocomplete="off">
+          <div class="form-group mb-3">
+            <label for="addName">{{ nameLabel }}</label>
+            <input type="text" class="form-control" id="addName" name="name" maxlength="200" required>
+          </div>
+          <div class="form-group mb-3">
+            <label for="addType">{{ sortType }}</label>
+            <select class="form-select" id="addType" name="station_type">
+              {% for code, label in stationTypes %}
+              <option value="{{ code }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div id="addStationMap" class="mb-1"></div>
+          <p class="small text-muted mb-2">{{ addManualStationHint }}</p>
+          <div class="row g-2 mb-3">
+            <div class="col">
+              <label for="addLat">Latitude</label>
+              <input type="number" step="any" min="-90" max="90" class="form-control" id="addLat" name="lat" required>
+            </div>
+            <div class="col">
+              <label for="addLng">Longitude</label>
+              <input type="number" step="any" min="-180" max="180" class="form-control" id="addLng" name="lng" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
+        </form>
+      </div>
     </div>
   </div>
 </div>
@@ -95,11 +146,37 @@
       lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]]
     });
 
+    // Adding one: placed by a click on the map, or by its coordinates typed, which move the pin.
+    var addMap = null, addPin = null;
+    function placePin(lat, lng, pan) {
+      if (addPin) addPin.setLatLng([lat, lng]); else addPin = L.marker([lat, lng]).addTo(addMap);
+      if (pan) addMap.panTo([lat, lng]);
+    }
+    $('#addStationModal').on('shown.bs.modal', function () {
+      $('#addName').trigger('focus');
+      if (addMap) { addMap.invalidateSize(); return; }
+      // Around the user's first station, else Europe.
+      var center = {{ ([stationsList[0].lat, stationsList[0].lng] if stationsList else [48, 8])|tojson }};
+      addMap = L.map('addStationMap').setView(center, {{ 10 if stationsList else 4 }});
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(addMap);
+      addMap.on('click', function (e) {
+        $('#addLat').val(e.latlng.lat.toFixed(6));
+        $('#addLng').val(e.latlng.lng.toFixed(6));
+        placePin(e.latlng.lat, e.latlng.lng, false);
+      });
+    });
+    $('#addLat, #addLng').on('change', function () {
+      var lat = parseFloat($('#addLat').val()), lng = parseFloat($('#addLng').val());
+      if (addMap && !isNaN(lat) && !isNaN(lng)) placePin(lat, lng, true);
+    });
+
     $('#deleteStationModal').on('show.bs.modal', function (event) {
       var button = $(event.relatedTarget);
       var stationId = button.data('station-id');
       var form = $('#deleteStationForm');
-      var actionUrl = "{{ url_for('deleteUserManualStation', username=username, id=0) }}".replace('/0/delete', '/' + stationId + '/delete');
+      var actionUrl = "{{ url_for('manual_stations.deleteUserManualStation', username=username, id=0) }}".replace('/0/delete', '/' + stationId + '/delete');
       form.attr('action', actionUrl);
     });
   });

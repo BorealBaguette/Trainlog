@@ -101,6 +101,8 @@
 .flagPNG {
   height:20px;
   max-width: 35px;
+  /* .dropdown-item is a flex row: a long name would otherwise squash the flag. */
+  flex-shrink: 0;
   display: inline-block;
   vertical-align: -5px;
   border-radius: 3px; 
@@ -211,6 +213,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 5px; /* Adjust the gap as needed */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tag-blob {
@@ -222,7 +226,11 @@
   margin: 2px;
   user-select: none;
   text-decoration: none;
-  white-space: nowrap;
+  /* Long names shrink to the container width, then wrap onto extra lines */
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
@@ -317,6 +325,20 @@ tr.selected td img{
   background-color: #ffffff;
   padding: 5px;
   border-radius: 6px;
+}
+
+/* Coloured icons (CO2 level, ticket) in a pale version on a selected row, or they drown in the
+   blue; their colour is inline, hence !important. */
+tr.selected td .fa-leaf{
+  color: color-mix(in srgb, var(--carbon-color) 40%, #fff) !important;
+}
+tr.selected td .bi-ticket-perforated-fill{
+  color: #b8ecc4 !important;
+}
+
+tr.selected td .modalButton,
+tr.selected td .modalButton:hover{
+  color: #fff;
 }
 
 td .operatorLogo{
@@ -652,6 +674,56 @@ body::before {
   background-color: #ffb4b43b;
 }
 
+/* Another rail mode's station in the list (stationSearchAutocomplete): its mode's icon */
+.ui-autocomplete .station-mode{ height: 14px; margin-right: 4px; vertical-align: -2px; }
+
+/* Scrolls, as reaching its end loads the next stations (stationSearchAutocomplete). */
+.ui-autocomplete.stationSearchMenu{
+  max-height: min(24em, 50vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* A quai station's place, at the end of its row: a hint, not part of what is saved. */
+.ui-autocomplete .station-item{
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+}
+.ui-autocomplete .station-item .station-name{
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* Gives way to the name first: shrinks, then is cut short */
+.ui-autocomplete .station-place{
+  flex: 0 1000 auto;
+  min-width: 3em;
+  margin-left: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 75%;
+  font-style: italic;
+  color: #888;
+}
+/* On the highlighted row, the row's own colour (white on blue), faded. */
+.ui-autocomplete .ui-state-active .station-place{
+  color: inherit;
+  opacity: 0.8;
+}
+/* A name or place ICU wrote in the user's script (none in OSM), or one set in Trainlog. */
+.ui-autocomplete .transliterated{
+  color: #b45309;
+}
+.ui-autocomplete .named-in-trainlog{
+  color: #15803d;
+}
+.ui-autocomplete .ui-state-active .transliterated,
+.ui-autocomplete .ui-state-active .named-in-trainlog{
+  color: inherit;
+  text-decoration: underline dotted;
+}
+
 .ui-autocomplete .disambiguation{
   opacity: 0.5;
   font-size: 75%;
@@ -818,6 +890,16 @@ body::before {
   gap: 8px;
 }
 
+/* The entry that widens the search to a second pool, and where that pool starts. */
+.ui-autocomplete .op-suggestion-more{
+  border-top: 1px solid #ddd;
+  color: #0d6efd;
+  font-size: 0.9em;
+}
+.ui-autocomplete .op-suggestion-first-more{
+  border-top: 1px solid #ddd;
+}
+
 .op-suggestion-logo{
   flex: 0 0 34px;
   width: 34px;
@@ -857,9 +939,13 @@ body::before {
   position: absolute;
   top: 50%;
   transform: translateY(-75%);
-  width: 100%;
+  /* Only the flag shows: the box ends just past it (4px + a 1em glyph), so the select clips
+     the option's country code ("🇳🇴 NO"), which otherwise peeks out as a sliver of black.
+     Not color: transparent, as Chrome draws colour glyphs with the text's alpha (no flag). */
+  width: 28px;
   height: 100%;
   padding-left: 4px;
+  padding-right: 0;
   border: none;
   background-color: transparent;
   font-size: 20px;
@@ -928,6 +1014,17 @@ body::before {
   color: black;
   -webkit-appearance: none;
   appearance: none;
+}
+
+#form textarea {
+  width: 100%;
+  padding: 6px 16px;
+  border: 0;
+  background-color: #f3f3f3;
+  margin: 0 0 1rem;
+  color: black;
+  font: inherit;
+  resize: vertical;
 }
 
 #form input[type=float] {
@@ -1042,6 +1139,59 @@ input[type=number] {
   display: block;
   clear: both;
 }
+
+/* Testing how stations are named (new.html, ?stationnames), over the user's settings. */
+.station-names-panel{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px 10px;
+  border: 1px dashed #c7cdd6;
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.04);
+  font-size: 0.9rem;
+}
+.station-names-panel .station-names-title{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.station-names-panel .station-names-reset{
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.station-names-panel .form-check{
+  margin: 0;
+}
+/* What the colours of station names mean (includes/station_script_switch.html). */
+.station-names-colours{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+}
+.station-names-colours[hidden]{
+  display: none;
+}
+.station-names-colour::before{
+  content: "";
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: currentColor;
+}
+.station-names-colour.transliterated{ color: #b45309; }
+.station-names-colour.named-in-trainlog{ color: #15803d; }
 
 #form label.checkboxLabel {
   display: inline;
@@ -2012,3 +2162,53 @@ html, body {
 .currency-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }
 .currency-combo-flag-inline { flex: none; line-height: 1; }
 .currency-combo-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A station's tracks or lines, in a dropdown at the end of its field (static/js/stop_slots.js):
+   shown once a station that has some is picked, without moving anything around it */
+.track-dropdown { position: absolute; top: 0; right: 0; height: 32px; }
+.track-dropdown[hidden] { display: none; }
+.track-toggle {
+    height: 32px; max-width: 76px; padding: 0 10px; border: 0; background: transparent;
+    color: #888; font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden;
+    display: flex; align-items: center; gap: 4px; cursor: pointer;
+}
+.track-toggle:hover, .track-toggle.exact { color: #4b78d6; }
+/* On its platform beside the track (approximate); a timetable's platform OSM lacks */
+.track-toggle.placed { color: #555; }
+.track-toggle.unmapped { color: #aaa; font-style: italic; }
+.track-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.track-menu { padding: 8px; max-width: 280px; }
+.track-menu-title { font-size: .75rem; color: #888; margin: 0 2px 6px; }
+.track-menu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.track-chip {
+    min-width: 30px; padding: 0 6px; border: 1px solid #d0d5db; border-radius: 4px;
+    background: #fff; font-size: .8rem; font-weight: 600; line-height: 24px; color: #444; cursor: pointer;
+}
+.track-chip:hover { background: #f1f3f6; }
+.track-chip.active { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+
+/* The edit page's origin and destination: the name, then at its end the station's tracks and
+   whether typing renames it or searches for another station (inside the field, so they line up
+   with it whatever margin the form gives its inputs). No margin of its own: the 35px flag box
+   alone puts it where the operator field starts, past its 31px logo and the gap after it. */
+.end-station-field { position: relative; flex: 1; min-width: 0; margin-left: 0; }
+#originGroup .flagDropdownWrapper, #destinationGroup .flagDropdownWrapper { flex: none; }
+#form .end-station-field input { width: 100%; margin-left: 0; padding-right: 40px; text-overflow: ellipsis; }
+#form .end-station-field input.has-stops { padding-right: 112px; }
+.end-station-field .track-dropdown { right: 32px; }
+.end-mode-toggle {
+  position: absolute; top: 0; right: 0; width: 32px; height: 32px; padding: 0;
+  border: 0; background: transparent; color: #999; cursor: pointer;
+}
+.end-mode-toggle[hidden] { display: none; }
+.end-mode-toggle:hover { color: #4b78d6; }
+.end-mode-toggle.searching { color: #4b78d6; }
+
+/* The new-trip form's swap of its two ends, at the right of the gap between them */
+#form .swap-ends { position: relative; height: 0; }
+#form .swap-ends button {
+  position: absolute; right: 0; top: -14px; width: 28px; height: 28px; padding: 0;
+  border: 1px solid #d0d5db; border-radius: 50%; background: #fff; color: #888; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; z-index: 1;
+}
+#form .swap-ends button:hover { color: #4b78d6; border-color: #4b78d6; }

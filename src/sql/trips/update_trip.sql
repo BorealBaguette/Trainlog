@@ -24,7 +24,7 @@ UPDATE trips SET
     notes = :notes,
     price = :price,
     currency = :currency,
-    ticket_id = :ticket_id,
+    ticket_ids = CAST(:ticket_ids AS integer[]),
     purchase_date = :purchase_date,
     carbon = :carbon,
     visibility = :visibility,
@@ -32,5 +32,9 @@ UPDATE trips SET
     arrival_delay = :arrival_delay,
     power_type = :power_type,
     co2_override = :co2_override,
+    departure_platform = :departure_platform,
+    arrival_platform = :arrival_platform,
+    origin_station_key = :origin_station_key,
+    destination_station_key = :destination_station_key,
     route_source = :route_source
 WHERE trip_id = :trip_id

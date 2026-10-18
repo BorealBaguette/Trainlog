@@ -2,7 +2,6 @@
 import requests
 from urllib.parse import parse_qs
 from flask import make_response
-import os
 
 # Import these from wherever they currently live in your project
 # Adjust imports to match your structure.
@@ -10,12 +9,54 @@ from src.router_regions import all_in_region
 from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 
-NEW_TRAIN_ROUTER = os.environ.get("NEW_TRAIN_ROUTER_URL", "https://train-gh.srv.trainlog.me")
+# Track filters of the new router's train profile, sent by routing.js as plain
+# parameters and turned into custom_model conditions here, so clients never write
+# conditions themselves. Untagged track passes every filter on purpose.
+FILTER_KEYS = ("avoid_highspeed", "max_speed", "electrified", "power", "gauge")
+POWER_SYSTEMS = {
+    "25kv": "voltage >= 24000 && voltage <= 26000 && frequency >= 47.5 && frequency <= 52.5",
+    "15kv": "voltage >= 14000 && voltage <= 16000 && frequency >= 15 && frequency <= 17.5",
+    "3kv": "voltage >= 2900 && voltage <= 3100 && frequency == 0",
+    "1.5kv": "voltage >= 1400 && voltage <= 1600 && frequency == 0",
+    "750v": "voltage >= 700 && voltage <= 800 && frequency == 0",
+}
+# A gauge choice takes any track within GAUGE_TOLERANCE mm of it, so 1520 and 1524 run
+# together (trains cross between Finland and Russia) while 1668 and 1676 stay apart.
+# Narrow gauges are one choice, any track of 1067 mm or less. Kept in step with
+# ROUTE_GAUGES in routing.js.
+GAUGES = ("1676", "1668", "1600", "1524", "1520", "1435")
+GAUGE_TOLERANCE = 5
+NARROW_GAUGE_MAX = 1067
 
 
-def forward_routing_core(routingType, path, flask_request, extra_args=None):
+def filter_conditions(query):
+    """The conditions of the tracks to exclude, one per active filter, and the train's
+    top speed (0 when uncapped)."""
+    get = lambda key: query.get(key, [""])[0]
+    conditions = []
+    # A capped train is a classic one: off high-speed lines too, or a capped LGV would
+    # still be its shortest way.
+    max_speed = int(get("max_speed")) if get("max_speed").isdigit() else 0
+    if get("avoid_highspeed") == "1" or max_speed:
+        conditions.append("highspeed")
+    power = [POWER_SYSTEMS[p] for p in get("power").split(",") if p in POWER_SYSTEMS]
+    if get("electrified") == "yes" or power:
+        conditions.append("electrified == NO")
+    if power:
+        conditions.append("!(" + " || ".join(f"({p})" for p in power) + " || voltage == 0)")
+    if get("gauge") == "narrow":
+        conditions.append(f"gauge > {NARROW_GAUGE_MAX}")
+    elif get("gauge") in GAUGES:
+        gauge = int(get("gauge"))
+        conditions.append(f"gauge != 0 && (gauge < {gauge - GAUGE_TOLERANCE} || gauge > {gauge + GAUGE_TOLERANCE})")
+    return conditions, max_speed
+
+
+def forward_routing_core(routingType, path, flask_request, extra_args=None, use_new_router=None, public_fallback=True):
+    """use_new_router None reads it from the request. public_fallback False keeps bus
+    routing on its own router, answering NoRoute rather than asking a public one."""
     # GraphHopper profile matching the original (pre-normalization) trip type
-    gh_profile = {"tram": "tram", "metro": "metro"}.get(routingType, "train" if routingType in ("train", "rail", "funicular") else "all")
+    gh_profile = {"train": "train", "tram": "tram", "metro": "metro"}.get(routingType, "all")
 
     # Normalize routing type
     if routingType in ("train", "tram", "metro", "funicular", "rail"):
@@ -24,14 +65,14 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
         routingType = "cycle"
 
     radiuses = None
-    use_new_router = False  # defined for all paths
 
     # Determine base URL + (optional) return_code for bus
     return_code = None
 
     if routingType == "train":
-        use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
-        base = NEW_TRAIN_ROUTER if use_new_router else "https://train.srv.trainlog.me"
+        if use_new_router is None:
+            use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
+        base = "https://train-gh.srv.trainlog.me" if use_new_router else "https://train.srv.trainlog.me"
 
     elif routingType == "ferry":
         base = "https://ferry.srv.trainlog.me"
@@ -109,6 +150,11 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
         else:
             waypoint_modes = ",".join(modes)
 
+    # Only the new router's train profile takes filters (others answer 400), and the
+    # old router never sees them.
+    filters, max_speed = filter_conditions(parse_qs(args)) if use_new_router and gh_profile == "train" else ([], 0)
+    args = "&".join(p for p in args.split("&") if p.split("=")[0] not in FILTER_KEYS)
+
     def build_url(base_url):
         q = f"?{args}" if args else ""
         full_url = f"{base_url}/{path}{q}"
@@ -126,7 +172,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
         full_url = (
             f"{base_url}/route?"
-            f"{point_params}&type=json&profile={gh_profile}&details=electrified&details=distance"
+            f"{point_params}&type=json&profile={gh_profile}&details=electrified&details=distance&details=time"
         )
         if waypoint_modes:
             full_url += f"&waypoint_modes={waypoint_modes}"
@@ -135,10 +181,34 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
             full_url += f"&radiuses={radiuses}"
         return full_url
 
+    def build_gh_body():
+        # POST, as a query string can't carry custom_model. multiply_by stays 0:
+        # values above 1 give wrong routes.
+        body = {
+            "profile": gh_profile,
+            "points": [[float(c) for c in coord.split(",")] for coord in path.split("/")[-1].split(";")],
+            "details": ["electrified", "distance", "time"],
+            "ch.disable": True,
+            "custom_model": {"priority": [{"if": c, "multiply_by": "0"} for c in filters]},
+        }
+        if max_speed:
+            # limit_to only ever lowers speeds
+            body["custom_model"]["speed"] = [{"if": "true", "limit_to": str(max_speed)}]
+        if waypoint_modes:
+            body["waypoint_modes"] = waypoint_modes
+        return body
+
     # (connect, read) timeouts — connect failures fail fast; reads cap at 8s
     TIMEOUT = (3, 8)
 
     # Behavior per type
+    if routingType == "bus" and not public_fallback:
+        try:
+            response = requests.get(build_url(base), timeout=TIMEOUT)
+            return make_response(response.json(), response.status_code)
+        except (requests.RequestException, ValueError) as e:
+            return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
+
     if routingType == "bus":
         routers_fallback_base = "https://routing.openstreetmap.de/routed-car"
         try:
@@ -160,9 +230,15 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
     if routingType == "train" and use_new_router:
         try:
-            gh_json = requests.get(build_gh_url(base), timeout=TIMEOUT).json()
+            if filters:
+                # A filter forcing a long detour takes seconds on the worldwide graph
+                gh_json = requests.post(f"{base}/route", json=build_gh_body(), timeout=(3, 25)).json()
+            else:
+                gh_json = requests.get(build_gh_url(base), timeout=TIMEOUT).json()
         except requests.RequestException as e:
             return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
+        if filters and not gh_json.get("paths"):
+            return {"code": "NoRoute", "message": "No route matches these filters"}
         return convert_graphhopper_to_osrm(gh_json)
 
     # All other types: just proxy text

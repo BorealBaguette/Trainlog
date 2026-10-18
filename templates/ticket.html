@@ -1,0 +1,305 @@
+{% extends "bootstrap/layout.html" %}
+
+{% block content %}
+{% include "bootstrap/navigation.html" %}
+{% from "ticket_flags.html" import flags with context %}
+
+<style>
+    /* As high as the title and the line under it. */
+    .ticket-logo {
+        align-self: stretch;
+        min-width: 72px;
+        min-height: 52px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .ticket-logo img {
+        height: 100%;
+        max-width: 240px;
+        object-fit: contain;
+    }
+    .ticket-operator img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    .ticket-flag-wall {
+        display: inline-grid;
+        gap: .25rem .3rem;
+        justify-items: center;
+    }
+    .ticket-row-logo {
+        height: 20px;
+        max-width: 60px;
+        object-fit: contain;
+    }
+    .ticket-operator {
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+    }
+    .ticket-operator img {
+        max-width: 90px;
+    }
+    .ticket-stat {
+        background: #f8f9fa;
+        border-radius: .75rem;
+        padding: .9rem 1.1rem;
+        height: 100%;
+    }
+    .ticket-stat-label {
+        font-size: .8rem;
+        color: #6c757d;
+    }
+    .ticket-stat-value {
+        font-size: 1.3rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+    /* On a phone: a smaller logo beside the title, and three stats a line. */
+    @media (max-width: 767.98px) {
+        .ticket-logo {
+            min-width: 48px;
+        }
+        .ticket-logo img {
+            max-width: 96px;
+        }
+        .ticket-stat {
+            padding: .6rem .7rem;
+        }
+        .ticket-stat-label {
+            font-size: .7rem;
+        }
+        .ticket-stat-value {
+            font-size: 1rem;
+        }
+    }
+</style>
+
+{% macro money(value, currency) %}<span class="money" data-value="{{ value }}" data-currency="{{ currency }}"></span>{% endmacro %}
+
+{% macro operator_pill(name, count=none) %}
+    <span class="ticket-operator badge bg-light text-dark border fw-normal gap-1" title="{{ name }}">
+        {% if logos.get(name) %}<img src="{{ url_for('static', filename=logos[name]) }}" alt="{{ name }}">{% else %}{{ name }}{% endif %}
+        {% if count %}<span class="text-muted">×{{ count }}</span>{% endif %}
+    </span>
+{% endmacro %}
+
+{% set latest = group.latest %}
+{% set has_uses = group.tickets|selectattr('uses')|list %}
+{% set all_trip_ids = group.tickets|map(attribute='trip_ids')|sum(start=[]) %}
+{# A product or operator whose logo changed over the years: each ticket with the one of its day. #}
+{% set mixed_logos = group.tickets|map(attribute='logo')|unique|list|length > 1 %}
+{# Tickets valid in different countries (a Global pass, a One Country one): each with its own. #}
+{% set mixed_countries = group.tickets|map(attribute='active_countries')|unique|list|length > 1 %}
+{# Tickets of one brand bought from several operators: each with its own. #}
+{% set mixed_operators = group.operators|length > 1 %}
+
+<div class="container-xl py-3">
+    <a href="{{ url_for('tickets.ticket_list', username=username) }}" class="small text-decoration-none">
+        <i class="bi bi-chevron-left"></i> {{nav_tickets}}
+    </a>
+
+    <div class="d-flex flex-wrap align-items-center gap-3 mt-2 mb-4">
+        <div class="d-flex gap-3 me-auto" style="min-width: 0;">
+        {% set logo = latest.logo %}
+        <div class="ticket-logo">
+            {% if logo %}
+                <img src="{{ url_for('static', filename=logo) }}" alt="">
+            {% else %}
+                <i class="bi bi-ticket-perforated fs-1 text-muted"></i>
+            {% endif %}
+        </div>
+        <div style="min-width: 0;">
+            <h1 class="h2 mb-1">{{ group.name }}</h1>
+            {% if group.ticket_name and group.ticket_name != group.name %}<div class="text-muted mb-1">{{ group.ticket_name }}</div>{% endif %}
+            {% if whole %}
+                <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=whole.latest.uid) }}" class="small text-decoration-none d-inline-block mb-1">
+                    <i class="bi bi-collection"></i> {{ticketSeeGroup}} ({{ whole.tickets|length }})
+                </a>
+            {% endif %}
+            <div class="d-flex flex-wrap align-items-center gap-1 small text-muted">
+                {% if mixed_operators %}
+                    {% for name, count in group.operators %}{{ operator_pill(name, count) }}{% endfor %}
+                {% elif latest.product_logo and latest.operator %}{{ operator_pill(latest.operator) }}{% endif %}
+                {% if group.secondary_operators %}
+                    {{ticketAlsoValidWith}}
+                    {% for name in group.secondary_operators %}{{ operator_pill(name) }}{% endfor %}
+                {% endif %}
+            </div>
+            {% if group.countries %}
+                {# A block of even rows, ten flags at most each: 34 come as 9, 9, 9 and 7. #}
+                {% set codes = group.countries.split(',') %}
+                {% set rows = (codes|length + 9) // 10 %}
+                <div class="ticket-flag-wall small mt-1" style="grid-template-columns: repeat({{ (codes|length + rows - 1) // rows }}, auto);">
+                    {% for country in codes %}<span class="flag" data-bs-toggle="tooltip" title="{{ country }}">{{ country_list[country] }}</span>{% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            {% if all_trip_ids %}
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('public_trip', tripIds=all_trip_ids|join(',')) }}?price">
+                    <i class="bi bi-map"></i> {{map}}
+                </a>
+            {% endif %}
+            {# Acting on the whole group: only from its own page. #}
+            {% if not whole %}
+            <button type="button" class="btn btn-outline-secondary btn-sm group-button" data-ticket='{{ group.edit|tojson }}'>
+                <i class="fa-regular fa-pen-to-square"></i> {{ticketEditAll}}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm renew-button" data-ticket='{{ latest|tojson }}'>
+                <i class="bi bi-arrow-repeat"></i> {{ticketRenew}}
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row row-cols-3 row-cols-md-5 g-2 mb-4">
+        {% for label, value in [
+            (ticketSpent, money(group.spent, user_currency)),
+            (trips, group.trips),
+            (ticketDistance, '%d km'|format(group.km)),
+            (ticketPricePerUse if latest.uses else price_per_trip, money(group.per_trip, user_currency) if group.per_trip is not none else '–'),
+            (price_per_km, money(group.per_km, user_currency) if group.per_km is not none else '–'),
+        ] %}
+        <div class="col">
+            <div class="ticket-stat">
+                <div class="ticket-stat-label">{{ label }}</div>
+                <div class="ticket-stat-value">{{ value }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="ticket-table-card table-responsive">
+        <table id="ticketsTable" class="ticket-table table table-hover align-middle">
+            <thead>
+                <tr>
+                    {% if mixed_operators %}<th data-sort="text">{{operator}}</th>{% endif %}
+                    <th data-sort="text" aria-sort="descending">{{ticketValidity}}</th>
+                    <th data-sort="number" class="text-end">{{price}}</th>
+                    <th data-sort="number" class="text-end">{{trips}}</th>
+                    {% if has_uses %}<th data-sort="number" class="text-end">{{ticketUsesUnit}}</th>{% endif %}
+                    <th data-sort="number" class="text-end">{{ ticketPricePerUse if latest.uses else price_per_trip }}</th>
+                    <th data-sort="number" class="text-end">{{price_per_km}}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in group.tickets %}
+                <tr id="ticket_{{ ticket.uid }}">
+                    {% if mixed_operators %}
+                    <td class="ticket-cell-operator text-nowrap" data-order="{{ ticket.operator or '' }}">
+                        {% if ticket.operator %}{{ operator_pill(ticket.operator) }}{% endif %}
+                    </td>
+                    {% endif %}
+                    <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
+                        {% if group.mixed_names or mixed_logos or (mixed_countries and ticket.active_countries) %}
+                            <div class="d-flex flex-wrap align-items-center gap-2 fw-medium text-wrap">
+                                {% if mixed_logos and ticket.logo %}<img src="{{ url_for('static', filename=ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
+                                {% if group.mixed_names %}{{ ticket.name }}{% endif %}
+                                {% if mixed_countries and ticket.active_countries %}
+                                    <span class="fw-normal">{{ flags(ticket.active_countries) }}</span>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                        {% if ticket.valid_from or ticket.valid_until %}
+                            <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until }}"></span>
+                            {% if ticket.valid_from and ticket.valid_until and ticket.valid_from != ticket.valid_until %}
+                                → <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
+                            {% endif %}
+                            {% if ticket.auto_renew %}<i class="bi bi-arrow-repeat text-success" title="{{ticketAutoRenew}}"></i>{% endif %}
+                            {% if ticket.state == 'valid' %}<span class="badge bg-success">{{active}}</span>
+                            {% elif ticket.state == 'upcoming' %}<span class="badge bg-info text-dark">{{ticketUpcoming}}</span>{% endif %}
+                        {% else %}
+                            <span class="ticket-date ticket-from" data-date="{{ ticket.purchasing_date }}"></span>
+                            <div class="form-check form-switch d-inline-block mb-0 align-middle">
+                                <input class="form-check-input ticket-active-switch" type="checkbox" role="switch" id="ticketActive{{ ticket.uid }}" data-ticket-id="{{ ticket.uid }}" {% if ticket.active %}checked{% endif %}>
+                                <label class="form-check-label small text-muted" for="ticketActive{{ ticket.uid }}">{{active}}</label>
+                            </div>
+                        {% endif %}
+                        {% if ticket.state == 'used' %}<span class="badge bg-secondary">{{ticketUsedUp}}</span>{% endif %}
+                        {% if ticket.notes %}<div class="small text-muted text-wrap">{{ ticket.notes }}</div>{% endif %}
+                    </td>
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{price}}" data-order="{{ ticket.user_price if ticket.user_price is not none else ticket.price }}">
+                        {{ money(ticket.price, ticket.currency) }}
+                        {% if ticket.currency != user_currency and ticket.user_price is not none %}
+                            <div class="small text-muted">{{ money(ticket.user_price, user_currency) }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="ticket-cell-stat text-end" data-label="{{trips}}" data-order="{{ ticket.trip_ids|length }}">
+                        {{ ticket.trip_ids|length }}
+                    </td>
+                    {% if has_uses %}
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{ticketUsesUnit}}" data-order="{{ ticket.used if ticket.uses else '' }}">
+                        {% if ticket.uses %}{{ ticket.used }} / {{ ticket.uses }}{% endif %}
+                    </td>
+                    {% endif %}
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{ ticketPricePerUse if latest.uses else price_per_trip }}" data-order="{{ ticket.per_trip if ticket.per_trip is not none else '' }}">
+                        {% if ticket.per_trip is not none %}{{ money(ticket.per_trip, user_currency) }}{% endif %}
+                    </td>
+                    <td class="ticket-cell-stat text-end text-nowrap" data-label="{{price_per_km}}" data-order="{{ ticket.user_price / ticket.km if ticket.km and ticket.user_price is not none else '' }}">
+                        {% if ticket.km and ticket.user_price is not none %}{{ money(ticket.user_price / ticket.km, user_currency) }}{% endif %}
+                    </td>
+                    <td class="ticket-cell-actions text-end text-nowrap">
+                        <div class="ticket-actions d-inline-flex gap-1">
+                            {% if ticket.trip_ids %}
+                                <a class="btn btn-sm" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price" title="{{map}}">
+                                    <i class="bi bi-link-45deg"></i>
+                                </a>
+                            {% endif %}
+                            <button type="button" class="btn btn-sm edit-button" data-ticket='{{ ticket|tojson }}' title="{{edit}}">
+                                <i class="fa-regular fa-pen-to-square"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm delete-button" data-ticket-id="{{ ticket.uid }}" title="{{delete}}">
+                                <i class="fa-regular fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% include "ticket_form.html" %}
+
+<script>
+$(function () {
+    formatTicketPage();
+
+    sortableTicketTable($('#ticketsTable'));
+
+    $('.renew-button').on('click', function () { openTicketForm($(this).data('ticket'), 'renew'); });
+    $('.edit-button').on('click', function () { openTicketForm($(this).data('ticket'), 'edit'); });
+    $('.group-button').on('click', function () { openTicketForm($(this).data('ticket'), 'group'); });
+
+    $('.delete-button').on('click', function () {
+        if (!confirm('Are you sure you want to delete this ticket?')) return;
+        var deleted = this.dataset.ticketId;
+        var url = {{ url_for('tickets.delete_ticket', username=username, ticket_id=0)|tojson }}.replace(/0$/, deleted);
+        $.get(url)
+            .done(function () {
+                // The page may be addressed by the ticket just deleted: go on by one still there.
+                var left = $('#ticketsTable tbody tr').not('#ticket_' + deleted).first();
+                location.href = left.length
+                    ? {{ url_for('tickets.ticket_page', username=username, ticket_id=0)|tojson }}.replace(/0$/, left.attr('id').replace('ticket_', '')) + location.search
+                    : {{ url_for('tickets.ticket_list', username=username)|tojson }};
+            })
+            .fail(function () { alert('Failed to delete the ticket. Please try again.'); });
+    });
+
+    $('.ticket-active-switch').on('change', function () {
+        var url = {{ url_for('tickets.toggle_ticket_active', username=username, ticket_id=0)|tojson }}.replace(/0$/, this.dataset.ticketId);
+        var input = this;
+        $.get(url).fail(function () { input.checked = !input.checked; });
+    });
+
+});
+</script>
+
+{% endblock %}

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
-from flask import session
+import sqlalchemy
+from flask import g, session
 from flask_sqlalchemy import SQLAlchemy
 
 authDb = SQLAlchemy()
@@ -63,6 +64,23 @@ class User(authDb.Model):
     live_tracking = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Routing: start with "pass exactly through every point" on.
     exact_waypoints = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # Language of the map background's labels: "" follows the site language, "native" is
+    # as written locally, "local" the same + Latin below a non-Latin name, "int" in Latin
+    # letters only, anything else is a site language code.
+    map_lang = authDb.Column(authDb.String(10), nullable=False, default="")
+    # How stations are named in searches (src/quai.py): "" in the user's language, "local" as
+    # written where they are (北京南), "int" in Latin letters (Beijingnan); and whether always
+    # in the script of the user's language, transliterated where OSM has no name in it.
+    station_names = authDb.Column(authDb.String(10), nullable=False, default="int")
+    # Station search by quai (src/quai.py) rather than Photon: in beta, so opted into.
+    new_station_search = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # A rail trip's station search: every rail mode's stations at once, not only on asking
+    # (src/quai.py, other_modes).
+    all_rail_stations = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # Routing: timetable stops the page put on their track (or direction's stop position) are
+    # passed exactly, not just near; a wrongly mapped track then sends the route astray.
+    exact_tracks = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    station_script = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Discord user id, set via the /discord/connect OAuth flow. Used to grant/revoke
     # the premium role automatically when membership status changes.
     discord_id = authDb.Column(authDb.String(30), nullable=True)
@@ -109,6 +127,12 @@ class User(authDb.Model):
             "flight_3d": self.flight_3d,
             "live_tracking": self.live_tracking,
             "exact_waypoints": self.exact_waypoints,
+            "map_lang": self.map_lang,
+            "station_names": self.station_names,
+            "new_station_search": self.new_station_search,
+            "station_script": self.station_script,
+            "all_rail_stations": self.all_rail_stations,
+            "exact_tracks": self.exact_tracks,
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
             "discord_autopost": self.discord_autopost,
@@ -168,7 +192,76 @@ class Friendship(authDb.Model):
     )
 
 
+def valid_station_names(value):
+    """Whether `value` is a way of naming stations: "", "local", "int" or a language."""
+    from src.utils import lang
+
+    return value in ("", "local", "int") or value in lang
+
+
+def station_names_context():
+    """Template variables: the languages stations can be named in, and how the logged-in user
+    has them named (the settings, and new.html's ?stationnames testing panel)."""
+    from src.utils import lang
+
+    station_names, station_script = station_name_settings()
+    return {
+        "station_name_langs": [{"code": code, "name": lang[code][code]} for code in sorted(lang)],
+        "station_names_setting": station_names,
+        "station_script_setting": station_script,
+    }
+
+
+def ensure_station_name_columns(db_session):
+    """The station search settings' columns, on an auth.db made before them."""
+    existing = {row[1] for row in db_session.execute(sqlalchemy.text("PRAGMA table_info(user)"))}
+    for column, definition in (("station_names", "VARCHAR(10) NOT NULL DEFAULT 'int'"),
+                               ("station_script", "BOOLEAN NOT NULL DEFAULT 0"),
+                               ("all_rail_stations", "BOOLEAN NOT NULL DEFAULT 0"),
+                               ("new_station_search", "BOOLEAN NOT NULL DEFAULT 0"),
+                               ("exact_tracks", "BOOLEAN NOT NULL DEFAULT 0")):
+        if column not in existing:
+            db_session.execute(sqlalchemy.text(f"ALTER TABLE user ADD COLUMN {column} {definition}"))
+            db_session.commit()
+
+
+def new_station_search():
+    """Whether the logged-in user searches stations with quai (in beta) rather than Photon."""
+    user = User.query.filter_by(username=session.get("logged_in")).first() \
+        if session.get("logged_in") else None
+    return bool(user and user.new_station_search)
+
+
+def all_rail_stations():
+    """Whether the logged-in user's rail station searches look in every rail mode."""
+    user = User.query.filter_by(username=session.get("logged_in")).first() \
+        if session.get("logged_in") else None
+    return bool(user and user.all_rail_stations)
+
+
+def station_name_settings():
+    """The logged-in user's (station_names, station_script), read once per request; ("int",
+    False) for a visitor."""
+    if "station_name_settings" not in g:
+        user = User.query.filter_by(username=session.get("logged_in")).first() \
+            if session.get("logged_in") else None
+        g.station_name_settings = (user.station_names, user.station_script) if user else ("int", False)
+    return g.station_name_settings
+
+
 def exact_waypoints_context():
-    """Template variable: whether the logged-in user starts routing with every point exact."""
+    """Template variables: whether the logged-in user starts routing with every point exact,
+    and whether stops put on their track are passed exactly."""
     user = User.query.filter_by(username=session.get("logged_in")).first()
-    return {"exact_waypoints_default": bool(user and user.exact_waypoints)}
+    return {"exact_waypoints_default": bool(user and user.exact_waypoints),
+            "exact_tracks": bool(user and user.exact_tracks)}
+
+
+def map_lang_context():
+    """Template variable: the language map backgrounds label places in, for the
+    logged-in user's map_lang or else the session's language."""
+    session_lang = (session.get("userinfo") or {}).get("lang") or "en"
+    if getattr(g, "suppress_context_queries", False) or not session.get("logged_in"):
+        return {"mapLang": session_lang}
+    user = User.query.filter_by(username=session.get("logged_in")).first()
+    return {"mapLang": (user and user.map_lang) or session_lang}

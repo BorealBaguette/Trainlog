@@ -1,0 +1,567 @@
+{# The ticket form, shared by the ticket list and a ticket's page with the styles of their
+   tables: openTicketForm(ticket, mode) opens it empty ("new"), on a ticket ("edit"), on the
+   ticket that follows it ("renew"), or on what all the tickets of its group share ("group"). #}
+<style>
+    /* The operator suggestions open above the modal, not behind it. */
+    .ui-front { z-index: 9999999 !important; }
+    /* The form sits between the modal's content and its body: it has to pass the height on, or
+       the body is cut instead of scrolling. */
+    #ticketForm {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    /* style2.css sets every number input a line height of 1, which leaves them shorter than the
+       fields beside them. */
+    #ticketForm input[type=number] {
+        line-height: 1.5;
+    }
+    .ticket-kinds {
+        display: flex;
+        gap: 3px;
+        padding: 3px;
+        margin-bottom: .75rem;
+        background: #e9ecef;
+        border-radius: .6rem;
+    }
+    .ticket-kinds label {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        padding: .45rem .5rem;
+        border-radius: .5rem;
+        color: #495057;
+        font-size: .9rem;
+        cursor: pointer;
+        transition: background-color .15s, color .15s, box-shadow .15s;
+    }
+    .ticket-kinds label:hover {
+        color: #212529;
+    }
+    .ticket-kinds .btn-check:checked + label {
+        background: #fff;
+        color: #0d6efd;
+        font-weight: 500;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+    }
+    .ticket-kinds .btn-check:focus-visible + label {
+        outline: 2px solid #86b7fe;
+    }
+    .ticket-kind-box {
+        padding: .9rem;
+        margin-bottom: 1rem;
+        background: #fafbfc;
+        border: 1px solid #e9ecef;
+        border-radius: .6rem;
+    }
+    .ticket-kind-box .form-label {
+        margin-bottom: .25rem;
+        font-size: .85rem;
+        color: #6c757d;
+    }
+    .ticket-table-card {
+        border: 1px solid #dee2e6;
+        border-radius: .75rem;
+        overflow: hidden;
+    }
+    .ticket-table {
+        margin-bottom: 0;
+        font-variant-numeric: tabular-nums;
+    }
+    /* Not the blue headers every other table gets. */
+    .ticket-table th {
+        background-color: #f8f9fa !important;
+        color: #6c757d;
+        font-weight: 500;
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        white-space: nowrap;
+        padding: .75rem;
+    }
+    .ticket-table td {
+        padding: .75rem;
+    }
+    .ticket-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+    .ticket-table th[data-sort] {
+        cursor: pointer;
+        user-select: none;
+    }
+    .ticket-table th[data-sort]:hover,
+    .ticket-table th[aria-sort] {
+        color: var(--bs-body-color);
+    }
+    .ticket-table th[aria-sort="ascending"]::after { content: " ↑"; }
+    .ticket-table th[aria-sort="descending"]::after { content: " ↓"; }
+    /* Wide enough for the longest date, so the arrows and end dates line up. */
+    .ticket-from {
+        display: inline-block;
+        min-width: 7.5em;
+    }
+    .ticket-actions .btn {
+        color: #6c757d;
+        border: 0;
+    }
+    .ticket-actions .btn:hover { color: var(--bs-body-color); background: #e9ecef; }
+    .ticket-actions .delete-button:hover { color: var(--bs-danger); }
+    /* On a phone, each ticket a block of its dates and actions above its labelled figures. */
+    @media (max-width: 767.98px) {
+        .ticket-table thead {
+            display: none;
+        }
+        .ticket-table tbody tr {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .4rem .9rem;
+            padding: .75rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .ticket-table tbody tr:last-child {
+            border-bottom: 0;
+        }
+        .ticket-table td {
+            display: block;
+            padding: 0;
+            border: 0;
+        }
+        .ticket-table .ticket-cell-validity,
+        .ticket-table .ticket-cell-operator,
+        .ticket-table .ticket-cell-actions {
+            order: -1;
+        }
+        .ticket-table .ticket-cell-validity {
+            flex: 1 1 0;
+            min-width: 0;
+            white-space: normal;
+        }
+        /* Three figures a line, the same width from one ticket to the next. */
+        .ticket-table .ticket-cell-stat {
+            order: 1;
+            flex: 1 1 28%;
+            min-width: 0;
+            text-align: left !important;
+            font-size: .9rem;
+        }
+        .ticket-table .ticket-cell-stat::before {
+            content: attr(data-label);
+            display: block;
+            font-size: .7rem;
+            color: #6c757d;
+        }
+        /* Bootstrap paints the hover cell by cell, which the cells as blocks turn into patches:
+           the whole row instead. */
+        .ticket-table.table-hover > tbody > tr:hover > * {
+            --bs-table-accent-bg: transparent;
+        }
+        .ticket-table.table-hover > tbody > tr:hover {
+            background-color: var(--bs-table-hover-bg);
+        }
+        /* What would be cut short beside others: a line of its own. */
+        .ticket-table .ticket-cell-wide {
+            flex-basis: 100%;
+        }
+        /* A full-width break between the dates and actions, and the figures under them. */
+        .ticket-table tbody tr::before {
+            content: "";
+            order: 0;
+            flex-basis: 100%;
+        }
+    }
+</style>
+
+<div class="modal fade" id="ticketModal" tabindex="-1" aria-labelledby="ticketModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ticketModalLabel"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{cancel}}"></button>
+            </div>
+            <form id="ticketForm">
+                <div class="modal-body">
+                    <input type="hidden" id="ticketId" name="ticket_id">
+                    <div class="ticket-single">
+                    <div class="mb-3">
+                        <label for="ticketName" class="form-label">{{ticket_name}}</label>
+                        <input type="text" class="form-control" id="ticketName" name="name" required placeholder="{{enter_ticket_name}}">
+                    </div>
+                    <div class="row g-2 mb-3 align-items-end">
+                        <div class="col-7">
+                            <label for="ticketPrice" class="form-label">{{price}}</label>
+                            <input type="number" step="0.01" class="form-control" id="ticketPrice" name="price" required placeholder="{{enter_ticket_price}}">
+                        </div>
+                        <div class="col-5">
+                            <label for="ticketCurrency" class="form-label">{{currency}}</label>
+                            <select class="form-select" id="ticketCurrency" name="currency">
+                                {% for currency in currencyOptions %}
+                                <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}">{{ currency['currency'] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ticketPurchasingDate" class="form-label">{{purchasing_date}}</label>
+                        <input type="date" class="form-control" id="ticketPurchasingDate" name="purchasing_date" required>
+                    </div>
+                    {# What the ticket is for: once, a period, or a number of uses; each kind opens its
+                       own fields, and those of the others, disabled, are saved empty. #}
+                    <div class="ticket-kinds" role="group">
+                        {% for kind, label, icon in (('single', ticketKindSingle, 'ticket'), ('pass', ticketKindPass, 'calendar2-range'), ('card', ticketKindCard, 'ui-checks-grid')) %}
+                        <input type="radio" class="btn-check" name="kind" id="ticketKind_{{ kind }}" value="{{ kind }}" autocomplete="off" {% if kind == 'single' %}checked{% endif %}>
+                        <label for="ticketKind_{{ kind }}"><i class="bi bi-{{ icon }}"></i>{{ label }}</label>
+                        {% endfor %}
+                    </div>
+                    <div class="ticket-kind ticket-kind-box" data-kind="pass">
+                        <div class="row g-2 mb-1 align-items-end">
+                            <div class="col-6">
+                                <label for="ticketValidFrom" class="form-label">{{ticketValidFrom}}</label>
+                                <input type="date" class="form-control" id="ticketValidFrom" name="valid_from">
+                            </div>
+                            <div class="col-6">
+                                <label for="ticketValidUntil" class="form-label">{{ticketValidUntil}}</label>
+                                <input type="date" class="form-control" id="ticketValidUntil" name="valid_until">
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-1 mb-3 small text-muted">
+                            {{ticketValidFor}}
+                            {# Days counted as such; months and years as on the calendar. #}
+                            {% for unit, count, label in (('days', 1, ticketDuration1Day), ('days', 7, ticketDuration7Days), ('months', 1, ticketDuration1Month), ('months', 12, ticketDuration1Year)) %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 ticket-duration" data-{{ unit }}="{{ count }}">{{ label }}</button>
+                            {% endfor %}
+                        </div>
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" id="ticketAutoRenew" name="auto_renew">
+                            <label class="form-check-label" for="ticketAutoRenew">{{ticketAutoRenew}}</label>
+                            <div class="form-text">{{ticketAutoRenewHint}}</div>
+                            <div class="form-text fw-medium" id="ticketRenewNext"></div>
+                        </div>
+                    </div>
+                    <div class="ticket-kind ticket-kind-box" data-kind="card">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-6">
+                                <label for="ticketUses" class="form-label">{{ticketUses}}</label>
+                                <input type="number" min="1" step="1" class="form-control" id="ticketUses" name="uses" required>
+                            </div>
+                            <div class="col-6">
+                                <label for="ticketUseMinutes" class="form-label">{{ticketUseMinutes}}</label>
+                                <div class="input-group">
+                                    <input type="number" min="1" step="1" class="form-control" id="ticketUseMinutes" name="use_minutes" placeholder="{{ticketOptional}}">
+                                    <span class="input-group-text">min</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-text small mt-1 mb-3">{{ticketUseMinutesHint}}</div>
+                        <label for="ticketCardUntil" class="form-label">{{ticketValidUntil}} <span class="fst-italic">({{ticketOptional}})</span></label>
+                        <input type="date" class="form-control" id="ticketCardUntil" name="valid_until">
+                    </div>
+                    </div>
+                    <div class="ticket-group alert alert-light small py-2 mb-3" id="ticketGroupMixed">{{ticketGroupMixedHint}}</div>
+                    <div class="ticket-group mb-3">
+                        <label for="ticketGroupName" class="form-label">{{ticket_name}}</label>
+                        <input type="text" class="form-control" id="ticketGroupName" name="name" required>
+                    </div>
+                    <div class="ticket-group mb-3">
+                        <label for="ticketGroupDays" class="form-label">{{ticketUndatedValidity}}</label>
+                        <div class="input-group">
+                            <input type="number" min="1" step="1" class="form-control" id="ticketGroupDays" name="validity_days">
+                            <span class="input-group-text">{{ticketDays}}</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ticketProductSearch" class="form-label">{{ticketProduct}}</label>
+                        <input type="hidden" id="ticketProduct" name="product">
+                        <div class="operatorPillsField" id="ticketProductPills">
+                            <input type="text" id="ticketProductSearch" class="op-pill-placeholder" autocomplete="off">
+                        </div>
+                        <div class="form-text">{{ticketProductHint}}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ticketOperatorSearch" class="form-label">{{operator}}</label>
+                        <input type="hidden" id="ticketOperator" name="operator">
+                        <div class="operatorPillsField" id="ticketOperatorPills">
+                            <input type="text" id="ticketOperatorSearch" class="op-pill-placeholder" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ticketSecondarySearch" class="form-label">{{ticketAlsoValidWith}}</label>
+                        <input type="hidden" id="ticketSecondary" name="secondary_operators">
+                        <div class="operatorPillsField" id="ticketSecondaryPills">
+                            <input type="text" id="ticketSecondarySearch" class="op-pill-placeholder" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ticketCountries" class="form-label">{{ticketCountries}}</label>
+                        <select class="form-control selectpicker" id="ticketCountries" name="active_countries[]" data-none-selected-text="{{countriesNoneSelectedText}}" data-count-selected-text="{{countriesCountSelectedText}}" multiple data-live-search="true" data-selected-text-format="count > 5">
+                            {% for code, emoji in country_list.items() %}
+                            <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="ticket-single">
+                        <label for="ticketNotes" class="form-label">{{notes}}</label>
+                        <textarea class="form-control" id="ticketNotes" name="notes" rows="2" placeholder="{{additional_notes}}"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary w-100">{{submit}}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+var openTicketForm = (function () {
+    var operatorPills = null, secondaryPills = null, productPills = null;
+
+    function addDays(day, days) {
+        var d = new Date(day + 'T00:00:00Z');
+        d.setUTCDate(d.getUTCDate() + days);
+        return d.toISOString().slice(0, 10);
+    }
+
+    function daysBetween(from, until) {
+        return Math.round((Date.parse(until) - Date.parse(from)) / 86400000);
+    }
+
+    // As dateutil's relativedelta: the same day, months later, or the month's last if shorter.
+    function addMonths(day, months) {
+        var d = new Date(day + 'T00:00:00Z');
+        var target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1));
+        var last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+        target.setUTCDate(Math.min(d.getUTCDate(), last));
+        return target.toISOString().slice(0, 10);
+    }
+
+    // How many months a pass lasts, as its renewals count them (src/tickets.py, _renew_due);
+    // none under four weeks, which are not renewed by months.
+    function passMonths(from, until) {
+        var days = daysBetween(from, until) + 1;
+        return days >= {{ min_renew_days }} ? Math.max(1, Math.round(days / 30.44)) : null;
+    }
+
+    // The pass after one from `from` to `until`: on the same day of the month for one of months,
+    // or as many days long; following on, or from today if it has ended.
+    function nextPeriod(from, until, today) {
+        var months = passMonths(from, until);
+        if (until >= today) {
+            if (months) return [addMonths(from, months), addDays(addMonths(from, 2 * months), -1)];
+            return [addDays(until, 1), addDays(until, 1 + daysBetween(from, until))];
+        }
+        if (months) return [today, addDays(addMonths(today, months), -1)];
+        return [today, addDays(today, daysBetween(from, until))];
+    }
+
+    function formatDay(day) {
+        return new Date(day + 'T00:00:00').toLocaleDateString({{ langId|tojson }}, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    // Renewing is for passes of a month or more: the next one shown, or why it cannot be.
+    function updateRenew() {
+        var from = $('#ticketValidFrom').val(), until = $('#ticketValidUntil').val();
+        var dated = Boolean(from && until && from <= until);
+        var months = dated ? passMonths(from, until) : null;
+        var $box = $('#ticketAutoRenew');
+        // Left alone while the pass fields are, those of another kind of ticket.
+        if (!$('#ticketValidFrom').prop('disabled')) $box.prop('disabled', !months);
+        if (!months) $box.prop('checked', false);
+        var text = '';
+        if (dated && !months) {
+            text = {{ ticketAutoRenewMonthOnly|tojson }};
+        } else if (months && $box.prop('checked')) {
+            // Renewals keep to the first one's day of the month, whenever this one ended.
+            text = {{ ticketRenewNext|tojson }}
+                .replace('{start}', formatDay(addMonths(from, months)))
+                .replace('{end}', formatDay(addDays(addMonths(from, 2 * months), -1)));
+        }
+        $('#ticketRenewNext').text(text);
+    }
+    $('#ticketValidFrom, #ticketValidUntil, #ticketAutoRenew').on('change', updateRenew);
+
+    // Loaded on the first opening only: the operator list is long.
+    function loadOperators() {
+        if (operatorPills) return;
+        var staticUrl = {{ url_for('static', filename='')|tojson }};
+        var operatorsLoaded = $.get({{ url_for('getManAndOps', username=username, station_type='train')|tojson }}, function (manAndOps) {
+            operatorPills = operatorPillsInput($('#ticketOperator'), $('#ticketOperatorSearch'), $('#ticketOperatorPills'), manAndOps, staticUrl, 'train');
+            secondaryPills = operatorPillsInput($('#ticketSecondary'), $('#ticketSecondarySearch'), $('#ticketSecondaryPills'), manAndOps, staticUrl, 'train');
+        });
+        // A brand may be any operator too, searched only when asked for from the menu.
+        $.when($.get({{ url_for('tickets.ticket_products', username=username)|tojson }}), operatorsLoaded).done(function (products, operators) {
+            productPills = operatorPillsInput($('#ticketProduct'), $('#ticketProductSearch'), $('#ticketProductPills'), products[0], staticUrl, 'train',
+                { more: operators[0], moreLabel: {{ ticketSearchOperators|tojson }} });
+        });
+    }
+
+    // A ticket has one operator and one product: the one picked last replaces the one before.
+    function keepLast(pills) {
+        return function () {
+            var names = this.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            if (names.length > 1) pills().set(names[names.length - 1]);
+        };
+    }
+    $('#ticketOperator').on('change', keepLast(function () { return operatorPills; }));
+    $('#ticketProduct').on('change', keepLast(function () { return productPills; }));
+
+    function applyKind() {
+        var kind = $('input[name="kind"]:checked').val();
+        $('.ticket-kind').each(function () {
+            var shown = this.dataset.kind === kind;
+            $(this).toggle(shown).find(':input').prop('disabled', !shown);
+        });
+        updateRenew();
+    }
+    $('input[name="kind"]').on('change', applyKind);
+
+    $('.ticket-duration').on('click', function () {
+        var from = $('#ticketValidFrom').val() || getCurrentDate();
+        $('#ticketValidFrom').val(from);
+        $('#ticketValidUntil').val(this.dataset.months
+            ? addDays(addMonths(from, Number(this.dataset.months)), -1)
+            : addDays(from, Number(this.dataset.days) - 1));
+        updateRenew();
+    });
+
+    function setOperators(head, secondary, product) {
+        $('#ticketOperator').val(head || '');
+        $('#ticketSecondary').val(secondary || '');
+        $('#ticketProduct').val(product || '');
+        if (operatorPills) {
+            operatorPills.set(head || '');
+            secondaryPills.set(secondary || '');
+        }
+        if (productPills) productPills.set(product || '');
+    }
+
+    // For "Edit all": the fields as the form opened, so that only those changed are sent to be
+    // set on every ticket, the others left as each has them.
+    var groupFields = {
+        operator: function () { return $('#ticketOperator').val(); },
+        secondary_operators: function () { return $('#ticketSecondary').val(); },
+        product: function () { return $('#ticketProduct').val(); },
+        active_countries: function () { return (countriesSelect.val() || []).join(','); }
+    };
+    var groupOpened = null;
+
+    var saveUrl = {{ url_for('tickets.save_ticket', username=username)|tojson }};
+    $('#ticketForm').on('submit', function (e) {
+        e.preventDefault();
+        var data = $(this).serialize();
+        if (groupOpened) {
+            Object.keys(groupFields).forEach(function (field) {
+                if (groupFields[field]() !== groupOpened[field]) data += '&' + $.param({ 'changed[]': field });
+            });
+        }
+        $.post(saveUrl, data)
+            .done(function () { location.reload(); })
+            .fail(function () { alert('Failed to save the ticket. Please try again.'); });
+    });
+
+    $('#ticketModal').on('shown.bs.modal', function () { $('#ticketName').trigger('focus'); });
+
+    var currencySelect = document.getElementById('ticketCurrency');
+    for (var option of currencySelect.options) {
+        option.text = option.text + ' ' + (option.dataset.emoji || getFlagEmoji(option.dataset.country));
+    }
+    var countriesSelect = $('#ticketCountries');
+    updateCountryNames(countriesSelect.get(0), true);
+    countriesSelect.selectpicker();
+
+    return function (ticket, mode) {
+        ticket = ticket || {};
+        loadOperators();
+        $('#ticketForm')[0].reset();
+        var titles = { 'new': {{ new_ticket|tojson }}, 'edit': {{ edit_ticket|tojson }}, 'renew': {{ ticketRenew|tojson }}, 'group': {{ ticketEditAll|tojson }} };
+        $('#ticketModalLabel').text(titles[mode]);
+        // Disabled, the fields of a single ticket are neither required nor sent.
+        $('.ticket-single').toggle(mode !== 'group').find(':input').prop('disabled', mode === 'group');
+        $('.ticket-group').toggle(mode === 'group').find(':input').prop('disabled', mode !== 'group');
+        saveUrl = mode === 'group'
+            ? {{ url_for('tickets.edit_group', username=username, ticket_id=0)|tojson }}.replace('/0/', '/' + ticket.uid + '/')
+            : {{ url_for('tickets.save_ticket', username=username)|tojson }};
+
+        var today = getCurrentDate();
+        var validFrom = ticket.valid_from || '', validUntil = ticket.valid_until || '';
+        if (mode === 'renew') {
+            // The next one starts once this one ends, or today if it has already.
+            if (validFrom && validUntil) {
+                var next = nextPeriod(validFrom, validUntil, today);
+                validFrom = next[0];
+                validUntil = next[1];
+            } else {
+                validFrom = validUntil = '';
+            }
+        }
+
+        $('#ticketId').val(mode === 'edit' ? ticket.uid : '');
+        $('#ticketName').val(ticket.name || '');
+        $('#ticketPrice').val(ticket.price != null ? ticket.price : '');
+        $('#ticketCurrency').val(ticket.currency || {{ user_currency|tojson }});
+        $('#ticketPurchasingDate').val(mode === 'edit' ? ticket.purchasing_date : today);
+        $('#ticketValidFrom').val(validFrom);
+        $('#ticketValidUntil').val(validUntil);
+        $('#ticketUses').val(ticket.uses || '');
+        $('#ticketUseMinutes').val(ticket.use_minutes || '');
+        $('#ticketCardUntil').val(ticket.uses ? (ticket.valid_until || '') : '');
+        var kind = ticket.uses ? 'card' : (ticket.valid_from || ticket.valid_until) ? 'pass' : 'single';
+        $('#ticketKind_' + kind).prop('checked', true);
+        if (mode !== 'group') applyKind();
+        $('#ticketAutoRenew').prop('checked', mode !== 'new' && Boolean(ticket.auto_renew));
+        updateRenew();
+        setOperators(ticket.operator, ticket.secondary_operators, ticket.product);
+        countriesSelect.selectpicker('val', ticket.active_countries ? ticket.active_countries.split(',') : []);
+        $('#ticketNotes').val(mode === 'edit' ? (ticket.notes || '') : '');
+        // Tickets of one product may each have their own name: left empty, they keep it.
+        $('#ticketGroupName').val(ticket.mixed_names ? '' : (ticket.name || ''))
+            .prop('required', mode === 'group' && !ticket.mixed_names);
+        $('#ticketGroupMixed').toggle(mode === 'group' && Boolean((ticket.mixed || []).length));
+        groupOpened = null;
+        if (mode === 'group') {
+            groupOpened = {};
+            Object.keys(groupFields).forEach(function (field) { groupOpened[field] = groupFields[field](); });
+        }
+        $('#ticketModal').modal('show');
+    };
+})();
+
+// A column sorts descending on its first click, then flips; empty cells go last.
+function sortableTicketTable($table) {
+    $table.find('th[data-sort]').on('click', function () {
+        var $th = $(this), column = $th.index(), numeric = $th.data('sort') === 'number';
+        var direction = $th.attr('aria-sort') === 'descending' ? 1 : -1;
+        $table.find('th').removeAttr('aria-sort');
+        $th.attr('aria-sort', direction === 1 ? 'ascending' : 'descending');
+        var rows = $table.find('tbody tr').get().sort(function (a, b) {
+            var x = a.cells[column].dataset.order, y = b.cells[column].dataset.order;
+            if (!x || !y) return !x - !y;
+            return direction * (numeric ? parseFloat(x) - parseFloat(y) : x.localeCompare(y));
+        });
+        $table.find('tbody').append(rows);
+    });
+}
+
+// Amounts and dates as the reader writes them.
+function formatTicketPage() {
+    $('.money').each(function () {
+        var value = parseFloat(this.dataset.value);
+        if (isNaN(value)) return;
+        this.textContent = value === 0 ? {{ free|tojson }} : formatCurrency({{ langId|tojson }}, value, this.dataset.currency);
+    });
+    $('.ticket-date').each(function () {
+        var d = new Date(this.dataset.date + 'T00:00:00');
+        var text = d.toLocaleDateString({{ langId|tojson }}, { day: 'numeric', month: 'short', year: 'numeric' });
+        this.textContent = this.dataset.format ? this.dataset.format.replace('{date}', text) : text;
+    });
+    $('.flag[data-bs-toggle="tooltip"]').each(function () {
+        this.title = regionNames.of(this.title);
+    }).tooltip();
+    $('.flag-more').each(function () {
+        this.title = this.dataset.countries.split(',').map(function (code) { return regionNames.of(code); }).join(', ');
+    }).tooltip();
+}
+</script>

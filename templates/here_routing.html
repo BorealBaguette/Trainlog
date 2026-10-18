@@ -339,7 +339,7 @@ if (operatorContents.length) {
         originalCurrency = formatCurrency("{{langId}}",trip.trip.ticket_price, trip.trip.ticket_currency);
         formattedTicketPrice += ` (${originalCurrency})`;
       }
-      formattedTicketInfo = `<div class="popupInfo ticket_popupInfo" popupinfo_content="${formattedTicketPrice}"><i class="bi bi-ticket-perforated-fill ticket-icon"></i></div>`;
+      formattedTicketInfo = `<div class="popupInfo ticket_popupInfo" popupinfo_content="${formattedTicketPrice}">${ticketIcon('<i class="bi bi-ticket-perforated-fill ticket-icon"></i>', trip.trip.ticket_count)}</div>`;
       
     }
 
@@ -762,7 +762,7 @@ $('#saveButton').on('click', function () {
       "originManualName": "",
       "reg": "",
       "seat": "",
-      "ticket_id": "",
+      "ticket_ids": [],
       "trip_length": 0,
       "precision": "preciseDates"
     }));
