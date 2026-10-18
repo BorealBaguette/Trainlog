@@ -886,6 +886,7 @@
     "routerMode": "Percorso",
     "useRoutedPathLabel": "Usa percorso instradato",
     "useRawGpxLabel": "Modifica traccia GPX",
+    "routeRawGpxLabel": "Instrada automaticamente la traccia GPX",
     "simplifyingRoute": "Semplificazione del percorso… può richiedere fino a un minuto",
     "expandMap": "Ingrandisci mappa",
     "collapseMap": "Nascondi mappa",

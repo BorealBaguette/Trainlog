@@ -883,6 +883,7 @@
     "routerMode": "Marsruut",
     "useRoutedPathLabel": "Kasuta marsruuditud teekonda",
     "useRawGpxLabel": "Muuda GPX-jälge",
+    "routeRawGpxLabel": "Koosta GPX-rajast marsruut automaatselt",
     "simplifyingRoute": "Marsruudi lihtsustamine… võib võtta kuni minuti",
     "expandMap": "Suurenda kaarti",
     "collapseMap": "Peida kaart",

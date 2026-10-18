@@ -889,6 +889,7 @@
     "routerMode": "Ruta",
     "useRoutedPathLabel": "Koristi usmjerenu rutu",
     "useRawGpxLabel": "Uredi GPX trag",
+    "routeRawGpxLabel": "Automatski usmjeri GPX trag",
     "simplifyingRoute": "Pojednostavljivanje rute… može potrajati do minute",
     "expandMap": "Povećaj kartu",
     "collapseMap": "Sakrij kartu",

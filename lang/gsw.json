@@ -884,6 +884,7 @@
     "routerMode": "Routing",
     "useRoutedPathLabel": "Berächneti Route bruuche",
     "useRawGpxLabel": "GPX-Spur bearbeite",
+    "routeRawGpxLabel": "GPX-Spur automatisch route",
     "simplifyingRoute": "Route wird vereifacht… cha bis zu ere Minute dure",
     "expandMap": "Charte vergrössere",
     "collapseMap": "Charte uusblände",

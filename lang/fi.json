@@ -884,6 +884,7 @@
     "routerMode": "Reititys",
     "useRoutedPathLabel": "Käytä reititettyä reittiä",
     "useRawGpxLabel": "Muokkaa GPX-jälkeä",
+    "routeRawGpxLabel": "Reititä GPX-jälki automaattisesti",
     "simplifyingRoute": "Yksinkertaistetaan reittiä… voi kestää jopa minuutin",
     "expandMap": "Suurenna kartta",
     "collapseMap": "Piilota kartta",

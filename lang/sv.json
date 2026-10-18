@@ -886,6 +886,7 @@
     "routerMode": "Rutt",
     "useRoutedPathLabel": "Använd ruttad väg",
     "useRawGpxLabel": "Redigera GPX-spår",
+    "routeRawGpxLabel": "Ruttlägg GPX-spåret automatiskt",
     "simplifyingRoute": "Förenklar rutten… kan ta upp till en minut",
     "expandMap": "Förstora kartan",
     "collapseMap": "Dölj kartan",

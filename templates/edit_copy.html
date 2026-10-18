@@ -2341,6 +2341,7 @@
     var renderGpxToggle = null;
     var freehandToggleHandle = null;
     var gpxToggleBtn = null;
+    var gpxRouteBtn = null;
     // Which toggle started the current freehand session, for button highlighting only —
     // saving always records route_source "freehand" regardless of how it was seeded.
     var freehandSource = null; // null | 'manual' | 'gpx'
@@ -2507,6 +2508,17 @@
                     freehandSource === 'gpx' ? exitFreehand() : enterGpxFreehand();
                 });
                 document.getElementById('gpxToggleSlot').appendChild(gpxToggleBtn);
+
+                gpxRouteBtn = document.createElement('button');
+                gpxRouteBtn.type = 'button';
+                gpxRouteBtn.className = 'btn btn-sm btn-outline-secondary ms-1';
+                gpxRouteBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> ' +
+                    "{{ routeRawGpxLabel|default('Auto-route GPX track') }}";
+                gpxRouteBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    routeFromRawPath();
+                });
+                document.getElementById('gpxToggleSlot').appendChild(gpxRouteBtn);
                 {% endif %}
             }
         }
@@ -2599,44 +2611,31 @@
             '</div>';
         document.getElementById('map').appendChild(simplifyOverlay);
         if (gpxToggleBtn) gpxToggleBtn.disabled = true;
+        if (gpxRouteBtn) gpxRouteBtn.disabled = true;
         $('#editPathButton').prop('disabled', true);
     }
     function hideSimplifyOverlay() {
         if (simplifyOverlay) { simplifyOverlay.remove(); simplifyOverlay = null; }
         if (gpxToggleBtn) gpxToggleBtn.disabled = false;
+        if (gpxRouteBtn) gpxRouteBtn.disabled = false;
         $('#editPathButton').prop('disabled', false);
     }
-    function exitFreehand() {
-        if (!freehandActive || simplifyingRoute) return;
-        var path = freehandEditor ? freehandEditor.getPath() : null;
-        var waypoints = freehandEditor ? freehandEditor.getWaypoints() : [];
-        teardownFreehandEditor();
-        if (renderGpxToggle) renderGpxToggle();
+    function resumeRouting(newWplist) {
+        if (!window.control) return;
+        window.control.setWaypoints(newWplist.map(function (p) { return L.latLng(p[0], p[1]); }));
+        if (!window.control._map) window.control.addTo(map); // back from freehand
+    }
 
-        function resumeRouting(newWplist) {
-            if (!window.control) return;
-            window.control.setWaypoints(newWplist.map(function (p) { return L.latLng(p[0], p[1]); }));
-            window.control.addTo(map); // re-adds + re-routes
-        }
-
-        if (!path || path.length < 2) return;
-        var origin = [path[0].lat, path[0].lng];
-        var dest = [path[path.length - 1].lat, path[path.length - 1].lng];
-
-        if (waypoints.length <= ROUTER_WAYPOINT_CAP) {
-            resumeRouting([origin].concat(waypoints.map(function (w) { return [w.lat, w.lng]; })).concat([dest]));
-            return;
-        }
-
+    // Starts the router from the waypoints the GPS cleaner finds along path ([[lat, lng], ...]).
+    function routeThroughSimplified(path) {
+        var origin = path[0];
+        var dest = path[path.length - 1];
         simplifyingRoute = true;
         showSimplifyOverlay();
         fetch('{{ url_for("simplify_path", username=username) }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                path: path.map(function (p) { return [p.lat, p.lng]; }),
-                type: tripType
-            })
+            body: JSON.stringify({ path: path, type: tripType })
         }).then(function (r) { return r.json(); }).then(function (data) {
             resumeRouting(data.waypoints && data.waypoints.length >= 2 ? data.waypoints : [origin, dest]);
         }).catch(function () {
@@ -2646,6 +2645,36 @@
             simplifyingRoute = false;
             hideSimplifyOverlay();
         });
+    }
+
+    function exitFreehand() {
+        if (!freehandActive || simplifyingRoute) return;
+        var path = freehandEditor ? freehandEditor.getPath() : null;
+        var waypoints = freehandEditor ? freehandEditor.getWaypoints() : [];
+        teardownFreehandEditor();
+        if (renderGpxToggle) renderGpxToggle();
+
+        if (!path || path.length < 2) return;
+        var origin = [path[0].lat, path[0].lng];
+        var dest = [path[path.length - 1].lat, path[path.length - 1].lng];
+
+        if (waypoints.length <= ROUTER_WAYPOINT_CAP) {
+            resumeRouting([origin].concat(waypoints.map(function (w) { return [w.lat, w.lng]; })).concat([dest]));
+            return;
+        }
+        routeThroughSimplified(path.map(function (p) { return [p.lat, p.lng]; }));
+    }
+
+    // "Auto-route GPX track": the snapping the automatic GPX import does, run on the raw
+    // trace, leaving a router session to fine-tune.
+    function routeFromRawPath() {
+        if (simplifyingRoute) return;
+        if (freehandActive) {
+            teardownFreehandEditor();
+            if (freehandToggleHandle) freehandToggleHandle.setActive(false);
+            if (renderGpxToggle) renderGpxToggle();
+        }
+        routeThroughSimplified(rawPath);
     }
     {% endif %}
 

@@ -2103,11 +2103,11 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
             rows = parse_gpx_files(cleaned_files, source="gpslogger", username=user.username)
             for row in rows:
                 newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
-                    row, trip_type, params, use_routing, request
+                    row, trip_type, params, use_routing
                 )
                 # Distinct from the manual GPX-upload UI's "gpx"/"gpx_routed" — this is a
                 # direct, unreviewed import (Tasker/GPSLogger hitting the API).
-                newTrip["route_source"] = "routed_gpx_api" if use_routing else "gpx_api"
+                newTrip["route_source"] = {"gpx": "gpx_api", "gpx_routed": "routed_gpx_api"}[newTrip["route_source"]]
                 saveTripToDb(
                     username=user.username,
                     newTrip=newTrip,
@@ -2351,7 +2351,7 @@ def saveTripFromGPX(username, gpx_id):
     row = dict(gpx._mapping)
     raw_count = len(json.loads(row["path"]))
     newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
-        row, trip_type, parse_trip_params(request.args), use_routing, request
+        row, trip_type, parse_trip_params(request.args), use_routing
     )
 
     # Delete the GPX file after saving as a trip
@@ -2361,7 +2361,6 @@ def saveTripFromGPX(username, gpx_id):
             {"uid": gpx_id, "username": username},
         )
 
-    newTrip["route_source"] = "gpx_routed" if use_routing else "gpx"
     saveTripToDb(
         username=username,
         newTrip=newTrip,
@@ -2407,13 +2406,7 @@ def previewSmartRouting(username, gpx_id, trip_type):
     ]
    
     # Clean the GPS route with smart routing
-    cleaning_result = clean_gps_route(
-        raw_waypoints=raw_waypoints,
-        forwardRouting=lambda path, routingType, options=None: forward_routing_core(routingType=routingType, path=path, flask_request=request, extra_args=options),
-        trip_type=trip_type,
-        deviation_threshold=800,       # Kept: Now defines the "validation corridor" width
-        max_search_points=75
-    )
+    cleaning_result = clean_gps_route(raw_waypoints, trip_type)
    
     if request.method == "POST":
         # Return JSON for API usage
@@ -2426,7 +2419,6 @@ def previewSmartRouting(username, gpx_id, trip_type):
                 "compression_ratio": cleaning_result["compression_ratio"],
                 "reroute_count": cleaning_result["reroute_count"],
                 "distance": cleaning_result["distance"],
-                "duration": cleaning_result["duration"],
                 "preview_path": cleaning_result["path"][:100]  # First 100 points for preview
             })
         else:
@@ -2463,14 +2455,7 @@ def simplify_path(username):
         return jsonify({"error": "Need at least 2 points"}), 400
 
     raw_waypoints = [{"lat": p[0], "lng": p[1]} for p in path]
-    cleaning_result = clean_gps_route(
-        raw_waypoints=raw_waypoints,
-        forwardRouting=lambda rpath, routingType, options=None: forward_routing_core(
-            routingType=routingType, path=rpath, flask_request=request, extra_args=options
-        ),
-        trip_type=trip_type,
-        deviation_threshold=800,
-    )
+    cleaning_result = clean_gps_route(raw_waypoints, trip_type)
 
     if not cleaning_result["success"]:
         return jsonify({"error": cleaning_result.get("error", "routing failed")}), 502

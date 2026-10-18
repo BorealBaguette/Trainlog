@@ -883,6 +883,7 @@
     "routerMode": "路线",
     "useRoutedPathLabel": "使用路由路径",
     "useRawGpxLabel": "编辑GPX轨迹",
+    "routeRawGpxLabel": "根据GPX轨迹自动规划路线",
     "simplifyingRoute": "正在简化路线…最多可能需要一分钟",
     "expandMap": "放大地图",
     "collapseMap": "隐藏地图",

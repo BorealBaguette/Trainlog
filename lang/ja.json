@@ -883,6 +883,7 @@
     "routerMode": "ルート",
     "useRoutedPathLabel": "ルート検索されたパスを使用",
     "useRawGpxLabel": "GPXトラックを編集",
+    "routeRawGpxLabel": "GPXトラックから自動ルート作成",
     "simplifyingRoute": "ルートを簡略化しています…最大1分かかる場合があります",
     "expandMap": "マップを拡大",
     "collapseMap": "マップを隠す",

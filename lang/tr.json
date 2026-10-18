@@ -883,6 +883,7 @@
     "routerMode": "Rota",
     "useRoutedPathLabel": "Yönlendirilmiş rotayı kullan",
     "useRawGpxLabel": "GPX izini düzenle",
+    "routeRawGpxLabel": "GPX izinden otomatik rota oluştur",
     "simplifyingRoute": "Rota sadeleştiriliyor… bir dakikaya kadar sürebilir",
     "expandMap": "Haritayı büyüt",
     "collapseMap": "Haritayı gizle",

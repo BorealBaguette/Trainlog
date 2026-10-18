@@ -889,6 +889,7 @@
     "routerMode": "Маршрут",
     "useRoutedPathLabel": "Использовать проложенный маршрут",
     "useRawGpxLabel": "Редактировать GPX-трек",
+    "routeRawGpxLabel": "Автоматически проложить маршрут по GPX-треку",
     "simplifyingRoute": "Упрощение маршрута… это может занять до минуты",
     "expandMap": "Развернуть карту",
     "collapseMap": "Скрыть карту",

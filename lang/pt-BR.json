@@ -886,6 +886,7 @@
     "routerMode": "Rota",
     "useRoutedPathLabel": "Usar rota roteada",
     "useRawGpxLabel": "Editar trajeto GPX",
+    "routeRawGpxLabel": "Rotear automaticamente o trajeto GPX",
     "simplifyingRoute": "Simplificando a rota… pode levar até um minuto",
     "expandMap": "Ampliar mapa",
     "collapseMap": "Ocultar mapa",

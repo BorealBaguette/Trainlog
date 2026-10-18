@@ -914,6 +914,7 @@
     "routerMode": "Routage",
     "useRoutedPathLabel": "Utiliser l'itinéraire calculé",
     "useRawGpxLabel": "Modifier la trace GPX",
+    "routeRawGpxLabel": "Router automatiquement la trace GPX",
     "simplifyingRoute": "Simplification de l'itinéraire… cela peut prendre jusqu'à une minute",
     "expandMap": "Agrandir la carte",
     "collapseMap": "Masquer la carte",

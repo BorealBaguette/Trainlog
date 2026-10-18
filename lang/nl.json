@@ -886,6 +886,7 @@
     "routerMode": "Routering",
     "useRoutedPathLabel": "Gerouteerd pad gebruiken",
     "useRawGpxLabel": "GPX-track bewerken",
+    "routeRawGpxLabel": "GPX-spoor automatisch routeren",
     "simplifyingRoute": "Route wordt vereenvoudigd… kan tot een minuut duren",
     "expandMap": "Kaart vergroten",
     "collapseMap": "Kaart verbergen",

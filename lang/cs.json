@@ -891,6 +891,7 @@
     "routerMode": "Trasování",
     "useRoutedPathLabel": "Použít trasovanou cestu",
     "useRawGpxLabel": "Upravit GPX stopu",
+    "routeRawGpxLabel": "Automaticky naplánovat trasu podle GPX stopy",
     "simplifyingRoute": "Zjednodušování trasy… může trvat až minutu",
     "expandMap": "Zvětšit mapu",
     "collapseMap": "Skrýt mapu",

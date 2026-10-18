@@ -886,6 +886,7 @@
     "routerMode": "Rute",
     "useRoutedPathLabel": "Bruk rutet sti",
     "useRawGpxLabel": "Rediger GPX-spor",
+    "routeRawGpxLabel": "Rutelegg GPX-sporet automatisk",
     "simplifyingRoute": "Forenkler ruten… kan ta opptil ett minutt",
     "expandMap": "Forstørr kart",
     "collapseMap": "Skjul kart",

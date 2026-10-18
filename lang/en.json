@@ -914,6 +914,7 @@
     "routerMode": "Router",
     "useRoutedPathLabel": "Use routed path",
     "useRawGpxLabel": "Edit GPX track",
+    "routeRawGpxLabel": "Auto-route GPX track",
     "simplifyingRoute": "Simplifying route… this can take up to a minute",
     "expandMap": "Expand map",
     "collapseMap": "Hide map",

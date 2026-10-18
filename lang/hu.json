@@ -883,6 +883,7 @@
     "routerMode": "Útvonal",
     "useRoutedPathLabel": "Útvonaltervezett út használata",
     "useRawGpxLabel": "GPX nyomvonal szerkesztése",
+    "routeRawGpxLabel": "GPX-nyomvonal automatikus útvonalazása",
     "simplifyingRoute": "Útvonal egyszerűsítése… akár egy percig is tarthat",
     "expandMap": "Térkép nagyítása",
     "collapseMap": "Térkép elrejtése",

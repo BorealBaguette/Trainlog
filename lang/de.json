@@ -886,6 +886,7 @@
     "routerMode": "Routing",
     "useRoutedPathLabel": "Berechnete Route verwenden",
     "useRawGpxLabel": "GPX-Spur bearbeiten",
+    "routeRawGpxLabel": "GPX-Spur automatisch routen",
     "simplifyingRoute": "Route wird vereinfacht… kann bis zu einer Minute dauern",
     "expandMap": "Karte vergrößern",
     "collapseMap": "Karte ausblenden",

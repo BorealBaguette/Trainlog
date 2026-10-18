@@ -883,6 +883,7 @@
     "routerMode": "경로",
     "useRoutedPathLabel": "라우팅된 경로 사용",
     "useRawGpxLabel": "GPX 트랙 편집",
+    "routeRawGpxLabel": "GPX 트랙으로 자동 경로 생성",
     "simplifyingRoute": "경로를 단순화하는 중… 최대 1분 정도 걸릴 수 있습니다",
     "expandMap": "지도 확대",
     "collapseMap": "지도 숨기기",
