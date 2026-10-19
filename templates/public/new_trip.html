@@ -1829,7 +1829,7 @@ function addCurrentStops(trips) {
         source: 'current-stops',
         paint: {
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3.4, 10, 4.3, 14, 5.5],
-            'circle-color': '#000000',
+            'circle-color': MapLibreUtils.tripShadowColor(map),
             'circle-opacity': 0.8,
             'circle-blur': 0.3
         }

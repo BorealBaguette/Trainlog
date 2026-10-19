@@ -3979,6 +3979,24 @@
           3.5,
           0,
           5,
+          [
+            "case",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "highspeed"
+                ],
+                false
+              ],
+              true
+            ],
+            1,
+            0.7
+          ],
+          7,
           1
         ],
         "line-width": [
@@ -10508,6 +10526,70 @@
     },
     {
       "type": "line",
+      "id": "admin-2-glow",
+      "metadata": {
+        "taxonomy:group": "admin-boundaries"
+      },
+      "source": "openmaptiles",
+      "source-layer": "boundary",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "admin_level"
+          ],
+          2
+        ],
+        [
+          "==",
+          [
+            "get",
+            "maritime"
+          ],
+          0
+        ]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          6,
+          "#3e3c3a",
+          10,
+          "#343332"
+        ],
+        "line-blur": 2,
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          1.5,
+          6,
+          6,
+          10,
+          8
+        ]
+      },
+      "maxzoom": 10
+    },
+    {
+      "type": "line",
       "id": "admin-2",
       "metadata": {
         "taxonomy:group": "admin-boundaries"
@@ -10546,7 +10628,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#6E6E6E",
+        "line-color": "#1f1e1d",
         "line-width": [
           "interpolate",
           [
@@ -10556,7 +10638,9 @@
             "zoom"
           ],
           0,
-          0.5,
+          0.8,
+          6,
+          1.4,
           12,
           2
         ]
@@ -10602,27 +10686,10 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#6E6E6E",
+        "line-color": "#1f1e1d",
         "line-dasharray": [
-          "step",
-          [
-            "zoom"
-          ],
-          [
-            "literal",
-            [
-              6,
-              3
-            ]
-          ],
-          9,
-          [
-            "literal",
-            [
-              12,
-              3
-            ]
-          ]
+          1,
+          2
         ],
         "line-width": [
           "interpolate",
@@ -10633,7 +10700,9 @@
             "zoom"
           ],
           0,
-          0.5,
+          0.8,
+          6,
+          1.4,
           12,
           2
         ]
@@ -10671,7 +10740,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#000000",
+        "line-color": "#262524",
         "line-dasharray": [
           "step",
           [
@@ -10701,10 +10770,10 @@
           [
             "zoom"
           ],
-          1,
+          5,
           0,
-          2,
-          0.75
+          7,
+          0.7
         ],
         "line-width": [
           "interpolate",
@@ -10719,7 +10788,8 @@
           12,
           1.5
         ]
-      }
+      },
+      "minzoom": 5
     },
     {
       "type": "fill",

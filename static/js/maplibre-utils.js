@@ -364,6 +364,8 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
     const prev = map.getStyle();
     const keepSources = Object.entries(prev.sources).filter(([id]) => !baseSources.has(id) && !ormSources.has(id));
     const keepLayers = prev.layers.filter(l => !baseLayers.has(l.id) && !ormLayers.has(l.id));
+    const shadow = tripShadowColor(map);
+    for (const l of keepLayers) if (l.id.endsWith('-shadow')) l.paint[`${l.type}-color`] = shadow;
     const images = [...map._userImages].filter(id => map.hasImage(id)).map(id => [id, map.getImage(id)]);
 
     map._baseIds = { sources: Object.keys(mapStyle.sources || {}), layers: mapStyle.layers.map(l => l.id) };
@@ -382,6 +384,15 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
         }
         if (ormVectorBase) addOrmOverlay(map, ormVectorType);
     });
+}
+
+// Trip shadows are black, but on a dark map the darkest trip colours would vanish in one:
+// those get a light grey edge instead. Stop dots carry their trip's type as tripType
+const DARK_BACKGROUNDS = ['dark-train', 'trainlog-rail', 'jawg-dark'];
+const DARK_TRIP_TYPES = ['metro', 'cycle', 'ferry', 'other'];
+function tripShadowColor(map) {
+    if (!DARK_BACKGROUNDS.includes(map._currentTileserver?.split('.').pop())) return '#000000';
+    return ['match', ['coalesce', ['get', 'tripType'], ['get', 'type']], DARK_TRIP_TYPES, '#b0b0b0', '#000000'];
 }
 
 // Check if tileserver is a vector tile server
@@ -767,7 +778,7 @@ function buildTripLayers(map, trips, transportTypes, options = {}) {
                             'visibility': 'none'
                         },
                         paint: {
-                            'line-color': '#000000',
+                            'line-color': tripShadowColor(map),
                             'line-width': (type.id === 'air') ? 3 : 5,
                             'line-opacity': timeStatus === 'future' ? 0.3 : 0.8,
                             'line-blur': 0.5
@@ -886,7 +897,7 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
         {
             id: `${sourceId}-shadow`,
             paint: {
-                'line-color': '#000000',
+                'line-color': tripShadowColor(map),
                 'line-width': ['case', isAir, 3, 5],
                 'line-opacity': ['case', ['==', time, 'future'], 0.3, 0.8],
                 'line-blur': 0.5
@@ -1427,6 +1438,7 @@ window.MapLibreUtils = {
     build3DFlightLayer,
     initializeMapLibre,
     changeBackground,
+    tripShadowColor,
     isVectorTileServer,
     getVectorStyleUrl,
     createRasterStyle,

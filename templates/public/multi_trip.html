@@ -324,7 +324,7 @@ function processTrips() {
         source: 'completed-trips',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-            'line-color': '#000000',
+            'line-color': MapLibreUtils.tripShadowColor(map),
             'line-width': ['case', ['==', ['get', 'type'], 'air'], 4, 7],
             'line-opacity': 0.6
         }
