@@ -32,12 +32,19 @@ def _junction(arriving, leaving, point):
         bare = name[2:].strip()
     else:
         bare = name
+    # The platform it changed at: the leaving trip's, else the arriving one's; the
+    # scheduled one apart from it when one was given (migration 0088).
+    if leaving.get("departure_platform"):
+        planned, actual = leaving.get("departure_platform_planned"), leaving["departure_platform"]
+    else:
+        planned, actual = arriving.get("arrival_platform_planned"), arriving.get("arrival_platform")
     stop = {
         "name": bare,
         "cc": getCountryFromCoordinates(lat, lng)["countryCode"],
         "arr": _utc(arriving["utc_end_datetime"]),
         "dep": _utc(leaving["utc_start_datetime"]),
-        "platform": leaving["departure_platform"] or arriving["arrival_platform"],
+        "platform": planned or actual,
+        "platform_rt": actual if planned else None,
         "tz": _timezone_finder.timezone_at(lat=lat, lng=lng),
         "lat": lat,
         "lng": lng,
@@ -64,6 +71,8 @@ def merged_stop_fields(trip_items):
         "waypoints": json.dumps(waypoints),
         "departurePlatform": first["departure_platform"],
         "arrivalPlatform": last["arrival_platform"],
+        "departurePlatformPlanned": first.get("departure_platform_planned"),
+        "arrivalPlatformPlanned": last.get("arrival_platform_planned"),
         "originStationKey": first.get("origin_station_key"),
         "destinationStationKey": last.get("destination_station_key"),
         "departure_delay": first["departure_delay"],

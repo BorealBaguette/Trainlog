@@ -261,6 +261,8 @@ def split_trip(trip_id, split_index, mid_station, user_id):
                 # The cut is a name typed, not a station picked: no platform or key there.
                 "departure_platform": trip.get("departure_platform"),
                 "arrival_platform": None,
+                "departure_platform_planned": trip.get("departure_platform_planned"),
+                "arrival_platform_planned": None,
                 "origin_station_key": trip.get("origin_station_key"),
                 "destination_station_key": None,
                 "route_source": trip["route_source"],
@@ -309,6 +311,8 @@ def split_trip(trip_id, split_index, mid_station, user_id):
                 "co2_override": trip["co2_override"],
                 "departure_platform": None,
                 "arrival_platform": trip.get("arrival_platform"),
+                "departure_platform_planned": None,
+                "arrival_platform_planned": trip.get("arrival_platform_planned"),
                 "origin_station_key": None,
                 "destination_station_key": trip.get("destination_station_key"),
                 "route_source": trip["route_source"],

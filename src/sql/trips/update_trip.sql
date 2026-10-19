@@ -34,6 +34,8 @@ UPDATE trips SET
     co2_override = :co2_override,
     departure_platform = :departure_platform,
     arrival_platform = :arrival_platform,
+    departure_platform_planned = :departure_platform_planned,
+    arrival_platform_planned = :arrival_platform_planned,
     origin_station_key = :origin_station_key,
     destination_station_key = :destination_station_key,
     route_source = :route_source

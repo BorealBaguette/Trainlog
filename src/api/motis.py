@@ -1193,6 +1193,12 @@ def _live_update(trip_row, path):
     def platform(st):
         return st and (st["platform_rt"] or st["platform"])
 
+    def planned(st, kept):
+        """The scheduled one, kept apart when the run says it moved; none when it didn't."""
+        if not platform(st):
+            return kept
+        return st["platform"] if st["platform_rt"] else None
+
     dep = start and _seconds_between(start["dep_rt"], start["dep"])
     arr = end and _seconds_between(end["arr_rt"], end["arr"])
     return {
@@ -1200,6 +1206,8 @@ def _live_update(trip_row, path):
         "arrival_delay": arr if arr is not None else trip_row["arrival_delay"],
         "departure_platform": platform(start) or trip_row["departure_platform"],
         "arrival_platform": platform(end) or trip_row["arrival_platform"],
+        "departure_platform_planned": planned(start, trip_row["departure_platform_planned"]),
+        "arrival_platform_planned": planned(end, trip_row["arrival_platform_planned"]),
         "waypoints": json.dumps(waypoints, ensure_ascii=False),
     }
 
@@ -1219,6 +1227,7 @@ def current_trip_live(username):
         row = pg.execute(
             """SELECT t.waypoints, t.departure_delay, t.arrival_delay,
                       t.departure_platform, t.arrival_platform,
+                      t.departure_platform_planned, t.arrival_platform_planned,
                       (SELECT json_agg(json_build_array(ST_Y(dp.geom), ST_X(dp.geom)) ORDER BY dp.path)
                        FROM paths p, ST_DumpPoints(p.geom) AS dp WHERE p.trip_id = t.trip_id) AS path
                FROM trips t WHERE t.trip_id = :trip_id""",
@@ -1241,6 +1250,8 @@ def current_trip_live(username):
             pg.execute(
                 """UPDATE trips SET departure_delay = :departure_delay, arrival_delay = :arrival_delay,
                           departure_platform = :departure_platform, arrival_platform = :arrival_platform,
+                          departure_platform_planned = :departure_platform_planned,
+                          arrival_platform_planned = :arrival_platform_planned,
                           waypoints = :waypoints, last_modified = :last_modified
                    WHERE trip_id = :trip_id""",
                 {**update, "trip_id": trip_id, "last_modified": datetime.now()},

@@ -974,6 +974,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
         departure_platform=newTrip.get("departurePlatform"),
         arrival_platform=newTrip.get("arrivalPlatform"),
+        departure_platform_planned=newTrip.get("departurePlatformPlanned"),
+        arrival_platform_planned=newTrip.get("arrivalPlatformPlanned"),
         origin_station_key=newTrip.get("originStationKey"),
         destination_station_key=newTrip.get("destinationStationKey"),
         altitude=altitude,
@@ -7483,6 +7485,8 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         co2_override=co2_override,
         departure_platform=formData.get("departurePlatform"),
         arrival_platform=formData.get("arrivalPlatform"),
+        departure_platform_planned=formData.get("departurePlatformPlanned"),
+        arrival_platform_planned=formData.get("arrivalPlatformPlanned"),
         # The edit page sends the ends' quai stations, cleared when an end is retyped; a
         # client sending none (an older page) leaves them as they were.
         origin_station_key=formData["originStationKey"] if "originStationKey" in formData
@@ -10496,6 +10500,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripCo2Override": trip.get("co2_override"),
         "tripDeparturePlatform": trip.get("departure_platform") or "",
         "tripArrivalPlatform": trip.get("arrival_platform") or "",
+        "tripDeparturePlatformPlanned": trip.get("departure_platform_planned") or "",
+        "tripArrivalPlatformPlanned": trip.get("arrival_platform_planned") or "",
         "tripOriginStationKey": trip.get("origin_station_key") or "",
         "tripDestinationStationKey": trip.get("destination_station_key") or "",
     }

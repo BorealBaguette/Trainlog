@@ -2179,7 +2179,7 @@ function renderStops(data, type, row) {
 
     var lastFlag = labelFlag(row.origin_station);
     var rows = [line('end', escapeStopText(row.origin_station),
-        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform, null, row.type))];
+        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform_planned || row.departure_platform, row.departure_platform_planned ? row.departure_platform : null, row.type))];
     stops.forEach(function (st) {
         var flag = st.cc && st.cc !== 'UN' && typeof getFlagEmoji === 'function' ? getFlagEmoji(st.cc) : '';
         var showFlag = flag && flag !== lastFlag;
@@ -2193,7 +2193,7 @@ function renderStops(data, type, row) {
             escapeStopText(time) + badge(delay), stopPlatformHtml(st.platform, st.platform_rt, row.type)));
     });
     rows.push(line('end', escapeStopText(row.destination_station),
-        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform, null, row.type)));
+        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform_planned || row.arrival_platform, row.arrival_platform_planned ? row.arrival_platform : null, row.type)));
 
     var count = typeof pluralize === 'function' ? pluralize(STOPS_TEXT.count, stops.length) : String(stops.length);
     return '<details class="trip-stops"><summary><span class="ts-toggle">' + escapeStopText(count) + '</span></summary>' +

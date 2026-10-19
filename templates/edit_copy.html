@@ -573,9 +573,12 @@
         </group>
         <label for="lineName" class="sr-only">{{lineName}}</label>
         <input type="text" name="lineName" id="lineName" placeholder="{{lineName}}" value="{{tripLineName}}" />
-        {# Edited in the stops dialog (its origin and destination rows) #}
+        {# Edited in the stops dialog (its origin and destination rows): the platform used, and
+           the scheduled one apart from it when an actual one was given (else empty) #}
         <input type="hidden" name="departurePlatform" id="departurePlatform" value="{{tripDeparturePlatform}}" />
         <input type="hidden" name="arrivalPlatform" id="arrivalPlatform" value="{{tripArrivalPlatform}}" />
+        <input type="hidden" name="departurePlatformPlanned" id="departurePlatformPlanned" value="{{tripDeparturePlatformPlanned}}" />
+        <input type="hidden" name="arrivalPlatformPlanned" id="arrivalPlatformPlanned" value="{{tripArrivalPlatformPlanned}}" />
         {# The quai stations the ends are at: a name typed keeps it, a station picked sets its own #}
         <input type="hidden" name="originStationKey" id="originStationKey" value="{{tripOriginStationKey}}" />
         <input type="hidden" name="destinationStationKey" id="destinationStationKey" value="{{tripDestinationStationKey}}" />
@@ -1329,11 +1332,11 @@
                 $('<span class="stop-value">').text(value || ''), $('<small class="stop-sched">'));
         }
         // A time as read: the scheduled one, struck when it ran otherwise, with the actual one
-        // under it, red late, green early (the delay in its tooltip).
+        // under it, red late, green early or on time (the delay in its tooltip; null: none known).
         function timeText(sched, delay, actual) {
             var $cell = textCell(sched), d = Math.round(delay || 0);
-            if (sched && d) {
-                $cell.find('.stop-value').empty().append($('<s>').text(sched));
+            if (sched && delay != null) {
+                if (d) $cell.find('.stop-value').empty().append($('<s>').text(sched));
                 $cell.find('.stop-sched').append($('<span class="stop-ran">').toggleClass('late', d > 0).text(actual)
                     .attr('title', (d > 0 ? '+' : '') + d + ' min'));
             }
@@ -1342,11 +1345,11 @@
         function timeCell(st, field) {
             var sched = st && st[field], actual = st && st[field + '_rt'];
             if (!sched) return textCell(actual ? toLocal(actual, st.tz).time : '');
-            return timeText(toLocal(sched, st.tz).time, actual ? minutes(actual, sched) : 0, actual ? toLocal(actual, st.tz).time : '');
+            return timeText(toLocal(sched, st.tz).time, actual ? minutes(actual, sched) : null, actual ? toLocal(actual, st.tz).time : '');
         }
         function platformCell(st) {
             var $cell = textCell(st && (st.platform_rt || st.platform));
-            if (st && st.platform && st.platform_rt) $cell.find('.stop-sched').append($('<s>').text(st.platform));
+            if (st && st.platform && st.platform_rt && st.platform_rt !== st.platform) $cell.find('.stop-sched').append($('<s>').text(st.platform));
             return $cell;
         }
         function editButton(which) {
@@ -1376,7 +1379,7 @@
             if (!noDelays) $g.append($('<span class="stop-caption">').text({{ stopDelay|tojson }}));
             return $g.append($('<span class="stop-caption">').text({{ delayActual|tojson }}));
         }
-        // o: { time: scheduled 'HH:MM', date: its day, delay: minutes, enabled,
+        // o: { time: scheduled 'HH:MM', date: its day, delay: minutes (null: none given, 0: on time), enabled,
         //      set(time, delay, date): the day it went on, if another,
         //      actual(time, delay, date): the 'HH:MM' they make }
         // The day is picked beside the time (a night train's stops past midnight), among the
@@ -1391,16 +1394,18 @@
                 $('<option>').val(date).text(dayText(date)).appendTo($day);
             });
             $day.val(o.date);
-            var $delay = $('<input type="number" step="1" placeholder="0">').val(o.delay ? Math.round(o.delay) : '')
+            var $delay = $('<input type="number" step="1" placeholder="0">').val(o.delay != null ? Math.round(o.delay) : '')
                 .attr('aria-label', label + ' · ' + {{ stopDelay|tojson }});
             var $actual = $('<span class="stop-actual">');
+            // The delay typed: null when left empty, so a 0 (on time) is kept as one
+            function typed() { var d = parseInt($delay.val(), 10); return isNaN(d) ? null : d; }
             function show() {
-                var t = $time.val(), d = parseInt($delay.val(), 10) || 0;
+                var t = $time.val(), d = typed();
                 $delay.prop('disabled', !t || o.enabled === false);
-                $actual.text(t && d ? o.actual(t, d, $day.val()) : '').toggleClass('late', d > 0).toggleClass('early', d < 0);
+                $actual.text(t && d != null ? o.actual(t, d, $day.val()) : '').toggleClass('late', d > 0).toggleClass('early', d < 0);
             }
             function changed() {
-                var t = $time.val(), date = o.set(t, t ? parseInt($delay.val(), 10) || 0 : 0, $day.val());
+                var t = $time.val(), date = o.set(t, t ? typed() : null, $day.val());
                 if (date) $day.val(date);
                 show();
                 checkOrder();
@@ -1565,7 +1570,7 @@
                     }
                     timeLine($g, field === 'arr' ? {{ stopArrival|tojson }} : {{ stopDeparture|tojson }}, {
                         time: local ? local.time : '', date: local ? local.date : baseDate(i),
-                        delay: st && st[field] && st[rt] ? minutes(st[rt], st[field]) : 0,
+                        delay: st && st[field] && st[rt] ? minutes(st[rt], st[field]) : null,
                         set: function (t, d, date) {
                             if (!t) {
                                 if (row.stop) { delete row.stop[field]; delete row.stop[rt]; }
@@ -1574,7 +1579,7 @@
                             var s = ensureStop();
                             if (!s[field]) date = firstDay(t, s.tz, date);
                             s[field] = toUtc(date, t, s.tz);
-                            if (d) s[rt] = plusMinutes(s[field], d); else delete s[rt];
+                            if (d != null) s[rt] = plusMinutes(s[field], d); else delete s[rt];
                             return date;
                         },
                         actual: function (t, d, date) {
@@ -1595,7 +1600,7 @@
                     }
                     var s = ensureStop();
                     if (p) s.platform = p; else delete s.platform;
-                    if (a && a !== p) s.platform_rt = a; else delete s.platform_rt;
+                    if (a) s.platform_rt = a; else delete s.platform_rt;   // the same as planned: confirmed
                 });
                 platformLine($g, $pSched, $pActual);
                 $rows.append($row);
@@ -1607,16 +1612,21 @@
 
         // ---- origin / destination rows
         function readEnds() {
+            function delayIn(sel) { var d = parseFloat($(sel).val()); return isNaN(d) ? null : d; }
             var delaysOn = $('#delayToggle').is(':checked');
             function end(kind) {
                 var origin = kind === 'origin';
+                // platform: the scheduled one; platformRt: the actual one, when given apart
+                var used = $(origin ? '#departurePlatform' : '#arrivalPlatform').val() || '';
+                var planned = $(origin ? '#departurePlatformPlanned' : '#arrivalPlatformPlanned').val() || '';
                 return {
                     name: [$(origin ? '#originCountry' : '#destinationCountry').val(),
                            $(origin ? '#originStation' : '#destinationStation').val()].join(' ').trim(),
                     date: $(origin ? '#newTripStartDate' : '#newTripEndDate').val(),
                     time: $(origin ? '#newTripStartTime' : '#newTripEndTime').val(),
-                    delay: delaysOn ? (parseFloat($(origin ? '#departureDelayMinutes' : '#arrivalDelayMinutes').val()) || 0) : 0,
-                    platform: $(origin ? '#departurePlatform' : '#arrivalPlatform').val() || ''
+                    delay: delaysOn ? delayIn(origin ? '#departureDelayMinutes' : '#arrivalDelayMinutes') : null,
+                    platform: planned || used,
+                    platformRt: planned ? used : ''
                 };
             }
             var r = { origin: end('origin'), destination: end('destination') };
@@ -1670,7 +1680,8 @@
                     }
                     $row.append(precise ? timeText(end.time, end.delay, shifted(end.date, end.time, end.delay)) : textCell(''));
                 });
-                $row.append(textCell(end.platform), $('<span class="stop-actions">').append(editButton(kind)));
+                $row.append(platformCell({ platform: end.platform, platform_rt: end.platformRt }),
+                    $('<span class="stop-actions">').append(editButton(kind)));
                 return opens($row, kind);
             }
 
@@ -1681,7 +1692,7 @@
                 $('<span class="stop-actions">').append(closeButton())).appendTo($editor);
             var $g = fieldsGrid().appendTo($editor);
             timeLine($g, origin ? {{ stopDeparture|tojson }} : {{ stopArrival|tojson }}, {
-                time: precise ? end.time : '', date: end.date || baseDate(0), delay: precise ? end.delay : 0, enabled: !!precise,
+                time: precise ? end.time : '', date: end.date || baseDate(0), delay: precise ? end.delay : null, enabled: !!precise,
                 set: function (t, d, date) {
                     end.delay = d;
                     if (!t) return;
@@ -1694,8 +1705,11 @@
                 actual: function (t, d, date) { return shifted(date, t, d); }
             });
             platformLine($g, $('<input type="text" maxlength="12">').val(end.platform)
-                .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }})
-                .on('change', function () { end.platform = this.value.trim(); }));
+                .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }} + ' · ' + {{ stopScheduled|tojson }})
+                .on('change', function () { end.platform = this.value.trim(); }),
+                $('<input type="text" maxlength="12" class="stop-platform-actual">').val(end.platformRt)
+                .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }} + ' · ' + {{ delayActual|tojson }})
+                .on('change', function () { end.platformRt = this.value.trim(); }));
             return $row;
         }
         // The start the page opened with, as stopsStart reads ('YYYY-MM-DD HH:MM', local)
@@ -1705,11 +1719,14 @@
         // Into the form: platforms always, delays when the trip has precise times.
         function applyEnds() {
             if (!ends) return;
-            $('#departurePlatform').val(ends.origin.platform);
-            $('#arrivalPlatform').val(ends.destination.platform);
-            ['origin', 'destination'].forEach(function (end) {   // the fields' track dropdowns
-                var slot = endSlots[end];
-                if (slot) { slot.selected = ends[end].platform || null; renderStops(slot); }
+            // The trip's platform is the one used; the scheduled one kept apart when an actual one was given
+            [['origin', '#departurePlatform', '#departurePlatformPlanned'],
+             ['destination', '#arrivalPlatform', '#arrivalPlatformPlanned']].forEach(function (e) {
+                var end = ends[e[0]], used = end.platformRt || end.platform;
+                $(e[1]).val(used);
+                $(e[2]).val(end.platformRt ? end.platform : '');
+                var slot = endSlots[e[0]];   // the fields' track dropdowns
+                if (slot) { slot.selected = used || null; renderStops(slot); }
             });
             // The rows' times are for the start as set here (moved along as the dialog opened,
             // and with its day; renewed with it by a refresh): not to be shifted again on save.
@@ -1726,11 +1743,12 @@
                 $('#newTripEndTime').val(ends.destination.time).trigger('change');
             }
             if (!$('#radioPreciseDates').is(':checked') || !$('#delayToggle').length) return;
-            var dep = Math.round(ends.origin.delay), arr = Math.round(ends.destination.delay);
+            function minutesOf(d) { return d == null ? '' : Math.round(d); }
+            var dep = minutesOf(ends.origin.delay), arr = minutesOf(ends.destination.delay);
             var on = $('#delayToggle').is(':checked');
-            if (!on && !dep && !arr) return;
-            $('#departureDelayMinutes').val(dep || '').trigger('input');
-            $('#arrivalDelayMinutes').val(arr || '').trigger('input');
+            if (!on && dep === '' && arr === '') return;
+            $('#departureDelayMinutes').val(dep).trigger('input');
+            $('#arrivalDelayMinutes').val(arr).trigger('input');
             if (!on) $('#delayToggle').prop('checked', true).trigger('change');
         }
 
@@ -2042,7 +2060,7 @@
                     } else {
                         if (fresh.platform) st.platform = fresh.platform;
                         if (fresh.platform_rt && fresh.platform_rt !== st.platform) st.platform_rt = fresh.platform_rt;
-                        else if (freshLive || moveTrip || st.platform_rt === st.platform) delete st.platform_rt;
+                        else if (freshLive || moveTrip) delete st.platform_rt;
                     }
                     if (fresh.tz && !st.tz) st.tz = fresh.tz;
                 });
@@ -2055,8 +2073,14 @@
                     });
                     return best && best.st;
                 }
-                function late(st, f) {
-                    return st && st[f] && st[f + '_rt'] ? Math.round((Date.parse(st[f + '_rt']) - Date.parse(st[f])) / 60000) : 0;
+                function late(st, f) {   // null: no live time to tell
+                    return st && st[f] && st[f + '_rt'] ? Math.round((Date.parse(st[f + '_rt']) - Date.parse(st[f])) / 60000) : null;
+                }
+                // The run's platform at it, scheduled and actual, when it has one
+                function takePlatform(end, st) {
+                    if (!st.platform && !st.platform_rt) return;
+                    end.platform = st.platform || st.platform_rt;
+                    end.platformRt = st.platform && st.platform_rt ? st.platform_rt : '';
                 }
                 if (typeof wplist !== 'undefined' && wplist.length >= 2) {
                     var startStop = nearest(wplist[0]), endStop = nearest(wplist[wplist.length - 1]);
@@ -2066,17 +2090,17 @@
                         var at = toLocal(renew ? st[f + '_rt'] || st[f] : st[f] || st[f + '_rt'], st.tz);
                         if (!at) return;
                         end.date = at.date; end.time = at.time; end.renewed = true;
-                        end.delay = renew ? 0 : late(st, f);
+                        end.delay = renew ? null : late(st, f);
                     }
                     if (startStop) {
                         if (renew || moveTrip) renewEnd(ends.origin, startStop, 'dep');
                         else if (live) ends.origin.delay = late(startStop, 'dep');
-                        ends.origin.platform = startStop.platform_rt || startStop.platform || ends.origin.platform;
+                        takePlatform(ends.origin, startStop);
                     }
                     if (endStop) {
                         if (renew || moveTrip) renewEnd(ends.destination, endStop, 'arr');
                         else if (live) ends.destination.delay = late(endStop, 'arr');
-                        ends.destination.platform = endStop.platform_rt || endStop.platform || ends.destination.platform;
+                        takePlatform(ends.destination, endStop);
                     }
                 }
                 render();
@@ -2172,11 +2196,13 @@
             var $name = $('#' + end + 'Station'), $country = $('#' + end + 'Country');
             var $toggle = $('#' + end + 'ModeToggle');
             var $platform = $(origin ? '#departurePlatform' : '#arrivalPlatform');
+            var $planned = $(origin ? '#departurePlatformPlanned' : '#arrivalPlatformPlanned');
             var endIndex = function () { return origin ? 0 : wplist.length - 1; };
             var slot = endSlots[end] = stopSlot({
                 $input: $name, $dropdown: $('#' + end + 'Tracks'), fillsLine: true,
                 stationLabel: ($country.val() + ' ' + $name.val()).trim(),
-                setPlatform: function (ref) { $platform.val(ref || ''); },
+                // Another track picked here: the scheduled one kept for the old one no longer applies
+                setPlatform: function (ref) { if ((ref || '') !== $platform.val()) $planned.val(''); $platform.val(ref || ''); },
                 setExact: function (on) { slot.exact = on; },
                 shown: function (on) { $name.toggleClass('has-stops', on); },
                 moved: function (point, exact) { moveEnd(point, exact); }
@@ -2217,6 +2243,7 @@
                 var wp = stored[i], st = wp.stop;
                 var platform = st.platform_rt || st.platform || '';
                 $platform.val(platform);
+                $planned.val(st.platform && st.platform_rt ? st.platform : '');
                 slot.selected = platform || null;
                 renderStops(slot);
                 var sched = origin ? st.dep || st.arr : st.arr || st.dep;
@@ -2229,10 +2256,10 @@
                     if (origin) stopsStart = local.date + ' ' + local.time;
                     else if (!stopsStart) stopsStart = $('#newTripStartDate').val() + ' ' + $('#newTripStartTime').val();
                     if ($('#delayToggle').length) {
-                        var delay = actual ? Math.round((Date.parse(actual) - Date.parse(sched)) / 60000) : 0;
+                        var delay = actual ? Math.round((Date.parse(actual) - Date.parse(sched)) / 60000) : null;
                         var on = $('#delayToggle').is(':checked');
-                        if (on || delay) {
-                            $(origin ? '#departureDelayMinutes' : '#arrivalDelayMinutes').val(delay || '').trigger('input');
+                        if (on || delay != null) {
+                            $(origin ? '#departureDelayMinutes' : '#arrivalDelayMinutes').val(delay == null ? '' : delay).trigger('input');
                             if (!on) $('#delayToggle').prop('checked', true).trigger('change');
                         }
                     }
