@@ -6293,6 +6293,196 @@
       }
     },
     {
+      "id": "public-transport-dot",
+      "type": "circle",
+      "source": "openmaptiles",
+      "source-layer": "poi",
+      "minzoom": 10,
+      "maxzoom": 13,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "class"
+          ],
+          "railway"
+        ],
+        [
+          "!",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "tram_stop"
+          ]
+        ]
+      ],
+      "paint": {
+        "circle-radius": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          10,
+          2.0,
+          13,
+          3.0
+        ],
+        "circle-color": "#9a9a9a",
+        "circle-stroke-color": "#000000",
+        "circle-stroke-width": 0.8,
+        "circle-opacity": 0.8,
+        "circle-stroke-opacity": 0.8
+      }
+    },
+    {
+      "type": "symbol",
+      "id": "public-transport-hint",
+      "source": "openmaptiles",
+      "source-layer": "poi",
+      "filter": [
+        "any",
+        [
+          "all",
+          [
+            "all",
+            [
+              "==",
+              [
+                "get",
+                "class"
+              ],
+              "railway"
+            ],
+            [
+              "!",
+              [
+                "==",
+                [
+                  "get",
+                  "subclass"
+                ],
+                "tram_stop"
+              ]
+            ]
+          ],
+          [
+            ">=",
+            [
+              "zoom"
+            ],
+            13
+          ],
+          [
+            "<",
+            [
+              "zoom"
+            ],
+            14
+          ]
+        ],
+        [
+          "all",
+          [
+            "all",
+            [
+              "==",
+              [
+                "get",
+                "class"
+              ],
+              "railway"
+            ],
+            [
+              "==",
+              [
+                "get",
+                "subclass"
+              ],
+              "tram_stop"
+            ]
+          ],
+          [
+            ">=",
+            [
+              "zoom"
+            ],
+            13
+          ],
+          [
+            "<",
+            [
+              "zoom"
+            ],
+            15
+          ]
+        ],
+        [
+          "all",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "bus"
+          ],
+          [
+            ">=",
+            [
+              "zoom"
+            ],
+            13
+          ],
+          [
+            "<",
+            [
+              "zoom"
+            ],
+            15
+          ]
+        ]
+      ],
+      "layout": {
+        "icon-image": [
+          "case",
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "tram_stop"
+          ],
+          "rail-light-sm",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "railway"
+          ],
+          "rail-sm",
+          "bus-sm"
+        ],
+        "icon-size": 0.6,
+        "icon-padding": 4,
+        "icon-allow-overlap": false
+      },
+      "paint": {
+        "icon-opacity": 0.85
+      },
+      "minzoom": 13
+    },
+    {
       "type": "symbol",
       "id": "public-transport-label",
       "source": "openmaptiles",
@@ -6302,15 +6492,47 @@
         [
           "all",
           [
-            "==",
+            "all",
             [
-              "get",
-              "class"
+              "==",
+              [
+                "get",
+                "class"
+              ],
+              "railway"
             ],
-            "railway"
+            [
+              "!",
+              [
+                "==",
+                [
+                  "get",
+                  "subclass"
+                ],
+                "tram_stop"
+              ]
+            ]
           ],
           [
-            "!",
+            ">=",
+            [
+              "zoom"
+            ],
+            14
+          ]
+        ],
+        [
+          "all",
+          [
+            "all",
+            [
+              "==",
+              [
+                "get",
+                "class"
+              ],
+              "railway"
+            ],
             [
               "==",
               [
@@ -6319,43 +6541,17 @@
               ],
               "tram_stop"
             ]
-          ]
-        ],
-        [
-          "all",
+          ],
           [
             ">=",
             [
               "zoom"
             ],
             15
-          ],
-          [
-            "==",
-            [
-              "get",
-              "class"
-            ],
-            "railway"
-          ],
-          [
-            "==",
-            [
-              "get",
-              "subclass"
-            ],
-            "tram_stop"
           ]
         ],
         [
           "all",
-          [
-            ">=",
-            [
-              "zoom"
-            ],
-            16
-          ],
           [
             "==",
             [
@@ -6363,6 +6559,13 @@
               "class"
             ],
             "bus"
+          ],
+          [
+            ">=",
+            [
+              "zoom"
+            ],
+            15
           ]
         ]
       ],
@@ -6393,40 +6596,32 @@
         "icon-padding": 10.0,
         "text-anchor": "top",
         "text-field": [
-          "step",
+          "case",
           [
-            "zoom"
+            "has",
+            "name:nonlatin"
           ],
-          "",
-          14,
           [
-            "case",
+            "concat",
             [
-              "has",
+              "get",
+              "name:latin"
+            ],
+            "\n",
+            [
+              "get",
               "name:nonlatin"
+            ]
+          ],
+          [
+            "coalesce",
+            [
+              "get",
+              "name:en"
             ],
             [
-              "concat",
-              [
-                "get",
-                "name:latin"
-              ],
-              "\n",
-              [
-                "get",
-                "name:nonlatin"
-              ]
-            ],
-            [
-              "coalesce",
-              [
-                "get",
-                "name:en"
-              ],
-              [
-                "get",
-                "name"
-              ]
+              "get",
+              "name"
             ]
           ]
         ],
@@ -6452,7 +6647,8 @@
           10,
           18,
           12
-        ]
+        ],
+        "text-optional": true
       },
       "paint": {
         "text-color": [
@@ -6472,7 +6668,7 @@
         "text-halo-color": "#000000",
         "text-halo-width": 1.0
       },
-      "minzoom": 13
+      "minzoom": 14
     },
     {
       "type": "symbol",
