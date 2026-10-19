@@ -33,7 +33,7 @@ QUAI_MODES = {
 }
 
 
-QUAI_URL = "http://localhost:5020"#"https://quai.srv.trainlog.me"
+QUAI_URL = "https://quai.srv.trainlog.me"
 
 
 def user_lang():
