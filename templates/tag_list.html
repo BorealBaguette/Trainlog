@@ -420,10 +420,22 @@
       $('#leaveTagForm').attr('action', $(event.relatedTarget).data('url'));
     });
 
+    // bootstrap-colorpicker 3.4 calls Popover#getTipElement(), which Bootstrap
+    // 5.2+ made private; without it the first picker throws and aborts this
+    // whole ready handler (tag-type popover, edit pickers...)
+    if (window.bootstrap && !bootstrap.Popover.prototype.getTipElement) {
+      bootstrap.Popover.prototype.getTipElement = function () { return this._getTipElement(); };
+    }
+
     function bindColorPicker(picker) {
       // autoInputFallback rewrites the input on every keystroke, which makes
       // typing a hex code impossible, so disable it
-      picker.colorpicker({ format: 'hex', autoInputFallback: false, autoHexInputFallback: false });
+      picker.colorpicker({
+        format: 'hex', autoInputFallback: false, autoHexInputFallback: false,
+        // Bootstrap 5.3 rebuilds the tip on every show, dropping the class the
+        // plugin adds once; customClass reapplies it each time
+        popover: { customClass: 'colorpicker-bs-popover' }
+      });
       picker.on('colorpickerChange colorpickerCreate', function (event) {
         var color = event.color;
         picker.css("color", getTextColor(color.toString())).css('background-color', color.toString());
