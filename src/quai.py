@@ -647,11 +647,11 @@ def _search_stations_as_typed(trip_type, q=None, lat=None, lon=None, radius_km=N
     return features(merge([own, *better]))
 
 
-# A track or line typed after a station's name ("Bronowice SKA 06", "Part-Dieu voie 7"): a last
-# word with a digit, or one after a track word. Mirrors typedStop() in stop_slots.js.
+# A track or line typed after a station's name ("Bronowice SKA 06", "Part-Dieu voie 7",
+# "Bergerac A"): a last word with a digit, a single letter, or one after a track word. Mirrors typedStop() in stop_slots.js.
 TYPED_STOP = re.compile(
     r"\s+((?:voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа)\s*\S+"
-    r"|\S*\d\S*)\s*$", re.IGNORECASE
+    r"|\S*\d\S*|[^\W\d_])\s*$", re.IGNORECASE
 )
 
 

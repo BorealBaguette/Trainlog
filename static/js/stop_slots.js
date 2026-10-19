@@ -174,15 +174,20 @@ function forgetStop(slot) {
   slot.setExact(false);
 }
 
-// The track (or line) typed after the station's name ("Bronowice SKA 06", "Part-Dieu voie 7"),
-// as the slot's kind names it at `label`, or null: a last word with a digit, or one after a
-// track word, that the station has and its own name does not hold ("Jerzmanowska nr 17").
+// The track (or line) typed after the station's name ("Bronowice SKA 06", "Part-Dieu voie 7",
+// "Bergerac A"), as the slot's kind names it at `label`, or null: a last word with a digit, a
+// single letter, or one after a track word, that the station has and that does not start a
+// word of its own name ("Jerzmanowska nr 17"; "Gare de L", typing "Gare de Lyon").
 function typedStop(typed, label) {
-  var m = /(?:^|\s)((?:voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа)\s*\S+|\S*\d\S*)\s*$/i.exec(typed || '');
+  var m = /(?:^|\s)((?:voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа)\s*\S+|\S*\d\S*|\p{L})\s*$/iu.exec(typed || '');
   var kind = stopKind(label);
   if (!m || !kind) return null;
   var key = stopKey(m[1]);
-  var named = String(label).toLowerCase().split(/\s+/).some(function (w) { return w.indexOf(key) === 0; });
+  // A word of the name it starts, not typed whole before it, is still being typed.
+  var before = typed.slice(0, m.index).toLowerCase().split(/\s+/);
+  var named = String(label).toLowerCase().split(/\s+/).some(function (w) {
+    return w.indexOf(key) === 0 && before.indexOf(w) === -1;
+  });
   var list = (kind === 'track' ? globalStationTracks : globalStationLines)[label] || [];
   // "6" for Kraków's "06": leading zeros aside.
   var bare = function (k) { return k.replace(/^0+(?=\d)/, ''); };
