@@ -131,7 +131,11 @@ async function initializeMapLibre(options = {}) {
     const addImage = map.addImage.bind(map);
     map.addImage = (id, ...rest) => { map._userImages.add(id); return addImage(id, ...rest); };
 
-    // Add a sentinel layer that trip layers will sit above
+    // Page lines (trips) go under the base's 3D buildings, which then hide them as they hide the ground
+    const addLayer = map.addLayer.bind(map);
+    map.addLayer = (layer, beforeId) => addLayer(layer, beforeId ?? (layer.type === 'line' ? baseBuildingsId(map) : undefined));
+
+    // Add a sentinel layer that page layers will sit above
     map.once('load', () => {
         map.addLayer({ id: 'orm-sentinel', type: 'background', paint: { 'background-opacity': 0 } });
     });
@@ -156,6 +160,20 @@ async function initializeMapLibre(options = {}) {
     }
 
     return map;
+}
+
+function baseBuildingsId(map) {
+    const base = new Set(map._baseIds.layers);
+    return map.getStyle().layers.find(l => l.type === 'fill-extrusion' && base.has(l.id))?.id;
+}
+
+// Where the overlay goes: under the base's first label, under its 3D buildings (drawn after them
+// the lines showed through), and under anything the page added. First label, not first symbol:
+// oneway arrow layers sit down among the tunnels and would bury it under the roads
+function ormAnchorId(map) {
+    const base = new Set(map._baseIds.layers);
+    return map.getStyle().layers.find(l => !base.has(l.id) || l.type === 'fill-extrusion'
+        || (l.type === 'symbol' && l.layout?.['text-field']))?.id;
 }
 
 // Adds the OpenRailwayMap vector overlay under the base map's labels. What it adds is
@@ -183,11 +201,7 @@ async function addOrmOverlay(map, ormVectorType) {
             maxzoom: 19,
             attribution: '© <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>'
         });
-        const baseLayers = [];
-        for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
-        const firstLabelId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
-        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstLabelId)?.id || firstLabelId;
-        map.addLayer({ id, type: 'raster', source: id }, anchorId);
+        map.addLayer({ id, type: 'raster', source: id }, ormAnchorId(map));
         ormIds.sources.push(id);
         ormIds.layers.push(id);
         return;
@@ -230,13 +244,7 @@ async function addOrmOverlay(map, ormVectorType) {
         // Skip symbol/background layers but the line labels — they cause gritty artifacts and CORS issues
         const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
         const skipTypes = new Set(['symbol', 'background', 'raster']);
-        // Only look below the sentinel: after a background change trip layers sit above it
-        const baseLayers = [];
-        for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
-        // First label, not first symbol: oneway arrow layers sit down among the tunnels and would bury it under the roads
-        const firstSymbolId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
-        // Under 3D buildings too, where the base has them: drawn after them the lines showed through
-        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstSymbolId)?.id || firstSymbolId;
+        const anchorId = ormAnchorId(map);
         // Labels along the lines ("25kV 50Hz", speeds, refs) need a font from the map's one glyph
         // source: raster bases have none, so they get OpenFreeMap's
         if (!map.getStyle().glyphs) map.setGlyphs(OFM_GLYPHS);
@@ -289,14 +297,14 @@ function describeOrmLine(p, type) {
 }
 
 // The overlay line under a point and what to tell about it, or null. Anything the page draws
-// above the sentinel (trips, stops) has its own click and cursor, so a hit on one of those wins
+// (trips, stops) has its own click and cursor, so a hit on one of those wins
 function ormLineAt(map, point) {
     const orm = map._ormIds;
     if (!orm?.layers.length) return null;
     // Lines are a few px wide: search around the point rather than under it
     const box = [[point.x - 6, point.y - 6], [point.x + 6, point.y + 6]];
-    const order = map.getLayersOrder();
-    const pageLayers = order.slice(order.indexOf('orm-sentinel') + 1);
+    const skip = new Set([...map._baseIds.layers, ...orm.layers, 'orm-sentinel']);
+    const pageLayers = map.getLayersOrder().filter(id => !skip.has(id));
     if (pageLayers.length && map.queryRenderedFeatures(box, { layers: pageLayers }).length) return null;
     for (const f of map.queryRenderedFeatures(box, { layers: orm.layers })) {
         if (!f.sourceLayer?.includes('railway_line')) continue;
@@ -360,9 +368,12 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
 
     map._baseIds = { sources: Object.keys(mapStyle.sources || {}), layers: mapStyle.layers.map(l => l.id) };
     map._ormIds = null;
-    // Layers sit before the base's first symbol layer only for ORM; trip layers go on top.
+    // Page lines go under the new base's 3D buildings, as addLayer puts them; the rest on top
     for (const [id, src] of keepSources) mapStyle.sources[id] = src;
-    mapStyle.layers.push(...keepLayers);
+    const buildings = mapStyle.layers.findIndex(l => l.type === 'fill-extrusion');
+    const lines = buildings < 0 ? [] : keepLayers.filter(l => l.type === 'line');
+    mapStyle.layers.splice(buildings, 0, ...lines);
+    mapStyle.layers.push(...keepLayers.filter(l => !lines.includes(l)));
     map.setStyle(mapStyle, { diff: false });
 
     map.once('style.load', () => {
