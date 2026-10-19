@@ -109,10 +109,12 @@
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.5));
 }
 
+/* A fixed height, not the SVG's own size: some flags (nl-ge) declare width="9". */
 .largeFlag {
-  height:unset !important;
-  max-height: 100px;
-  max-width: 35%!important;
+  height: 100px !important;
+  width: auto;
+  max-width: 35% !important;
+  object-fit: contain;
 }
 
 .flag {
