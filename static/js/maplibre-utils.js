@@ -30,6 +30,7 @@ const MapConfig = {
         "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json',
         "dark-train":       '/getVectorStyle/{language}/trainlog-dark.json',
         "trainlog-rail":    '/getVectorStyle/{language}/trainlog-rail.json',
+        "trainlog-light":   '/getVectorStyle/{language}/trainlog-light.json',
         "ofm-liberty": 'https://tiles.openfreemap.org/styles/liberty',
         "ofm-bright": 'https://tiles.openfreemap.org/styles/bright',
         "ofm-positron": 'https://tiles.openfreemap.org/styles/positron'
@@ -379,6 +380,7 @@ function isVectorTileServer(tileserver) {
         'trainlog-lagoon-v2',
         'dark-train',
         'trainlog-rail',
+        'trainlog-light',
         'ofm-liberty',
         'ofm-bright',
         'ofm-positron'
@@ -390,7 +392,7 @@ function isVectorTileServer(tileserver) {
 // labels be localised client-side (Jawg instead gets its language server-side).
 const OFM_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 
-const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
+const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'trainlog-light', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
 
 // "native" labels places as written locally (北京); "local" the same with the
 // Latin spelling below a non-Latin name (北京 / Beijing); "int" in Latin letters

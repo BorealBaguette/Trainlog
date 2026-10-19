@@ -1,0 +1,16 @@
+{
+  "tl-wood": {
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 96,
+    "pixelRatio": 2
+  },
+  "tl-park": {
+    "x": 96,
+    "y": 0,
+    "width": 96,
+    "height": 96,
+    "pixelRatio": 2
+  }
+}

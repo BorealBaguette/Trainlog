@@ -11232,48 +11232,99 @@
       "type": "symbol",
       "id": "public-transport-label",
       "source": "openmaptiles",
-      "source-layer": "transportation_name",
+      "source-layer": "poi",
       "filter": [
-        "all",
+        "any",
         [
-          "any",
+          "all",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "railway"
+          ],
           [
             "!",
             [
-              "has",
-              "rank"
+              "==",
+              [
+                "get",
+                "subclass"
+              ],
+              "tram_stop"
             ]
+          ]
+        ],
+        [
+          "all",
+          [
+            ">=",
+            [
+              "zoom"
+            ],
+            15
           ],
           [
-            "<=",
+            "==",
             [
               "get",
-              "rank"
+              "class"
             ],
-            2
+            "railway"
+          ],
+          [
+            "==",
+            [
+              "get",
+              "subclass"
+            ],
+            "tram_stop"
+          ]
+        ],
+        [
+          "all",
+          [
+            ">=",
+            [
+              "zoom"
+            ],
+            16
+          ],
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "bus"
           ]
         ]
       ],
       "layout": {
         "icon-anchor": "center",
         "icon-image": [
-          "step",
+          "case",
           [
-            "zoom"
-          ],
-          [
-            "concat",
+            "==",
             [
               "get",
-              "maki"
+              "subclass"
             ],
-            "-sm"
+            "tram_stop"
           ],
-          16,
+          "rail-light",
           [
-            "get",
-            "maki"
-          ]
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "railway"
+          ],
+          "rail",
+          "bus"
         ],
         "icon-padding": 10.0,
         "text-anchor": "top",
@@ -11283,7 +11334,7 @@
             "zoom"
           ],
           "",
-          17,
+          14,
           [
             "case",
             [
@@ -11325,14 +11376,39 @@
         ],
         "text-padding": 1.0,
         "text-rotation-alignment": "viewport",
-        "text-size": 10.0
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          14,
+          10,
+          18,
+          12
+        ]
       },
       "paint": {
-        "text-color": "#B5B5B5",
+        "text-color": [
+          "case",
+          [
+            "==",
+            [
+              "get",
+              "class"
+            ],
+            "railway"
+          ],
+          "#D0D0D0",
+          "#B5B5B5"
+        ],
         "text-halo-blur": 1.0,
         "text-halo-color": "#000000",
         "text-halo-width": 1.0
-      }
+      },
+      "minzoom": 13
     },
     {
       "type": "symbol",
