@@ -35,6 +35,15 @@ function ticketPicker(opts) {
       && (!ticket.valid_until || date <= ticket.valid_until));
   }
 
+  // Not valid yet, so not active, but no more past than an active one.
+  function isUpcoming(ticket) {
+    if (ticket.uses != null && ticket.used >= ticket.uses) return false;
+    const now = new Date();
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
+      + '-' + String(now.getDate()).padStart(2, '0');
+    return Boolean(ticket.valid_from && ticket.valid_from > today);
+  }
+
   function runsOn(ticket, operators) {
     return [ticket.operator, ...String(ticket.secondary_operators || '').split(',')]
       .map(normalizeOperatorName).some(name => name && operators.includes(name));
@@ -119,7 +128,8 @@ function ticketPicker(opts) {
     }
 
     section(covering.length ? $('#ticketPickerModal').data('thatDay') : null, covering);
-    section($('#ticketPickerModal').data('current'), tickets.filter(t => t.active || picked.includes(t.uid)));
+    section($('#ticketPickerModal').data('current'),
+      tickets.filter(t => t.active || isUpcoming(t) || picked.includes(t.uid)));
     if (showAll || query) section($('#ticketPickerModal').data('past'), tickets);
     $('#ticketPickerShowAll').toggle(!showAll && !query && tickets.some(t => !shown.has(t.uid)));
     if (!shown.size) $list.append($('<p class="text-muted small mb-0"></p>').text(opts.texts.none));
