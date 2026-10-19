@@ -24,8 +24,19 @@ function stopSlotLabel(slot) {
 // The slot's station entry ([point, label, record?, exact?]): the field's own where it has one
 // (a timetable's stop, whose label another stop of the run can share: out and back through
 // Kerlaurent), else the one of its label.
+// A slot with `ownEntry` (the new trip page's ends) has its own copy of the entry of the
+// station picked there, for as long as the field holds it: both ends at Bronowice SKA, one
+// at track 06 and the other at 02, share a label and so globalStationDict's entry.
 function stopSlotEntry(slot) {
-  return slot.$input.data('stationEntry') || globalStationDict[stopSlotLabel(slot)];
+  return slot.$input.data('stationEntry')
+    || (slot.own && slot.own.value === slot.$input.val() ? slot.own.entry : null)
+    || globalStationDict[stopSlotLabel(slot)];
+}
+// Gives the slot its own copy of the entry of `value`, the station now in its field.
+function ownStopEntry(slot, value) {
+  var shared = globalStationDict[value];
+  slot.own = shared ? { value: value, entry: shared.slice() } : null;
+  if (slot.own && shared.stationPoint) slot.own.entry.stationPoint = shared.stationPoint;
 }
 
 // "Gleis 7", "Voie 7" and "7" are the same track.
@@ -163,10 +174,35 @@ function forgetStop(slot) {
   slot.setExact(false);
 }
 
+// The track (or line) typed after the station's name ("Bronowice SKA 06", "Part-Dieu voie 7"),
+// as the slot's kind names it at `label`, or null: a last word with a digit, or one after a
+// track word, that the station has and its own name does not hold ("Jerzmanowska nr 17").
+function typedStop(typed, label) {
+  var m = /(?:^|\s)((?:voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа)\s*\S+|\S*\d\S*)\s*$/i.exec(typed || '');
+  var kind = stopKind(label);
+  if (!m || !kind) return null;
+  var key = stopKey(m[1]);
+  var named = String(label).toLowerCase().split(/\s+/).some(function (w) { return w.indexOf(key) === 0; });
+  var list = (kind === 'track' ? globalStationTracks : globalStationLines)[label] || [];
+  // "6" for Kraków's "06": leading zeros aside.
+  var bare = function (k) { return k.replace(/^0+(?=\d)/, ''); };
+  var choice = !named && (findStop(list, m[1])
+    || list.find(function (c) { return bare(stopKey(c.ref)) === bare(key); }));
+  return choice ? { kind: kind, ref: choice.ref } : null;
+}
+
 function watchStopSlot(slot) {
   slot.$input.on('autocompleteselect', function (e, ui) {
+    if (slot.ownEntry) ownStopEntry(slot, ui.item.value);
     forgetStop(slot);
     renderStops(slot, ui.item.value);
+    // What was typed: the search's term, the field holding the highlighted station's name
+    // once the list is gone through with the arrow keys. The name replaces it once this returns.
+    var widget = slot.$input.autocomplete('instance');
+    var typed = typedStop((widget && widget.term) || slot.$input.val(), ui.item.value);
+    if (typed) setTimeout(function () {
+      if (slot.$input.val() === ui.item.value) pickStop(slot, typed.kind, typed.ref);
+    }, 0);
   });
   slot.$input.on('input', function () {
     forgetStop(slot);

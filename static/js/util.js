@@ -532,10 +532,15 @@ function toRouting(data, routingUrl, type){
   newTrip = processFormDates(newTrip);
 
   // What the station fields held (the trip keeps the entries instead), for Back.
-  var stationState = {};
+  var stationState = {}, ends = {};
   // Manual ends are no quai station.
   ["origin", "destination"].forEach(function (end) {
-    var label = newTrip[end + "Station"], entry = globalStationDict[label] || {};
+    // An end's own entry where the page keeps one (stop_slots.js, stopSlotEntry): both ends
+    // can be the same station, at different tracks.
+    var slot = typeof endSlots !== "undefined" && endSlots[end];
+    var label = newTrip[end + "Station"];
+    var entry = (slot && slot.$input.val() === label && stopSlotEntry(slot)) || globalStationDict[label] || {};
+    ends[end] = entry;
     stationState[end] = { value: label, key: globalStationKeys[label], tracks: globalStationTracks[label],
                           lines: globalStationLines[label], point: entry.stationPoint };
     var manual = (end + "ManualToggle") in newTrip && (newTrip[end + "ManualName"] || "").trim() != "";
@@ -548,7 +553,7 @@ function toRouting(data, routingUrl, type){
 
   }
   else{
-    newTrip["originStation"] = globalStationDict[newTrip["originStation"]];
+    newTrip["originStation"] = ends.origin[1] ? ends.origin : undefined;
   }
 
   if ("destinationManualToggle" in  newTrip && newTrip["destinationManualName"].trim()!=""){
@@ -556,7 +561,7 @@ function toRouting(data, routingUrl, type){
     newTrip["destinationStation"] = [[Number(newTrip["destinationManualLat"]), Number(newTrip["destinationManualLng"])], label];
   }
   else{
-    newTrip["destinationStation"] = globalStationDict[newTrip["destinationStation"]];
+    newTrip["destinationStation"] = ends.destination[1] ? ends.destination : undefined;
   }
   if (["accommodation", "restaurant", "poi"].includes(type)){
     newTrip["destinationStation"] = newTrip["originStation"]
@@ -665,6 +670,8 @@ function restoreNewTripForm(){
     // The track (or line) dropdown, with what was picked.
     if (typeof endSlots !== "undefined") {
       var slot = endSlots[end];
+      // Its own entry, the other end's being another even at the same station.
+      if (slot.ownEntry) slot.own = { value: label, entry: entry };
       slot.selected = (stopKind(label) === 'track' ? t[end === 'origin' ? 'departurePlatform' : 'arrivalPlatform'] : t.lineName) || null;
       renderStops(slot, label);
     }
@@ -1030,6 +1037,14 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
         $name.toggleClass("named-in-trainlog", !!item.namedInTrainlog);
         // Only the parts ICU wrote: "ベルゲン - オラヴ クイッレス ガテ" has Bergen's from OSM.
         if ((item.transliterated || []).length) $name.html(markParts(item.label, item.transliterated));
+        // The track (or line) typed after the name, which picking it selects (stop_slots.js,
+        // typedStop): "Bronowice SKA 06".
+        var typed = typeof typedStop === 'function' && typedStop(widget.element.val(), item.value);
+        if (typed) {
+          $name.append(" ", $("<span class='station-track'>").append(
+            $("<i>").addClass(typed.kind === 'track' ? 'bi bi-signpost-split' : 'bi bi-diagram-3'),
+            document.createTextNode(typed.ref)));
+        }
         if (item.mode) {
           $name.prepend($("<img class='station-mode'>").attr({ src: "/static/images/icons/trip_logos/" + item.mode + ".png",
                                                                 alt: item.mode, title: item.mode }));

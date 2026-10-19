@@ -1030,14 +1030,14 @@
                             texts: { track: {{ platform_text(vehicle_type, 'word')|tojson }}, line: {{ lineName|tojson }} } };
   var endSlots = {
     origin: stopSlot({
-      $input: $('#originStation'), $dropdown: $('#originTracks'), fillsLine: true,
+      $input: $('#originStation'), $dropdown: $('#originTracks'), fillsLine: true, ownEntry: true,
       setPlatform: function (ref) { $('#departurePlatform').val(ref || ''); },
       // '1' made exact by the user, 'auto' by the page (checked by the router, routing.js).
       setExact: function (on, auto) { $('#originExact').val(on ? (auto ? 'auto' : '1') : ''); },
       shown: function (on) { $('#originStation').toggleClass('has-stops', on); }
     }),
     destination: stopSlot({
-      $input: $('#destinationStation'), $dropdown: $('#destinationTracks'), fillsLine: true,
+      $input: $('#destinationStation'), $dropdown: $('#destinationTracks'), fillsLine: true, ownEntry: true,
       setPlatform: function (ref) { $('#arrivalPlatform').val(ref || ''); },
       setExact: function (on, auto) { $('#destinationExact').val(on ? (auto ? 'auto' : '1') : ''); },
       shown: function (on) { $('#destinationStation').toggleClass('has-stops', on); }
@@ -1096,11 +1096,12 @@
   $('#swapEnds').on('click', function () {
     function swap(a, b) { var x = $(a).val(); $(a).val($(b).val()); $(b).val(x); }
     ['origin', 'destination'].forEach(function (end) {
-      var slot = endSlots[end], entry = globalStationDict[slot.$input.val()];
+      var slot = endSlots[end], entry = stopSlotEntry(slot);
       if (entry && entry.stationPoint) entry[0] = entry.stationPoint;
       forgetStop(slot);
     });
     swap('#originStation', '#destinationStation');
+    var own = endSlots.origin.own; endSlots.origin.own = endSlots.destination.own; endSlots.destination.own = own;
     ['ManualName', 'ManualLat', 'ManualLng'].forEach(function (f) { swap('#origin' + f, '#destination' + f); });
     var originManual = $('#originManualToggle').prop('checked');
     $('#originManualToggle').prop('checked', $('#destinationManualToggle').prop('checked'));

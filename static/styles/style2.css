@@ -711,6 +711,21 @@ body::before {
   color: inherit;
   opacity: 0.8;
 }
+/* The track typed after the name, which picking the station selects: as its field's
+   dropdown button shows it (.track-toggle.exact). */
+.ui-autocomplete .station-track{
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: .3em;
+  font-size: 80%;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #4b78d6;
+}
+.ui-autocomplete .ui-state-active .station-track{
+  color: inherit;
+}
 /* A name or place ICU wrote in the user's script (none in OSM), or one set in Trainlog. */
 .ui-autocomplete .transliterated{
   color: #b45309;

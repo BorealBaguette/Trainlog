@@ -33,7 +33,7 @@ QUAI_MODES = {
 }
 
 
-QUAI_URL = "https://quai.srv.trainlog.me"
+QUAI_URL = "http://localhost:5020"#"https://quai.srv.trainlog.me"
 
 
 def user_lang():
@@ -559,8 +559,8 @@ def other_modes(trip_type):
     return [m for m in RAIL_MODES if m not in own_modes(trip_type)] if mode in RAIL_MODES else []
 
 
-def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit=10,
-                    timeout=None, all_rail=False):
+def _search_stations_as_typed(trip_type, q=None, lat=None, lon=None, radius_km=None, limit=10,
+                              timeout=None, all_rail=False):
     """Stations of the trip type's modes (own_modes) named like `q`, or near lat/lon when `q`
     is None, with those of its other modes (other_modes) where it has no good match, or always
     with `all_rail` (the user's setting, all_rail_stations). Several modes' are merged by how
@@ -645,6 +645,39 @@ def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit
     if q is None or any(map(good, own)) or not any(better):
         return features(own)
     return features(merge([own, *better]))
+
+
+# A track or line typed after a station's name ("Bronowice SKA 06", "Part-Dieu voie 7"): a last
+# word with a digit, or one after a track word. Mirrors typedStop() in stop_slots.js.
+TYPED_STOP = re.compile(
+    r"\s+((?:voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа)\s*\S+"
+    r"|\S*\d\S*)\s*$", re.IGNORECASE
+)
+
+
+def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit=10,
+                    timeout=None, all_rail=False):
+    """Stations of the trip type's modes named like `q` (_search_stations_as_typed). Where `q`
+    has no good match but ends in a track or line (TYPED_STOP) that a good match for the rest
+    has, that search's instead: quai, not knowing "06" is a pole, finds Bronowice SKA only
+    fuzzily for "Bronowice SKA 06", among other fuzzy guesses and other modes' stations. The
+    page then picks that track (stop_slots.js, typedStop)."""
+    args = dict(lat=lat, lon=lon, radius_km=radius_km, limit=limit, timeout=timeout, all_rail=all_rail)
+    found = _search_stations_as_typed(trip_type, q, **args)
+    tail = TYPED_STOP.search(q or "")
+    if not found or not tail or any((f["properties"].get("tier") or 0) <= GOOD_MATCH_TIER for f in found):
+        return found
+
+    def bare(ref):
+        return re.sub(r"^0+(?=\d)", "", track_key(ref))
+
+    wanted = bare(tail.group(1))
+    rest = _search_stations_as_typed(trip_type, q[:tail.start()], **args)
+    has_stop = any((f["properties"].get("tier") or 0) <= GOOD_MATCH_TIER
+                   and any(bare(t.get("ref")) == wanted
+                           for t in (f["properties"].get("tracks") or []) + (f["properties"].get("lines") or []))
+                   for f in rest or [])
+    return rest if has_stop else found
 
 
 def nearest_stations(mode, points, radius_m=400, candidates=1, timeout=30):
