@@ -68,6 +68,7 @@ async function resolveBackground(tileserver, { styleUrl = null, userLanguage = w
                 throw new Error(`Failed to load style: ${response.status}`);
             }
             mapStyle = await response.json();
+            absolutizeSprite(mapStyle);
 
             if (OFM_SOURCED_STYLES.includes(effectiveTileserver)) {
                 applyStyleLanguage(mapStyle, userLanguage);
@@ -416,6 +417,17 @@ function applyStyleLanguage(style, userLanguage) {
 }
 
 // Get vector style URL based on tileserver
+// /getVectorStyle serves its sprite paths relative (the server can't tell http
+// from https behind the proxy); MapLibre wants them absolute, on the page's origin
+function absolutizeSprite(style) {
+    const abs = url => new URL(url, window.location.href).href;
+    if (typeof style.sprite === 'string') {
+        style.sprite = abs(style.sprite);
+    } else if (Array.isArray(style.sprite)) {
+        style.sprite = style.sprite.map(s => ({ ...s, url: abs(s.url) }));
+    }
+}
+
 function getVectorStyleUrl(tileserver, userLanguage) {
     // Validate language for Jawg
     if (!MapConfig.jawgAllowedLangs.includes(userLanguage)) {

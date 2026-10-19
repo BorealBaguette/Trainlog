@@ -3661,16 +3661,12 @@ def vector_style(language, style):
 
     with open(json_path, "r", encoding="utf-8") as f:
         file_contents = f.read()
-        # Match the incoming request's scheme rather than hardcoding https: in
-        # local dev (plain http) a forced https sprite URL is a different
-        # origin from the page itself — nothing listens there, so the sprite
-        # fetch just times out/CORS-fails. In production this still resolves
-        # to https, since the site itself is only ever served over https.
+        # Relative on purpose: behind the proxy request.scheme is http, so an
+        # external URL is blocked as mixed content on the https site, while a
+        # forced https one breaks local dev. resolveBackground() makes the
+        # sprite absolute against the page's own origin.
         file_contents = file_contents.replace(
-            "{{mapPinUrl}}",
-            url_for(
-                "static", filename="styles/vector_maps", _scheme=request.scheme, _external=True
-            ),
+            "{{mapPinUrl}}", url_for("static", filename="styles/vector_maps")
         )
         template_url = "https://tiles.trainlog.me/tile/streets-v2+landcover-v1.1+hillshade-v1/{x}/{y}/{z}/{language}"
         final_url = template_url.replace("{language}", language)
