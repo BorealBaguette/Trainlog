@@ -1485,6 +1485,8 @@
     "stopsRouteNote": "Rota bu noktalardan geçecek şekilde yeniden hesaplanacak: haritada kontrol edip onaylayın.",
     "stopsRefresh": "Saatleri yenile",
     "stopsRefreshNone": "Transitous'ta artık bu seferin saatleri yok.",
+    "stopsLinked": "Bir Transitous seferinden saatler",
+    "stopsUnlinked": "Başka bir güne taşındığı için duraklar artık bir Transitous seferine bağlı değil: yeniden bağlamak için onları tarifeden yükleyin.",
     "stopsLoad": "Durakları tarifeden yükle",
     "stopScheduled": "Planlanan",
     "stopDelay": "Gecikme (dk)",

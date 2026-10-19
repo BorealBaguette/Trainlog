@@ -1489,6 +1489,8 @@
     "stopsRouteNote": "De route wordt opnieuw berekend via deze punten: controleer hem op de kaart en bevestig.",
     "stopsRefresh": "Tijden bijwerken",
     "stopsRefreshNone": "Transitous heeft de tijden van deze rit niet meer.",
+    "stopsLinked": "Tijden van een Transitous-rit",
+    "stopsUnlinked": "Verplaatst naar een andere dag zijn de haltes niet meer gekoppeld aan een Transitous-rit: laad ze uit de dienstregeling om ze opnieuw te koppelen.",
     "stopsLoad": "Haltes uit de dienstregeling laden",
     "stopScheduled": "Gepland",
     "stopDelay": "Vertraging (min)",

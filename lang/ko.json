@@ -1485,6 +1485,8 @@
     "stopsRouteNote": "경로가 이 지점들을 지나도록 다시 계산됩니다. 지도에서 확인한 뒤 확정하세요.",
     "stopsRefresh": "시간 새로고침",
     "stopsRefreshNone": "Transitous에 더 이상 이 운행의 시간이 없습니다.",
+    "stopsLinked": "Transitous 운행편의 시각",
+    "stopsUnlinked": "다른 날로 옮겨져 정차역이 더 이상 Transitous 운행편과 연결되어 있지 않습니다. 시간표에서 불러오면 다시 연결됩니다.",
     "stopsLoad": "시간표에서 정차역 불러오기",
     "stopScheduled": "예정",
     "stopDelay": "지연 (분)",

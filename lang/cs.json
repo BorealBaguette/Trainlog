@@ -1495,6 +1495,8 @@
     "stopsRouteNote": "Trasa se přepočítá přes tyto body: zkontrolujte ji na mapě a potvrďte.",
     "stopsRefresh": "Obnovit časy",
     "stopsRefreshNone": "Transitous už časy tohoto spoje nemá.",
+    "stopsLinked": "Časy ze spoje Transitous",
+    "stopsUnlinked": "Po přesunu na jiný den už zastávky nejsou propojeny se spojem Transitous: načtěte je z jízdního řádu, abyste je znovu propojili.",
     "stopsLoad": "Načíst zastávky z jízdního řádu",
     "stopScheduled": "Podle jízdního řádu",
     "stopDelay": "Zpoždění (min)",

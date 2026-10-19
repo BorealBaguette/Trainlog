@@ -1485,6 +1485,8 @@
     "stopsRouteNote": "Az útvonal ezeken a pontokon át újraszámolódik: ellenőrizze a térképen, majd erősítse meg.",
     "stopsRefresh": "Időpontok frissítése",
     "stopsRefreshNone": "A Transitous már nem tárolja ennek a járatnak az időpontjait.",
+    "stopsLinked": "Időpontok egy Transitous-járatból",
+    "stopsUnlinked": "Másik napra áthelyezve a megállók már nem kapcsolódnak Transitous-járathoz: töltsd be őket a menetrendből az újbóli összekapcsoláshoz.",
     "stopsLoad": "Megállók betöltése a menetrendből",
     "stopScheduled": "Menetrend szerint",
     "stopDelay": "Késés (perc)",

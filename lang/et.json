@@ -1486,6 +1486,8 @@
     "stopsRouteNote": "Marsruut arvutatakse nende punktide kaudu uuesti: kontrolli seda kaardil ja kinnita.",
     "stopsRefresh": "Värskenda aegu",
     "stopsRefreshNone": "Transitousil pole enam selle reisi aegu.",
+    "stopsLinked": "Ajad Transitousi reisilt",
+    "stopsUnlinked": "Teisele päevale viiduna pole peatused enam Transitousi reisiga seotud: laadi need sõiduplaanist, et need uuesti siduda.",
     "stopsLoad": "Laadi peatused sõiduplaanist",
     "stopScheduled": "Sõiduplaan",
     "stopDelay": "Hilinemine (min)",

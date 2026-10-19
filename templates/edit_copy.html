@@ -124,6 +124,10 @@
     #stopsModal .stop-row.stop-wrong .stop-value, #stopsModal .stop-row.stop-wrong .stop-value s { color: #b42318; }
     #stopsModal .stop-row.stop-wrong .stop-dot { border-color: #b42318; }
     #stopsModal .stop-row.stop-wrong .stop-editor { border-color: #f1aeb5; background: #fdf3f4; }
+    /* The Transitous run the stops are from */
+    #stopsModal .stops-linked { font-size: .75rem; color: #6b7280; margin: 8px 0 0 30px; display: flex; align-items: center; gap: 5px; }
+    #stopsModal .stops-linked img { width: 12px; height: 12px; }
+    #stopsModal .stops-linked a { color: inherit; }
     #stopsModal .stops-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-left: 30px; }
     /* The runs to pick from (pickRun), as the new-trip form's timetable list */
     #stopsModal .stops-runs { margin: 10px 0 0 30px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
@@ -977,6 +981,11 @@
                         <i class="fa-solid fa-magnifying-glass"></i> {{stopsLoad}}
                     </button>
                 </div>
+                <p class="stops-linked" id="stopsLinked" style="display:none">
+                    <a href="https://transitous.org" target="_blank" rel="noopener"><img src="{{ url_for('static', filename='images/transitous.svg') }}" alt="Transitous"></a>
+                    <span>{{stopsLinked}}</span>
+                </p>
+                <p class="stops-note" id="stopsUnlinked" style="display:none">{{stopsUnlinked}}</p>
                 <p class="stops-note" id="stopsRefreshNone" style="display:none">{{stopsRefreshNone}}</p>
                 <p class="stops-note stops-wrong" id="stopsOrderNote" style="display:none">{{stopsOutOfOrder}}</p>
                 <p class="stops-note" id="stopsRouteNote" style="display:none">{{stopsRouteNote}}</p>
@@ -1168,6 +1177,7 @@
         // own start/end, so their time is its start/end time plus its delay, and their
         // platform the trip's departure/arrival platform.
         var ends = null;
+        var unlinked = false;   // moved to another day here, the stops lost the run they were from
 
         // ---- times: UTC ISO <-> wall clock at the stop
         function parts(ms, tz) {
@@ -1232,7 +1242,8 @@
                 var st = rows[j] && rows[j].stop, v = st && toLocal(st.arr || st.dep, st.tz);
                 if (v) return v.date;
             }
-            return $('#newTripStartDate').val() || new Date().toISOString().slice(0, 10);
+            // The start's day as set here (not yet in the form until Update)
+            return (ends && ends.origin.date) || $('#newTripStartDate').val() || new Date().toISOString().slice(0, 10);
         }
         function structural() {
             if (rows.length !== stored.length) return true;
@@ -1293,6 +1304,23 @@
             return Date.UTC(d[0], d[1] - 1, d[2], t[0], t[1]);
         }
         function plusMinutes(iso, m) { return new Date(Date.parse(iso) + m * 60000).toISOString().replace(/\.\d{3}Z$/, 'Z'); }
+        // The rows' stops moved along with the trip's start, by its wall-clock minutes (each
+        // in its own time zone, so a DST change between keeps the timetable's times); what
+        // belonged to the run they were for goes, as on save (_shift_trip_stops).
+        function shiftRows(m) {
+            rows.forEach(function (r) {
+                var st = r.stop;
+                if (!st) return;
+                ['arr', 'dep'].forEach(function (f) {
+                    var l = st[f] && toLocal(st[f], st.tz);
+                    if (!l) return;
+                    var at = wallMs(l.date, l.time) + m * 60000;
+                    st[f] = toUtc(new Date(at).toISOString().slice(0, 10), new Date(at).toISOString().slice(11, 16), st.tz);
+                });
+                if (st.trip) unlinked = true;
+                delete st.arr_rt; delete st.dep_rt; delete st.platform_rt; delete st.trip;
+            });
+        }
         function openRow(which) { open = which; render(); }
 
         // A read cell: the value as it was, what was planned struck under it when it differs
@@ -1425,6 +1453,9 @@
         }
 
         function render() {
+            var linked = runIds().length > 0;
+            $('#stopsLinked').toggle(linked);
+            $('#stopsUnlinked').toggle(unlinked && !linked);
             $rows.empty();
             $rows.append(endRow('origin'));
             // A line with the day where it changes from the row before's (a night train)
@@ -1523,6 +1554,7 @@
                     function firstDay(t, tz, date) {
                         var s = row.stop, near = s && (s.arr || s.dep);
                         for (var j = i - 1; !near && j >= 0; j--) near = rows[j].stop && (rows[j].stop.dep || rows[j].stop.arr);
+                        if (!near && ends && ends.origin.date && ends.origin.time) near = toUtc(ends.origin.date, ends.origin.time, tzNear(0));
                         if (!near) return date;
                         var best = null;
                         [-1, 0, 1].forEach(function (k) {
@@ -1652,7 +1684,12 @@
                 time: precise ? end.time : '', date: end.date || baseDate(0), delay: precise ? end.delay : 0, enabled: !!precise,
                 set: function (t, d, date) {
                     end.delay = d;
-                    if (t) { end.time = t; end.date = date; }
+                    if (!t) return;
+                    // The start put on another day (stops picked from a run of another day) moves
+                    // the stops by as many days; a time put right (even past midnight) doesn't.
+                    var days = origin ? Math.round((wallMs(date, t) - wallMs(end.date, end.time)) / 864e5) : 0;
+                    end.time = t; end.date = date;
+                    if (days) { shiftRows(days * 1440); render(); }
                 },
                 actual: function (t, d, date) { return shifted(date, t, d); }
             });
@@ -1665,12 +1702,6 @@
         var loadedStart = (function (s) {
             return /^\d{4}-\d\d-\d\d.\d\d:\d\d/.test(s) ? s.slice(0, 10) + ' ' + s.slice(11, 16) : null;
         })({{ start_datetime|string|tojson }});
-        function minutesOfDay(time) { var t = time.split(':').map(Number); return t[0] * 60 + t[1]; }
-        function shiftedStart(start, minutes) {
-            var d = start.slice(0, 10).split('-').map(Number);
-            var ms = Date.UTC(d[0], d[1] - 1, d[2]) + (minutesOfDay(start.slice(11, 16)) + minutes) * 60000;
-            return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
-        }
         // Into the form: platforms always, delays when the trip has precise times.
         function applyEnds() {
             if (!ends) return;
@@ -1680,14 +1711,11 @@
                 var slot = endSlots[end];
                 if (slot) { slot.selected = ends[end].platform || null; renderStops(slot); }
             });
-            // A run refreshed ahead of time moved the trip's start/end (renewEnd); or its
-            // scheduled time was put right here, which doesn't move the stops: the start
-            // they're for moves along, so they shift on save only as they would have.
+            // The rows' times are for the start as set here (moved along as the dialog opened,
+            // and with its day; renewed with it by a refresh): not to be shifted again on save.
             function edited(end) { return end.date !== end.date0 || end.time !== end.time0; }
-            if (ends.origin.renewed) stopsStart = ends.origin.date + ' ' + ends.origin.time;
-            else if (edited(ends.origin) && (stopsStart || loadedStart)) {
-                var o = ends.origin, moved = (wallMs(o.date, o.time) - wallMs(o.date0, o.time0)) / 60000;
-                stopsStart = shiftedStart(stopsStart || loadedStart, moved);
+            if ($('#radioPreciseDates').is(':checked') && ends.origin.date && ends.origin.time) {
+                stopsStart = ends.origin.date + ' ' + ends.origin.time;
             }
             if (ends.origin.renewed || edited(ends.origin)) {
                 $('#newTripStartDate').val(ends.origin.date).trigger('change');
@@ -1718,6 +1746,15 @@
             showPlain = false;
             open = null;
             ends = readEnds();
+            // The trip moved on the form since its stops were set (a copy dated today, a day
+            // changed): they move along now, as they would on save, so they show (and are
+            // checked) where they'll be.
+            unlinked = false;
+            var from = stopsStart || loadedStart, o = ends.origin;
+            if (from && $('#radioPreciseDates').is(':checked') && o.date && o.time) {
+                var m = (wallMs(o.date, o.time) - wallMs(from.slice(0, 10), from.slice(11, 16))) / 60000;
+                if (m) shiftRows(m);
+            }
             $('#stopsRuns').hide();
             $('#stopsRefreshNone').hide();
             render();

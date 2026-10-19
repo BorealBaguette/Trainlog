@@ -1493,6 +1493,8 @@
     "stopsRouteNote": "Trasa zostanie przeliczona przez te punkty: sprawdź ją na mapie, a potem potwierdź.",
     "stopsRefresh": "Odśwież godziny",
     "stopsRefreshNone": "Transitous nie ma już godzin tego kursu.",
+    "stopsLinked": "Godziny z kursu Transitous",
+    "stopsUnlinked": "Po przeniesieniu na inny dzień przystanki nie są już powiązane z kursem Transitous: wczytaj je z rozkładu jazdy, aby powiązać je ponownie.",
     "stopsLoad": "Wczytaj przystanki z rozkładu",
     "stopScheduled": "Rozkładowo",
     "stopDelay": "Opóźnienie (min)",

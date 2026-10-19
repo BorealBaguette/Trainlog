@@ -1487,6 +1487,8 @@
     "stopsRouteNote": "D Route wird über die Pünkt neu berächnet: prüef si uf de Charte und bestätig si dänn.",
     "stopsRefresh": "Ziite aktualisiere",
     "stopsRefreshNone": "Transitous het d Ziite vo dere Fahrt nüme.",
+    "stopsLinked": "Ziite vo ere Transitous-Fahrt",
+    "stopsUnlinked": "Uf en andere Tag verschobe, sind d Halt nüme mit ere Transitous-Fahrt verchnüpft: Lad si usem Fahrplan, zum si wieder z verchnüpfe.",
     "stopsLoad": "Halt us em Fahrplan lade",
     "stopScheduled": "Fahrplan",
     "stopDelay": "Verspötig (min)",

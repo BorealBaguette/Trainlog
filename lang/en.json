@@ -1486,6 +1486,8 @@
     "stopsRouteNote": "The route will be recalculated through these points: check it on the map, then confirm.",
     "stopsRefresh": "Refresh times",
     "stopsRefreshNone": "Transitous no longer has this run's times.",
+    "stopsLinked": "Times from a Transitous timetable run",
+    "stopsUnlinked": "Moved to another day, the stops are no longer linked to a Transitous run: load them from the timetable to link them again.",
     "stopsLoad": "Load stops from the timetable",
     "stopScheduled": "Scheduled",
     "stopDelay": "Delay (min)",

@@ -1493,6 +1493,8 @@
     "stopsRouteNote": "Ruta će se ponovno izračunati kroz ove točke: provjerite je na karti, a zatim potvrdite.",
     "stopsRefresh": "Osvježi vremena",
     "stopsRefreshNone": "Transitous više nema vremena ove vožnje.",
+    "stopsLinked": "Vremena s Transitous vožnje",
+    "stopsUnlinked": "Premještena na drugi dan, stajališta više nisu povezana s Transitous vožnjom: učitajte ih iz voznog reda da ih ponovno povežete.",
     "stopsLoad": "Učitaj stajališta iz voznog reda",
     "stopScheduled": "Po voznom redu",
     "stopDelay": "Kašnjenje (min)",

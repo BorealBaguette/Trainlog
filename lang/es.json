@@ -1489,6 +1489,8 @@
     "stopsRouteNote": "La ruta se recalculará pasando por estos puntos: compruébala en el mapa y luego confirma.",
     "stopsRefresh": "Actualizar horarios",
     "stopsRefreshNone": "Transitous ya no tiene los horarios de este trayecto.",
+    "stopsLinked": "Horarios de un trayecto de Transitous",
+    "stopsUnlinked": "Al moverse a otro día, las paradas ya no están vinculadas a un trayecto de Transitous: cárgalas desde el horario para volver a vincularlas.",
     "stopsLoad": "Cargar paradas del horario",
     "stopScheduled": "Programado",
     "stopDelay": "Retraso (min)",

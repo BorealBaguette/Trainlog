@@ -1489,6 +1489,8 @@
     "stopsRouteNote": "Ruten beregnes på nytt gjennom disse punktene: sjekk den på kartet, og bekreft.",
     "stopsRefresh": "Oppdater tider",
     "stopsRefreshNone": "Transitous har ikke lenger tidene for denne avgangen.",
+    "stopsLinked": "Tider fra en Transitous-avgang",
+    "stopsUnlinked": "Flyttet til en annen dag er stoppene ikke lenger knyttet til en Transitous-avgang: last dem inn fra ruteplanen for å knytte dem igjen.",
     "stopsLoad": "Hent stopp fra rutetabellen",
     "stopScheduled": "Planlagt",
     "stopDelay": "Forsinkelse (min)",

@@ -1489,6 +1489,8 @@
     "stopsRouteNote": "Rutten beräknas om genom de här punkterna: kontrollera den på kartan och bekräfta.",
     "stopsRefresh": "Uppdatera tider",
     "stopsRefreshNone": "Transitous har inte längre tiderna för den här turen.",
+    "stopsLinked": "Tider från en Transitous-tur",
+    "stopsUnlinked": "Flyttade till en annan dag är hållplatserna inte längre kopplade till en Transitous-tur: ladda dem från tidtabellen för att koppla dem igen.",
     "stopsLoad": "Hämta hållplatser från tidtabellen",
     "stopScheduled": "Enligt tidtabell",
     "stopDelay": "Försening (min)",

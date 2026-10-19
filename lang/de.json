@@ -1489,6 +1489,8 @@
     "stopsRouteNote": "Die Route wird über diese Punkte neu berechnet: prüfe sie auf der Karte und bestätige sie dann.",
     "stopsRefresh": "Zeiten aktualisieren",
     "stopsRefreshNone": "Transitous hat die Zeiten dieser Fahrt nicht mehr.",
+    "stopsLinked": "Zeiten aus einer Transitous-Fahrt",
+    "stopsUnlinked": "Auf einen anderen Tag verschoben, sind die Halte nicht mehr mit einer Transitous-Fahrt verknüpft: Lade sie aus dem Fahrplan, um sie wieder zu verknüpfen.",
     "stopsLoad": "Halte aus dem Fahrplan laden",
     "stopScheduled": "Fahrplan",
     "stopDelay": "Verspätung (min)",

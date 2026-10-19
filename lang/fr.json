@@ -1486,6 +1486,8 @@
     "stopsRouteNote": "Le trajet sera recalculé en passant par ces points : vérifiez-le sur la carte, puis validez.",
     "stopsRefresh": "Actualiser les horaires",
     "stopsRefreshNone": "Transitous n'a plus les horaires de ce trajet.",
+    "stopsLinked": "Horaires d'un trajet Transitous",
+    "stopsUnlinked": "Déplacés à un autre jour, les arrêts ne sont plus liés à un trajet Transitous : chargez-les depuis les horaires pour les relier à nouveau.",
     "stopsLoad": "Charger les arrêts depuis les horaires",
     "stopScheduled": "Prévu",
     "stopDelay": "Retard (min)",

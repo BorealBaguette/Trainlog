@@ -1487,6 +1487,8 @@
     "stopsRouteNote": "Reitti lasketaan uudelleen näiden pisteiden kautta: tarkista se kartalta ja vahvista.",
     "stopsRefresh": "Päivitä ajat",
     "stopsRefreshNone": "Transitousilla ei enää ole tämän vuoron aikoja.",
+    "stopsLinked": "Ajat Transitous-vuorolta",
+    "stopsUnlinked": "Toiselle päivälle siirrettyinä pysäkit eivät ole enää linkitetty Transitous-vuoroon: lataa ne aikataulusta linkittääksesi ne uudelleen.",
     "stopsLoad": "Lataa pysähdykset aikataulusta",
     "stopScheduled": "Aikataulu",
     "stopDelay": "Viive (min)",
