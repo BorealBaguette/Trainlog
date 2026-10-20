@@ -370,11 +370,12 @@ def _groups(tickets):
         # who else they were valid with.
         sellers = Counter(t["operator"] for t in tickets if t["operator"])
         operators = sorted(sellers, key=lambda name: -sellers[name])
-        secondary = [
-            name
-            for name in dict.fromkeys(n for t in tickets for n in split_operators(t["secondary_operators"]))
-            if name not in sellers
-        ]
+        # One name per operator however its tickets spell it, as their logos are matched.
+        secondary = {"".join(_words(name)): None for name in sellers}
+        for t in tickets:
+            for name in split_operators(t["secondary_operators"]):
+                secondary.setdefault("".join(_words(name)), name)
+        secondary = [name for name in secondary.values() if name]
         summaries.append({
             "tickets": tickets,
             "latest": tickets[0],

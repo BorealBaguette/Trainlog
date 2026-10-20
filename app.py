@@ -4977,7 +4977,11 @@ def create_trip_share():
         abort(400)
 
     target = "multi_trip" if request.form.get("view") == "multiTrip" else "public_trip"
-    return redirect(url_for(target, tripIds=key), code=303)
+    url = url_for(target, tripIds=key)
+    # The ticket page's map opens with prices shown.
+    if request.form.get("price"):
+        url += "?price"
+    return redirect(url, code=303)
 
 
 @app.route("/public/multiTrip/<tripIds>")
