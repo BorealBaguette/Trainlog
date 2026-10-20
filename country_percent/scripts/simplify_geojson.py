@@ -212,7 +212,11 @@ def process(country_code):
     assert data.get("type") == "FeatureCollection"
 
     # Convert the features to a GeoDataFrame
-    geometries = [shape(feature["geometry"]) for feature in data.get("features", [])]
+    # QGIS leaves `"geometry": null` behind for features without geometry
+    geometries = [
+        shape(feature["geometry"]) if feature["geometry"] else None
+        for feature in data.get("features", [])
+    ]
     gdf = gpd.GeoDataFrame(data["features"], geometry=geometries, crs=input_crs)
 
     # Drop unkown columns
