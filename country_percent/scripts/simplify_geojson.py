@@ -211,6 +211,7 @@ def process(country_code):
         print(f"Geojson file not found for {country_code}")
         return
 
+    print(f"Processing {path}")
     with open(path, "r") as file:
         data = json.load(file)
 
