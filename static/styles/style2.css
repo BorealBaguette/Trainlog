@@ -2194,15 +2194,34 @@ html, body {
 .track-toggle.placed { color: #555; }
 .track-toggle.unmapped { color: #aaa; font-style: italic; }
 .track-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.track-menu { padding: 8px; max-width: 280px; }
+/* As wide as its grid: anchored to the small button, it would otherwise shrink to it. */
+.track-menu { padding: 8px; width: max-content; min-width: 0; max-width: calc(100vw - 32px); }
 .track-menu-title { font-size: .75rem; color: #888; margin: 0 2px 6px; }
-.track-menu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+/* A grid of equal cells, --track-cols to a row (stop_slots.js), as wide as its widest name. */
+.track-menu-chips { display: grid; grid-template-columns: repeat(var(--track-cols, 5), 1fr); gap: 4px; }
+/* Between groups of tracks ("1 Est" …, "1 Ovest" …): a thin rule across the grid, with the
+   group's word, if any, on it. */
+.track-menu-break {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin: 2px 0;
+    font-size: .7rem; color: #999;
+}
+.track-menu-break::before, .track-menu-break::after { content: ""; flex: 1; border-top: 1px solid #e3e6ea; }
+.track-menu-break:empty { gap: 0; }
 .track-chip {
-    min-width: 30px; padding: 0 6px; border: 1px solid #d0d5db; border-radius: 4px;
+    min-width: 36px; padding: 0 6px; border: 1px solid #d0d5db; border-radius: 4px; white-space: nowrap;
     background: #fff; font-size: .8rem; font-weight: 600; line-height: 24px; color: #444; cursor: pointer;
 }
 .track-chip:hover { background: #f1f3f6; }
 .track-chip.active { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+/* The word of a group's track ("Est" of "1 Est"), lighter than its number. */
+.track-chip-word { font-weight: 400; opacity: .6; }
+/* A half's letter (11a, 20 bis) raised after its number, in slate grey (blue here means
+   picked). */
+.track-chip-half {
+    font-size: .68em; font-weight: 700; vertical-align: .5em; line-height: 0; margin-left: 1px;
+    color: #6b7a90; letter-spacing: .02em;
+}
+.track-chip.active .track-chip-half { color: inherit; }
 
 /* The edit page's origin and destination: the name, then at its end the station's tracks and
    whether typing renames it or searches for another station (inside the field, so they line up
