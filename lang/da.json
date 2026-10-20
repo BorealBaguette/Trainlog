@@ -392,6 +392,7 @@
     "ticketValidFrom": "Gyldig fra",
     "ticketValidUntil": "Gyldig til",
     "ticketValidFor": "Gyldig i",
+    "ticketValidOn": "Gyldig den",
     "ticketDays": "dage",
     "ticketAlsoValidWith": "Også gyldig hos",
     "ticketProduct": "Mærke",

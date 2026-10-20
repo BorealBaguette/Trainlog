@@ -391,6 +391,7 @@
     "ticketValidFrom": "Érvényes ettől",
     "ticketValidUntil": "Érvényes eddig",
     "ticketValidFor": "Érvényes",
+    "ticketValidOn": "Érvényes ekkor",
     "ticketDays": "napig",
     "ticketAlsoValidWith": "Ezeknél is érvényes",
     "ticketProduct": "Márka",

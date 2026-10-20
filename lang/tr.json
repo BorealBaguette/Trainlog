@@ -391,6 +391,7 @@
     "ticketValidFrom": "Geçerlilik başlangıcı",
     "ticketValidUntil": "Geçerlilik bitişi",
     "ticketValidFor": "Geçerlilik",
+    "ticketValidOn": "Geçerlilik günü",
     "ticketDays": "gün",
     "ticketAlsoValidWith": "Şunlarda da geçerli",
     "ticketProduct": "Marka",

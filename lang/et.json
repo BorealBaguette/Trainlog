@@ -391,6 +391,7 @@
     "ticketValidFrom": "Kehtib alates",
     "ticketValidUntil": "Kehtib kuni",
     "ticketValidFor": "Kehtib",
+    "ticketValidOn": "Kehtib",
     "ticketDays": "päeva",
     "ticketAlsoValidWith": "Kehtib ka",
     "ticketProduct": "Kaubamärk",

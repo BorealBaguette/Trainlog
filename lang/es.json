@@ -392,6 +392,7 @@
     "ticketValidFrom": "Válido desde",
     "ticketValidUntil": "Válido hasta",
     "ticketValidFor": "Válido durante",
+    "ticketValidOn": "Válido el",
     "ticketDays": "días",
     "ticketAlsoValidWith": "También válido con",
     "ticketProduct": "Marca",

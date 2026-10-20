@@ -391,6 +391,7 @@
     "ticketValidFrom": "유효 시작일",
     "ticketValidUntil": "유효 종료일",
     "ticketValidFor": "유효 기간",
+    "ticketValidOn": "유효일",
     "ticketDays": "일",
     "ticketAlsoValidWith": "함께 이용 가능",
     "ticketProduct": "브랜드",

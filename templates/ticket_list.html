@@ -60,7 +60,7 @@
         {% if ticket.uses %}· {{ ticket.used }} / {{ ticket.uses }} {{ticketUsesUnit}}{% endif %}
     {% elif ticket.state == 'upcoming' %}
         <span class="badge bg-info text-dark">{{ticketUpcoming}}</span>
-        <span class="ticket-date" data-date="{{ ticket.valid_from }}" data-format="{{ ticketFrom }}"></span>
+        <span class="ticket-date" data-date="{{ ticket.valid_from or ticket.valid_on }}" data-format="{{ ticketFrom }}"></span>
     {% elif ticket.state == 'active' %}
         <span class="badge bg-success">{{active}}</span>
         {% if ticket.uses %}{{ ticket.used }} / {{ ticket.uses }} {{ticketUsesUnit}}{% endif %}
@@ -68,7 +68,7 @@
         <span class="badge bg-secondary">{{ticketUsedUp}}</span>
     {% elif ticket.state == 'expired' %}
         <span class="badge bg-secondary">{{ticketExpired}}</span>
-        <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
+        <span class="ticket-date" data-date="{{ ticket.valid_until or ticket.valid_on }}"></span>
     {% else %}
         <span class="badge bg-secondary">{{ticketInactive}}</span>
         <span class="ticket-date" data-date="{{ ticket.purchasing_date }}"></span>
@@ -210,7 +210,7 @@
                 {% for ticket in all_tickets %}
                 {% set logo = ticket.logo %}
                 {% set per_km = ticket.user_price / ticket.km if ticket.km and ticket.user_price is not none else none %}
-                <tr class="ticket-flat-row" data-year="{{ (ticket.valid_from or ticket.purchasing_date)[:4] }}" data-search="{{ ticket.name }} {{ ticket.product or '' }} {{ ticket.operator or '' }} {{ ticket.secondary_operators or '' }} {{ (ticket.active_countries or '').replace(',', ' ') }}">
+                <tr class="ticket-flat-row" data-year="{{ (ticket.valid_from or ticket.valid_on or ticket.purchasing_date)[:4] }}" data-search="{{ ticket.name }} {{ ticket.product or '' }} {{ ticket.operator or '' }} {{ ticket.secondary_operators or '' }} {{ (ticket.active_countries or '').replace(',', ' ') }}">
                     <td class="ticket-cell-validity ticket-cell-wide" data-order="{{ ticket.name|lower }}">
                         <div class="d-flex align-items-center gap-2">
                             <span class="ticket-table-logo">
@@ -222,8 +222,8 @@
                             {% endif %}
                         </div>
                     </td>
-                    <td class="ticket-cell-stat ticket-cell-wide text-nowrap" data-label="{{ticketValidity}}" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
-                        <span class="ticket-date" data-date="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}"></span>
+                    <td class="ticket-cell-stat ticket-cell-wide text-nowrap" data-label="{{ticketValidity}}" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on or ticket.purchasing_date }}">
+                        <span class="ticket-date" data-date="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on or ticket.purchasing_date }}"></span>
                         {% if ticket.valid_from and ticket.valid_until and ticket.valid_from != ticket.valid_until %}
                             → <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
                         {% endif %}

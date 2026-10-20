@@ -108,7 +108,7 @@ def _product_in(name, products):
 
 
 def _day(ticket):
-    return ticket["valid_from"] or ticket["purchasing_date"]
+    return ticket["valid_from"] or ticket["valid_on"] or ticket["purchasing_date"]
 
 
 def _with_product(ticket, products):
@@ -161,11 +161,15 @@ def _countries(ticket):
 def _state(ticket, today):
     if ticket["uses"] is not None and ticket["used"] >= ticket["uses"]:
         return "used"
-    if not (ticket["valid_from"] or ticket["valid_until"]):
+    # A single ticket for a given day is valid on that day only; one without dates stays on
+    # its manual switch.
+    valid_from = ticket["valid_from"] or ticket["valid_on"]
+    valid_until = ticket["valid_until"] or ticket["valid_on"]
+    if not (valid_from or valid_until):
         return "active" if ticket["active"] else "inactive"
-    if ticket["valid_from"] and ticket["valid_from"] > today:
+    if valid_from and valid_from > today:
         return "upcoming"
-    if ticket["valid_until"] and ticket["valid_until"] < today:
+    if valid_until and valid_until < today:
         return "expired"
     return "valid"
 
@@ -536,7 +540,7 @@ def ticket_page(username, ticket_id):
 def edit_group(username, ticket_id):
     """The fields changed in the form (changed[]) set on all the tickets of a group, the others
     left as each ticket has them, and their name when one is given; those without dates, given a
-    number of days, become valid that long from their purchase."""
+    number of days, become valid that long from the day they were for, or else their purchase."""
     form = request.form
     changed = set(form.getlist("changed[]"))
     try:
@@ -567,10 +571,13 @@ def edit_group(username, ticket_id):
         pg.execute(
             "UPDATE tickets SET name = COALESCE(:name, name)," + shared +
             " valid_from = CASE WHEN CAST(:days AS int) IS NOT NULL AND valid_from IS NULL"
-            "     AND valid_until IS NULL THEN purchasing_date::date ELSE valid_from END,"
+            "     AND valid_until IS NULL THEN COALESCE(valid_on, purchasing_date::date) ELSE valid_from END,"
             " valid_until = CASE WHEN CAST(:days AS int) IS NOT NULL AND valid_from IS NULL"
-            "     AND valid_until IS NULL THEN purchasing_date::date + CAST(:days AS int) - 1"
-            "     ELSE valid_until END"
+            "     AND valid_until IS NULL THEN COALESCE(valid_on, purchasing_date::date) + CAST(:days AS int) - 1"
+            "     ELSE valid_until END,"
+            # Now a pass, the day it was for is where its period starts.
+            " valid_on = CASE WHEN CAST(:days AS int) IS NOT NULL AND valid_from IS NULL"
+            "     AND valid_until IS NULL THEN NULL ELSE valid_on END"
             " WHERE uid = ANY(:uids) AND username = :username",
             {
                 "name": name,
@@ -607,6 +614,7 @@ def save_ticket(username):
         "purchasing_date": form.get("purchasing_date"),
         "valid_from": form.get("valid_from") or None,
         "valid_until": form.get("valid_until") or None,
+        "valid_on": form.get("valid_on") or None,
         "uses": uses,
         "use_minutes": use_minutes,
         "operator": form.get("operator", "").strip() or None,
@@ -629,10 +637,10 @@ def save_ticket(username):
         if uid is None:
             uid = pg.execute(
                 "INSERT INTO tickets (name, username, price, currency, purchasing_date, valid_from,"
-                " valid_until, uses, use_minutes, operator, secondary_operators, product,"
+                " valid_until, valid_on, uses, use_minutes, operator, secondary_operators, product,"
                 " active_countries, notes, auto_renew)"
                 " VALUES (:name, :username, :price, :currency, :purchasing_date, :valid_from,"
-                " :valid_until, :uses, :use_minutes, :operator, :secondary_operators, :product,"
+                " :valid_until, :valid_on, :uses, :use_minutes, :operator, :secondary_operators, :product,"
                 " :active_countries, :notes, :auto_renew)"
                 " RETURNING uid",
                 values,
@@ -640,7 +648,7 @@ def save_ticket(username):
         elif pg.execute(
             "UPDATE tickets SET name = :name, price = :price, currency = :currency,"
             " purchasing_date = :purchasing_date, valid_from = :valid_from,"
-            " valid_until = :valid_until, uses = :uses, use_minutes = :use_minutes,"
+            " valid_until = :valid_until, valid_on = :valid_on, uses = :uses, use_minutes = :use_minutes,"
             " operator = :operator,"
             " secondary_operators = :secondary_operators, product = :product,"
             " active_countries = :active_countries, notes = :notes, auto_renew = :auto_renew"

@@ -201,7 +201,7 @@
                         {% if ticket.operator %}{{ operator_pill(ticket.operator) }}{% endif %}
                     </td>
                     {% endif %}
-                    <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
+                    <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on or ticket.purchasing_date }}">
                         {% if group.mixed_names or mixed_logos or (mixed_countries and ticket.active_countries) %}
                             <div class="d-flex flex-wrap align-items-center gap-2 fw-medium text-wrap">
                                 {% if mixed_logos and ticket.logo %}<img src="{{ url_for('static', filename=ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
@@ -211,8 +211,8 @@
                                 {% endif %}
                             </div>
                         {% endif %}
-                        {% if ticket.valid_from or ticket.valid_until %}
-                            <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until }}"></span>
+                        {% if ticket.valid_from or ticket.valid_until or ticket.valid_on %}
+                            <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on }}"></span>
                             {% if ticket.valid_from and ticket.valid_until and ticket.valid_from != ticket.valid_until %}
                                 → <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
                             {% endif %}

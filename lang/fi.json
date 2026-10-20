@@ -392,6 +392,7 @@
     "ticketValidFrom": "Voimassa alkaen",
     "ticketValidUntil": "Voimassa asti",
     "ticketValidFor": "Voimassa",
+    "ticketValidOn": "Voimassa",
     "ticketDays": "päivää",
     "ticketAlsoValidWith": "Käy myös",
     "ticketProduct": "Brändi",

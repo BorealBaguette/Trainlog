@@ -393,6 +393,7 @@
     "ticketValidFrom": "Platí od",
     "ticketValidUntil": "Platí do",
     "ticketValidFor": "Platnost",
+    "ticketValidOn": "Platí dne",
     "ticketDays": "dní",
     "ticketAlsoValidWith": "Platí také u",
     "ticketProduct": "Značka",

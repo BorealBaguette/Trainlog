@@ -393,6 +393,7 @@
     "ticketValidFrom": "Действует с",
     "ticketValidUntil": "Действует до",
     "ticketValidFor": "Срок действия",
+    "ticketValidOn": "Действует",
     "ticketDays": "дн.",
     "ticketAlsoValidWith": "Также действует у",
     "ticketProduct": "Бренд",

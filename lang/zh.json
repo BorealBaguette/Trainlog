@@ -391,6 +391,7 @@
     "ticketValidFrom": "生效日期",
     "ticketValidUntil": "失效日期",
     "ticketValidFor": "有效期",
+    "ticketValidOn": "有效日期",
     "ticketDays": "天",
     "ticketAlsoValidWith": "也适用于",
     "ticketProduct": "品牌",

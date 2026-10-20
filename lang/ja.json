@@ -391,6 +391,7 @@
     "ticketValidFrom": "有効開始日",
     "ticketValidUntil": "有効期限",
     "ticketValidFor": "有効期間",
+    "ticketValidOn": "有効日",
     "ticketDays": "日",
     "ticketAlsoValidWith": "他の利用可能な事業者",
     "ticketProduct": "ブランド",

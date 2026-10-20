@@ -216,6 +216,10 @@
                         <label for="ticketKind_{{ kind }}"><i class="bi bi-{{ icon }}"></i>{{ label }}</label>
                         {% endfor %}
                     </div>
+                    <div class="ticket-kind ticket-kind-box" data-kind="single">
+                        <label for="ticketValidOn" class="form-label">{{ticketValidOn}} <span class="fst-italic">({{ticketOptional}})</span></label>
+                        <input type="date" class="form-control" id="ticketValidOn" name="valid_on">
+                    </div>
                     <div class="ticket-kind ticket-kind-box" data-kind="pass">
                         <div class="row g-2 mb-1 align-items-end">
                             <div class="col-6">
@@ -505,6 +509,7 @@ var openTicketForm = (function () {
         $('#ticketPurchasingDate').val(mode === 'edit' ? ticket.purchasing_date : today);
         $('#ticketValidFrom').val(validFrom);
         $('#ticketValidUntil').val(validUntil);
+        $('#ticketValidOn').val(mode === 'edit' ? (ticket.valid_on || '') : '');
         $('#ticketUses').val(ticket.uses || '');
         $('#ticketUseMinutes').val(ticket.use_minutes || '');
         $('#ticketCardUntil').val(ticket.uses ? (ticket.valid_until || '') : '');
