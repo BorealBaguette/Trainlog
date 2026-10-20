@@ -2,9 +2,9 @@
 Simplify a processed GeoJSON file by:
 1. unpacking features of type GeometryCollection,
 2. deleting features of all types except Polygon and Multipolygon,
-3. simplifying polygon outlines with Douglas-Peucker, keeping shared borders,
-4. converting the output to CRS84,
-5. truncating coordinate precision to the cm range,
+3. converting to CRS84,
+4. truncating coordinate precision to the cm range,
+5. simplifying polygon outlines with Douglas-Peucker, keeping shared borders,
 6. recomputing polygon areas,
 7. re-assign new IDs,
 8. failing on very tiny or invalid polygons.
@@ -53,6 +53,13 @@ def truncate_coords(coords):
 def truncate_geometry(geometry):
     geometry["coordinates"] = truncate_coords(geometry["coordinates"])
     return geometry
+
+
+def truncate_gdf(gdf):
+    gdf["geometry"] = gdf["geometry"].apply(
+        lambda geometry: shape(truncate_geometry(mapping(geometry)))
+    )
+    return gdf
 
 
 def polygons_of(geometry):
@@ -225,21 +232,20 @@ def process(country_code):
     # Handle different types of features
     gdf = explode_and_filter_geometries(gdf)
 
+    # Truncate coordinates to reduce file size. Truncating before
+    # simplifying makes it keep only rounded points, so that re-running
+    # the script is a no-op.
+    print("Truncating coordinates...")
+    gdf = truncate_gdf(gdf.to_crs(OUTPUT_CRS))
+
     # Transform to Web Mercator for accurate distance calculations
     gdf_mercator = gdf.to_crs(WEB_MERCATOR_CRS)
 
     print("Simplifying...")
     gdf_mercator["geometry"] = simplify_geometries(list(gdf_mercator["geometry"]))
 
-    # Transform to output crs
-    gdf = gdf_mercator.to_crs(OUTPUT_CRS)
-
-    # Truncate coordinates to reduce file size. Areas are computed from
-    # the truncated geometry so that re-running the script is a no-op.
-    print("Truncating coordinates...")
-    gdf["geometry"] = gdf["geometry"].apply(
-        lambda geometry: shape(truncate_geometry(mapping(geometry)))
-    )
+    # round again to drop the float error of the reprojection round trip
+    gdf = truncate_gdf(gdf_mercator.to_crs(OUTPUT_CRS))
 
     print("Calculating areas...")
 
