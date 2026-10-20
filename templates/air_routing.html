@@ -220,31 +220,59 @@ function showLoadingSidebar(message = "Loading flight path...") {
 }
 
 
+// The path to save — the FR24 track (with its altitude/timestamps, parallel to the path
+// points) or the geodesic between the two markers — with trip_length and
+// estimated_trip_duration set on newTrip to match.
+function routeToSave() {
+    if (useFR24 && Array.isArray(fr24PathCache) && fr24PathCache.length >= 2) {
+        newTrip["trip_length"] = getTotalDistanceFromPath(fr24PathCache);
+        newTrip["estimated_trip_duration"] = newTrip.fr24_duration ?? newTrip.estimated_trip_duration;
+        return {
+            path: fr24PathCache.map(p => ({ lat: p[0], lng: p[1] })),
+            altitude: fr24AltCache,
+            timestamps: fr24TimeCache
+        };
+    }
+    const path = [
+        { lat: origMarker.getLatLng().lat, lng: origMarker.getLatLng().lng },
+        { lat: destMarker.getLatLng().lat, lng: destMarker.getLatLng().lng }
+    ];
+    newTrip["trip_length"] = getDistanceFromLocations(path[0], path[1]);
+    newTrip["estimated_trip_duration"] = (newTrip["trip_length"] / 235) + 1800;
+    return { path: path, altitude: null, timestamps: null };
+}
+
+// ─── Route for the app's trip editor ────────────────────────────────────────
+// As on routing.html: the app edits an existing trip's path here and saves it through
+// patchTrip, so it reads the route with getRouteForApp() instead of calling saveTrip(),
+// which would create a new trip. Returns {ok: true, path: [{lat, lng}, ...], altitude,
+// timestamps (the FR24 track's, else null), route_source, trip_length (m),
+// estimated_trip_duration (s)}, or {ok: false, error} while the FR24 track is loading.
+function getRouteForApp() {
+    if (useFR24 && newTrip.fr24_id && !fr24PathCache) return { ok: false, error: 'loading' };
+    const route = routeToSave();
+    return {
+        ok: true,
+        path: route.path,
+        altitude: route.altitude,
+        timestamps: route.timestamps,
+        // As saveFlight records it: a real 3D track is FR24's, a bare geodesic the router's.
+        route_source: route.altitude ? 'fr24' : 'router',
+        trip_length: newTrip["trip_length"],
+        estimated_trip_duration: newTrip["estimated_trip_duration"]
+    };
+}
+window.getRouteForApp = getRouteForApp;
+// ─── End route for the app's trip editor ────────────────────────────────────
+
 async function saveTrip(continueTrip=false) {
     flutterBridge.loading(true);
     sidebar.setContent('<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>');
 
-    let pathToSave;
-    let altToSave = null;
-    let timeToSave = null;
-
-    if (useFR24 && Array.isArray(fr24PathCache) && fr24PathCache.length >= 2) {
-        // Save FR24 path (with altitude/timestamps, parallel to the path points)
-        pathToSave = fr24PathCache.map(p => ({ lat: p[0], lng: p[1] }));
-        altToSave = fr24AltCache;
-        timeToSave = fr24TimeCache;
-        console.log("Saving FR24 path", pathToSave);
-        newTrip["trip_length"] = getTotalDistanceFromPath(fr24PathCache);
-        newTrip["estimated_trip_duration"] = newTrip.fr24_duration ?? newTrip.estimated_trip_duration;
-    } else {
-        // Save Geodesic
-        pathToSave = [
-            { lat: origMarker.getLatLng().lat, lng: origMarker.getLatLng().lng },
-            { lat: destMarker.getLatLng().lat, lng: destMarker.getLatLng().lng }
-        ];
-        newTrip["trip_length"] = getDistanceFromLocations(pathToSave[0], pathToSave[1]);
-        newTrip["estimated_trip_duration"] = (newTrip["trip_length"] / 235) + 1800;
-    }
+    const route = routeToSave();
+    const pathToSave = route.path;
+    const altToSave = route.altitude;
+    const timeToSave = route.timestamps;
 
     $.post({
         url: '{{url_for("saveFlight", username=username, type=type)}}',
