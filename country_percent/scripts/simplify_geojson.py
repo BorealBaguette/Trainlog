@@ -3,7 +3,7 @@ Simplify a processed GeoJSON file by:
 1. unpacking features of type GeometryCollection,
 2. deleting features of all types except Polygon and Multipolygon,
 3. converting to CRS84,
-4. truncating coordinate precision to the cm range,
+4. rounding coordinates to 6 decimals, keeping polygons valid,
 5. simplifying polygon outlines with Douglas-Peucker, keeping shared borders,
 6. recomputing polygon areas,
 7. re-assign new IDs,
@@ -26,6 +26,7 @@ import os
 import sys
 
 import geopandas as gpd
+import shapely
 from shapely.geometry import LineString, MultiPolygon, Polygon, mapping, shape
 from shapely.validation import explain_validity
 
@@ -42,24 +43,16 @@ def round_area(value):
     return round(value, 2)
 
 
-def truncate_coords(coords):
-    if coords and all(isinstance(item, (int, float)) for item in coords):
-        # a single position
-        assert all(e == 0 for e in coords[3:])
-        return [round(item, 6) for item in coords[:2]]
-    return [truncate_coords(item) for item in coords]
-
-
-def truncate_geometry(geometry):
-    geometry["coordinates"] = truncate_coords(geometry["coordinates"])
-    return geometry
-
-
 def truncate_gdf(gdf):
+    # unlike plain rounding, set_precision keeps polygons valid; normalize
+    # fixes the vertex order so that re-runs write the same file
     gdf["geometry"] = gdf["geometry"].apply(
-        lambda geometry: shape(truncate_geometry(mapping(geometry)))
+        lambda geometry: shapely.normalize(
+            shapely.set_precision(shapely.force_2d(geometry), 1e-6)
+        )
     )
-    return gdf
+    # remove empty polygons
+    return gdf[~gdf["geometry"].is_empty].reset_index(drop=True)
 
 
 def polygons_of(geometry):
