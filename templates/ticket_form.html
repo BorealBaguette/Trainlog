@@ -138,7 +138,15 @@
         .ticket-table .ticket-cell-validity {
             flex: 1 1 0;
             min-width: 0;
-            white-space: normal;
+            /* Beats the cell's text-nowrap (itself !important), or the dates run under
+               the actions instead of wrapping. */
+            white-space: normal !important;
+        }
+        .ticket-table .ticket-date {
+            white-space: nowrap;
+        }
+        .ticket-table .ticket-actions .btn {
+            padding-inline: .35rem;
         }
         /* Three figures a line, the same width from one ticket to the next. */
         .ticket-table .ticket-cell-stat {
