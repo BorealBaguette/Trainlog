@@ -9,16 +9,19 @@ Endpoints:
     GET /timeline                  → redirect to the logged-in user's timeline
     GET /u/<username>/timeline      → private timeline (login required)
     GET /public/<username>/timeline → public timeline
+    GET /u/<username>/timeline/schengen       → Schengen 90/180 counter
+    GET /public/<username>/timeline/schengen  → public Schengen counter
 """
 
 import json
 import os
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import distinctipy
 from flask import (
     Blueprint,
+    make_response,
     redirect,
     render_template,
     request,
@@ -63,7 +66,7 @@ def getTimelineData(username):
         ).fetchall()
 
     if not trips:
-        return render_template("timeline.html", username=username, country_blocks=[])
+        return [], [], {}, {}, {}
 
     flag_set = set()
     trip_data = []
@@ -142,7 +145,7 @@ def getTimelineData(username):
     observations = sorted(seen.items())   # [(datetime, flag), ...]
 
     if not observations:
-        return [], {}, {}, {}
+        return [], [], {}, {}, {}
 
     raw_blocks = []
     block_start, current_flag = observations[0]
@@ -313,6 +316,329 @@ def getTimelineData(username):
     return blocks, residence_blocks, days_abroad_by_year, residence_country_by_year, residence_flags_by_year
 
 
+# ── Schengen 90/180 ──────────────────────────────────────────────────────────
+#
+# Date each country (by station country code) started applying Schengen, so
+# past stays are judged by the membership of the day. Codes follow
+# static/data/countries-filtered.geojson, which splits off territories:
+# IC (Canaries) / EA (Ceuta, Melilla) / AX (Åland) are in; RE, GF, GP, SJ, FO,
+# GL… are not. MC, SM and VA have open borders with FR/IT and count de facto.
+# AD, CY and IE are outside.
+_ORIGINAL = date(1995, 3, 26)
+_NORDIC = date(2001, 3, 25)
+_EU2004 = date(2007, 12, 21)
+SCHENGEN_SINCE = {
+    "BE": _ORIGINAL, "DE": _ORIGINAL, "ES": _ORIGINAL, "FR": _ORIGINAL,
+    "LU": _ORIGINAL, "NL": _ORIGINAL, "PT": _ORIGINAL, "MC": _ORIGINAL,
+    "IC": _ORIGINAL, "EA": _ORIGINAL,
+    "IT": date(1997, 10, 26), "SM": date(1997, 10, 26), "VA": date(1997, 10, 26),
+    "AT": date(1997, 12, 1),
+    "GR": date(2000, 3, 26),
+    "DK": _NORDIC, "FI": _NORDIC, "IS": _NORDIC, "NO": _NORDIC, "SE": _NORDIC,
+    "AX": _NORDIC,
+    "CZ": _EU2004, "EE": _EU2004, "HU": _EU2004, "LT": _EU2004, "LV": _EU2004,
+    "MT": _EU2004, "PL": _EU2004, "SI": _EU2004, "SK": _EU2004,
+    "CH": date(2008, 12, 12),
+    "LI": date(2011, 12, 19),
+    "HR": date(2023, 1, 1),
+    "BG": date(2024, 3, 31), "RO": date(2024, 3, 31),
+}
+SCHENGEN_MAX_DAYS = 90
+SCHENGEN_WINDOW = 180
+
+
+def _flag_to_cc(flag):
+    return "".join(chr(ord(c) - 127397) for c in flag)
+
+
+def _in_schengen(flag, day):
+    since = SCHENGEN_SINCE.get(_flag_to_cc(flag))
+    return since is not None and day >= since
+
+
+def getSchengenData(username, residence_blocks=(), ignore_residence=False):
+    """Days spent in the Schengen area, by local calendar day.
+
+    Any day touched counts in full (entry and exit days included). Presence
+    between trips follows the country timeline: the user stays where a trip
+    arrived until the next departure. After the last trip they are assumed to
+    stay put, which drives the "must leave by" projection.
+
+    Days while resident in a Schengen country don't count (see below), using
+    the residence periods inferred for the country timeline, unless
+    *ignore_residence* (the user says that inference is wrong).
+    """
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT origin_station, destination_station, start_datetime, end_datetime
+            FROM trips
+            WHERE user_id = :user_id
+              AND start_datetime IS NOT NULL
+              AND end_datetime IS NOT NULL
+              AND origin_station IS NOT NULL
+              AND destination_station IS NOT NULL
+              AND start_datetime < '2100-01-01'
+              AND end_datetime < '2100-01-01'
+            ORDER BY COALESCE(utc_start_datetime, start_datetime),
+                     COALESCE(utc_end_datetime, end_datetime)
+        """,
+            {"user_id": get_user_id(username)},
+        ).fetchall()
+
+    today = date.today()
+    if not rows:
+        return None
+
+    trips = [
+        (
+            row["origin_station"][:2],
+            row["destination_station"][:2],
+            row["start_datetime"].date(),
+            row["end_datetime"].date(),
+        )
+        for row in rows
+    ]
+
+    last_end = max(t[3] for t in trips)
+    known_end = max(today, last_end)
+    horizon = known_end + timedelta(days=SCHENGEN_WINDOW)
+
+    days = defaultdict(list)  # {date: [flags in order seen]}
+
+    def mark(flag, d0, d1):
+        d = d0
+        while d <= d1:
+            if _in_schengen(flag, d) and flag not in days[d]:
+                days[d].append(flag)
+            d += timedelta(days=1)
+
+    gaps = []
+    for i, (origin, dest, start, end) in enumerate(trips):
+        mark(origin, start, start)
+        mark(dest, end, end)
+        # Multi-day trips within the area (night trains, ferries) count throughout
+        if _in_schengen(origin, start) and _in_schengen(dest, end):
+            mark(origin, start, end)
+
+        if i + 1 < len(trips):
+            next_origin, next_start = trips[i + 1][0], trips[i + 1][2]
+            if next_start >= end:
+                mark(dest, end, next_start)
+            if _in_schengen(dest, end) != _in_schengen(next_origin, next_start):
+                gaps.append({
+                    "arrived": dest,
+                    "arrived_on": end.isoformat(),
+                    "departed": next_origin,
+                    "departed_on": next_start.isoformat(),
+                })
+        else:
+            mark(dest, end, horizon)
+
+    if not days:
+        return None
+
+    first_day = min(days)
+    n = (horizon - first_day).days + 1
+
+    def rolling_counter():
+        """Rolling 180-day count for every day from the first Schengen day to the horizon."""
+        prefix = [0] * (n + 1)
+        for k in range(n):
+            prefix[k + 1] = prefix[k] + (1 if days.get(first_day + timedelta(days=k)) else 0)
+
+        def count_on(d):
+            k = (d - first_day).days
+            if k < 0:
+                return 0
+            k = min(k, n - 1)
+            return prefix[k + 1] - prefix[max(0, k + 1 - SCHENGEN_WINDOW)]
+        return count_on
+
+    count_on = rolling_counter()
+
+    # Residence: inferred residence flips after any 45-day stay, so a visitor's
+    # long trip can look like residence. Only a Schengen residence spell of at
+    # least 180 days that breaks the 90/180 limit anyway (which no legal short
+    # stay can) is taken as real residence; its days are dropped. The ongoing
+    # spell extends to the horizon so the projection doesn't count it either.
+    resident_days = {}  # {date: residence flag}
+    for i, b in enumerate(residence_blocks):
+        d = max(datetime.fromisoformat(b["start"]).date(), first_day)
+        end = horizon if i == len(residence_blocks) - 1 else datetime.fromisoformat(b["end"]).date()
+        while d <= end:
+            if _in_schengen(b["flag"], d):
+                resident_days[d] = b["flag"]
+            d += timedelta(days=1)
+
+    residences = []
+    for d in sorted(resident_days):
+        if residences and residences[-1]["end"] == d - timedelta(days=1):
+            residences[-1]["end"] = d
+        else:
+            residences.append({"start": d, "end": d, "flags": []})
+        if resident_days[d] not in residences[-1]["flags"]:
+            residences[-1]["flags"].append(resident_days[d])
+
+    residences = [
+        r for r in residences
+        if (min(r["end"], today) - r["start"]).days + 1 >= SCHENGEN_WINDOW
+        and any(
+            count_on(r["start"] + timedelta(days=k)) > SCHENGEN_MAX_DAYS
+            for k in range((min(r["end"], known_end) - r["start"]).days + 1)
+        )
+    ]
+    residence_detected = bool(residences)
+    if ignore_residence:
+        residences = []
+    resident_now = any(r["start"] <= today <= r["end"] for r in residences)
+    if residences:
+        for r in residences:
+            d = r["start"]
+            while d <= r["end"]:
+                days.pop(d, None)
+                d += timedelta(days=1)
+        count_on = rolling_counter()
+
+    used = count_on(today)
+
+    # First projected day over the limit → the day before is the last legal one
+    must_leave_by = None
+    beyond_trips = False
+    d = today
+    while d <= horizon:
+        if count_on(d) > SCHENGEN_MAX_DAYS:
+            must_leave_by = d - timedelta(days=1)
+            beyond_trips = d > last_end
+            break
+        d += timedelta(days=1)
+
+    # Next day on which the count drops
+    next_freed = None
+    d = today + timedelta(days=1)
+    while d <= horizon:
+        if count_on(d) < count_on(d - timedelta(days=1)):
+            next_freed = d
+            break
+        d += timedelta(days=1)
+
+    # Outside the area today: how long a stay entered today could last,
+    # counting only past days (planned trips ignored)
+    max_stay_until = None
+    if not days.get(today) and not resident_now:
+        past = count_on(today - timedelta(days=1))
+        k = 0
+        while k < SCHENGEN_MAX_DAYS:
+            day = today + timedelta(days=k)
+            drop_day = day - timedelta(days=SCHENGEN_WINDOW)
+            if drop_day >= first_day and days.get(drop_day):
+                past -= 1
+            if past + k + 1 > SCHENGEN_MAX_DAYS:
+                break
+            k += 1
+        if k:
+            max_stay_until = today + timedelta(days=k - 1)
+
+    # Stays: runs of consecutive Schengen days, cut at the last known day
+    stays = []
+    run = None
+    d = first_day
+    while d <= known_end:
+        if days.get(d):
+            if run is None:
+                run = {"entry": d, "exit": d, "flags": [], "peak": 0}
+            run["exit"] = d
+            run["flags"].extend(f for f in days[d] if f not in run["flags"])
+            run["peak"] = max(run["peak"], count_on(d))
+        elif run is not None:
+            stays.append(run)
+            run = None
+        d += timedelta(days=1)
+    if run is not None:
+        run["open"] = bool(days.get(known_end + timedelta(days=1)))
+        stays.append(run)
+
+    for r in residences:
+        stays.append({
+            "entry": r["start"],
+            "exit": min(r["end"], known_end),
+            "flags": r["flags"],
+            "peak": 0,
+            "open": r["end"] > known_end,
+            "resident": True,
+        })
+    stays.sort(key=lambda s: s["entry"], reverse=True)
+
+    stays_out = [
+        {
+            "entry": s["entry"].isoformat(),
+            "exit": s["exit"].isoformat(),
+            "days": (s["exit"] - s["entry"]).days + 1,
+            "flags": s["flags"],
+            "peak": s["peak"],
+            "planned": s["entry"] > today,
+            "open": s.get("open", False),
+            "resident": s.get("resident", False),
+        }
+        for s in stays
+    ]
+
+    return {
+        "today": today.isoformat(),
+        "window_start": (today - timedelta(days=SCHENGEN_WINDOW - 1)).isoformat(),
+        "used": used,
+        "remaining": max(0, SCHENGEN_MAX_DAYS - used),
+        "in_now": bool(days.get(today)),
+        "resident_now": resident_now,
+        "residence_detected": residence_detected,
+        "must_leave_by": must_leave_by.isoformat() if must_leave_by else None,
+        "beyond_trips": beyond_trips,
+        "last_flag": trips[-1][1],
+        "next_freed": next_freed.isoformat() if next_freed else None,
+        "max_stay_until": max_stay_until.isoformat() if max_stay_until else None,
+        "peak_ever": max((s["peak"] for s in stays), default=0),
+        "stays": stays_out,
+        "gaps": list(reversed(gaps)),
+    }
+
+
+def _resides_in_schengen(residence_blocks):
+    """Whether the inferred residence right now is a Schengen country."""
+    now = datetime.now()
+    current = [b for b in residence_blocks if datetime.fromisoformat(b["start"]) <= now]
+    return bool(current) and _in_schengen(current[-1]["flag"], now.date())
+
+
+SCHENGEN_RESIDENCE_COOKIE = "schengenIgnoreResidence"
+
+
+def _render_schengen(username, nav):
+    # ?residence=ignore / ?residence=auto flips the viewer's preference, kept in a cookie
+    choice = request.args.get("residence")
+    if choice in ("ignore", "auto"):
+        ignore_residence = choice == "ignore"
+    else:
+        ignore_residence = request.cookies.get(SCHENGEN_RESIDENCE_COOKIE) == "1"
+
+    residence_blocks = getTimelineData(username)[1]
+    response = make_response(render_template(
+        "timeline_schengen.html",
+        username=username,
+        schengen=getSchengenData(username, residence_blocks, ignore_residence),
+        ignore_residence=ignore_residence,
+        max_days=SCHENGEN_MAX_DAYS,
+        nav=nav,
+        isCurrent=has_current_trip(get_user_id()),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    ))
+    if choice == "ignore":
+        response.set_cookie(SCHENGEN_RESIDENCE_COOKIE, "1", max_age=10 * 365 * 86400, samesite="Lax")
+    elif choice == "auto":
+        response.delete_cookie(SCHENGEN_RESIDENCE_COOKIE)
+    return response
+
+
 @timeline_blueprint.route("/timeline")
 def my_timeline():
     if not session.get("logged_in") or not session.get("logged_in_user_id"):
@@ -333,6 +659,7 @@ def timeline(username):
         residence_country_by_year=residence_country_by_year,
         residence_flags_by_year=residence_flags_by_year,
         residence_blocks=residence_blocks,
+        show_schengen_tab=not _resides_in_schengen(residence_blocks),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
         **lang[session["userinfo"]["lang"]],
@@ -353,8 +680,21 @@ def p_timeline(username):
         residence_country_by_year=residence_country_by_year,
         residence_flags_by_year=residence_flags_by_year,
         residence_blocks=residence_blocks,
+        show_schengen_tab=not _resides_in_schengen(residence_blocks),
         nav="bootstrap/public_nav.html",
         isCurrent=has_current_trip(get_user_id()),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
+
+
+@timeline_blueprint.route("/u/<username>/timeline/schengen")
+@login_required
+def timeline_schengen(username):
+    return _render_schengen(username, "bootstrap/navigation.html")
+
+
+@timeline_blueprint.route("/public/<username>/timeline/schengen")
+@public_required
+def p_timeline_schengen(username):
+    return _render_schengen(username, "bootstrap/public_nav.html")
