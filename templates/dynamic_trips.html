@@ -1094,7 +1094,9 @@
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>visibility:</code></span> <span>{{smart_search_visibility}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>material:</code></span> <span>{{smart_search_material}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>reg:</code></span> <span>{{smart_search_reg}}</span></div>
-                            <div class="d-flex"><span style="width: 100px; flex-shrink: 0;"><code>notes:</code></span> <span>{{smart_search_notes}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>notes:</code></span> <span>{{smart_search_notes}}</span></div>
+                            {% if not isPublic %}<div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>ticket:</code></span> <span>{{smart_search_ticket}}</span></div>{% endif %}
+                            <div class="d-flex"><span style="width: 100px; flex-shrink: 0;"><code>id:</code></span> <span>{{smart_search_id}}</span></div>
                         </div>
                     </div>
                     <div class="col-md-5">
@@ -2538,7 +2540,9 @@ var table = $('#tripRows');
         'visibility': 'visibility',
         'material': 'material_type',
         'reg': 'reg',
-        'notes': 'notes'
+        'notes': 'notes',
+        {% if not isPublic %}'ticket': 'ticket_ids',{% endif %}
+        'id': 'uid'
     };
 
     // Strip a wrapping pair of " (spaces) or ` (exact). Returns {value, isExact}.

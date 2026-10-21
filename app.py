@@ -9450,6 +9450,12 @@ def get_trips_api_internal(username, is_public=False):
     # column, so a field can carry several terms. They are ANDed, the alternatives
     # inside one term ORed.
     filters = parse_filters(request.form.get("filters"), is_public=is_public)
+    # A link to given trips ("id:123|456", "ticket:864") shows them whether or
+    # not they are still upcoming, regardless of the "show upcoming" switch.
+    if past == 1 and any(
+        f["field"] in ("uid", "ticket_ids") and not f["negate"] for f in filters
+    ):
+        include_planned = 1
 
     additional_conditions, search_params = filter_conditions(filters)
     search_params.update(

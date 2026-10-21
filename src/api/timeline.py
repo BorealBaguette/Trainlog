@@ -50,7 +50,9 @@ def getTimelineData(username):
             WITH base AS (
                 -- Actual times: a delayed departure must sort after whatever
                 -- got the user to it (e.g. the airport transit)
-                SELECT origin_station, destination_station,
+                SELECT trip_id, origin_station, destination_station,
+                    start_datetime + make_interval(secs => COALESCE(departure_delay, 0)) AS local_start,
+                    end_datetime + make_interval(secs => COALESCE(arrival_delay, 0)) AS local_end,
                     COALESCE(utc_start_datetime, start_datetime)
                         + make_interval(secs => COALESCE(departure_delay, 0)) AS utc_filtered_start_datetime,
                     -- Never before the actual departure (departure delay entered alone)
@@ -63,7 +65,8 @@ def getTimelineData(username):
                 FROM trips
                 WHERE user_id = :user_id
             )
-            SELECT origin_station, destination_station, utc_filtered_start_datetime, utc_filtered_end_datetime
+            SELECT trip_id, origin_station, destination_station, local_start, local_end,
+                utc_filtered_start_datetime, utc_filtered_end_datetime
             FROM base
             WHERE utc_filtered_start_datetime IS NOT NULL
               AND utc_filtered_end_datetime IS NOT NULL
@@ -75,7 +78,7 @@ def getTimelineData(username):
         ).fetchall()
 
     if not trips:
-        return [], [], {}, {}, {}
+        return [], [], {}, {}, {}, []
 
     flag_set = set()
     trip_data = []
@@ -91,12 +94,20 @@ def getTimelineData(username):
         flag_set.update([origin_flag, dest_flag])
         trip_data.append(
             {
+                "id": row["trip_id"],
                 "start": start_datetime,
                 "end": end_datetime,
+                "local_start": row["local_start"],
+                "local_end": row["local_end"],
                 "origin_flag": origin_flag,
                 "dest_flag": dest_flag,
             }
         )
+
+    gaps = find_gaps(
+        (t["id"], t["origin_flag"], t["dest_flag"], t["local_start"].date(), t["local_end"].date())
+        for t in trip_data
+    )
 
     # Sort flags so each run is consistent
     sorted_flags = sorted(flag_set)
@@ -154,7 +165,7 @@ def getTimelineData(username):
     observations = sorted(seen.items())   # [(datetime, flag), ...]
 
     if not observations:
-        return [], [], {}, {}, {}
+        return [], [], {}, {}, {}, []
 
     raw_blocks = []
     block_start, current_flag = observations[0]
@@ -322,7 +333,40 @@ def getTimelineData(username):
         year: round(seconds / 86400, 1)
         for year, seconds in seconds_abroad_by_year.items()
     }
-    return blocks, residence_blocks, days_abroad_by_year, residence_country_by_year, residence_flags_by_year
+    return blocks, residence_blocks, days_abroad_by_year, residence_country_by_year, residence_flags_by_year, gaps
+
+
+UNKNOWN_FLAG = "\U0001F1FA\U0001F1F3"  # 🇺🇳, stations no country polygon matched
+
+
+def find_gaps(trips, relevant=lambda arrived, arrived_on, departed, departed_on: True):
+    """Places where a trip departs from another country than the previous
+    trip arrived in: likely a missing trip. *trips* are (id, origin flag,
+    destination flag, start date, end date) in travel order; newest gap first.
+    Plans are expected to be patchy, so gaps before a future trip are left out.
+    """
+    today = date.today()
+    gaps = []
+    prev = None
+    for trip in trips:
+        if prev is not None:
+            prev_id, _, arrived, _, arrived_on = prev
+            trip_id, departed, _, departed_on, _ = trip
+            if (
+                departed_on <= today
+                and arrived != departed
+                and UNKNOWN_FLAG not in (arrived, departed)
+                and relevant(arrived, arrived_on, departed, departed_on)
+            ):
+                gaps.append({
+                    "arrived": arrived,
+                    "arrived_on": arrived_on,
+                    "departed": departed,
+                    "departed_on": departed_on,
+                    "trip_ids": [prev_id, trip_id],
+                })
+        prev = trip
+    return gaps[::-1]
 
 
 # ── Schengen 90/180 ──────────────────────────────────────────────────────────
@@ -442,7 +486,7 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False, citiz
     with pg_session() as pg:
         rows = pg.execute(
             """
-            SELECT origin_station, destination_station,
+            SELECT trip_id, origin_station, destination_station,
                 start_datetime + make_interval(secs => COALESCE(departure_delay, 0)) AS start_datetime,
                 end_datetime + make_interval(secs => COALESCE(arrival_delay, 0)) AS end_datetime
             FROM trips
@@ -475,6 +519,7 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False, citiz
         )
         for row in rows
     ]
+    trip_ids = [row["trip_id"] for row in rows]
 
     last_end = max(t[3] for t in trips)
     known_end = max(today, last_end)
@@ -489,7 +534,6 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False, citiz
                 days[d].append(flag)
             d += timedelta(days=1)
 
-    gaps = []
     for i, (origin, dest, start, end) in enumerate(trips):
         mark(origin, start, start)
         mark(dest, end, end)
@@ -498,16 +542,9 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False, citiz
             mark(origin, start, end)
 
         if i + 1 < len(trips):
-            next_origin, next_start = trips[i + 1][0], trips[i + 1][2]
+            next_start = trips[i + 1][2]
             if next_start >= end:
                 mark(dest, end, next_start)
-            if _in_schengen(dest, end) != _in_schengen(next_origin, next_start):
-                gaps.append({
-                    "arrived": dest,
-                    "arrived_on": end,
-                    "departed": next_origin,
-                    "departed_on": next_start,
-                })
         else:
             mark(dest, end, horizon)
 
@@ -688,12 +725,14 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False, citiz
         "max_stay_until": max_stay_until.isoformat() if max_stay_until else None,
         "peak_ever": max((s["peak"] for s in stays), default=0),
         "stays": stays_out,
-        "gaps": [
-            dict(g, arrived_on=g["arrived_on"].isoformat(), departed_on=g["departed_on"].isoformat())
-            for g in reversed(gaps)
-            # A gap only matters where it can change the count
-            if counts(g["arrived_on"]) or counts(g["departed_on"])
-        ],
+        "gaps": find_gaps(
+            ((trip_id, *trip) for trip_id, trip in zip(trip_ids, trips)),
+            # Only across the Schengen border, and where it can change the count
+            lambda arrived, arrived_on, departed, departed_on: (
+                _in_schengen(arrived, arrived_on) != _in_schengen(departed, departed_on)
+                and (counts(arrived_on) or counts(departed_on))
+            ),
+        ),
     }
 
 
@@ -769,7 +808,7 @@ def my_timeline():
 @timeline_blueprint.route("/u/<username>/timeline")
 @login_required
 def timeline(username):
-    blocks, residence_blocks, days_abroad_by_year, residence_country_by_year, residence_flags_by_year = getTimelineData(username)
+    blocks, residence_blocks, days_abroad_by_year, residence_country_by_year, residence_flags_by_year, gaps = getTimelineData(username)
     # Pass to the template
     return render_template(
         "timeline.html",
@@ -780,6 +819,7 @@ def timeline(username):
         residence_flags_by_year=residence_flags_by_year,
         residence_blocks=residence_blocks,
         show_schengen_tab=not _resides_in_schengen(residence_blocks),
+        gaps=gaps,
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
         **lang[session["userinfo"]["lang"]],
@@ -790,7 +830,7 @@ def timeline(username):
 @timeline_blueprint.route("/public/<username>/timeline")
 @public_required
 def p_timeline(username):
-    blocks, residence_blocks, days_abroad_by_year, residence_country_by_year, residence_flags_by_year = getTimelineData(username)
+    blocks, residence_blocks, days_abroad_by_year, residence_country_by_year, residence_flags_by_year, gaps = getTimelineData(username)
     # Pass to the template
     return render_template(
         "timeline.html",
@@ -801,6 +841,7 @@ def p_timeline(username):
         residence_flags_by_year=residence_flags_by_year,
         residence_blocks=residence_blocks,
         show_schengen_tab=not _resides_in_schengen(residence_blocks),
+        gaps=gaps,
         nav="bootstrap/public_nav.html",
         isCurrent=has_current_trip(get_user_id()),
         **lang[session["userinfo"]["lang"]],

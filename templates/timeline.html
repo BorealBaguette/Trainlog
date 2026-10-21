@@ -122,6 +122,13 @@
   </div>
   {% endif %}
 
+  {% if gaps %}
+  <div class="mt-4">
+    {% set gaps_text = tl_gaps_text %}
+    {% include "timeline_gaps.html" %}
+  </div>
+  {% endif %}
+
   {% if not show_schengen_tab %}
   <p class="text-center small mt-4 mb-0">
     <a class="text-muted" href="{{ url_for('timeline.p_timeline_schengen' if request.endpoint.startswith('timeline.p_') else 'timeline.timeline_schengen', username=username) }}">
@@ -133,6 +140,16 @@
 </div>
 
 <div class="tl-tooltip" id="tl-tooltip"></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+  document.querySelectorAll('[data-date]').forEach(el => {
+    const [y, m, d] = el.dataset.date.split('-').map(Number);
+    el.textContent = new Date(y, m - 1, d).toLocaleDateString('{{ langId }}', opts);
+  });
+});
+</script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {

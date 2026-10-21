@@ -149,6 +149,9 @@
                         <i class="bi bi-map"></i> {{map}}
                     </button>
                 </form>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ group.tickets | map(attribute='uid') | join('|')) }}">
+                    <i class="bi bi-list-ul"></i> {{trips}}
+                </a>
             {% endif %}
             {# Acting on the whole group: only from its own page. #}
             {% if not whole %}
@@ -254,6 +257,9 @@
                             {% if ticket.trip_ids %}
                                 <a class="btn btn-sm" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price" title="{{map}}">
                                     <i class="bi bi-link-45deg"></i>
+                                </a>
+                                <a class="btn btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ ticket.uid) }}" title="{{trips}}">
+                                    <i class="bi bi-list-ul"></i>
                                 </a>
                             {% endif %}
                             <button type="button" class="btn btn-sm edit-button" data-ticket='{{ ticket|tojson }}' title="{{edit}}">
