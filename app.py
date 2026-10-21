@@ -204,6 +204,7 @@ from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src.api.station_cleanup import station_cleanup_blueprint
 from src.api.station_explorer import station_explorer_blueprint
+from src.api.station_map import station_map_blueprint
 from src import visualisations as viz_module
 from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
@@ -379,6 +380,7 @@ app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(station_cleanup_blueprint)
 app.register_blueprint(station_explorer_blueprint)
+app.register_blueprint(station_map_blueprint)
 app.register_blueprint(trips_blueprint)
 app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)

@@ -1,0 +1,193 @@
+{% extends "bootstrap/layout.html" %}
+{% set leaflet = True %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+
+{% include nav %}
+
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+</div>
+
+<div id="map" class="mapUser"></div>
+
+<div class="control-panel" id="controlPanel">
+    <button class="control-toggle" onclick="toggleControlPanel()">
+        <i id="controlToggleIcon" class="fas fa-chevron-left"></i>
+    </button>
+
+    <div class="control-header">
+        <h3 class="control-title">{{ stations }}</h3>
+    </div>
+
+    <div class="filter-section">
+        <div class="filter-grid">
+            <label class="filter-item">
+                <input type="checkbox" id="groupToggle" checked onchange="redraw()">
+                <span class="filter-icon"><i class="fa-solid fa-circle-nodes"></i></span>
+                <span class="filter-label">Group</span>
+            </label>
+            <label class="filter-item">
+                <input type="checkbox" id="usesToggle" checked onchange="redraw()">
+                <span class="filter-icon"><i class="fa-solid fa-chart-simple"></i></span>
+                <span class="filter-label">Uses</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <div class="filter-grid" id="transportFilters"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+const transportTypeLabels = {
+    train: '{{ train }}', tram: '{{ tram }}', metro: '{{ metro }}', bus: '{{ bus }}',
+    car: '{{ car }}', cycle: '{{ cycle }}', walk: '{{ walk }}', air: '{{ air }}',
+    ferry: '{{ ferry }}', aerialway: '{{ aerialway }}', scooter: '{{ scooter }}',
+    funicular: '{{ funicular }}', rail: '{{ rail }}', ski: '{{ ski }}'
+};
+const types = MapLibreUtils.MapConfig.transportTypes;
+const colorOf = ['match', ['get', 'type'], ...types.flatMap(t => [t.id, t.color]), '#000000'];
+
+let map;
+let stations = [];
+const hiddenTypes = new Set();
+
+async function initMap() {
+    const params = new URLSearchParams(window.location.search);
+    map = await MapLibreUtils.initializeMapLibre({
+        container: 'map',
+        tileserver: params.get('tileserver') || "{{ tileserver }}",
+        useGlobe: params.has('globe') ? params.get('globe') === 'true' : {{ 'true' if globe else 'false' }},
+    });
+
+    const [data] = await Promise.all([
+        fetch('{{ url_for("station_map.stations_map_data", username=username) }}').then(r => r.json()),
+        new Promise(resolve => map.loaded() ? resolve() : map.once('load', resolve)),
+    ]);
+    stations = data.features;
+    buildTypeFilters();
+    redraw();
+    fitToStations();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+
+    map.on('click', 'stations', e => {
+        const p = e.features[0].properties;
+        const popup = new maplibregl.Popup()
+            .setLngLat(e.features[0].geometry.coordinates)
+            .setHTML(`<b></b><div class="text-muted small"></div>${transportTypeLabels[p.type] || p.type} · ${p.uses}×`)
+            .addTo(map)
+            .getElement();
+        popup.querySelector('b').textContent = p.name;
+        // Feature properties come back from the map with arrays as JSON.
+        popup.querySelector('div.small').textContent = JSON.parse(p.names).slice(1).join(', ');
+    });
+    map.on('click', 'station-clusters', async e => {
+        const feature = e.features[0];
+        const zoom = await map.getSource('stations').getClusterExpansionZoom(feature.properties.cluster_id);
+        map.easeTo({ center: feature.geometry.coordinates, zoom });
+    });
+    for (const layer of ['stations', 'station-clusters']) {
+        map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
+    }
+}
+
+function buildTypeFilters() {
+    const present = new Set(stations.map(f => f.properties.type));
+    const container = document.getElementById('transportFilters');
+    types.filter(t => present.has(t.id)).forEach(type => {
+        const item = document.createElement('label');
+        item.className = 'filter-item';
+        item.innerHTML = `
+            <input type="checkbox" checked>
+            <span class="filter-icon" style="color: ${type.color};">
+                <i class="${type.iconClass || 'fa-solid'} ${type.icon}"></i>
+            </span>
+            <span class="filter-label">${transportTypeLabels[type.id] || type.id}</span>
+        `;
+        item.querySelector('input').addEventListener('change', e => {
+            e.target.checked ? hiddenTypes.delete(type.id) : hiddenTypes.add(type.id);
+            redraw();
+        });
+        container.appendChild(item);
+    });
+}
+
+function visibleStations() {
+    return { type: 'FeatureCollection', features: stations.filter(f => !hiddenTypes.has(f.properties.type)) };
+}
+
+// Clustering is a property of the source, so toggling it means rebuilding the source.
+function redraw() {
+    const group = document.getElementById('groupToggle').checked;
+    const uses = document.getElementById('usesToggle').checked;
+    for (const layer of ['stations', 'station-clusters']) {
+        if (map.getLayer(layer)) map.removeLayer(layer);
+    }
+    if (map.getSource('stations')) map.removeSource('stations');
+
+    map.addSource('stations', {
+        type: 'geojson',
+        data: visibleStations(),
+        cluster: group,
+        clusterMaxZoom: 9,
+        clusterRadius: 40,
+        clusterProperties: { uses: ['+', ['get', 'uses']] },
+    });
+
+    map.addLayer({
+        id: 'station-clusters',
+        type: 'circle',
+        source: 'stations',
+        filter: ['has', 'point_count'],
+        paint: {
+            'circle-color': 'rgba(255, 255, 255, 0.85)',
+            'circle-stroke-color': '#333',
+            'circle-stroke-width': 1,
+            'circle-radius': uses
+                ? ['interpolate', ['linear'], ['sqrt', ['get', 'uses']], 1, 8, 40, 36]
+                : ['interpolate', ['linear'], ['sqrt', ['get', 'point_count']], 1, 8, 20, 24],
+        },
+    });
+
+    map.addLayer({
+        id: 'stations',
+        type: 'circle',
+        source: 'stations',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+            'circle-color': colorOf,
+            'circle-stroke-color': '#fff',
+            'circle-stroke-width': 1,
+            'circle-radius': uses
+                ? ['interpolate', ['linear'], ['sqrt', ['get', 'uses']], 1, 4, 20, 20]
+                : 5,
+        },
+    });
+}
+
+function fitToStations() {
+    if (!stations.length) return;
+    const bounds = new maplibregl.LngLatBounds();
+    stations.forEach(f => bounds.extend(f.geometry.coordinates));
+    map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 0 });
+}
+
+function toggleControlPanel() {
+    const panel = document.getElementById('controlPanel');
+    const icon = document.getElementById('controlToggleIcon');
+    panel.classList.toggle('collapsed');
+    const isCollapsed = panel.classList.contains('collapsed');
+    icon.classList.remove('fa-chevron-left', 'fa-chevron-right');
+    icon.classList.add(isCollapsed ? 'fa-chevron-right' : 'fa-chevron-left');
+}
+
+initMap();
+</script>
+{% endblock %}
