@@ -655,20 +655,21 @@
     color: #374151;
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    cursor: pointer;
-    user-select: none;
   }
   .card-header-custom i {
     font-size: 1rem;
     color: var(--primary-color);
   }
-  .card-header-custom .collapse-chevron {
+  .card-header-custom .collapse-toggle {
     margin-left: auto;
-    font-size: 0.7rem;
+    padding: 0.25rem 0.4rem;
+    border: none;
+    border-radius: 6px;
+    background: none;
     color: var(--text-muted);
-    transition: transform 0.2s ease;
   }
-  .card-header-custom.collapsed .collapse-chevron { transform: rotate(-90deg); }
+  .card-header-custom .collapse-toggle:hover { background: var(--background-light); }
+  .card-header-custom .collapse-toggle i { font-size: 0.8rem; color: inherit; }
   .completion-table { margin: 0; }
   .completion-table thead th {
     background: var(--background-light) !important;
@@ -936,10 +937,10 @@
       </div>
       <div class="col-md-6">
         <div class="completion-card" id="completion-section" style="height:100%;margin:0;">
-          <div class="card-header-custom" id="completion-toggle">
+          <div class="card-header-custom">
             <i class="bi bi-percent"></i>
             <span>{{coverage}}</span>
-            <span class="collapse-chevron">▼</span>
+            <button type="button" class="collapse-toggle" id="completion-toggle"><i class="fa-solid fa-chevron-down"></i></button>
           </div>
           <div id="completion-body">
             <table class="table completion-table" id="completion-table">
@@ -2044,7 +2045,6 @@ fetch(`/u/${username}/dashboard_friends`)
 // ─── Country completion ───────────────────────────────────────────────────────
 
 const completionToggle = document.getElementById("completion-toggle");
-const completionBody   = document.getElementById("completion-body");
 let completionLoaded   = false;
 
 function loadCompletion() {
@@ -2084,11 +2084,12 @@ function loadCompletion() {
             </div>
           </td>`;
 
-        tr.addEventListener("click", () => {
+        tr.setOpen = open => {
           if (!hasRegions) return;
           const subRows = document.querySelectorAll(`.region-of-${country.cc}`);
+          if (open === subRows.length > 0) return;
           const chevronIcon = tr.querySelector(".chevron");
-          if (subRows.length > 0) {
+          if (!open) {
             subRows.forEach(row => row.remove());
             chevronIcon.classList.remove("down");
           } else {
@@ -2110,17 +2111,28 @@ function loadCompletion() {
             });
             chevronIcon.classList.add("down");
           }
+        };
+        tr.addEventListener("click", () => {
+          tr.setOpen(!tr.querySelector(".chevron.down"));
+          updateCompletionToggle();
         });
         tableBody.appendChild(tr);
       });
+      completionToggle.hidden = !tableBody.querySelector(".chevron");
     });
 }
 
+function updateCompletionToggle() {
+  const anyClosed = !!document.querySelector("#completion-table .chevron:not(.down)");
+  const icon = completionToggle.querySelector("i");
+  icon.classList.toggle("fa-chevron-down", anyClosed);
+  icon.classList.toggle("fa-chevron-up", !anyClosed);
+}
+
 completionToggle.addEventListener("click", () => {
-  const isCollapsed = completionBody.style.display === "none";
-  completionBody.style.display = isCollapsed ? "" : "none";
-  completionToggle.classList.toggle("collapsed", !isCollapsed);
-  loadCompletion();
+  const open = !!completionToggle.querySelector(".fa-chevron-down");
+  document.querySelectorAll("#completion-table .country-row").forEach(tr => tr.setOpen(open));
+  updateCompletionToggle();
 });
 
 loadCompletion(); // load on page open
