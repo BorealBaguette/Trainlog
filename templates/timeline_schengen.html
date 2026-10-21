@@ -56,6 +56,10 @@
   <div class="alert alert-info sch-alert mb-3">
     <i class="bi bi-house-fill me-2"></i>{{ sch_resident_now }}
   </div>
+  {% elif schengen.exempt_now %}
+  <div class="alert alert-info sch-alert mb-3">
+    <i class="bi bi-person-badge-fill me-2"></i>{{ sch_exempt_now }}
+  </div>
   {% endif %}
 
   {% if schengen.residence_detected %}
@@ -149,8 +153,18 @@
   </div>
   {% endif %}
 
+  <div class="d-flex justify-content-center align-items-center gap-2 small mb-3">
+    <label for="schCitizenship" class="text-muted text-nowrap">{{ sch_citizenship }}</label>
+    <select id="schCitizenship" class="form-select form-select-sm w-auto">
+      <option value="auto" {% if not chosen_citizenship %}selected{% endif %}>{{ sch_citizenship_auto }}{% if inferred_citizenship_flag %} ({{ inferred_citizenship_flag }}){% endif %}</option>
+      {% for cc, flag in countries %}
+      <option value="{{ cc }}" data-flag="{{ flag }}" {% if chosen_citizenship == cc %}selected{% endif %}>{{ flag }} {{ cc }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
   <p class="text-muted small">
-    <i class="bi bi-info-circle me-1"></i>{{ sch_disclaimer }}{% if not ignore_residence %} {{ sch_resident_rule }}{% endif %}
+    <i class="bi bi-info-circle me-1"></i>{{ sch_disclaimer }}{% if not ignore_residence %} {{ sch_resident_rule }}{% endif %} {{ sch_citizenship_rule }}
     <a href="https://travel-europe.europa.eu/ees_en" target="_blank" rel="noopener">{{ sch_official }}</a>
   </p>
 
@@ -163,6 +177,24 @@ document.addEventListener("DOMContentLoaded", function () {
     const [y, m, d] = el.dataset.date.split('-').map(Number);
     const text = new Date(y, m - 1, d).toLocaleDateString('{{ langId }}', opts);
     el.textContent = el.dataset.dateFormat ? el.dataset.dateFormat.replace('{date}', text) : text;
+  });
+
+  // Citizenship picker: localised country names, sorted, guess kept first
+  const select = document.getElementById('schCitizenship');
+  let names = null;
+  try { names = new Intl.DisplayNames(['{{ langId }}'], { type: 'region' }); } catch (e) {}
+  const options = [...select.options].slice(1);
+  options.forEach(o => {
+    o.dataset.name = o.value;
+    try { if (names) o.dataset.name = names.of(o.value); } catch (e) {}
+    o.textContent = `${o.dataset.flag} ${o.dataset.name}`;
+  });
+  options.sort((a, b) => a.dataset.name.localeCompare(b.dataset.name, '{{ langId }}'));
+  options.forEach(o => select.appendChild(o));
+  select.addEventListener('change', () => {
+    const params = new URLSearchParams(location.search);
+    params.set('citizenship', select.value);
+    location.search = params.toString();
   });
 });
 </script>

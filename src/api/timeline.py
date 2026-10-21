@@ -29,7 +29,7 @@ from flask import (
     url_for,
 )
 
-from py.utils import rgb_to_hex
+from py.utils import get_all_countries, rgb_to_hex
 from src.pg import pg_session
 from src.utils import (
     get_user_id,
@@ -347,6 +347,57 @@ SCHENGEN_MAX_DAYS = 90
 SCHENGEN_WINDOW = 180
 
 
+# Citizens of these countries aren't held to the 90/180 rule: (since, until)
+# by citizenship. EU/EEA accession or the EU–Swiss agreement give free
+# movement; the UK left at the end of the Brexit transition. The microstates
+# have open borders with their neighbours and their citizens are exempt from
+# the EES, so their days are never counted.
+_EU1958 = date(1958, 1, 1)
+_EU1973 = date(1973, 1, 1)
+_EU1995 = date(1995, 1, 1)
+_EU2004 = date(2004, 5, 1)
+FREE_MOVEMENT = {
+    "BE": (_EU1958, None), "DE": (_EU1958, None), "FR": (_EU1958, None),
+    "IT": (_EU1958, None), "LU": (_EU1958, None), "NL": (_EU1958, None),
+    "DK": (_EU1973, None), "IE": (_EU1973, None),
+    "GB": (_EU1973, date(2021, 1, 1)),
+    "GR": (date(1981, 1, 1), None),
+    "ES": (date(1986, 1, 1), None), "PT": (date(1986, 1, 1), None),
+    "IS": (date(1994, 1, 1), None), "NO": (date(1994, 1, 1), None),
+    "AT": (_EU1995, None), "FI": (_EU1995, None), "SE": (_EU1995, None),
+    "LI": (date(1995, 5, 1), None),
+    "CH": (date(2002, 6, 1), None),
+    "CY": (_EU2004, None), "CZ": (_EU2004, None), "EE": (_EU2004, None),
+    "HU": (_EU2004, None), "LT": (_EU2004, None), "LV": (_EU2004, None),
+    "MT": (_EU2004, None), "PL": (_EU2004, None), "SI": (_EU2004, None),
+    "SK": (_EU2004, None),
+    "BG": (date(2007, 1, 1), None), "RO": (date(2007, 1, 1), None),
+    "HR": (date(2013, 7, 1), None),
+    "AD": (date.min, None), "MC": (date.min, None), "SM": (date.min, None),
+    "VA": (date.min, None),
+}
+
+# Dependent territories, mapped to the state whose citizenship their residents
+# hold: folds them into that state when guessing citizenship from residence,
+# and keeps them out of the citizenship picker
+SOVEREIGN = {
+    "RE": "FR", "GF": "FR", "GP": "FR", "MQ": "FR", "YT": "FR", "PM": "FR",
+    "MF": "FR", "BL": "FR", "NC": "FR", "PF": "FR", "WF": "FR", "TF": "FR",
+    "CP": "FR",
+    "IC": "ES", "EA": "ES", "AX": "FI", "SJ": "NO", "BV": "NO",
+    "GL": "DK", "FO": "DK",
+    "AW": "NL", "CW": "NL", "SX": "NL", "BQ": "NL",
+    "GI": "GB", "JE": "GB", "GG": "GB", "IM": "GB", "AI": "GB", "BM": "GB",
+    "VG": "GB", "KY": "GB", "FK": "GB", "MS": "GB", "SH": "GB", "TC": "GB",
+    "IO": "GB", "GS": "GB", "PN": "GB",
+    "AS": "US", "GU": "US", "MP": "US", "PR": "US", "VI": "US", "UM": "US",
+    "CX": "AU", "CC": "AU", "NF": "AU", "HM": "AU",
+    "CK": "NZ", "NU": "NZ", "TK": "NZ",
+}
+# Neither a state nor anyone's territory of citizenship
+NO_CITIZENSHIP = {"AQ", "EH"}
+
+
 def _flag_to_cc(flag):
     return "".join(chr(ord(c) - 127397) for c in flag)
 
@@ -356,7 +407,17 @@ def _in_schengen(flag, day):
     return since is not None and day >= since
 
 
-def getSchengenData(username, residence_blocks=(), ignore_residence=False):
+def infer_citizenship(residence_blocks):
+    """Country code with the most total residence time, or None."""
+    totals = defaultdict(float)
+    for b in residence_blocks:
+        cc = _flag_to_cc(b["flag"])
+        span = datetime.fromisoformat(b["end"]) - datetime.fromisoformat(b["start"])
+        totals[SOVEREIGN.get(cc, cc)] += span.total_seconds()
+    return max(totals, key=totals.get) if totals else None
+
+
+def getSchengenData(username, residence_blocks=(), ignore_residence=False, citizenship=None):
     """Days spent in the Schengen area, by local calendar day.
 
     Any day touched counts in full (entry and exit days included). Presence
@@ -366,7 +427,8 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
 
     Days while resident in a Schengen country don't count (see below), using
     the residence periods inferred for the country timeline, unless
-    *ignore_residence* (the user says that inference is wrong).
+    *ignore_residence* (the user says that inference is wrong). Neither do
+    days on which *citizenship* (a country code) gave free movement.
     """
     with pg_session() as pg:
         rows = pg.execute(
@@ -428,9 +490,9 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
             if _in_schengen(dest, end) != _in_schengen(next_origin, next_start):
                 gaps.append({
                     "arrived": dest,
-                    "arrived_on": end.isoformat(),
+                    "arrived_on": end,
                     "departed": next_origin,
-                    "departed_on": next_start.isoformat(),
+                    "departed_on": next_start,
                 })
         else:
             mark(dest, end, horizon)
@@ -441,11 +503,11 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
     first_day = min(days)
     n = (horizon - first_day).days + 1
 
-    def rolling_counter():
+    def rolling_counter(counted):
         """Rolling 180-day count for every day from the first Schengen day to the horizon."""
         prefix = [0] * (n + 1)
         for k in range(n):
-            prefix[k + 1] = prefix[k] + (1 if days.get(first_day + timedelta(days=k)) else 0)
+            prefix[k + 1] = prefix[k] + (1 if counted.get(first_day + timedelta(days=k)) else 0)
 
         def count_on(d):
             k = (d - first_day).days
@@ -455,7 +517,7 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
             return prefix[k + 1] - prefix[max(0, k + 1 - SCHENGEN_WINDOW)]
         return count_on
 
-    count_on = rolling_counter()
+    count_on = rolling_counter(days)
 
     # Residence: inferred residence flips after any 45-day stay, so a visitor's
     # long trip can look like residence. Only a Schengen residence spell of at
@@ -492,13 +554,23 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
     if ignore_residence:
         residences = []
     resident_now = any(r["start"] <= today <= r["end"] for r in residences)
-    if residences:
-        for r in residences:
-            d = r["start"]
-            while d <= r["end"]:
-                days.pop(d, None)
-                d += timedelta(days=1)
-        count_on = rolling_counter()
+    for r in residences:
+        d = r["start"]
+        while d <= r["end"]:
+            days.pop(d, None)
+            d += timedelta(days=1)
+
+    since, until = FREE_MOVEMENT.get(citizenship, (None, None))
+
+    def exempt(d):
+        return since is not None and d >= since and (until is None or d < until)
+
+    def counts(d):
+        """Whether a day in Schengen on *d* would count (not exempt, not resident)."""
+        return not exempt(d) and not any(r["start"] <= d <= r["end"] for r in residences)
+
+    counted = {d: flags for d, flags in days.items() if not exempt(d)}
+    count_on = rolling_counter(counted)
 
     used = count_on(today)
 
@@ -525,13 +597,13 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
     # Outside the area today: how long a stay entered today could last,
     # counting only past days (planned trips ignored)
     max_stay_until = None
-    if not days.get(today) and not resident_now:
+    if not days.get(today) and not resident_now and not exempt(today):
         past = count_on(today - timedelta(days=1))
         k = 0
         while k < SCHENGEN_MAX_DAYS:
             day = today + timedelta(days=k)
             drop_day = day - timedelta(days=SCHENGEN_WINDOW)
-            if drop_day >= first_day and days.get(drop_day):
+            if drop_day >= first_day and counted.get(drop_day):
                 past -= 1
             if past + k + 1 > SCHENGEN_MAX_DAYS:
                 break
@@ -539,20 +611,22 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
         if k:
             max_stay_until = today + timedelta(days=k - 1)
 
-    # Stays: runs of consecutive Schengen days, cut at the last known day
+    # Stays: runs of consecutive Schengen days, cut at the last known day and
+    # where free movement starts or ends (free-movement runs aren't listed)
     stays = []
     run = None
     d = first_day
     while d <= known_end:
-        if days.get(d):
-            if run is None:
-                run = {"entry": d, "exit": d, "flags": [], "peak": 0}
-            run["exit"] = d
-            run["flags"].extend(f for f in days[d] if f not in run["flags"])
-            run["peak"] = max(run["peak"], count_on(d))
-        elif run is not None:
+        if run is not None and (not days.get(d) or run["exempt"] != exempt(d)):
             stays.append(run)
             run = None
+        if days.get(d):
+            if run is None:
+                run = {"entry": d, "exit": d, "flags": [], "peak": 0, "exempt": exempt(d)}
+            run["exit"] = d
+            run["flags"].extend(f for f in days[d] if f not in run["flags"])
+            if not run["exempt"]:
+                run["peak"] = max(run["peak"], count_on(d))
         d += timedelta(days=1)
     if run is not None:
         run["open"] = bool(days.get(known_end + timedelta(days=1)))
@@ -581,6 +655,7 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
             "resident": s.get("resident", False),
         }
         for s in stays
+        if not s.get("exempt")
     ]
 
     return {
@@ -591,6 +666,7 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
         "in_now": bool(days.get(today)),
         "resident_now": resident_now,
         "residence_detected": residence_detected,
+        "exempt_now": exempt(today),
         "must_leave_by": must_leave_by.isoformat() if must_leave_by else None,
         "beyond_trips": beyond_trips,
         "last_flag": trips[-1][1],
@@ -598,7 +674,12 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False):
         "max_stay_until": max_stay_until.isoformat() if max_stay_until else None,
         "peak_ever": max((s["peak"] for s in stays), default=0),
         "stays": stays_out,
-        "gaps": list(reversed(gaps)),
+        "gaps": [
+            dict(g, arrived_on=g["arrived_on"].isoformat(), departed_on=g["departed_on"].isoformat())
+            for g in reversed(gaps)
+            # A gap only matters where it can change the count
+            if counts(g["arrived_on"]) or counts(g["departed_on"])
+        ],
     }
 
 
@@ -610,6 +691,7 @@ def _resides_in_schengen(residence_blocks):
 
 
 SCHENGEN_RESIDENCE_COOKIE = "schengenIgnoreResidence"
+SCHENGEN_CITIZENSHIP_COOKIE = "schengenCitizenship"
 
 
 def _render_schengen(username, nav):
@@ -620,12 +702,32 @@ def _render_schengen(username, nav):
     else:
         ignore_residence = request.cookies.get(SCHENGEN_RESIDENCE_COOKIE) == "1"
 
+    # ?citizenship=XX picks one, ?citizenship=auto goes back to the guess
+    countries = {
+        cc: flag for cc, flag in get_all_countries().items()
+        if cc not in SOVEREIGN and cc not in NO_CITIZENSHIP
+    }
+    citizenship_choice = request.args.get("citizenship")
+    if citizenship_choice not in countries and citizenship_choice != "auto":
+        citizenship_choice = None
+    if citizenship_choice:
+        chosen_citizenship = None if citizenship_choice == "auto" else citizenship_choice
+    else:
+        chosen_citizenship = request.cookies.get(SCHENGEN_CITIZENSHIP_COOKIE)
+        if chosen_citizenship not in countries:
+            chosen_citizenship = None
+
     residence_blocks = getTimelineData(username)[1]
+    inferred_citizenship = infer_citizenship(residence_blocks)
+    citizenship = chosen_citizenship or inferred_citizenship
     response = make_response(render_template(
         "timeline_schengen.html",
         username=username,
-        schengen=getSchengenData(username, residence_blocks, ignore_residence),
+        schengen=getSchengenData(username, residence_blocks, ignore_residence, citizenship),
         ignore_residence=ignore_residence,
+        countries=sorted(countries.items()),
+        chosen_citizenship=chosen_citizenship,
+        inferred_citizenship_flag=countries.get(inferred_citizenship, ""),
         max_days=SCHENGEN_MAX_DAYS,
         nav=nav,
         isCurrent=has_current_trip(get_user_id()),
@@ -636,6 +738,10 @@ def _render_schengen(username, nav):
         response.set_cookie(SCHENGEN_RESIDENCE_COOKIE, "1", max_age=10 * 365 * 86400, samesite="Lax")
     elif choice == "auto":
         response.delete_cookie(SCHENGEN_RESIDENCE_COOKIE)
+    if citizenship_choice == "auto":
+        response.delete_cookie(SCHENGEN_CITIZENSHIP_COOKIE)
+    elif citizenship_choice:
+        response.set_cookie(SCHENGEN_CITIZENSHIP_COOKIE, citizenship_choice, max_age=10 * 365 * 86400, samesite="Lax")
     return response
 
 
