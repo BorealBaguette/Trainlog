@@ -48,9 +48,18 @@ def getTimelineData(username):
         trips = pg.execute(
             """
             WITH base AS (
+                -- Actual times: a delayed departure must sort after whatever
+                -- got the user to it (e.g. the airport transit)
                 SELECT origin_station, destination_station,
-                    COALESCE(utc_start_datetime, start_datetime) AS utc_filtered_start_datetime,
-                    COALESCE(utc_end_datetime, end_datetime) AS utc_filtered_end_datetime
+                    COALESCE(utc_start_datetime, start_datetime)
+                        + make_interval(secs => COALESCE(departure_delay, 0)) AS utc_filtered_start_datetime,
+                    -- Never before the actual departure (departure delay entered alone)
+                    GREATEST(
+                        COALESCE(utc_end_datetime, end_datetime)
+                            + make_interval(secs => COALESCE(arrival_delay, 0)),
+                        COALESCE(utc_start_datetime, start_datetime)
+                            + make_interval(secs => COALESCE(departure_delay, 0))
+                    ) AS utc_filtered_end_datetime
                 FROM trips
                 WHERE user_id = :user_id
             )
@@ -433,7 +442,9 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False, citiz
     with pg_session() as pg:
         rows = pg.execute(
             """
-            SELECT origin_station, destination_station, start_datetime, end_datetime
+            SELECT origin_station, destination_station,
+                start_datetime + make_interval(secs => COALESCE(departure_delay, 0)) AS start_datetime,
+                end_datetime + make_interval(secs => COALESCE(arrival_delay, 0)) AS end_datetime
             FROM trips
             WHERE user_id = :user_id
               AND start_datetime IS NOT NULL
@@ -442,8 +453,11 @@ def getSchengenData(username, residence_blocks=(), ignore_residence=False, citiz
               AND destination_station IS NOT NULL
               AND start_datetime < '2100-01-01'
               AND end_datetime < '2100-01-01'
-            ORDER BY COALESCE(utc_start_datetime, start_datetime),
+            -- Actual (delayed) times, so a late flight sorts after the transit to it
+            ORDER BY COALESCE(utc_start_datetime, start_datetime)
+                         + make_interval(secs => COALESCE(departure_delay, 0)),
                      COALESCE(utc_end_datetime, end_datetime)
+                         + make_interval(secs => COALESCE(arrival_delay, 0))
         """,
             {"user_id": get_user_id(username)},
         ).fetchall()
