@@ -1,0 +1,190 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include nav %}
+<style>
+  .sch-over td { background-color: #fff5f5 !important; }
+  .sch-over .tl-abroad-bar-fill { background: linear-gradient(90deg, #dc3545, #f1aeb5); }
+</style>
+
+<div class="container py-4">
+
+  {% include "timeline_header.html" %}
+
+  <p class="text-muted text-center small mb-4">{{ sch_intro }}</p>
+
+  {% if not schengen %}
+  <p class="text-center text-muted py-5">{{ sch_no_data }}</p>
+  {% else %}
+  {% set over = schengen.used > max_days %}
+
+  <!-- Summary stat cards -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:{{ '#dc3545' if over else '#0d6efd' }}">
+        <div class="tl-stat-value" style="color:{{ '#dc3545' if over else '#0d6efd' }}">{{ schengen.used }} <small class="text-muted fs-6">/ {{ max_days }}</small></div>
+        <div class="tl-stat-label">{{ sch_days_used }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:#198754">
+        <div class="tl-stat-value" style="color:#198754">{{ schengen.remaining }}</div>
+        <div class="tl-stat-label">{{ sch_days_left }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:#fd7e14">
+        <div class="tl-stat-value" style="color:#fd7e14">{% if schengen.next_freed %}<span data-date="{{ schengen.next_freed }}">{{ schengen.next_freed }}</span>{% else %}–{% endif %}</div>
+        <div class="tl-stat-label">{{ sch_next_freed }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:#6f42c1">
+        <div class="tl-stat-value" style="color:#6f42c1">{{ schengen.peak_ever }}</div>
+        <div class="tl-stat-label">{{ sch_peak_ever }}</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-center text-muted small mb-3">
+    {{ sch_window }}: <span data-date="{{ schengen.window_start }}">{{ schengen.window_start }}</span>
+    → <span data-date="{{ schengen.today }}">{{ schengen.today }}</span>
+    {% if not schengen.resident_now %}· {{ sch_in_now if schengen.in_now else sch_out_now }}{% endif %}
+  </p>
+
+  {% if schengen.resident_now %}
+  <div class="alert alert-info tl-alert mb-3">
+    <i class="bi bi-house-fill me-2"></i>{{ sch_resident_now }}
+  </div>
+  {% elif schengen.exempt_now %}
+  <div class="alert alert-info tl-alert mb-3">
+    <i class="bi bi-person-badge-fill me-2"></i>{{ sch_exempt_now }}
+  </div>
+  {% endif %}
+
+  {% if schengen.residence_detected %}
+  <p class="text-center small mb-3">
+    {% if ignore_residence %}
+    <span class="text-muted">{{ sch_residence_ignored }}</span>
+    <a href="?residence=auto">{{ sch_residence_auto }}</a>
+    {% else %}
+    <a class="text-muted" href="?residence=ignore">{{ sch_residence_ignore }}</a>
+    {% endif %}
+  </p>
+  {% endif %}
+
+  {% if schengen.must_leave_by %}
+  <div class="alert {{ 'alert-danger' if over or not schengen.beyond_trips else 'alert-warning' }} tl-alert mb-3">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <span data-date-format="{{ sch_must_leave }}" data-date="{{ schengen.must_leave_by }}">{{ schengen.must_leave_by }}</span>
+    {% if schengen.beyond_trips %}
+    <div class="small mt-1">{{ sch_assume_stay }} <span class="sch-flags">{{ schengen.last_flag }}</span></div>
+    {% endif %}
+  </div>
+  {% elif schengen.max_stay_until %}
+  <div class="alert alert-success tl-alert mb-3">
+    <i class="bi bi-check-circle-fill me-2"></i>
+    <span data-date-format="{{ sch_max_stay_today }}" data-date="{{ schengen.max_stay_until }}">{{ schengen.max_stay_until }}</span>
+  </div>
+  {% endif %}
+
+  {% if schengen.gaps %}
+  {% set gaps = schengen.gaps %}{% set gaps_text = sch_gaps_text %}
+  {% include "timeline_gaps.html" %}
+  {% endif %}
+
+  <!-- Stays table -->
+  <div class="card tl-table-card mb-4">
+    <div class="card-header text-white">
+      <i class="bi bi-calendar3 me-2"></i> {{ sch_stays_title }}
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table tl-table table-hover mb-0">
+          <thead>
+            <tr>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_entry }}</th>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_exit }}</th>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_days }}</th>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_countries }}</th>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important; width:25%">{{ sch_peak_ever }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for stay in schengen.stays %}
+            {% set pct = [stay.peak / max_days * 100, 100] | min %}
+            <tr class="{{ 'sch-over' if stay.peak > max_days }}{{ ' text-muted' if stay.planned or stay.resident }}">
+              <td class="text-nowrap"><span data-date="{{ stay.entry }}">{{ stay.entry }}</span></td>
+              <td class="text-nowrap">
+                {% if stay.open %}<span class="badge bg-primary">{{ sch_ongoing }}</span>
+                {% else %}<span data-date="{{ stay.exit }}">{{ stay.exit }}</span>{% endif %}
+                {% if stay.planned %}<span class="badge bg-secondary ms-1">{{ sch_planned }}</span>{% endif %}
+              </td>
+              <td class="tl-days-num">{{ stay.days }}</td>
+              <td class="sch-flags fs-5">{{ stay.flags | join(' ') }}</td>
+              <td>
+                {% if stay.resident %}
+                <span class="badge bg-light text-secondary border"><i class="bi bi-house-fill me-1"></i>{{ tl_residence }}</span>
+                {% else %}
+                <div class="d-flex align-items-center gap-2">
+                  <div class="tl-abroad-bar flex-grow-1">
+                    <div class="tl-abroad-bar-fill" style="width:{{ pct }}%"></div>
+                  </div>
+                  <span class="tl-pct-label">{{ stay.peak }}</span>
+                </div>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="d-flex justify-content-center align-items-center gap-2 small mb-3">
+    <label for="schCitizenship" class="text-muted text-nowrap">{{ sch_citizenship }}</label>
+    <select id="schCitizenship" class="form-select form-select-sm w-auto">
+      <option value="auto" {% if not chosen_citizenship %}selected{% endif %}>{{ sch_citizenship_auto }}{% if inferred_citizenship_flag %} ({{ inferred_citizenship_flag }}){% endif %}</option>
+      {% for cc, flag in countries %}
+      <option value="{{ cc }}" data-flag="{{ flag }}" {% if chosen_citizenship == cc %}selected{% endif %}>{{ flag }} {{ cc }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <p class="text-muted small">
+    <i class="bi bi-info-circle me-1"></i>{{ sch_disclaimer }}{% if not ignore_residence %} {{ sch_resident_rule }}{% endif %} {{ sch_citizenship_rule }}
+    <a href="https://travel-europe.europa.eu/ees_en" target="_blank" rel="noopener">{{ sch_official }}</a>
+  </p>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+  document.querySelectorAll('[data-date]').forEach(el => {
+    const [y, m, d] = el.dataset.date.split('-').map(Number);
+    const text = new Date(y, m - 1, d).toLocaleDateString('{{ langId }}', opts);
+    el.textContent = el.dataset.dateFormat ? el.dataset.dateFormat.replace('{date}', text) : text;
+  });
+
+  // Citizenship picker: localised country names, sorted, guess kept first
+  const select = document.getElementById('schCitizenship');
+  let names = null;
+  try { names = new Intl.DisplayNames(['{{ langId }}'], { type: 'region' }); } catch (e) {}
+  const options = [...select.options].slice(1);
+  options.forEach(o => {
+    o.dataset.name = o.value;
+    try { if (names) o.dataset.name = names.of(o.value); } catch (e) {}
+    o.textContent = `${o.dataset.flag} ${o.dataset.name}`;
+  });
+  options.sort((a, b) => a.dataset.name.localeCompare(b.dataset.name, '{{ langId }}'));
+  options.forEach(o => select.appendChild(o));
+  select.addEventListener('change', () => {
+    const params = new URLSearchParams(location.search);
+    params.set('citizenship', select.value);
+    location.search = params.toString();
+  });
+});
+</script>
+{% endblock %}

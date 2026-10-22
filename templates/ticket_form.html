@@ -138,7 +138,15 @@
         .ticket-table .ticket-cell-validity {
             flex: 1 1 0;
             min-width: 0;
-            white-space: normal;
+            /* Beats the cell's text-nowrap (itself !important), or the dates run under
+               the actions instead of wrapping. */
+            white-space: normal !important;
+        }
+        .ticket-table .ticket-date {
+            white-space: nowrap;
+        }
+        .ticket-table .ticket-actions .btn {
+            padding-inline: .35rem;
         }
         /* Three figures a line, the same width from one ticket to the next. */
         .ticket-table .ticket-cell-stat {
@@ -215,6 +223,10 @@
                         <input type="radio" class="btn-check" name="kind" id="ticketKind_{{ kind }}" value="{{ kind }}" autocomplete="off" {% if kind == 'single' %}checked{% endif %}>
                         <label for="ticketKind_{{ kind }}"><i class="bi bi-{{ icon }}"></i>{{ label }}</label>
                         {% endfor %}
+                    </div>
+                    <div class="ticket-kind ticket-kind-box" data-kind="single">
+                        <label for="ticketValidOn" class="form-label">{{ticketValidOn}} <span class="fst-italic">({{ticketOptional}})</span></label>
+                        <input type="date" class="form-control" id="ticketValidOn" name="valid_on">
                     </div>
                     <div class="ticket-kind ticket-kind-box" data-kind="pass">
                         <div class="row g-2 mb-1 align-items-end">
@@ -505,6 +517,7 @@ var openTicketForm = (function () {
         $('#ticketPurchasingDate').val(mode === 'edit' ? ticket.purchasing_date : today);
         $('#ticketValidFrom').val(validFrom);
         $('#ticketValidUntil').val(validUntil);
+        $('#ticketValidOn').val(mode === 'edit' ? (ticket.valid_on || '') : '');
         $('#ticketUses').val(ticket.uses || '');
         $('#ticketUseMinutes').val(ticket.use_minutes || '');
         $('#ticketCardUntil').val(ticket.uses ? (ticket.valid_until || '') : '');

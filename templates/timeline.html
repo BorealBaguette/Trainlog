@@ -36,98 +36,11 @@
     box-shadow: 0 2px 10px rgba(0,0,0,0.3);
   }
 
-  /* ── Page chrome ── */
-  .tl-page-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    letter-spacing: -.01em;
-    color: #212529;
-  }
-  .tl-page-title span.username { color: #0d6efd; }
-
-  /* ── Summary stat cards ── */
-  .tl-stat-card {
-    background: #fff;
-    border-radius: 10px;
-    padding: 14px 20px;
-    box-shadow: 0 1px 8px rgba(0,0,0,0.07);
-    border-left: 4px solid #0d6efd;
-  }
-  .tl-stat-card .tl-stat-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #0d6efd;
-    line-height: 1.1;
-  }
-  .tl-stat-card .tl-stat-label {
-    font-size: 0.78rem;
-    color: #6c757d;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-  }
-
-  /* ── Table ── */
-  .tl-table-card {
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 1px 8px rgba(0,0,0,0.07);
-    border: none;
-  }
-  .tl-table-card .card-header {
-    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
-    border: none;
-    border-bottom: 2px solid rgba(255,255,255,0.25);
-    padding: 12px 20px;
-    font-weight: 600;
-    letter-spacing: .02em;
-  }
-
-  .tl-table th {
-    color: #0a58ca;
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: .07em;
-    border-bottom: 2px solid #dee2e6;
-    padding: 10px 16px;
-  }
-  .tl-table td {
-    padding: 9px 16px;
-    vertical-align: middle;
-    border-color: #f0f0f0;
-  }
-  .tl-table tbody tr:last-child td { border-bottom: none; }
-  .tl-abroad-bar {
-    height: 6px;
-    border-radius: 3px;
-    background: #e9ecef;
-    overflow: hidden;
-    min-width: 80px;
-  }
-  .tl-abroad-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    background: linear-gradient(90deg, #0d6efd, #6ea8fe);
-  }
-  .tl-days-num {
-    font-weight: 600;
-    color: #212529;
-    font-variant-numeric: tabular-nums;
-  }
-  .tl-pct-label {
-    font-size: 0.75rem;
-    color: #6c757d;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-    min-width: 36px;
-  }
 </style>
 
 <div class="container py-4">
 
-  <!-- Title -->
-  <div class="text-center mb-4">
-    <p class="tl-page-title">{{ tl_title }} <span class="username">{{ username }}</span></p>
-  </div>
+  {% include "timeline_header.html" %}
 
   <!-- Summary stat cards -->
   {% if days_abroad_by_year %}
@@ -183,7 +96,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for year, days in days_abroad_by_year.items() %}
+            {% for year, days in days_abroad_by_year.items() | sort(reverse=true) %}
             {% set pct = (days / 365 * 100) | round(1) %}
             {% set pct_capped = [pct, 100] | min %}
             <tr>
@@ -209,9 +122,34 @@
   </div>
   {% endif %}
 
+  {% if gaps %}
+  <div class="mt-4">
+    {% set gaps_text = tl_gaps_text %}
+    {% include "timeline_gaps.html" %}
+  </div>
+  {% endif %}
+
+  {% if not show_schengen_tab %}
+  <p class="text-center small mt-4 mb-0">
+    <a class="text-muted" href="{{ url_for('timeline.p_timeline_schengen' if request.endpoint.startswith('timeline.p_') else 'timeline.timeline_schengen', username=username) }}">
+      <span class="tl-flag-icon me-1">🇪🇺</span>{{ tl_tab_schengen }}
+    </a>
+  </p>
+  {% endif %}
+
 </div>
 
 <div class="tl-tooltip" id="tl-tooltip"></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+  document.querySelectorAll('[data-date]').forEach(el => {
+    const [y, m, d] = el.dataset.date.split('-').map(Number);
+    el.textContent = new Date(y, m - 1, d).toLocaleDateString('{{ langId }}', opts);
+  });
+});
+</script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -692,6 +630,30 @@ document.addEventListener("DOMContentLoaded", function () {
     clampPan(); render();
   }, { passive: false });
 
+  // "58 years, 2 months" rather than "21234d": calendar difference, two largest
+  // units. Intl.DurationFormat is recent; older browsers keep the day count.
+  const durationFmt = Intl.DurationFormat ? new Intl.DurationFormat('{{ langId }}', { style: 'short' }) : null;
+  function formatSpan(startMs, endMs) {
+    const days = Math.round((endMs - startMs) / 86400000);
+    if (!durationFmt) return `${days}d`;
+    const s = new Date(startMs), e = new Date(endMs);
+    const a = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+    const b = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+    // a + n months, clamped to the month's length (31 Jan + 1 month = 29 Feb)
+    const addMonths = n => {
+      const t = new Date(a.getFullYear(), a.getMonth() + n, 1);
+      t.setDate(Math.min(a.getDate(), new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()));
+      return t;
+    };
+    let months = (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth();
+    if (addMonths(months) > b) months -= 1;
+    const y = Math.floor(months / 12), m = months % 12;
+    const d = Math.round((b - addMonths(months)) / 86400000);
+    const parts = y ? { years: y, months: m } : m ? { months: m, days: d } : { days };
+    for (const k in parts) if (!parts[k]) delete parts[k];
+    return durationFmt.format(Object.keys(parts).length ? parts : { days: 0 });
+  }
+
   // Hover tooltip
   canvas.addEventListener('mousemove', e => {
     if (dragging) { tooltip.style.display = 'none'; return; }
@@ -699,20 +661,27 @@ document.addEventListener("DOMContentLoaded", function () {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     const RY     = LABEL_H;
+    const resY   = RY + RIBBON_H + RES_GAP;
+    const ms     = minMs + (mouseX - PAD - panPx) / pxPerMs;
+    let hit = null, prefix = '';
     if (mouseY >= RY && mouseY <= RY + RIBBON_H) {
-      const ms  = minMs + (mouseX - PAD - panPx) / pxPerMs;
-      const hit = blocks.find(b => ms >= b.startMs && ms <= b.endMs);
-      if (hit) {
-        const fmt = { year: 'numeric', month: 'short', day: 'numeric' };
-        const s   = new Date(hit.startMs).toLocaleDateString(undefined, fmt);
-        const end = new Date(hit.endMs).toLocaleDateString(undefined, fmt);
-        const d   = Math.round((hit.endMs - hit.startMs) / 86400000);
-        tooltip.innerHTML      = `${hit.flag}&nbsp; ${s} → ${end}&nbsp; <b>${d}d</b>`;
-        tooltip.style.display  = 'block';
-        tooltip.style.left     = (e.clientX + 14) + 'px';
-        tooltip.style.top      = (e.clientY - 38) + 'px';
-        return;
-      }
+      hit = blocks.find(b => ms >= b.startMs && ms <= b.endMs);
+    } else if (mouseY > RY + RIBBON_H && mouseY <= resY + RES_H + 2 && resBlocks.length) {
+      // Residence bar is too thin for a flag; the gap above it counts too.
+      // The current residence is drawn on to the right edge, so match it there.
+      const last = resBlocks[resBlocks.length - 1];
+      hit = resBlocks.find(b => ms >= b.startMs && ms <= b.endMs) || (ms > last.endMs ? last : null);
+      prefix = '<i class="fa-solid fa-house"></i>&nbsp; ';
+    }
+    if (hit) {
+      const fmt = { year: 'numeric', month: 'short', day: 'numeric' };
+      const s   = new Date(hit.startMs).toLocaleDateString(undefined, fmt);
+      const end = new Date(hit.endMs).toLocaleDateString(undefined, fmt);
+      tooltip.innerHTML      = `${prefix}${hit.flag}&nbsp; ${s} → ${end}&nbsp; <b>${formatSpan(hit.startMs, hit.endMs)}</b>`;
+      tooltip.style.display  = 'block';
+      tooltip.style.left     = (e.clientX + 14) + 'px';
+      tooltip.style.top      = (e.clientY - 38) + 'px';
+      return;
     }
     tooltip.style.display = 'none';
   });

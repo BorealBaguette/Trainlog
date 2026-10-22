@@ -1,0 +1,118 @@
+{# Shared by timeline.html and timeline_schengen.html: page title, tabs, card/table styles. #}
+{% set public_view = request.endpoint.startswith("timeline.p_") %}
+<style>
+  /* ── Page chrome ── */
+  .tl-page-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: #212529;
+  }
+  .tl-page-title span.username { color: #0d6efd; }
+
+  /* ── Summary stat cards ── */
+  .tl-stat-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 20px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.07);
+    border-left: 4px solid #0d6efd;
+  }
+  .tl-stat-card .tl-stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0d6efd;
+    line-height: 1.1;
+  }
+  .tl-stat-card .tl-stat-label {
+    font-size: 0.78rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  /* ── Table ── */
+  .tl-table-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.07);
+    border: none;
+  }
+  .tl-table-card .card-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.25);
+    padding: 12px 20px;
+    font-weight: 600;
+    letter-spacing: .02em;
+  }
+
+  .tl-table th {
+    color: #0a58ca;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    border-bottom: 2px solid #dee2e6;
+    padding: 10px 16px;
+  }
+  .tl-table td {
+    padding: 9px 16px;
+    vertical-align: middle;
+    border-color: #f0f0f0;
+  }
+  .tl-table tbody tr:last-child td { border-bottom: none; }
+  .tl-abroad-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #e9ecef;
+    overflow: hidden;
+    min-width: 80px;
+  }
+  .tl-abroad-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #0d6efd, #6ea8fe);
+  }
+  .tl-days-num {
+    font-weight: 600;
+    color: #212529;
+    font-variant-numeric: tabular-nums;
+  }
+  .tl-pct-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    min-width: 36px;
+  }
+
+  .tl-alert { border-radius: 10px; border: none; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
+
+  /* ── Tabs ── */
+  .tl-tabs .nav-link { color: #6c757d; font-weight: 600; }
+  .tl-tabs .nav-link.active { color: #0d6efd; }
+  /* Twemoji has a single weight: faux-bolding the colour glyph smears it */
+  .tl-flag-icon { font-weight: normal; font-synthesis: none; font-size: 1.3em; line-height: 1; vertical-align: -0.1em; }
+</style>
+
+<div class="text-center mb-3">
+  <p class="tl-page-title">{{ tl_title }} <span class="username">{{ username }}</span></p>
+</div>
+
+{# Hidden for Schengen residents, who reach it through the link under the timeline instead #}
+{% if show_schengen_tab | default(true) %}
+<ul class="nav nav-tabs tl-tabs justify-content-center mb-4">
+  <li class="nav-item">
+    <a class="nav-link {% if 'schengen' not in request.endpoint %}active{% endif %}"
+       href="{{ url_for('timeline.p_timeline' if public_view else 'timeline.timeline', username=username) }}">
+      <i class="bi bi-globe2 me-1"></i>{{ tl_tab_countries }}
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if 'schengen' in request.endpoint %}active{% endif %}"
+       href="{{ url_for('timeline.p_timeline_schengen' if public_view else 'timeline.timeline_schengen', username=username) }}">
+      <span class="tl-flag-icon me-1">🇪🇺</span>{{ tl_tab_schengen }}
+    </a>
+  </li>
+</ul>
+{% endif %}

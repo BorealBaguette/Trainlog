@@ -204,6 +204,7 @@ from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src.api.station_cleanup import station_cleanup_blueprint
 from src.api.station_explorer import station_explorer_blueprint
+from src.api.station_map import station_map_blueprint
 from src import visualisations as viz_module
 from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
@@ -379,6 +380,7 @@ app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(station_cleanup_blueprint)
 app.register_blueprint(station_explorer_blueprint)
+app.register_blueprint(station_map_blueprint)
 app.register_blueprint(trips_blueprint)
 app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
@@ -4977,7 +4979,11 @@ def create_trip_share():
         abort(400)
 
     target = "multi_trip" if request.form.get("view") == "multiTrip" else "public_trip"
-    return redirect(url_for(target, tripIds=key), code=303)
+    url = url_for(target, tripIds=key)
+    # The ticket page's map opens with prices shown.
+    if request.form.get("price"):
+        url += "?price"
+    return redirect(url, code=303)
 
 
 @app.route("/public/multiTrip/<tripIds>")
@@ -6407,8 +6413,14 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
     independently of the plan's anchor_date (see process_plan_dates)."""
     plan = get_owned_plan(plan_uuid, username)
     pt = _get_plan_trip_row(plan, plan_trip_uid)
-    formData = dict(request.form)
+    save_plan_trip_edit(plan, pt, dict(request.form))
+    # edit_copy posts via AJAX and redirects client-side.
+    return ""
 
+
+def save_plan_trip_edit(plan, pt, formData):
+    """Write the rich editor's payload `formData` over the plan-trip row `pt` (with its
+    geojson) of `plan`. The MCP's update_plan_trip saves through it too."""
     # Path: edited on the map, otherwise keep the stored geometry.
     if formData.get("path"):
         path = [{"lat": c["lat"], "lng": c["lng"]} for c in json.loads(formData["path"])]
@@ -6482,9 +6494,8 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
         created=pt["created"],
         last_modified=now,
     )
-    update_plan_trip_full(plan_trip_uid, plan_trip)
-    # edit_copy posts via AJAX and redirects client-side.
-    return ""
+    update_plan_trip_full(pt["uid"], plan_trip)
+    return plan_trip
 
 
 @app.route("/u/<username>/plan/<plan_uuid>/reorder", methods=["POST"])
@@ -7176,9 +7187,18 @@ def patchTrip(username):
     except (TypeError, ValueError):
         return jsonify({"error": "A numeric trip_id is required"}), 400
 
-    # Aborts 404 if the trip is missing or is not the caller's, so it is known
-    # to exist by the time it is read.
+    # Aborts 404 if the trip is missing or is not the caller's.
     check_current_user_owns_trip(trip_id)
+    try:
+        return jsonify(apply_trip_patch(trip_id, payload))
+    except ValueError as e:
+        return jsonify({"error": f"Invalid date: {e}"}), 400
+
+
+def apply_trip_patch(trip_id, payload):
+    """patchTrip's edit of a trip the caller owns: `payload` in `trips` column terms
+    (see patchTrip). Returns {trip_id, patched, ignored}; ValueError for a date that
+    doesn't parse. The MCP's update_trip edits trips through it too."""
     stored = get_trip_pg(trip_id)
 
     patched = _read_patch_payload(payload)
@@ -7189,10 +7209,7 @@ def patchTrip(username):
     ignored = sorted(set(patched) - known)
     trip = {**stored, **patched}
 
-    try:
-        formData = build_form_data_from_trip(trip)
-    except ValueError as e:
-        return jsonify({"error": f"Invalid date: {e}"}), 400
+    formData = build_form_data_from_trip(trip)
 
     # A route the caller worked out for itself: its geometry, the 3D track that
     # belongs with it, and the measurements taken off it.
@@ -7206,9 +7223,7 @@ def patchTrip(username):
     new_trip = update_trip_values_from_form_data(trip_id, formData)
     update_trip(trip_id, new_trip, formData)
 
-    return jsonify(
-        {"trip_id": trip_id, "patched": sorted(patched), "ignored": ignored}
-    )
+    return {"trip_id": trip_id, "patched": sorted(patched), "ignored": ignored}
 
 
 def check_current_user_owns_trip(trip_id):
@@ -7864,8 +7879,22 @@ def stopsByDirection():
 
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
-    # Check if this is a reverse geocoding request
-    params = request.args.to_dict(flat=False)
+    payload, error = station_autocomplete(request.args.to_dict(flat=False))
+    return error if payload is None else jsonify(payload)
+
+
+def station_autocomplete(params):
+    """The station search behind every station field of the site, for the query string
+    `params` (as request.args.to_dict(flat=False)): (FeatureCollection, None), or
+    (None, the error response) when the search service failed. The MCP's
+    search_stations asks it too, so an AI picks from what a user would."""
+
+    def arg(name, type=str):
+        try:
+            return type((params.get(name) or [None])[0])
+        except (TypeError, ValueError):
+            return None
+
     # lat/lon alone ask what is there; with q, they only bias the search towards them.
     is_reverse = params.get("lat") and params.get("lon") and not params.get("q")
     endpoint = "/reverse" if is_reverse else "/api"
@@ -7879,16 +7908,16 @@ def stationAutocomplete():
         all_rail = all_rail_stations()
         features = search_stations(
             trip_type,
-            q=None if is_reverse else request.args.get("q", ""),
-            lat=request.args.get("lat", type=float),
-            lon=request.args.get("lon", type=float),
-            radius_km=request.args.get("radius", type=float),
-            limit=request.args.get("limit", 10, type=int),
+            q=None if is_reverse else (arg("q") or ""),
+            lat=arg("lat", float),
+            lon=arg("lon", float),
+            radius_km=arg("radius", float),
+            limit=arg("limit", int) or 10,
             all_rail=all_rail,
         )
         if features is None:
-            return jsonify(error="station search unavailable"), 503
-        return jsonify({"type": "FeatureCollection", "features": features})
+            return None, (jsonify(error="station search unavailable"), 503)
+        return {"type": "FeatureCollection", "features": features}, None
     if not is_reverse:
         # The position only biases quai's ranking; Photon answers fewer results with it.
         params.pop("lat", None)
@@ -7899,8 +7928,8 @@ def stationAutocomplete():
     responseJson = photonRequest(endpoint, params=params, timeout=2)
 
     if responseJson is None:
-        return "Photon Error", 500
-    
+        return None, ("Photon Error", 500)
+
     # Unnamed features (a reverse lookup can return a bare platform or a building)
     # can't be offered as a station, and everything below keys on the name.
     responseJson["features"] = [
@@ -7962,7 +7991,7 @@ def stationAutocomplete():
                     if props["name"] == name and props.get("countrycode") == country:
                         props["homonymy_order"] = f" ({chr(suffix)})"
                         suffix += 1
-    return jsonify(responseJson)
+    return responseJson, None
 
 @app.route("/u/<username>/getManAndOps/<station_type>", methods=["GET", "POST"])
 @login_required
@@ -9446,6 +9475,12 @@ def get_trips_api_internal(username, is_public=False):
     # column, so a field can carry several terms. They are ANDed, the alternatives
     # inside one term ORed.
     filters = parse_filters(request.form.get("filters"), is_public=is_public)
+    # A link to given trips ("id:123|456", "ticket:864") shows them whether or
+    # not they are still upcoming, regardless of the "show upcoming" switch.
+    if past == 1 and any(
+        f["field"] in ("uid", "ticket_ids") and not f["negate"] for f in filters
+    ):
+        include_planned = 1
 
     additional_conditions, search_params = filter_conditions(filters)
     search_params.update(

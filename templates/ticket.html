@@ -141,8 +141,16 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             {% if all_trip_ids %}
-                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('public_trip', tripIds=all_trip_ids|join(',')) }}?price">
-                    <i class="bi bi-map"></i> {{map}}
+                {# Posted to the short-link store: a group's ids spelled out overflow the request line. #}
+                <form method="post" action="{{ url_for('create_trip_share') }}" class="d-inline">
+                    <input type="hidden" name="trips" value="{{ all_trip_ids|join(',') }}">
+                    <input type="hidden" name="price" value="1">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-map"></i> {{map}}
+                    </button>
+                </form>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ group.tickets | map(attribute='uid') | join('|')) }}">
+                    <i class="bi bi-list-ul"></i> {{trips}}
                 </a>
             {% endif %}
             {# Acting on the whole group: only from its own page. #}
@@ -196,7 +204,7 @@
                         {% if ticket.operator %}{{ operator_pill(ticket.operator) }}{% endif %}
                     </td>
                     {% endif %}
-                    <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
+                    <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on or ticket.purchasing_date }}">
                         {% if group.mixed_names or mixed_logos or (mixed_countries and ticket.active_countries) %}
                             <div class="d-flex flex-wrap align-items-center gap-2 fw-medium text-wrap">
                                 {% if mixed_logos and ticket.logo %}<img src="{{ url_for('static', filename=ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
@@ -206,8 +214,8 @@
                                 {% endif %}
                             </div>
                         {% endif %}
-                        {% if ticket.valid_from or ticket.valid_until %}
-                            <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until }}"></span>
+                        {% if ticket.valid_from or ticket.valid_until or ticket.valid_on %}
+                            <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on }}"></span>
                             {% if ticket.valid_from and ticket.valid_until and ticket.valid_from != ticket.valid_until %}
                                 → <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
                             {% endif %}
@@ -249,6 +257,9 @@
                             {% if ticket.trip_ids %}
                                 <a class="btn btn-sm" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price" title="{{map}}">
                                     <i class="bi bi-link-45deg"></i>
+                                </a>
+                                <a class="btn btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ ticket.uid) }}" title="{{trips}}">
+                                    <i class="bi bi-list-ul"></i>
                                 </a>
                             {% endif %}
                             <button type="button" class="btn btn-sm edit-button" data-ticket='{{ ticket|tojson }}' title="{{edit}}">

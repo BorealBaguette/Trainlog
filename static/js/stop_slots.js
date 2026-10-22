@@ -102,13 +102,54 @@ function renderStops(slot, label) {
   var list = (kind === 'track' ? globalStationTracks : globalStationLines)[label];
   var chosen = findStop(list, slot.selected);
   var $chips = $('<div class="track-menu-chips">');
-  // In the order they are numbered: 1a, 1b, 3, … 10, 12; "A" before "B".
-  list.slice().sort(function (a, b) {
-    return String(a.ref).localeCompare(String(b.ref), undefined, { numeric: true, sensitivity: 'base' });
-  }).forEach(function (c) {
+  // In the order they are numbered: 1a, 1b, 3, 3 bis, … 10, 12; "A" before "B". Tracks named
+  // by a word after their number (Bologna's "1 Est", "1 Ovest") come after the plain ones,
+  // each word on rows of its own below a rule: 1, 3, 4 … / 1 Est, 2 Est … / 1 Ovest, ….
+  // A letter or bis/ter/quater after the number is a track of its own, not a group. Tracks
+  // named by letters alone (Gare de Lyon's A … N) are a group too, between the two.
+  var byRef = function (a, b) {
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  };
+  var group = function (c) {
+    var ref = String(c.ref).trim();
+    if (!/^\d/.test(ref)) return ' letters';
+    var m = /^\d+\s+(\S.*)$/.exec(ref);
+    var word = m ? m[1].toLowerCase() : '';
+    return /^(\p{L}|bis|ter|quater)$/u.test(word) ? '' : word;
+  };
+  // In a grid of equal cells, five to a row (three for names like "1 Ovest"), so that the
+  // menu stays narrow and its rows line up. A word group's word names the rule above it, and
+  // is written lighter than the number on its chips ("1 Est"), so the chips still read as the
+  // tracks are signed. The same track twice ("2C", "2c") is shown once.
+  var seen = {};
+  var shown = list.filter(function (c) {
+    var key = stopKey(c.ref);
+    return !seen[key] && (seen[key] = true);
+  }).sort(function (a, b) {
+    // Numbers, then letters (' letters' sorts before any word), then each word.
+    var ga = group(a), gb = group(b);
+    return ga !== gb ? (ga < gb ? -1 : 1) : byRef(a.ref, b.ref);
+  });
+  var wide = shown.some(function (c) { return String(c.ref).trim().length > 3; });
+  $chips.css('--track-cols', Math.min(wide ? 3 : 5, shown.length));
+  var lastGroup = null;
+  shown.forEach(function (c) {
+    var g = group(c);
+    var m = g && g !== ' letters' ? /^(\d+)\s+(.*)$/.exec(String(c.ref).trim()) : null;
+    if (lastGroup !== null && g !== lastGroup) {
+      $chips.append($('<div class="track-menu-break">').append(m ? $('<span>').text(m[2]) : null));
+    }
+    // A half's letter, or bis/ter, raised after its number: 11ᵃ, 20ᵇⁱˢ.
+    if (!g) m = /^(\d+)\s*(\D.*)$/.exec(String(c.ref).trim());
+    lastGroup = g;
     var active = !!chosen && (chosen === c || (chosen.parts || []).indexOf(c) !== -1);
-    var $chip = $('<button type="button" class="track-chip">').text(c.ref).toggleClass('active', active)
+    var $chip = $('<button type="button" class="track-chip">').toggleClass('active', active)
       .on('click', function () { pickStop(slot, kind, active ? '' : c.ref); });
+    if (m) {
+      $chip.append(document.createTextNode(m[1] + (g ? ' ' : '')),
+                   $('<span>').addClass(g ? 'track-chip-word' : 'track-chip-half').text(m[2]));
+    }
+    else $chip.text(c.ref);
     if (c.colour) {
       $chip.css(active ? { background: c.colour, borderColor: c.colour, color: '#fff' }
                        : { borderColor: c.colour, boxShadow: 'inset 3px 0 0 ' + c.colour });
