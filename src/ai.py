@@ -76,15 +76,19 @@ def call_ai_json(prompt, images=None, model=None, timeout=120):
 
 
 class FakeRequest:
-    def __init__(self, use_new_router=False):
-        self.query_string = b"overview=full&geometries=geojson"
+    def __init__(self, use_new_router=False, waypoint_modes=None):
+        query = "overview=full&geometries=geojson"
+        if waypoint_modes:
+            # The new router's per-point hard/soft modes, as the routing page sends them.
+            query += "&waypoint_modes=" + ",".join(waypoint_modes)
+        self.query_string = query.encode()
         self.args = {"use_new_router": "true" if use_new_router else "false"}
 
 # The trip types the website routes with the new (GraphHopper) router by default
 # (NEW_ROUTER_TYPES in routing.js).
 NEW_ROUTER_TYPES = {"train", "tram", "metro", "funicular", "rail"}
 
-def _routed(points, trip_type, use_new_router):
+def _routed(points, trip_type, use_new_router, waypoint_modes=None):
     """(path, duration seconds, routing details) from one router, or (None, None, None)."""
     routing_type_map = {"tram": "train", "metro": "train", "funicular": "train", "rail": "train"}
     routing_type = routing_type_map.get(trip_type, trip_type)
@@ -93,7 +97,8 @@ def _routed(points, trip_type, use_new_router):
 
     try:
         # The trip type itself, so the new router picks its tram/metro/all profile.
-        result = forward_routing_core(trip_type if use_new_router else routing_type, path, FakeRequest(use_new_router))
+        fake_request = FakeRequest(use_new_router, waypoint_modes if use_new_router else None)
+        result = forward_routing_core(trip_type if use_new_router else routing_type, path, fake_request)
         if hasattr(result, 'get_json'):
             data = result.get_json()
         elif isinstance(result, str):
@@ -117,15 +122,18 @@ def _routed(points, trip_type, use_new_router):
 
     return None, None, None
 
-def route_via(points, trip_type):
+ROUTABLE_TYPES = {"train", "tram", "metro", "funicular", "rail", "ferry", "aerialway", "ski",
+                  "bus", "car", "walk", "cycle", "scooter"}
+
+def route_via(points, trip_type, waypoint_modes=None):
     """Route through points (origin, any vias, destination), as the website would:
     rail on the new router, falling back to the old one. Returns (path, duration
-    seconds, routing details); details (electrification) only from the new router."""
-    routable_types = {"train", "tram", "metro", "funicular", "rail", "ferry", "aerialway", "bus", "car", "walk", "cycle"}
-    if trip_type not in routable_types:
+    seconds, routing details); details (electrification) only from the new router.
+    waypoint_modes ("hard"/"soft", one per point) are the new router's."""
+    if trip_type not in ROUTABLE_TYPES:
         return None, None, None
     if trip_type in NEW_ROUTER_TYPES:
-        routed = _routed(points, trip_type, True)
+        routed = _routed(points, trip_type, True, waypoint_modes)
         if routed[0]:
             return routed
     return _routed(points, trip_type, False)
