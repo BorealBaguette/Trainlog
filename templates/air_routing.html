@@ -225,13 +225,11 @@ function showLoadingSidebar(message = "Loading flight path...") {
 // estimated_trip_duration set on newTrip to match.
 function routeToSave() {
     if (useFR24 && Array.isArray(fr24PathCache) && fr24PathCache.length >= 2) {
+        const pathToSave = fr24PathCache.map(p => ({ lat: p[0], lng: p[1] }));
+        console.log("Saving FR24 path", pathToSave);
         newTrip["trip_length"] = getTotalDistanceFromPath(fr24PathCache);
         newTrip["estimated_trip_duration"] = newTrip.fr24_duration ?? newTrip.estimated_trip_duration;
-        return {
-            path: fr24PathCache.map(p => ({ lat: p[0], lng: p[1] })),
-            altitude: fr24AltCache,
-            timestamps: fr24TimeCache
-        };
+        return { path: pathToSave, altitude: fr24AltCache, timestamps: fr24TimeCache };
     }
     const path = [
         { lat: origMarker.getLatLng().lat, lng: origMarker.getLatLng().lng },
