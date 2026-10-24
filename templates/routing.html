@@ -136,8 +136,11 @@ var wplist = [origCoord].concat(viaStations.map(function(v){ return v[0]; })).co
 // placed on their platform's track (new.html's matchStopTracks), which are exact.
 // Those the page made exact itself (v[4] 'auto', put on their direction's stop position) are
 // kept exact only where that does not lengthen the route (routing.js, createCustomRouter).
+// v[3] false is a point made approximate by hand (a reopened trip's hard: false), which
+// a later drag must not make exact.
 window.routingWaypointMeta = viaStations.map(function(v){
-  return v[3] === true ? { name: v[1], stop: v[2], hard: true, auto: v[4] === 'auto' } : { name: v[1], stop: v[2] };
+  if (v[3] === true) return { name: v[1], stop: v[2], hard: true, auto: v[4] === 'auto' };
+  return v[3] === false ? { name: v[1], stop: v[2], hard: false } : { name: v[1], stop: v[2] };
 });
 // Ends picked on a station's track or line are stop positions on the track: exact (new.html).
 window.routingEndpointMeta = ["originExact", "destinationExact"].map(function(k){
@@ -235,6 +238,50 @@ if (!SINGLE_POINT.includes(type)) {
   };
   if (startFreehand) enterFreehand();
 }
+
+// ─── Route for the app's trip editor ────────────────────────────────────────
+// The app edits an existing trip's path on this page, then saves it with the rest of
+// its edits through patchTrip. saveTrip() would create a new trip instead, so the app
+// reads the route through getRouteForApp() (what edit_copy.html's Edit path button
+// keeps), and nothing is saved here.
+var appRouteState = 'loading';   // 'loading' | 'ready' | 'error'
+if (window.control) {
+  window.control.on('routingstart', function () { appRouteState = 'loading'; })
+    .on('routesfound', function () { appRouteState = 'ready'; })
+    .on('routingerror', function () { appRouteState = 'error'; });
+}
+
+// The route as patchTrip takes it: {ok: true, path: [{lat, lng}, ...], waypoints (the
+// intermediate points: [{lat, lng, name?, stop?, hard?}, ...]), route_source, details,
+// trip_length (m), estimated_trip_duration (s)}. {ok: false, error} while the route is
+// still being computed or could not be.
+function getRouteForApp() {
+  var route = {
+    ok: true,
+    route_source: freehandActive ? 'freehand' : 'router',
+    trip_length: newTrip["trip_length"],
+    estimated_trip_duration: newTrip["estimated_trip_duration"],
+    details: null,
+    waypoints: []
+  };
+  if (SINGLE_POINT.includes(type)) {
+    route.path = currentRoute;
+    route.trip_length = 0;
+    route.estimated_trip_duration = 0;
+  } else if (freehandActive && freehandEditor) {
+    route.path = freehandEditor.getPath().map(function (p) { return { lat: p.lat, lng: p.lng }; });
+    route.waypoints = freehandEditor.getWaypoints();
+  } else {
+    if (appRouteState !== 'ready') return { ok: false, error: appRouteState };
+    route.path = currentRoute.map(function (p) { return { lat: p.lat, lng: p.lng }; });
+    route.waypoints = newTrip["waypoints"] ? JSON.parse(newTrip["waypoints"]) : [];
+    route.details = routeDetails;
+  }
+  if (!route.path || route.path.length < 1) return { ok: false, error: 'noRoute' };
+  return route;
+}
+window.getRouteForApp = getRouteForApp;
+// ─── End route for the app's trip editor ────────────────────────────────────
 
 function navigateAfterSave(continueTrip, isPlan, lastTrip) {
     if (isPlan) {
