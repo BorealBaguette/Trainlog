@@ -6,6 +6,7 @@ from app.py after fetchTripsPaths is defined.
 """
 
 import json
+import unicodedata
 from datetime import datetime
 
 from flask import Blueprint, jsonify, render_template, request, session, url_for
@@ -324,8 +325,10 @@ def _flag_country(label):
 
 
 def _station_name(label):
-    """A station name without its leading flag."""
-    return (label or "").split(" ", 1)[-1] if _flag_country(label) else (label or "")
+    """A station name without its leading flag, with its spacing and Unicode form made uniform
+    so the same station typed or geocoded differently is one node."""
+    name = (label or "").split(" ", 1)[-1] if _flag_country(label) else (label or "")
+    return " ".join(unicodedata.normalize("NFKC", name).split())
 
 
 @bp.route("/u/<username>/api/rail_graph.json")
