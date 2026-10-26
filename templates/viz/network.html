@@ -49,7 +49,7 @@
   svg.network { --accent: #40b91f; }
   svg.network.rail { --accent: #52b0fe; }
   .node circle { fill: #14202e; stroke: var(--accent); stroke-width: 2px; cursor: pointer; }
-  .node image.flag { opacity: 0.8; pointer-events: none; }
+  .node image.flag { pointer-events: none; }
   .node .code { fill: #e8edf3; font: bold 11px "Century Gothic", sans-serif; text-anchor: middle;
     dominant-baseline: central; pointer-events: none; }
   .node .city { fill: #8fa6bd; font: 10px "Century Gothic", sans-serif; text-anchor: middle; pointer-events: none; }
@@ -145,8 +145,24 @@ const tooltip = document.getElementById('tooltip');
 
 // The view follows the graph (fitView) until the user pans, zooms or drags; a new filter hands it back.
 let userMoved = false;
+// Semantic zoom: zooming spreads the places by the full factor, but bubbles, lines and text
+// grow only by its (1 − SEMANTIC_ZOOM) power, so zooming into a tangled cluster opens it up
+// instead of just enlarging the tangle. Measured from the fitted view (fitK), which looks
+// exactly as drawn; zs is what every drawn size is multiplied by.
+const SEMANTIC_ZOOM = 0.6;
+// Resizing redraws every edge outline and re-rasterizes every flag, far too much for each of a
+// wheel's or a pinch's many events: while zooming the graph is only transformed, and its
+// sizes follow once, SIZE_SETTLE_MS after the zooming stops.
+const SIZE_SETTLE_MS = 150;
+let zoomK = 1, fitK = 1, zs = 1, sizeTimer = null;
 const zoom = d3.zoom().scaleExtent([0.1, 6]).on('zoom', e => {
   root.attr('transform', e.transform);
+  zoomK = e.transform.k;
+  clearTimeout(sizeTimer);
+  sizeTimer = setTimeout(() => {
+    const nextZs = Math.pow(zoomK / fitK, -SEMANTIC_ZOOM);
+    if (Math.abs(nextZs - zs) > 1e-3) setSizeScale(nextZs); else fadeFlags();
+  }, SIZE_SETTLE_MS);
   if (e.sourceEvent) userMoved = true;
 });
 svg.call(zoom);
@@ -284,13 +300,10 @@ function rebuild() {
     g.append('text').attr('class', 'city');
     return g;
   });
-  g.select('circle').attr('r', d => d.r);
-  // Inside the ring, so the accent colour still frames it.
-  g.select('image.flag').attr('href', flagOf)
-    .attr('x', d => 1 - d.r).attr('y', d => 1 - d.r)
-    .attr('width', d => 2 * d.r - 2).attr('height', d => 2 * d.r - 2);
-  g.select('.code').text(d => MODE === 'train' ? '' : d.label).style('font-size', d => Math.max(10, d.r * 0.62) + 'px');
-  g.select('.city').text(d => MODE === 'train' ? d.label : checked('cities') ? d.city : '').attr('y', d => d.r + 12);
+  g.select('image.flag').attr('href', flagOf);
+  g.select('.code').text(d => MODE === 'train' ? '' : d.label);
+  g.select('.city').text(d => MODE === 'train' ? d.label : checked('cities') ? d.city : '');
+  applySizes();
   g.on('mouseenter', (e, d) => focus(d))
     .on('mousemove', (e, d) => showTip(e, nodeTip(d)))
     .on('mouseleave', () => { unfocus(); hideTip(); })
@@ -340,14 +353,36 @@ function applyForces() {
 // was flown into.
 const CURVE_STEPS = 12;
 
+// Every drawn size, at the current semantic-zoom scale zs.
+function applySizes() {
+  const g = nodeLayer.selectAll('g.node');
+  g.select('circle').attr('r', d => d.r * zs).style('stroke-width', 2 * zs + 'px');
+  // Inside the ring, so the accent colour still frames it.
+  g.select('image.flag')
+    .attr('x', d => zs - d.r * zs).attr('y', d => zs - d.r * zs)
+    .attr('width', d => 2 * (d.r - 1) * zs).attr('height', d => 2 * (d.r - 1) * zs);
+  g.select('.code').style('font-size', d => Math.max(10, d.r * 0.62) * zs + 'px');
+  g.select('.city').attr('y', d => (d.r + 12) * zs)
+    .style('font-size', (MODE === 'train' ? 11 : 10) * zs + 'px').style('stroke-width', 3 * zs + 'px');
+  labelLayer.selectAll('text').style('font-size', 11 * zs + 'px').style('stroke-width', 3 * zs + 'px');
+  hitLayer.selectAll('path').style('stroke-width', 10 * zs + 'px');
+  fadeFlags();
+}
+
+function setSizeScale(next) {
+  zs = next;
+  applySizes();
+  tick();
+}
+
 function geometry(l) {
   const s = l.source, t = l.target;
   const dx = t.x - s.x, dy = t.y - s.y, len = Math.hypot(dx, dy) || 1;
   const bend = Math.min(40, len * 0.15);
   const cx = (s.x + t.x) / 2 - dy / len * bend, cy = (s.y + t.y) / 2 + dx / len * bend;
   const trim = (p, r) => { const d = Math.hypot(cx - p.x, cy - p.y) || 1; return [p.x + (cx - p.x) * r / d, p.y + (cy - p.y) * r / d]; };
-  const [x1, y1] = trim(s, s.r + 1);
-  const [x2, y2] = trim(t, t.r + 1);
+  const [x1, y1] = trim(s, (s.r + 1) * zs);
+  const [x2, y2] = trim(t, (t.r + 1) * zs);
 
   // The quadratic Bézier P1 → C → P2, and its unit normal.
   const at = u => [(1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2,
@@ -360,7 +395,7 @@ function geometry(l) {
   const side = (u, k) => { const [px, py] = at(u), [nx, ny] = normal(u); return `${px + nx * k},${py + ny * k}`; };
 
   const arc = Math.hypot(cx - x1, cy - y1) + Math.hypot(x2 - cx, y2 - cy);  // close enough for a gentle bow
-  const hw = l.w / 2, hh = Math.max(5, l.w * 1.2);
+  const hw = l.w * zs / 2, hh = Math.max(5, l.w * 1.2) * zs;
   const startHead = directed && l.ba > 0, endHead = directed && l.ab > 0;
   const heads = (startHead ? 1 : 0) + (endHead ? 1 : 0);
   const headLen = heads ? Math.min(hh * 1.7, Math.max(0, arc - 2) / heads) : 0;
@@ -386,6 +421,7 @@ function fitView(duration) {
   const y0 = d3.min(nodes, n => n.y - n.r), y1 = d3.max(nodes, n => n.y + n.r + below);
   const top = 70, pad = 30;
   const k = Math.min(2, (width - 2 * pad) / Math.max(1, x1 - x0), (height - top - 2 * pad) / Math.max(1, y1 - y0));
+  fitK = k;
   const transform = d3.zoomIdentity
     .translate(width / 2 - k * (x0 + x1) / 2, top + (height - top) / 2 - k * (y0 + y1) / 2)
     .scale(k);
@@ -456,8 +492,15 @@ function hideTip() { tooltip.style.display = 'none'; }
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function exportSvg() {
+  // Drawn at the fitted view's sizes, whatever the semantic zoom on screen.
+  const viewZs = zs;
+  if (viewZs !== 1) setSizeScale(1);
   const clone = svg.node().cloneNode(true);
+  if (viewZs !== 1) setSizeScale(viewZs);
   clone.querySelectorAll('.hit').forEach(el => el.remove());
+  // The export is the graph unzoomed, so its flags show as they would at 1×.
+  clone.querySelectorAll('image.flag').forEach(el =>
+    el.setAttribute('opacity', flagOpacity((Number(el.getAttribute('width')) + 2) / 2, 1)));
   clone.classList.remove('focus');
   clone.querySelector('g').removeAttribute('transform');
 
@@ -539,7 +582,12 @@ window.addEventListener('resize', () => { applyForces(); sim.alpha(0.3).restart(
 // The site's flag SVGs have a viewBox but no size, which Firefox won't draw as an image; stamp
 // the size on, and keep each as a data URI so an exported SVG or PNG carries it too.
 const FLAG_DIR = "{{ url_for('static', filename='images/flags') }}";
-const FLAG_MIN_R = 8;
+// A flag fades in as its bubble grows on screen (radius × zoom), from nothing at FLAG_FADE[0] px
+// to full at FLAG_FADE[1]: too small to read, it would only be a speck of colour, but zooming
+// into a cluster brings them up rather than leaving its small bubbles bare.
+// A big network fits the screen only at about half size, putting most bubbles at 3.5–5 px:
+// still enough to tell a tricolour from a cross.
+const FLAG_FADE = [2, 4.5], FLAG_OPACITY = 0.8;
 const flags = new Map();
 
 function loadFlag(country) {
@@ -554,8 +602,17 @@ function loadFlag(country) {
     .catch(() => {});
 }
 
+function flagOpacity(r, k) {
+  const t = Math.max(0, Math.min(1, (r * k - FLAG_FADE[0]) / (FLAG_FADE[1] - FLAG_FADE[0])));
+  return FLAG_OPACITY * t * t * (3 - 2 * t);
+}
+
+function fadeFlags() {
+  nodeLayer.selectAll('image.flag').attr('opacity', d => flagOpacity(d.r * zs, zoomK));
+}
+
 function flagOf(d) {
-  return MODE === 'train' && d.r >= FLAG_MIN_R && flags.get(d.country) || null;
+  return MODE === 'train' && flags.get(d.country) || null;
 }
 
 fetch(DATA_URL).then(r => r.json()).then(async data => {
