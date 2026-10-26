@@ -372,21 +372,36 @@ function showTip(e, html) {
 }
 function hideTip() { tooltip.style.display = 'none'; }
 
-// The graph as it is on screen, as a standalone SVG document with its own styles and background.
+// The whole graph as a standalone SVG document, framed on the bubbles whatever the zoom on
+// screen, with its own styles and background. The style element must be an SVG one: an HTML
+// <style> is ignored once the file stands alone, and every edge then fills black.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 function exportSvg() {
   const clone = svg.node().cloneNode(true);
-  const { width, height } = svg.node().getBoundingClientRect();
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.querySelectorAll('.hit').forEach(el => el.remove());
+  clone.classList.remove('focus');
+  clone.querySelector('g').removeAttribute('transform');
+
+  const pad = 30, below = checked('cities') ? 16 : 0;
+  const x = d3.min(nodes, n => n.x - n.r) - pad, y = d3.min(nodes, n => n.y - n.r) - pad;
+  const width = Math.ceil(d3.max(nodes, n => n.x + n.r) + pad - x);
+  const height = Math.ceil(d3.max(nodes, n => n.y + n.r + below) + pad - y);
+  clone.setAttribute('xmlns', SVG_NS);
+  clone.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
   clone.setAttribute('width', width);
   clone.setAttribute('height', height);
-  clone.classList.remove('focus');
-  const style = document.createElement('style');
+
+  const style = document.createElementNS(SVG_NS, 'style');
   style.textContent = [...document.styleSheets].flatMap(sheet => {
     try { return [...sheet.cssRules].map(r => r.cssText); } catch { return []; }
   }).filter(css => /^(\.link|\.node|svg)/.test(css)).join('\n');
-  clone.prepend(style);
-  clone.insertAdjacentHTML('afterbegin', `<rect width="100%" height="100%" fill="#0d1b2a"/>`);
-  return { blob: new Blob([clone.outerHTML], { type: 'image/svg+xml' }), width, height };
+  const background = document.createElementNS(SVG_NS, 'rect');
+  Object.entries({ x, y, width, height, fill: '#0d1b2a' }).forEach(([k, v]) => background.setAttribute(k, v));
+  clone.prepend(style, background);
+
+  const markup = new XMLSerializer().serializeToString(clone);
+  return { blob: new Blob([markup], { type: 'image/svg+xml' }), width, height };
 }
 
 function save(blob, filename) {
