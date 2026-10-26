@@ -1674,6 +1674,7 @@
     "vizEdgeLength": "Duljina veze",
     "vizRepulsion": "Odbijanje",
     "vizDownloadSvg": "Preuzmi SVG",
+    "vizDownloadPng": "Preuzmi PNG",
     "vizAirportCount": {
         "one": "{n} zračna luka",
         "few": "{n} zračne luke",

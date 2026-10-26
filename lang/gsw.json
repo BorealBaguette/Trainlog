@@ -1664,6 +1664,7 @@
     "vizEdgeLength": "Kantelängi",
     "vizRepulsion": "Abstossig",
     "vizDownloadSvg": "SVG abelade",
+    "vizDownloadPng": "PNG abelade",
     "vizAirportCount": {
         "one": "{n} Flughafe",
         "other": "{n} Flughäfe"

@@ -1666,6 +1666,7 @@
     "vizEdgeLength": "Comprimento das ligações",
     "vizRepulsion": "Repulsão",
     "vizDownloadSvg": "Baixar SVG",
+    "vizDownloadPng": "Baixar PNG",
     "vizAirportCount": {
         "one": "{n} aeroporto",
         "other": "{n} aeroportos"

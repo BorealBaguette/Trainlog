@@ -1674,6 +1674,7 @@
     "vizEdgeLength": "Довжина зв'язків",
     "vizRepulsion": "Відштовхування",
     "vizDownloadSvg": "Завантажити SVG",
+    "vizDownloadPng": "Завантажити PNG",
     "vizAirportCount": {
         "one": "{n} аеропорт",
         "few": "{n} аеропорти",

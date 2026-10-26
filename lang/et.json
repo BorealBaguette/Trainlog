@@ -1663,6 +1663,7 @@
     "vizEdgeLength": "Ühenduse pikkus",
     "vizRepulsion": "Tõukumine",
     "vizDownloadSvg": "Laadi alla SVG",
+    "vizDownloadPng": "Laadi alla PNG",
     "vizAirportCount": {
         "one": "{n} lennujaam",
         "other": "{n} lennujaama"

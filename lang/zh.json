@@ -1658,6 +1658,7 @@
     "vizEdgeLength": "连线长度",
     "vizRepulsion": "排斥力",
     "vizDownloadSvg": "下载 SVG",
+    "vizDownloadPng": "下载 PNG",
     "vizAirportCount": {
         "other": "{n} 个机场"
     },

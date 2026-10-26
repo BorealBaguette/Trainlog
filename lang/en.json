@@ -1663,6 +1663,7 @@
     "vizEdgeLength": "Edge length",
     "vizRepulsion": "Repulsion",
     "vizDownloadSvg": "Download SVG",
+    "vizDownloadPng": "Download PNG",
     "vizAirportCount": {
         "one": "{n} airport",
         "other": "{n} airports"

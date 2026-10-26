@@ -1664,6 +1664,7 @@
     "vizEdgeLength": "Yhteyden pituus",
     "vizRepulsion": "Hylkivyys",
     "vizDownloadSvg": "Lataa SVG",
+    "vizDownloadPng": "Lataa PNG",
     "vizAirportCount": {
         "one": "{n} lentoasema",
         "other": "{n} lentoasemaa"

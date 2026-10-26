@@ -1691,6 +1691,7 @@
     "vizEdgeLength": "Délka spojení",
     "vizRepulsion": "Odpudivost",
     "vizDownloadSvg": "Stáhnout SVG",
+    "vizDownloadPng": "Stáhnout PNG",
     "vizAirportCount": {
         "one": "{n} letiště",
         "few": "{n} letiště",

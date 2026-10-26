@@ -1658,6 +1658,7 @@
     "vizEdgeLength": "Bağlantı uzunluğu",
     "vizRepulsion": "İtme",
     "vizDownloadSvg": "SVG indir",
+    "vizDownloadPng": "PNG indir",
     "vizAirportCount": {
         "other": "{n} havalimanı"
     },

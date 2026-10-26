@@ -1658,6 +1658,7 @@
     "vizEdgeLength": "線の長さ",
     "vizRepulsion": "反発力",
     "vizDownloadSvg": "SVGをダウンロード",
+    "vizDownloadPng": "PNGをダウンロード",
     "vizAirportCount": {
         "other": "{n}空港"
     },

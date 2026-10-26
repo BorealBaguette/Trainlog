@@ -1666,6 +1666,7 @@
     "vizEdgeLength": "Förbindelselängd",
     "vizRepulsion": "Repulsion",
     "vizDownloadSvg": "Ladda ner SVG",
+    "vizDownloadPng": "Ladda ner PNG",
     "vizAirportCount": {
         "one": "{n} flygplats",
         "other": "{n} flygplatser"

@@ -1689,6 +1689,7 @@
     "vizEdgeLength": "Długość połączeń",
     "vizRepulsion": "Odpychanie",
     "vizDownloadSvg": "Pobierz SVG",
+    "vizDownloadPng": "Pobierz PNG",
     "vizAirportCount": {
         "one": "{n} lotnisko",
         "few": "{n} lotniska",

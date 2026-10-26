@@ -1660,6 +1660,7 @@
     "vizEdgeLength": "연결선 길이",
     "vizRepulsion": "반발력",
     "vizDownloadSvg": "SVG 다운로드",
+    "vizDownloadPng": "PNG 다운로드",
     "vizAirportCount": {
         "other": "{n}개 공항"
     },

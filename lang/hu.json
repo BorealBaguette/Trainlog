@@ -1658,6 +1658,7 @@
     "vizEdgeLength": "Élhossz",
     "vizRepulsion": "Taszítás",
     "vizDownloadSvg": "SVG letöltése",
+    "vizDownloadPng": "PNG letöltése",
     "vizAirportCount": {
         "other": "{n} repülőtér"
     },
