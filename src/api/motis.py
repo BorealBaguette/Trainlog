@@ -50,9 +50,7 @@ USER_AGENT = "Trainlog/1.0 (https://trainlog.me; admin@trainlog.me; trip form ti
 WINDOW_BEFORE = timedelta(minutes=20)
 WINDOW_AHEAD = timedelta(days=4)
 WINDOW_LENGTH = WINDOW_BEFORE + WINDOW_AHEAD
-# The list is never cut before this (see _departures)...
-MIN_HORIZON = timedelta(hours=24)
-# ...nor longer than this many departures, the earliest kept.
+# The list is never longer than this many departures, the earliest kept.
 MAX_DEPARTURES = 60
 # Ask for a number of results rather than a fixed window: MOTIS starts with a short
 # window and widens it until it has found this many itineraries. A fixed 25 h window
@@ -388,7 +386,7 @@ def _direct_leg(itinerary, modes, origin, destination):
     return legs[0] if len(legs) == 1 else None
 
 
-def _board_legs(stop_id, modes, start, destination, nearest_m=None):
+def _board_legs(stop_id, modes, start, destination, nearest_m=None, loop=False):
     """Direct services from the origin stop's departure board: those that later call
     within reach (_reach) of the destination, and about as near it as its nearest stop
     (nearest_m, NEAREST_STOP_SLACK_M), shaped like plan legs.
@@ -396,19 +394,12 @@ def _board_legs(stop_id, modes, start, destination, nearest_m=None):
     The planner only returns the best journeys, and drops a direct service whenever
     another way is faster: Opéra → République on metro line 8 comes back as "ride to
     Strasbourg–Saint-Denis and walk", so it never counts as direct. The board lists
-    every departure regardless, with where each one goes next."""
-    board = _fetch(
-        MOTIS_BOARD_URL,
-        {
-            "stopId": stop_id,
-            "time": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "n": BOARD_DEPARTURES,
-            "mode": ",".join(sorted(modes)),
-            "fetchStops": "true",
-        },
-    )
+    every departure regardless, with where each one goes next.
+
+    A loop (destination = origin) alights at the last stop within reach instead: where a
+    circular line, or a run that turns at its terminus and comes back, returns."""
     legs = []
-    for dep in board.get("stopTimes", []):
+    for dep in _board(stop_id, modes, start):
         following = dep.get("nextStops") or []
         # The following stop nearest the destination, not the first one within reach:
         # line 3 passes Arts et Métiers (550 m from République) before République.
@@ -421,27 +412,177 @@ def _board_legs(stop_id, modes, start, destination, nearest_m=None):
         if nearest_m is not None:
             reach = min(reach, nearest_m + NEAREST_STOP_SLACK_M)
         near = [(d, i) for d, i in near if d <= reach]
-        arrival_at = min(near)[1] if near else None
+        arrival_at = (max(i for _, i in near) if loop else min(near)[1]) if near else None
         if arrival_at is None or dep.get("mode") not in modes:
             continue
-        frm, to = dep["place"], following[arrival_at]
-        legs.append(
-            {
-                **{k: dep.get(k) for k in (
-                    "mode", "routeType", "headsign", "displayName", "routeShortName", "tripShortName",
-                    "agencyName", "routeColor", "realTime", "tripId", "tripTo",
-                )},
-                "cancelled": dep.get("cancelled") or dep.get("tripCancelled"),
-                "from": frm,
-                "to": to,
-                "intermediateStops": following[:arrival_at],
-                "scheduledStartTime": frm.get("scheduledDeparture"),
-                "startTime": frm.get("departure"),
-                "scheduledEndTime": to.get("scheduledArrival"),
-                "endTime": to.get("arrival"),
-            }
-        )
+        legs.append(_board_leg(dep, arrival_at))
     return legs
+
+
+def _board(stop_id, modes, start):
+    """The departures from a stop from `start` on (BOARD_DEPARTURES of them), each with
+    the stops it calls at next."""
+    return _fetch(
+        MOTIS_BOARD_URL,
+        {
+            "stopId": stop_id,
+            "time": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "n": BOARD_DEPARTURES,
+            "mode": ",".join(sorted(modes)),
+            "fetchStops": "true",
+        },
+    ).get("stopTimes", [])
+
+
+def _board_leg(dep, arrival_at):
+    """A departure-board run shaped like a plan leg, alighting at its following stop
+    number arrival_at."""
+    following = dep.get("nextStops") or []
+    frm, to = dep["place"], following[arrival_at]
+    return {
+        **{k: dep.get(k) for k in (
+            "mode", "routeType", "headsign", "displayName", "routeShortName", "tripShortName",
+            "agencyName", "routeColor", "realTime", "tripId", "tripTo",
+        )},
+        "cancelled": dep.get("cancelled") or dep.get("tripCancelled"),
+        "from": frm,
+        "to": to,
+        "intermediateStops": following[:arrival_at],
+        "scheduledStartTime": frm.get("scheduledDeparture"),
+        "startTime": frm.get("departure"),
+        "scheduledEndTime": to.get("scheduledArrival"),
+        "endTime": to.get("arrival"),
+    }
+
+
+# A round trip over several runs of a line (_loop_legs) takes at most this many, looking up
+# at most this many departure boards where they end.
+LOOP_RUNS = 3
+LOOP_BOARDS = 4
+
+
+def _loop_legs(stop_id, modes, start, origin):
+    """Round trips back to the origin over several runs of the same line, each leaving
+    where the one before ended (_chained_leg's rules): Entur's ferry 390 goes round
+    Knarvik → Frekhaug → Strandkaiterminalen → Knarvik as three runs, so Frekhaug →
+    Frekhaug is Frekhaug → Strandkai, on to Knarvik, back to Frekhaug. Out on one run and
+    back on the next is the same with two.
+
+    From the departure boards where each run ends: the planner has nothing to say from a
+    place to itself. A run that comes back by itself is _board_legs's."""
+    boards = {}
+
+    def onward(place):
+        # The departure board of the stop a run ends at, looked up by the station around it
+        # (the run's last stop can be a platform, the next run leave from another).
+        if place.get("lat") is None:
+            return []
+        key = (round(place["lat"], 4), round(place["lon"], 4))
+        if key not in boards:
+            if len(boards) >= LOOP_BOARDS:
+                return []
+            stops = _stop_places(place["lat"], place["lon"], modes)
+            boards[key] = _board(stops[0]["id"], modes, start) if stops else []
+        return boards[key]
+
+    def back(dep):
+        # The first following stop within reach of the origin it can be left at, or None.
+        return next((
+            i for i, stop in enumerate(dep.get("nextStops") or [])
+            if stop.get("dropoffType") != "NOT_ALLOWED"
+            and _distance_m(stop["lat"], stop["lon"], *origin) <= _leg_reach(dep)
+        ), None)
+
+    legs = []
+    for dep in _board(stop_id, modes, start):
+        if dep.get("mode") not in modes or not dep.get("nextStops") or back(dep) is not None:
+            continue
+        chain = [dep]
+        while len(chain) < LOOP_RUNS:
+            end = chain[-1]["nextStops"][-1]
+            arrived = _parse_utc(end.get("scheduledArrival") or end.get("arrival"))
+            following = sorted(
+                (_departure_utc(_board_leg(d, 0)), i, d)
+                for i, d in enumerate(onward(end))
+                if d.get("nextStops") and _departure_utc(_board_leg(d, 0))
+            )
+            nxt = next((
+                d for leaves, _, d in following
+                if arrived and timedelta(0) <= leaves - arrived <= MAX_CHAIN_WAIT
+                and (d.get("agencyName"), d.get("displayName") or d.get("routeShortName"))
+                == (dep.get("agencyName"), dep.get("displayName") or dep.get("routeShortName"))
+            ), None)
+            if nxt is None:
+                break
+            chain.append(nxt)
+            if (i := back(nxt)) is not None:
+                runs = [_board_leg(d, len(d["nextStops"]) - 1) for d in chain[:-1]] + [_board_leg(nxt, i)]
+                if leg := _chained_leg({"legs": runs}, modes, origin, origin):
+                    # Which way it sets off, not where the last run goes (back past the origin).
+                    legs.append(dict(leg, headsign=dep.get("headsign"), tripTo=dep.get("tripTo")))
+                break
+    return legs
+
+
+# A run cut in two (or three) by its agency: the same line, changed at the same stop within
+# this long, is ridden as one. Entur's ferry 390 runs Frekhaug → Knarvik, then from Knarvik
+# 6 minutes later on to Strandkaiterminalen as another run (probably the same boat).
+MAX_CHAIN_WAIT = timedelta(minutes=45)
+CHAIN_TRANSFERS = 2
+# Looked for when nothing direct leaves this soon after the search's start: the 390's
+# morning boats run straight through, its afternoon ones are cut at Knarvik.
+CHAIN_GAP = timedelta(hours=2)
+
+
+def _chained_leg(itinerary, modes, origin, destination):
+    """The itinerary's legs joined into one, when they are runs of the same line (or ones
+    MOTIS says the vehicle continues as) following on at the same stop, from the origin to
+    the destination station; else None. The stops changed at become intermediate stops.
+
+    No run id: the joined leg is several runs, and the stops' live times can't be fetched
+    from one."""
+    legs = [leg for leg in itinerary.get("legs", []) if leg.get("mode") != "WALK"]
+    if len(legs) < 2 or any(leg.get("mode") not in modes for leg in legs):
+        return None
+    first, last = legs[0], legs[-1]
+    if (_distance_m(first["from"]["lat"], first["from"]["lon"], *origin) > _leg_reach(first)
+            or _distance_m(last["to"]["lat"], last["to"]["lon"], *destination) > _leg_reach(last)):
+        return None
+
+    def line(leg):
+        return ((leg.get("agencyName") or "").strip().lower(),
+                (leg.get("displayName") or leg.get("routeShortName") or "").strip().lower())
+
+    for prev, nxt in zip(legs, legs[1:]):
+        if not nxt.get("interlineWithPreviousLeg") and line(prev) != line(nxt):
+            return None
+        if _distance_m(prev["to"]["lat"], prev["to"]["lon"], nxt["from"]["lat"], nxt["from"]["lon"]) > SAME_STOP_M:
+            return None
+        arrived = _parse_utc(prev.get("scheduledEndTime") or prev.get("endTime"))
+        leaves = _departure_utc(nxt)
+        if not arrived or not leaves or not timedelta(0) <= leaves - arrived <= MAX_CHAIN_WAIT:
+            return None
+
+    stops = list(first.get("intermediateStops") or [])
+    for prev, nxt in zip(legs, legs[1:]):
+        stops.append(dict(prev["to"], departure=nxt["from"].get("departure"),
+                          scheduledDeparture=nxt["from"].get("scheduledDeparture")))
+        stops += nxt.get("intermediateStops") or []
+    paths = [_leg_path(leg) for leg in legs]
+    return dict(
+        first,
+        to=last["to"],
+        intermediateStops=stops,
+        scheduledEndTime=last.get("scheduledEndTime"),
+        endTime=last.get("endTime"),
+        headsign=last.get("headsign"),
+        tripTo=last.get("tripTo"),
+        tripId=None,
+        realTime=any(leg.get("realTime") for leg in legs),
+        cancelled=any(leg.get("cancelled") for leg in legs),
+        legGeometry={"points": polyline.encode([p for path in paths for p in path], 6), "precision": 6}
+        if all(paths) else None,
+    )
 
 
 def _stop_places(lat, lng, modes):
@@ -708,8 +849,13 @@ def departures_payload(args):
     trip_type, origin, destination, start, window, params, modes = _search(args)
     if _outside_timetable(start, window):
         return {"departures": [], "outside_timetable": True}, 200
+    # Back where it started (round the loop, out and back on the same run): the planner
+    # has nothing to say from a place to itself, only the departure board.
+    loop = _distance_m(*origin, *destination) <= SAME_STOP_M
 
     def direct_legs(from_place, to_place):
+        if loop:
+            return []
         plan = _fetch(MOTIS_PLAN_URL, dict(params, fromPlace=from_place, toPlace=to_place))
         return [
             leg
@@ -720,6 +866,8 @@ def departures_payload(args):
     # Rail replacement buses are buses in most feeds, so a train search looks for them
     # among the buses too.
     def replacement_legs(from_place, to_place):
+        if loop:
+            return []
         plan = _fetch(MOTIS_PLAN_URL, dict(
             params, fromPlace=from_place, toPlace=to_place, transitModes=TRANSIT_MODES["bus"]
         ))
@@ -727,6 +875,16 @@ def departures_payload(args):
             dict(leg, replacementBus=True)
             for it in plan.get("itineraries", [])
             if (leg := _direct_leg(it, BUS_MODES, origin, destination)) and _rail_replacement(leg)
+        ]
+
+    def chained_legs(from_place, to_place):
+        plan = _fetch(MOTIS_PLAN_URL, dict(
+            params, fromPlace=from_place, toPlace=to_place, maxTransfers=CHAIN_TRANSFERS
+        ))
+        return [
+            leg
+            for it in plan.get("itineraries", [])
+            if (leg := _chained_leg(it, modes, origin, destination))
         ]
 
     points = (params["fromPlace"], params["toPlace"])
@@ -765,10 +923,11 @@ def departures_payload(args):
         nearest = (from_stops[0] if from_stops else points[0], to_stops[0] if to_stops else points[1])
         from_nearest = submit(_quietly, direct_legs, *nearest) if nearest != points else None
         board = (
-            submit(_quietly, _board_legs, from_stops[0], modes, start, destination, to_nearest_m)
+            submit(_quietly, _board_legs, from_stops[0], modes, start, destination, to_nearest_m, loop)
             if from_stops else None
         )
-        searches = [result(f) for f in (from_points, from_nearest, board) if f]
+        loops = submit(_quietly, _loop_legs, from_stops[0], modes, start, origin) if loop and from_stops else None
+        searches = [result(f) for f in (from_points, from_nearest, board, loops) if f]
         if not any(searches):
             # Still nothing: every remaining point/stop combination (the nearest
             # stop can be the wrong feed's, e.g. the RER one at Paris Austerlitz).
@@ -779,6 +938,16 @@ def departures_payload(args):
                 if (f, t) not in (points, nearest)
             ]
             searches = [result(f) for f in [submit(_quietly, direct_legs, *pair) for pair in pairs]]
+        soonest = min(
+            (dep for found in searches for leg in found if (dep := _departure_utc(leg)) and dep >= start),
+            default=None,
+        )
+        if not loop and (soonest is None or soonest > start + CHAIN_GAP):
+            # Nothing direct for a while: the line may be cut into several runs (_chained_leg).
+            searches += [
+                result(f)
+                for f in [submit(_quietly, chained_legs, *pair) for pair in dict.fromkeys([points, nearest])]
+            ]
         if replacements:
             searches.append(result(replacements))
     except OutsideTimetable:
@@ -797,7 +966,7 @@ def departures_payload(args):
         # whatever hasn't started yet is dropped.
         pool.shutdown(wait=False, cancel_futures=True)
 
-    return {"departures": _departures(searches, start, window, destination)}, 200
+    return {"departures": _departures(searches, start, window, destination, loop)}, 200
 
 
 # A stop this close to where a run was boarded is the same stop (the other direction's side).
@@ -820,26 +989,29 @@ def _passes_again(leg):
     )
 
 
-def _departures(searches, start, window, destination):
+def _departures(searches, start, window, destination, loop=False):
     """The form's departure list from the direct legs each search found."""
     legs = [leg for found in searches for leg in found]
     # Each search widened its window until it had ITINERARIES results, so one that
     # reaches few departures (walking from the point misses most of Oslo S's platforms)
     # runs days ahead while a denser one stops after a few hours. Cut the merged list
     # where the densest full search ends, so it doesn't trail off into stray runs from
-    # days later, but not before MIN_HORIZON: a line with a few runs a day still
-    # shows the next day's. Searches that came back short ran out of range, not results.
+    # days later (Oslo S → Lillestrøm: every 5-10 min until 20:00, then a stray RE10 the
+    # next afternoon, which the Later button then went on from). Full is counted in runs,
+    # not legs (the same run comes back once per walking variant), so a line with a few
+    # runs a day is never cut: it shows the next days'. Searches that came back short ran
+    # out of range, not results.
     horizons = [
-        max(_departure_utc(leg) for leg in found)
+        max(runs)
         for found in searches
-        if len(found) >= ITINERARIES // 2
+        if len(runs := {_departure_utc(leg) for leg in found} - {None}) >= ITINERARIES // 2
     ]
     end = start + window
     if horizons:
-        end = min(end, max(min(horizons), start + WINDOW_BEFORE + MIN_HORIZON))
+        end = min(end, min(horizons))
     departures, seen = [], {}
     for leg in legs:
-        if not leg or leg.get("cancelled") or _passes_again(leg):
+        if not leg or leg.get("cancelled") or (_passes_again(leg) and not loop):
             continue
         dep_utc = _departure_utc(leg)
         if not dep_utc or not (start <= dep_utc <= end):

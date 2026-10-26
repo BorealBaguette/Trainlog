@@ -2600,8 +2600,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
   function search() {
     var origin = place('origin'), destination = place('destination');
     var date = $('#newTripStartDate').val(), time = $('#newTripStartTime').val();
-    if (!origin || !destination || !date || !$('#prec-precise').is(':checked')
-        || origin.join() === destination.join()) {
+    if (!origin || !destination || !date || !$('#prec-precise').is(':checked')) {
       lastKey = null;
       hide();
       return;
