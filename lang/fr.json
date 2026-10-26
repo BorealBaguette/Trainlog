@@ -1596,6 +1596,14 @@
     "vizHeatmapSub": "Les lignes que vous empruntez le plus",
     "vizAirports": "Réseau aérien",
     "vizAirportsSub": "Vos aéroports et les vols qui les relient",
+    "vizRail": "Réseau ferroviaire",
+    "vizRailSub": "Les villes que vous reliez en train",
+    "vizRailCredit": "Zones urbaines : {n}, adaptées",
+    "vizMinTrips": "Trajets min. par liaison",
+    "vizCityCount": {
+        "one": "{n} ville",
+        "other": "{n} villes"
+    },
     "vizStations": "Carte des gares",
     "vizStationsSub": "Chaque départ et chaque arrivée de vos trajets",
     "vizReplay": "Voyages en accéléré",
@@ -1654,6 +1662,7 @@
     "vizYear": "Année",
     "vizAllYears": "Toutes les années",
     "vizMinFlights": "Vols min. par liaison",
+    "vizGroupCities": "Regrouper les aéroports par ville",
     "vizDisplay": "Affichage",
     "vizAlwaysCounts": "Toujours afficher les nombres",
     "vizCityNames": "Noms des villes",

@@ -1597,6 +1597,14 @@
     "vizHeatmapSub": "Reitit, joilla matkustat eniten",
     "vizAirports": "Lentoverkosto",
     "vizAirportsSub": "Lentoasemasi ja niiden väliset lennot",
+    "vizRail": "Rautatieverkko",
+    "vizRailSub": "Kaupungit, joita yhdistät junalla",
+    "vizRailCredit": "Kaupunkialueet: {n}, muokattu",
+    "vizMinTrips": "Väh. matkoja yhteyttä kohden",
+    "vizCityCount": {
+        "one": "{n} kaupunki",
+        "other": "{n} kaupunkia"
+    },
     "vizStations": "Asemakartta",
     "vizStationsSub": "Matkojesi jokainen lähtö ja saapuminen",
     "vizReplay": "Matkat pikakelauksella",
@@ -1655,6 +1663,7 @@
     "vizYear": "Vuosi",
     "vizAllYears": "Kaikki vuodet",
     "vizMinFlights": "Väh. lentoja yhteyttä kohden",
+    "vizGroupCities": "Ryhmitä lentoasemat kaupungeittain",
     "vizDisplay": "Näyttö",
     "vizAlwaysCounts": "Näytä määrät aina",
     "vizCityNames": "Kaupunkien nimet",

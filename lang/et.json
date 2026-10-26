@@ -1596,6 +1596,14 @@
     "vizHeatmapSub": "Liinid, millel sa kõige rohkem sõidad",
     "vizAirports": "Lennuvõrk",
     "vizAirportsSub": "Sinu lennujaamad ja nendevahelised lennud",
+    "vizRail": "Raudteevõrk",
+    "vizRailSub": "Linnad, mida sa rongiga ühendad",
+    "vizRailCredit": "Linnapiirkonnad: {n}, kohandatud",
+    "vizMinTrips": "Min reise ühenduse kohta",
+    "vizCityCount": {
+        "one": "{n} linn",
+        "other": "{n} linna"
+    },
     "vizStations": "Jaamade kaart",
     "vizStationsSub": "Sinu reiside iga algus- ja lõpp-punkt",
     "vizReplay": "Reisid kiirendatult",
@@ -1654,6 +1662,7 @@
     "vizYear": "Aasta",
     "vizAllYears": "Kõik aastad",
     "vizMinFlights": "Min lende ühenduse kohta",
+    "vizGroupCities": "Rühmita lennujaamad linnade kaupa",
     "vizDisplay": "Kuva",
     "vizAlwaysCounts": "Näita alati arve",
     "vizCityNames": "Linnade nimed",

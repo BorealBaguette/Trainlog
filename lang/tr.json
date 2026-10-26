@@ -1594,6 +1594,13 @@
     "vizHeatmapSub": "En çok kullandığınız hatlar",
     "vizAirports": "Uçuş ağı",
     "vizAirportsSub": "Havalimanlarınız ve aralarındaki uçuşlar",
+    "vizRail": "Demiryolu ağı",
+    "vizRailSub": "Trenle bağladığınız şehirler",
+    "vizRailCredit": "Kentsel alanlar: {n}, uyarlanmıştır",
+    "vizMinTrips": "Bağlantı başına min. yolculuk",
+    "vizCityCount": {
+        "other": "{n} şehir"
+    },
     "vizStations": "İstasyon haritası",
     "vizStationsSub": "Yolculuklarınızın her kalkışı ve varışı",
     "vizReplay": "Hızlandırılmış yolculuklar",
@@ -1649,6 +1656,7 @@
     "vizYear": "Yıl",
     "vizAllYears": "Tüm yıllar",
     "vizMinFlights": "Bağlantı başına min. uçuş",
+    "vizGroupCities": "Havalimanlarını şehre göre grupla",
     "vizDisplay": "Görünüm",
     "vizAlwaysCounts": "Sayıları her zaman göster",
     "vizCityNames": "Şehir adları",

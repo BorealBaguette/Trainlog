@@ -1604,6 +1604,15 @@
     "vizHeatmapSub": "Linije kojima najčešće putujete",
     "vizAirports": "Zračna mreža",
     "vizAirportsSub": "Vaše zračne luke i letovi između njih",
+    "vizRail": "Željeznička mreža",
+    "vizRailSub": "Gradovi koje povezujete vlakom",
+    "vizRailCredit": "Urbana područja: {n}, prilagođeno",
+    "vizMinTrips": "Min. putovanja po vezi",
+    "vizCityCount": {
+        "one": "{n} grad",
+        "few": "{n} grada",
+        "other": "{n} gradova"
+    },
     "vizStations": "Karta postaja",
     "vizStationsSub": "Svaki polazak i dolazak vaših putovanja",
     "vizReplay": "Putovanja u ubrzanom prikazu",
@@ -1665,6 +1674,7 @@
     "vizYear": "Godina",
     "vizAllYears": "Sve godine",
     "vizMinFlights": "Min. letova po vezi",
+    "vizGroupCities": "Grupiraj zračne luke po gradovima",
     "vizDisplay": "Prikaz",
     "vizAlwaysCounts": "Uvijek prikaži brojeve",
     "vizCityNames": "Nazivi gradova",

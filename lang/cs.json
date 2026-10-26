@@ -1621,6 +1621,15 @@
     "vizHeatmapSub": "Tratě, po kterých jezdíte nejvíc",
     "vizAirports": "Letecká síť",
     "vizAirportsSub": "Vaše letiště a lety mezi nimi",
+    "vizRail": "Železniční síť",
+    "vizRailSub": "Města, která spojujete vlakem",
+    "vizRailCredit": "Městské oblasti: {n}, upraveno",
+    "vizMinTrips": "Min. cest na spojení",
+    "vizCityCount": {
+        "one": "{n} město",
+        "few": "{n} města",
+        "other": "{n} měst"
+    },
     "vizStations": "Mapa stanic",
     "vizStationsSub": "Každý odjezd a příjezd vašich cest",
     "vizReplay": "Cesty ve zrychlení",
@@ -1682,6 +1691,7 @@
     "vizYear": "Rok",
     "vizAllYears": "Všechny roky",
     "vizMinFlights": "Min. letů na spojení",
+    "vizGroupCities": "Seskupit letiště podle měst",
     "vizDisplay": "Zobrazení",
     "vizAlwaysCounts": "Vždy zobrazit počty",
     "vizCityNames": "Názvy měst",

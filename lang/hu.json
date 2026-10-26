@@ -1594,6 +1594,13 @@
     "vizHeatmapSub": "A leggyakrabban használt vonalak",
     "vizAirports": "Légi hálózat",
     "vizAirportsSub": "A repülőterek és a köztük lévő járatok",
+    "vizRail": "Vasúthálózat",
+    "vizRailSub": "A vonattal összekötött városok",
+    "vizRailCredit": "Városi területek: {n}, módosítva",
+    "vizMinTrips": "Min. utazás élenként",
+    "vizCityCount": {
+        "other": "{n} város"
+    },
     "vizStations": "Állomástérkép",
     "vizStationsSub": "Az utazások minden indulása és érkezése",
     "vizReplay": "Utazások gyorsítva",
@@ -1649,6 +1656,7 @@
     "vizYear": "Év",
     "vizAllYears": "Minden év",
     "vizMinFlights": "Min. járat élenként",
+    "vizGroupCities": "Repülőterek csoportosítása város szerint",
     "vizDisplay": "Megjelenítés",
     "vizAlwaysCounts": "Számok mindig látszanak",
     "vizCityNames": "Városnevek",

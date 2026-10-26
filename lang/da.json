@@ -1599,6 +1599,14 @@
     "vizHeatmapSub": "De strækninger, du rejser mest på",
     "vizAirports": "Flynetværk",
     "vizAirportsSub": "Dine lufthavne og flyvningerne imellem dem",
+    "vizRail": "Jernbanenet",
+    "vizRailSub": "Byerne, du forbinder med tog",
+    "vizRailCredit": "Byområder: {n}, tilpasset",
+    "vizMinTrips": "Min. rejser pr. forbindelse",
+    "vizCityCount": {
+        "one": "{n} by",
+        "other": "{n} byer"
+    },
     "vizStations": "Stationskort",
     "vizStationsSub": "Hver afgang og ankomst på dine rejser",
     "vizReplay": "Rejser i tidsforløb",
@@ -1657,6 +1665,7 @@
     "vizYear": "År",
     "vizAllYears": "Alle år",
     "vizMinFlights": "Min. fly pr. forbindelse",
+    "vizGroupCities": "Gruppér lufthavne efter by",
     "vizDisplay": "Visning",
     "vizAlwaysCounts": "Vis altid antal",
     "vizCityNames": "Bynavne",

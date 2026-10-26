@@ -182,6 +182,7 @@ def setup_db():
         t = time.monotonic()
         load_base_data(session, "airliners")
         load_base_data(session, "wagons", upsert=True)
+        load_base_data(session, "urban_areas", upsert=True)
         load_exchange_base_data(session)
         logger.info(f"Base data load took {time.monotonic() - t:.2f}s")
 

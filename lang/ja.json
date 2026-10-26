@@ -1594,6 +1594,13 @@
     "vizHeatmapSub": "よく利用する路線",
     "vizAirports": "航空ネットワーク",
     "vizAirportsSub": "利用した空港とそれを結ぶ便",
+    "vizRail": "鉄道ネットワーク",
+    "vizRailSub": "列車で結んだ都市",
+    "vizRailCredit": "都市域：{n}（改変あり）",
+    "vizMinTrips": "1路線あたりの最小移動数",
+    "vizCityCount": {
+        "other": "{n}都市"
+    },
     "vizStations": "駅マップ",
     "vizStationsSub": "すべての旅行の出発地と到着地",
     "vizReplay": "早送りの旅",
@@ -1649,6 +1656,7 @@
     "vizYear": "年",
     "vizAllYears": "すべての年",
     "vizMinFlights": "1路線あたりの最小便数",
+    "vizGroupCities": "空港を都市ごとにまとめる",
     "vizDisplay": "表示",
     "vizAlwaysCounts": "常に数を表示",
     "vizCityNames": "都市名",

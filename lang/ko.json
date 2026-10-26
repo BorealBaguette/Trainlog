@@ -1596,6 +1596,13 @@
     "vizHeatmapSub": "가장 많이 이용한 노선",
     "vizAirports": "항공 네트워크",
     "vizAirportsSub": "이용한 공항과 그 사이의 항공편",
+    "vizRail": "철도 네트워크",
+    "vizRailSub": "기차로 연결한 도시들",
+    "vizRailCredit": "도시 지역: {n} (수정됨)",
+    "vizMinTrips": "연결당 최소 여정",
+    "vizCityCount": {
+        "other": "{n}개 도시"
+    },
     "vizStations": "역 지도",
     "vizStationsSub": "모든 여정의 출발지와 도착지",
     "vizReplay": "빨리 감기 여행",
@@ -1651,6 +1658,7 @@
     "vizYear": "연도",
     "vizAllYears": "모든 연도",
     "vizMinFlights": "연결당 최소 항공편",
+    "vizGroupCities": "공항을 도시별로 묶기",
     "vizDisplay": "표시",
     "vizAlwaysCounts": "항상 숫자 표시",
     "vizCityNames": "도시 이름",

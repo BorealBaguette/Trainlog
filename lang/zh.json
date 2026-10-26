@@ -1594,6 +1594,13 @@
     "vizHeatmapSub": "你最常乘坐的线路",
     "vizAirports": "航线网络",
     "vizAirportsSub": "你的机场以及连接它们的航班",
+    "vizRail": "铁路网络",
+    "vizRailSub": "你乘火车连接的城市",
+    "vizRailCredit": "城市区域：{n}（经修改）",
+    "vizMinTrips": "每条连线最少行程数",
+    "vizCityCount": {
+        "other": "{n} 座城市"
+    },
     "vizStations": "站点地图",
     "vizStationsSub": "你每段行程的出发地和到达地",
     "vizReplay": "旅程快进",
@@ -1649,6 +1656,7 @@
     "vizYear": "年份",
     "vizAllYears": "所有年份",
     "vizMinFlights": "每条连线最少航班数",
+    "vizGroupCities": "按城市合并机场",
     "vizDisplay": "显示",
     "vizAlwaysCounts": "始终显示数字",
     "vizCityNames": "城市名称",

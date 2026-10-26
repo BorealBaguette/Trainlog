@@ -1597,6 +1597,14 @@
     "vizHeatmapSub": "D Strecke, wo Sie am meischte fahred",
     "vizAirports": "Flugnetz",
     "vizAirportsSub": "Ihri Flughäfe und d Flüüg dezwüsche",
+    "vizRail": "Bahnnetz",
+    "vizRailSub": "D Städt, wo Sie mit em Zug verbinded",
+    "vizRailCredit": "Stadtgebiet: {n}, aapasst",
+    "vizMinTrips": "Min. Reise pro Kante",
+    "vizCityCount": {
+        "one": "{n} Stadt",
+        "other": "{n} Städt"
+    },
     "vizStations": "Stationskarte",
     "vizStationsSub": "Jede Start- und Zielort vo Ihrne Reise",
     "vizReplay": "Reise im Ziitraffer",
@@ -1655,6 +1663,7 @@
     "vizYear": "Johr",
     "vizAllYears": "Alli Johr",
     "vizMinFlights": "Min. Flüüg pro Kante",
+    "vizGroupCities": "Flughäfe nach Stadt gruppiere",
     "vizDisplay": "Aazeig",
     "vizAlwaysCounts": "Aazahl immer aazeige",
     "vizCityNames": "Stadtnäme",

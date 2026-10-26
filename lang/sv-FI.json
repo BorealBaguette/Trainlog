@@ -1599,6 +1599,14 @@
     "vizHeatmapSub": "Sträckorna du åker mest",
     "vizAirports": "Flygnätverk",
     "vizAirportsSub": "Dina flygplatser och flygen mellan dem",
+    "vizRail": "Järnvägsnät",
+    "vizRailSub": "Städerna du förbinder med tåg",
+    "vizRailCredit": "Tätortsområden: {n}, anpassade",
+    "vizMinTrips": "Min. resor per förbindelse",
+    "vizCityCount": {
+        "one": "{n} stad",
+        "other": "{n} städer"
+    },
     "vizStations": "Stationskarta",
     "vizStationsSub": "Varje avgång och ankomst på dina resor",
     "vizReplay": "Resor i timelapse",
@@ -1657,6 +1665,7 @@
     "vizYear": "År",
     "vizAllYears": "Alla år",
     "vizMinFlights": "Min. flyg per förbindelse",
+    "vizGroupCities": "Gruppera flygplatser per stad",
     "vizDisplay": "Visning",
     "vizAlwaysCounts": "Visa alltid antal",
     "vizCityNames": "Ortnamn",

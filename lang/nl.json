@@ -1599,6 +1599,14 @@
     "vizHeatmapSub": "De lijnen waarop je het vaakst reist",
     "vizAirports": "Vliegnetwerk",
     "vizAirportsSub": "Je luchthavens en de vluchten ertussen",
+    "vizRail": "Spoornetwerk",
+    "vizRailSub": "De steden die je per trein verbindt",
+    "vizRailCredit": "Stedelijke gebieden: {n}, aangepast",
+    "vizMinTrips": "Min. ritten per verbinding",
+    "vizCityCount": {
+        "one": "{n} stad",
+        "other": "{n} steden"
+    },
     "vizStations": "Stationskaart",
     "vizStationsSub": "Elk vertrek en elke aankomst van je ritten",
     "vizReplay": "Reizen in timelapse",
@@ -1657,6 +1665,7 @@
     "vizYear": "Jaar",
     "vizAllYears": "Alle jaren",
     "vizMinFlights": "Min. vluchten per verbinding",
+    "vizGroupCities": "Luchthavens per stad groeperen",
     "vizDisplay": "Weergave",
     "vizAlwaysCounts": "Aantallen altijd tonen",
     "vizCityNames": "Plaatsnamen",

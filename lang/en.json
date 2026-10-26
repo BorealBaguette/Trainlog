@@ -1596,6 +1596,14 @@
     "vizHeatmapSub": "The lines you ride the most",
     "vizAirports": "Flight network",
     "vizAirportsSub": "Your airports and the flights between them",
+    "vizRail": "Rail network",
+    "vizRailSub": "The cities you connect by train",
+    "vizRailCredit": "City areas: {n}, adapted",
+    "vizMinTrips": "Min. trips per edge",
+    "vizCityCount": {
+        "one": "{n} city",
+        "other": "{n} cities"
+    },
     "vizStations": "Station map",
     "vizStationsSub": "Every departure and arrival of your trips",
     "vizReplay": "Travel time-lapse",
@@ -1654,6 +1662,7 @@
     "vizYear": "Year",
     "vizAllYears": "All years",
     "vizMinFlights": "Min. flights per edge",
+    "vizGroupCities": "Group airports by city",
     "vizDisplay": "Display",
     "vizAlwaysCounts": "Always show counts",
     "vizCityNames": "City names",

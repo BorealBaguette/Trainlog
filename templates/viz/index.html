@@ -23,8 +23,10 @@
   }
   .viz-grid {
     max-width: 1100px; margin: 0 auto;
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px;
   }
+  @media (max-width: 860px) { .viz-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 540px) { .viz-grid { grid-template-columns: minmax(0, 1fr); } }
   .viz-card {
     display: flex; flex-direction: column; overflow: hidden;
     border-radius: 12px; background: rgba(20,28,40,0.92);
@@ -50,24 +52,31 @@
     padding: 2px 8px; border-radius: 999px; font-size: 0.72em; letter-spacing: 0.03em;
     background: rgba(11,22,34,0.8); border: 1px solid rgba(255,255,255,0.15); color: #e8edf3;
   }
+  /* As the site's other beta pills (map background picker, settings). */
+  .viz-beta {
+    padding: 0.3em 0.55em 0.2em; border-radius: 1em; flex: none;
+    background: #fd7e14; color: #fff; font-size: 0.62rem; font-weight: 600; line-height: 1.2; text-transform: uppercase;
+  }
 </style>
 
+{# Three rows of three: the Bestagons pair and the calendar, the maps, then the networks. #}
 {% set cards = [
   ('hex',       url_for('viz.bestagons', username=username),         '<span class="hex">⬡</span>',               vizHexagons,  vizHexagonsSub, vizPersonal),
   ('community', url_for('bestagons_map'),                            '<i class="fa-solid fa-globe"></i>',         vizHexagons,  vizGlobalHexSub, vizCommunity),
   ('calendar',  url_for('viz.calendar', username=username),          '<i class="fa-solid fa-calendar-days"></i>', vizCalendar,  vizCalendarSub),
   ('arcs',      url_for('viz.arcs', username=username),              '<i class="fa-solid fa-bezier-curve"></i>',  vizArcs,      vizArcsSub),
   ('heatmap',   url_for('viz.heatmap', username=username),           '<i class="fa-solid fa-fire"></i>',          vizHeatmap,   vizHeatmapSub),
-  ('airports',  url_for('viz.airports_page', username=username),     '<i class="fa-solid fa-circle-nodes"></i>',  vizAirports,  vizAirportsSub),
   ('stations',  url_for('station_map.stations_map', username=username), '<i class="fa-solid fa-location-dot"></i>', vizStations, vizStationsSub),
+  ('airports',  url_for('viz.airports_page', username=username),     '<i class="fa-solid fa-circle-nodes"></i>',  vizAirports,  vizAirportsSub),
+  ('rail',      url_for('viz.rail_page', username=username),         '<i class="fa-solid fa-train"></i>',         vizRail,      vizRailSub, none, true),
   ('replay',    url_for('viz.trips_page', username=username),        '<i class="fa-solid fa-play"></i>',          vizReplay,    vizReplaySub),
 ] %}
 
-{% macro card(kind, href, icon, title, sub, badge=none) %}
+{% macro card(kind, href, icon, title, sub, badge=none, is_beta=false) %}
   <a class="viz-card" href="{{ href }}">
     <span class="viz-preview" data-preview="{{ kind }}">{% if badge %}<span class="viz-badge">{{ badge }}</span>{% endif %}</span>
     <span class="viz-body">
-      <span class="viz-title">{{ icon | safe }}<span>{{ title }}</span></span>
+      <span class="viz-title">{{ icon | safe }}<span>{{ title }}</span>{% if is_beta %}<span class="viz-beta">{{ beta }}</span>{% endif %}</span>
       <span class="viz-sub">{{ sub }}</span>
     </span>
   </a>
@@ -196,6 +205,26 @@ const PREVIEWS = {
     for (const [code, [x, y, r]] of Object.entries(n)) {
       out += `<circle cx="${x}" cy="${y}" r="${r}" fill="#14202e" stroke="#40b91f" stroke-width="1"/>`;
       if (r >= 6) out += `<text x="${x}" y="${y + 1.5}" font-size="${r * 0.55}" font-weight="bold" text-anchor="middle" fill="#e8edf3" font-family="sans-serif">${code}</text>`;
+    }
+    return out;
+  },
+
+  rail: () => {
+    const n = { Amsterdam: [66, 10], Brussels: [50, 22], Cologne: [82, 22], Paris: [32, 36], Frankfurt: [104, 32],
+                Strasbourg: [78, 46], Lyon: [44, 58], Zurich: [100, 58], Milan: [122, 74], Marseille: [56, 76] };
+    const e = [['Paris', 'Lyon', 5], ['Paris', 'Brussels', 4], ['Brussels', 'Amsterdam', 3], ['Brussels', 'Cologne', 2],
+               ['Cologne', 'Frankfurt', 3], ['Paris', 'Strasbourg', 3], ['Strasbourg', 'Frankfurt', 1], ['Strasbourg', 'Zurich', 1],
+               ['Zurich', 'Milan', 2], ['Lyon', 'Marseille', 3], ['Lyon', 'Zurich', 1], ['Amsterdam', 'Cologne', 1]];
+    const traffic = {};
+    e.forEach(([a, b, w]) => { traffic[a] = (traffic[a] || 0) + w; traffic[b] = (traffic[b] || 0) + w; });
+    let out = e.map(([a, b, w]) => {
+      const [x1, y1] = n[a], [x2, y2] = n[b];
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#8fa6bd" stroke-width="${0.5 + w * 0.5}" stroke-opacity="${0.3 + w * 0.12}"/>`;
+    }).join('');
+    for (const [name, [x, y]] of Object.entries(n)) {
+      const r = 2.2 + Math.sqrt(traffic[name]) * 1.1;
+      out += `<circle cx="${x}" cy="${y}" r="${r}" fill="#14202e" stroke="#52b0fe" stroke-width="1"/>`
+        + `<text x="${x}" y="${y + r + 4.2}" font-size="4.2" text-anchor="middle" fill="#dbe5ee" font-family="sans-serif">${name}</text>`;
     }
     return out;
   },
