@@ -1575,5 +1575,119 @@
     "stopStand": "Quai",
     "motisPier": "Quai {track}",
     "stopPier": "Quai",
-    "swapEnds": "Inverser départ et arrivée"
+    "swapEnds": "Inverser départ et arrivée",
+    "vizTitle": "Visualisations",
+    "vizLoading": "Chargement…",
+    "vizFailed": "Échec du chargement",
+    "vizSettings": "Paramètres d'affichage",
+    "vizTripTypes": "Types de trajet",
+    "vizOpacity": "Opacité",
+    "vizTrips": {
+        "one": "{n} trajet",
+        "other": "{n} trajets"
+    },
+    "vizHexagons": "Bestagones",
+    "vizHexagonsSub": "Là où vous passez le plus, en colonnes 3D",
+    "vizCalendar": "Calendrier",
+    "vizCalendarSub": "Vos jours de voyage, année après année",
+    "vizArcs": "Carte des liaisons",
+    "vizArcsSub": "Chaque départ relié à son arrivée",
+    "vizHeatmap": "Carte thermique",
+    "vizHeatmapSub": "Les lignes que vous empruntez le plus",
+    "vizAirports": "Réseau aérien",
+    "vizAirportsSub": "Vos aéroports et les vols qui les relient",
+    "vizStations": "Carte des gares",
+    "vizStationsSub": "Chaque départ et chaque arrivée de vos trajets",
+    "vizReplay": "Voyages en accéléré",
+    "vizReplaySub": "Vos trajets défilent dans l'ordre, jour après jour",
+    "vizPersonal": "Personnel",
+    "vizCommunity": "Communauté",
+    "vizGlobalHexSub": "Là où voyagent tous les utilisateurs de Trainlog",
+    "vizRadius": "Rayon",
+    "vizHeightScale": "Échelle de hauteur",
+    "vizCoverage": "Couverture",
+    "vizExtrusion": "Extrusion 3D",
+    "vizSensitivity": "Sensibilité : top {n} % → chaud",
+    "vizHotThreshold": {
+        "one": "≥ {n} trajet sur un corridor → chaud",
+        "other": "≥ {n} trajets sur un corridor → chaud"
+    },
+    "vizGlowSize": "Taille du halo",
+    "vizMergeRadius": "Rayon de fusion",
+    "vizMaxArcWidth": "Largeur max. des arcs",
+    "vizArcCount": {
+        "one": "{n} arc",
+        "other": "{n} arcs"
+    },
+    "vizTravelDate": "Date du voyage",
+    "vizLogDate": "Date d'enregistrement",
+    "vizTripsMode": "Trajets",
+    "vizTotalTrips": "Trajets au total",
+    "vizTotalDistance": "Distance totale",
+    "vizDaysWithTravel": "Jours de voyage",
+    "vizBusiestYear": "Année la plus chargée",
+    "vizBusiestWeekday": "Jour le plus chargé",
+    "vizBusiestMonth": "Mois le plus chargé",
+    "vizLess": "Moins",
+    "vizMore": "Plus",
+    "vizSpeed": "Vitesse",
+    "vizDaysPerSecond": "jours/s",
+    "vizTrail": "Traînée",
+    "vizDaysUnit": "jours",
+    "vizWidth": "Largeur",
+    "vizPlaying": "Lecture",
+    "vizCumulative": "Cumulatif (sans fondu)",
+    "vizAutoSkip": "Sauter les périodes vides",
+    "vizSkipGapsOver": "Sauter les périodes de plus de",
+    "vizFrom": "Du",
+    "vizTo": "Au",
+    "vizAll": "Tous",
+    "vizNone": "Aucun",
+    "vizPlayPause": "Lecture / pause",
+    "vizNoTimestamps": "Aucun trajet avec horaires",
+    "vizGapSkipped": {
+        "one": "Aucun voyage — {n} jour (sauté)",
+        "other": "Aucun voyage — {n} jours (sautés)"
+    },
+    "vizUndirected": "Non orienté",
+    "vizDirected": "Orienté",
+    "vizYear": "Année",
+    "vizAllYears": "Toutes les années",
+    "vizMinFlights": "Vols min. par liaison",
+    "vizDisplay": "Affichage",
+    "vizAlwaysCounts": "Toujours afficher les nombres",
+    "vizCityNames": "Noms des villes",
+    "vizSizeByTraffic": "Taille selon le trafic",
+    "vizLayout": "Disposition",
+    "vizGeoPull": "Attraction géographique",
+    "vizEdgeLength": "Longueur des liaisons",
+    "vizRepulsion": "Répulsion",
+    "vizDownloadSvg": "Télécharger en SVG",
+    "vizAirportCount": {
+        "one": "{n} aéroport",
+        "other": "{n} aéroports"
+    },
+    "vizEdgeCount": {
+        "one": "{n} liaison",
+        "other": "{n} liaisons"
+    },
+    "vizFlightCount": {
+        "one": "{n} vol",
+        "other": "{n} vols"
+    },
+    "vizConnectionCount": {
+        "one": "{n} connexion",
+        "other": "{n} connexions"
+    },
+    "vizGroupStations": "Regrouper les gares proches",
+    "vizSizeByVisits": "Taille selon les visites",
+    "vizStationCount": {
+        "one": "{n} gare",
+        "other": "{n} gares"
+    },
+    "vizVisitCount": {
+        "one": "{n} visite",
+        "other": "{n} visites"
+    },
+    "vizClickToZoom": "cliquer pour zoomer"
 }

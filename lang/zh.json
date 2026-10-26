@@ -1574,5 +1574,109 @@
     "stopStand": "站台",
     "motisPier": "{track}号码头",
     "stopPier": "码头",
-    "swapEnds": "交换出发地和目的地"
+    "swapEnds": "交换出发地和目的地",
+    "vizTitle": "可视化",
+    "vizLoading": "加载中…",
+    "vizFailed": "加载失败",
+    "vizSettings": "显示设置",
+    "vizTripTypes": "行程类型",
+    "vizOpacity": "不透明度",
+    "vizTrips": {
+        "other": "{n} 段行程"
+    },
+    "vizHexagons": "最佳边形",
+    "vizHexagonsSub": "你最常去的地方，以 3D 柱体呈现",
+    "vizCalendar": "日历",
+    "vizCalendarSub": "一年又一年的出行日",
+    "vizArcs": "连线地图",
+    "vizArcsSub": "每次出发都连到它的到达地",
+    "vizHeatmap": "热力图",
+    "vizHeatmapSub": "你最常乘坐的线路",
+    "vizAirports": "航线网络",
+    "vizAirportsSub": "你的机场以及连接它们的航班",
+    "vizStations": "站点地图",
+    "vizStationsSub": "你每段行程的出发地和到达地",
+    "vizReplay": "旅程快进",
+    "vizReplaySub": "你的行程按顺序逐日播放",
+    "vizPersonal": "个人",
+    "vizCommunity": "社区",
+    "vizGlobalHexSub": "所有 Trainlog 用户的足迹",
+    "vizRadius": "半径",
+    "vizHeightScale": "高度比例",
+    "vizCoverage": "覆盖率",
+    "vizExtrusion": "3D 拉伸",
+    "vizSensitivity": "灵敏度：前 {n}% → 热",
+    "vizHotThreshold": {
+        "other": "一条走廊 ≥ {n} 段行程 → 热"
+    },
+    "vizGlowSize": "光晕大小",
+    "vizMergeRadius": "合并半径",
+    "vizMaxArcWidth": "最大弧线宽度",
+    "vizArcCount": {
+        "other": "{n} 条弧线"
+    },
+    "vizTravelDate": "出行日期",
+    "vizLogDate": "记录日期",
+    "vizTripsMode": "行程",
+    "vizTotalTrips": "行程总数",
+    "vizTotalDistance": "总距离",
+    "vizDaysWithTravel": "出行天数",
+    "vizBusiestYear": "最繁忙的年份",
+    "vizBusiestWeekday": "最繁忙的星期",
+    "vizBusiestMonth": "最繁忙的月份",
+    "vizLess": "少",
+    "vizMore": "多",
+    "vizSpeed": "速度",
+    "vizDaysPerSecond": "天/秒",
+    "vizTrail": "轨迹",
+    "vizDaysUnit": "天",
+    "vizWidth": "宽度",
+    "vizPlaying": "播放中",
+    "vizCumulative": "累积（不淡出）",
+    "vizAutoSkip": "自动跳过空档",
+    "vizSkipGapsOver": "跳过超过以下天数的空档",
+    "vizFrom": "从",
+    "vizTo": "至",
+    "vizAll": "全部",
+    "vizNone": "无",
+    "vizPlayPause": "播放 / 暂停",
+    "vizNoTimestamps": "没有带时间的行程",
+    "vizGapSkipped": {
+        "other": "无出行 — {n} 天（已跳过）"
+    },
+    "vizUndirected": "无向",
+    "vizDirected": "有向",
+    "vizYear": "年份",
+    "vizAllYears": "所有年份",
+    "vizMinFlights": "每条连线最少航班数",
+    "vizDisplay": "显示",
+    "vizAlwaysCounts": "始终显示数字",
+    "vizCityNames": "城市名称",
+    "vizSizeByTraffic": "按流量调整大小",
+    "vizLayout": "布局",
+    "vizGeoPull": "地理牵引",
+    "vizEdgeLength": "连线长度",
+    "vizRepulsion": "排斥力",
+    "vizDownloadSvg": "下载 SVG",
+    "vizAirportCount": {
+        "other": "{n} 个机场"
+    },
+    "vizEdgeCount": {
+        "other": "{n} 条连线"
+    },
+    "vizFlightCount": {
+        "other": "{n} 个航班"
+    },
+    "vizConnectionCount": {
+        "other": "{n} 个连接"
+    },
+    "vizGroupStations": "合并邻近站点",
+    "vizSizeByVisits": "按到访次数调整大小",
+    "vizStationCount": {
+        "other": "{n} 个站点"
+    },
+    "vizVisitCount": {
+        "other": "{n} 次到访"
+    },
+    "vizClickToZoom": "点击放大"
 }

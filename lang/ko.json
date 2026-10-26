@@ -1576,5 +1576,109 @@
     "stopStand": "승차장",
     "motisPier": "{track}번 부두",
     "stopPier": "부두",
-    "swapEnds": "출발지와 도착지 바꾸기"
+    "swapEnds": "출발지와 도착지 바꾸기",
+    "vizTitle": "시각화",
+    "vizLoading": "불러오는 중…",
+    "vizFailed": "불러오지 못했습니다",
+    "vizSettings": "표시 설정",
+    "vizTripTypes": "여정 유형",
+    "vizOpacity": "불투명도",
+    "vizTrips": {
+        "other": "{n}개의 여정"
+    },
+    "vizHexagons": "베스타곤",
+    "vizHexagonsSub": "가장 많이 다닌 곳을 3D 기둥으로",
+    "vizCalendar": "캘린더",
+    "vizCalendarSub": "해마다 이동한 날들",
+    "vizArcs": "연결 지도",
+    "vizArcsSub": "출발지와 도착지를 잇는 선",
+    "vizHeatmap": "히트맵",
+    "vizHeatmapSub": "가장 많이 이용한 노선",
+    "vizAirports": "항공 네트워크",
+    "vizAirportsSub": "이용한 공항과 그 사이의 항공편",
+    "vizStations": "역 지도",
+    "vizStationsSub": "모든 여정의 출발지와 도착지",
+    "vizReplay": "빨리 감기 여행",
+    "vizReplaySub": "하루하루 순서대로 재생되는 여정",
+    "vizPersonal": "개인",
+    "vizCommunity": "커뮤니티",
+    "vizGlobalHexSub": "모든 Trainlog 사용자가 여행하는 곳",
+    "vizRadius": "반경",
+    "vizHeightScale": "높이 배율",
+    "vizCoverage": "범위",
+    "vizExtrusion": "3D 돌출",
+    "vizSensitivity": "민감도: 상위 {n}% → 뜨거움",
+    "vizHotThreshold": {
+        "other": "회랑당 {n}개 이상의 여정 → 뜨거움"
+    },
+    "vizGlowSize": "빛 번짐 크기",
+    "vizMergeRadius": "병합 반경",
+    "vizMaxArcWidth": "최대 아크 너비",
+    "vizArcCount": {
+        "other": "{n}개의 아크"
+    },
+    "vizTravelDate": "여행 날짜",
+    "vizLogDate": "기록 날짜",
+    "vizTripsMode": "여정",
+    "vizTotalTrips": "총 여정",
+    "vizTotalDistance": "총 거리",
+    "vizDaysWithTravel": "이동한 날",
+    "vizBusiestYear": "가장 바쁜 해",
+    "vizBusiestWeekday": "가장 바쁜 요일",
+    "vizBusiestMonth": "가장 바쁜 달",
+    "vizLess": "적음",
+    "vizMore": "많음",
+    "vizSpeed": "속도",
+    "vizDaysPerSecond": "일/초",
+    "vizTrail": "궤적",
+    "vizDaysUnit": "일",
+    "vizWidth": "너비",
+    "vizPlaying": "재생 중",
+    "vizCumulative": "누적 (사라지지 않음)",
+    "vizAutoSkip": "공백 자동 건너뛰기",
+    "vizSkipGapsOver": "다음보다 긴 공백 건너뛰기",
+    "vizFrom": "시작",
+    "vizTo": "끝",
+    "vizAll": "전체",
+    "vizNone": "없음",
+    "vizPlayPause": "재생 / 일시 정지",
+    "vizNoTimestamps": "시간 정보가 있는 여정이 없습니다",
+    "vizGapSkipped": {
+        "other": "이동 없음 — {n}일 (건너뜀)"
+    },
+    "vizUndirected": "무방향",
+    "vizDirected": "방향",
+    "vizYear": "연도",
+    "vizAllYears": "모든 연도",
+    "vizMinFlights": "연결당 최소 항공편",
+    "vizDisplay": "표시",
+    "vizAlwaysCounts": "항상 숫자 표시",
+    "vizCityNames": "도시 이름",
+    "vizSizeByTraffic": "이용량에 따른 크기",
+    "vizLayout": "배치",
+    "vizGeoPull": "지리적 끌림",
+    "vizEdgeLength": "연결선 길이",
+    "vizRepulsion": "반발력",
+    "vizDownloadSvg": "SVG 다운로드",
+    "vizAirportCount": {
+        "other": "{n}개 공항"
+    },
+    "vizEdgeCount": {
+        "other": "{n}개 연결"
+    },
+    "vizFlightCount": {
+        "other": "{n}편"
+    },
+    "vizConnectionCount": {
+        "other": "{n}개 연결"
+    },
+    "vizGroupStations": "가까운 역 묶기",
+    "vizSizeByVisits": "방문 수에 따른 크기",
+    "vizStationCount": {
+        "other": "{n}개 역"
+    },
+    "vizVisitCount": {
+        "other": "{n}회 방문"
+    },
+    "vizClickToZoom": "클릭하여 확대"
 }

@@ -1578,5 +1578,119 @@
     "stopStand": "Perron",
     "motisPier": "Steiger {track}",
     "stopPier": "Steiger",
-    "swapEnds": "Vertrek en aankomst omwisselen"
+    "swapEnds": "Vertrek en aankomst omwisselen",
+    "vizTitle": "Visualisaties",
+    "vizLoading": "Laden…",
+    "vizFailed": "Laden mislukt",
+    "vizSettings": "Weergave-instellingen",
+    "vizTripTypes": "Soorten ritten",
+    "vizOpacity": "Dekking",
+    "vizTrips": {
+        "one": "{n} rit",
+        "other": "{n} ritten"
+    },
+    "vizHexagons": "Besthoeken",
+    "vizHexagonsSub": "Waar je het meest komt, in 3D-zuilen",
+    "vizCalendar": "Kalender",
+    "vizCalendarSub": "Je reisdagen, jaar na jaar",
+    "vizArcs": "Verbindingskaart",
+    "vizArcsSub": "Elk vertrek verbonden met zijn aankomst",
+    "vizHeatmap": "Heatmap",
+    "vizHeatmapSub": "De lijnen waarop je het vaakst reist",
+    "vizAirports": "Vliegnetwerk",
+    "vizAirportsSub": "Je luchthavens en de vluchten ertussen",
+    "vizStations": "Stationskaart",
+    "vizStationsSub": "Elk vertrek en elke aankomst van je ritten",
+    "vizReplay": "Reizen in timelapse",
+    "vizReplaySub": "Je ritten op volgorde, dag na dag",
+    "vizPersonal": "Persoonlijk",
+    "vizCommunity": "Community",
+    "vizGlobalHexSub": "Waar alle Trainlog-gebruikers reizen",
+    "vizRadius": "Straal",
+    "vizHeightScale": "Hoogteschaal",
+    "vizCoverage": "Dekking",
+    "vizExtrusion": "3D-extrusie",
+    "vizSensitivity": "Gevoeligheid: bovenste {n}% → heet",
+    "vizHotThreshold": {
+        "one": "≥ {n} rit op een corridor → heet",
+        "other": "≥ {n} ritten op een corridor → heet"
+    },
+    "vizGlowSize": "Gloedgrootte",
+    "vizMergeRadius": "Samenvoegstraal",
+    "vizMaxArcWidth": "Max. boogbreedte",
+    "vizArcCount": {
+        "one": "{n} boog",
+        "other": "{n} bogen"
+    },
+    "vizTravelDate": "Reisdatum",
+    "vizLogDate": "Registratiedatum",
+    "vizTripsMode": "Ritten",
+    "vizTotalTrips": "Ritten in totaal",
+    "vizTotalDistance": "Totale afstand",
+    "vizDaysWithTravel": "Reisdagen",
+    "vizBusiestYear": "Drukste jaar",
+    "vizBusiestWeekday": "Drukste weekdag",
+    "vizBusiestMonth": "Drukste maand",
+    "vizLess": "Minder",
+    "vizMore": "Meer",
+    "vizSpeed": "Snelheid",
+    "vizDaysPerSecond": "dagen/s",
+    "vizTrail": "Spoor",
+    "vizDaysUnit": "dagen",
+    "vizWidth": "Breedte",
+    "vizPlaying": "Afspelen",
+    "vizCumulative": "Cumulatief (niet vervagen)",
+    "vizAutoSkip": "Gaten automatisch overslaan",
+    "vizSkipGapsOver": "Gaten overslaan langer dan",
+    "vizFrom": "Van",
+    "vizTo": "Tot",
+    "vizAll": "Alle",
+    "vizNone": "Geen",
+    "vizPlayPause": "Afspelen / pauze",
+    "vizNoTimestamps": "Geen ritten met tijden",
+    "vizGapSkipped": {
+        "one": "Geen reis — {n} dag (overgeslagen)",
+        "other": "Geen reis — {n} dagen (overgeslagen)"
+    },
+    "vizUndirected": "Ongericht",
+    "vizDirected": "Gericht",
+    "vizYear": "Jaar",
+    "vizAllYears": "Alle jaren",
+    "vizMinFlights": "Min. vluchten per verbinding",
+    "vizDisplay": "Weergave",
+    "vizAlwaysCounts": "Aantallen altijd tonen",
+    "vizCityNames": "Plaatsnamen",
+    "vizSizeByTraffic": "Grootte naar verkeer",
+    "vizLayout": "Indeling",
+    "vizGeoPull": "Geografische aantrekking",
+    "vizEdgeLength": "Verbindingslengte",
+    "vizRepulsion": "Afstoting",
+    "vizDownloadSvg": "SVG downloaden",
+    "vizAirportCount": {
+        "one": "{n} luchthaven",
+        "other": "{n} luchthavens"
+    },
+    "vizEdgeCount": {
+        "one": "{n} verbinding",
+        "other": "{n} verbindingen"
+    },
+    "vizFlightCount": {
+        "one": "{n} vlucht",
+        "other": "{n} vluchten"
+    },
+    "vizConnectionCount": {
+        "one": "{n} verbinding",
+        "other": "{n} verbindingen"
+    },
+    "vizGroupStations": "Nabije stations groeperen",
+    "vizSizeByVisits": "Grootte naar bezoeken",
+    "vizStationCount": {
+        "one": "{n} station",
+        "other": "{n} stations"
+    },
+    "vizVisitCount": {
+        "one": "{n} bezoek",
+        "other": "{n} bezoeken"
+    },
+    "vizClickToZoom": "klik om in te zoomen"
 }

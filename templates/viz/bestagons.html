@@ -27,21 +27,21 @@
 <div id="map"></div>
 
 <div id="info">
-  <b>⬡ Hexagons</b><br>
-  <span id="status">Loading…</span>
+  <b>⬡ {{ vizHexagons }}</b><br>
+  <span id="status">{{ vizLoading }}</span>
 </div>
 
 <div id="controls">
-  <label>Radius: <span id="radius-val">15</span> km
+  <label>{{ vizRadius }}: <span id="radius-val">15</span> km
     <input type="range" id="radius" min="5" max="100" step="5" value="15">
   </label>
-  <label>Height scale: <span id="escale-val">50</span>×
+  <label>{{ vizHeightScale }}: <span id="escale-val">50</span>×
     <input type="range" id="escale" min="0" max="200" step="10" value="50">
   </label>
-  <label>Coverage: <span id="cov-val">70</span>%
+  <label>{{ vizCoverage }}: <span id="cov-val">70</span>%
     <input type="range" id="cov" min="30" max="100" step="5" value="70">
   </label>
-  <label><input type="checkbox" id="extruded" checked>3D extrusion</label>
+  <label><input type="checkbox" id="extruded" checked>{{ vizExtrusion }}</label>
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
@@ -49,6 +49,7 @@
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 
 <script>
+const VIZ_TRIPS = {{ vizTrips | tojson }};
 const DATA_URL = "{{ data_url }}";
 const COLOR_RANGE = [
   [1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]
@@ -115,7 +116,7 @@ MapLibreUtils.initializeMapLibre({
       this._c = document.createElement('div');
       this._c.className = 'maplibregl-ctrl maplibregl-ctrl-group';
       const b = document.createElement('button');
-      b.type = 'button'; b.title = 'Display settings';
+      b.type = 'button'; b.title = {{ vizSettings | tojson }};
       b.innerHTML = '<i class="fa-solid fa-sliders"></i>';
       b.onclick = () => document.getElementById('controls').classList.toggle('open');
       this._c.appendChild(b);
@@ -129,7 +130,7 @@ MapLibreUtils.initializeMapLibre({
     overlay = new deck.MapboxOverlay({
       interleaved: false, layers: [],
       getTooltip: ({ object }) => object && {
-        html: `<b>${object.points?.length || '?'}</b> trips`,
+        html: `<b>${pluralize(VIZ_TRIPS, object.points?.length || 0)}</b>`,
         style: { background:'rgba(0,0,0,0.85)', color:'#fff', padding:'6px 8px', borderRadius:'6px' }
       }
     });
@@ -138,10 +139,10 @@ MapLibreUtils.initializeMapLibre({
     fetch(DATA_URL).then(r => r.json()).then(trips => {
       rawTrips = trips;
       overlay.setProps({ layers: [buildLayer()] });
-      document.getElementById('status').textContent = trips.length + ' trips';
+      document.getElementById('status').textContent = pluralize(VIZ_TRIPS, trips.length);
       document.querySelector('.spinner-container').style.display = 'none';
     }).catch(() => {
-      document.getElementById('status').textContent = 'Failed to load';
+      document.getElementById('status').textContent = {{ vizFailed | tojson }};
       document.querySelector('.spinner-container').style.display = 'none';
     });
   });

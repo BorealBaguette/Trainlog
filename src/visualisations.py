@@ -39,6 +39,11 @@ def _parse_trip_dt(value):
         return None
 
 
+def _t(key):
+    """A string in the user's language."""
+    return lang[session["userinfo"]["lang"]][key]
+
+
 def _ctx(username):
     """Template context shared by all viz pages."""
     return dict(
@@ -203,6 +208,70 @@ def arc_trips_api(username):
     ])
 
 
+@bp.route("/u/<username>/api/airport_graph.json")
+@login_required
+def airport_graph_api(username):
+    """Flights between airports for the airport graph, by direction and year.
+
+    Air trips name their airports "… (CDG)"; the trailing code is the node,
+    looked up in `airports` for its city, country and position.
+    """
+    user_id = get_user_id(username)
+    with pg_session() as pg:
+        rows = pg.execute(
+            f"""
+            SELECT substring(t.origin_station FROM :code_re)      AS src,
+                   substring(t.destination_station FROM :code_re) AS dst,
+                   min(t.origin_station)      AS src_name,
+                   min(t.destination_station) AS dst_name,
+                   EXTRACT(YEAR FROM COALESCE(t.utc_start_datetime, t.start_datetime))::int AS year,
+                   count(*) AS flights
+            FROM   trips t
+            WHERE  t.user_id = :user_id
+              AND  t.trip_type = 'air'
+              {_PAST_FILTER}
+            GROUP  BY 1, 2, 5
+            """,
+            {"user_id": user_id, "code_re": r"\(([^()]+)\)\s*$"},
+        ).fetchall()
+        rows = [r for r in rows if r["src"] and r["dst"]]
+
+        # Name as the trip wrote it, without its flag, for codes `airports` doesn't know.
+        names = {}
+        for r in rows:
+            names.setdefault(r["src"], r["src_name"])
+            names.setdefault(r["dst"], r["dst_name"])
+        airports = pg.execute(
+            """
+            SELECT DISTINCT ON (iata) iata, name, city, iso_country, latitude, longitude
+            FROM   airports
+            WHERE  iata = ANY(:codes)
+            ORDER  BY iata
+            """,
+            {"codes": list(names)},
+        ).fetchall() if names else []
+
+    known = {a["iata"]: a for a in airports}
+    nodes = []
+    for code, trip_name in names.items():
+        a = known.get(code)
+        nodes.append({
+            "code": code,
+            "name": a["name"] if a else trip_name.split(" ", 1)[-1],
+            "city": (a["city"] if a else None) or "",
+            "country": (a["iso_country"] if a else None) or "",
+            "lat": a["latitude"] if a else None,
+            "lng": a["longitude"] if a else None,
+        })
+    return jsonify({
+        "nodes": nodes,
+        "edges": [
+            {"src": r["src"], "dst": r["dst"], "year": r["year"], "count": r["flights"]}
+            for r in rows
+        ],
+    })
+
+
 # ---------------------------------------------------------------------------
 # Page routes
 # ---------------------------------------------------------------------------
@@ -210,19 +279,19 @@ def arc_trips_api(username):
 @bp.route("/u/<username>/viz")
 @login_required
 def index(username):
-    return render_template("viz/index.html", title="visualisations", **_ctx(username))
+    return render_template("viz/index.html", title=_t("vizTitle"), **_ctx(username))
 
 
 @bp.route("/u/<username>/viz/bestagons")
 @login_required
 def bestagons(username):
-    return render_template("viz/bestagons.html", title="Hexagons", **_ctx(username))
+    return render_template("viz/bestagons.html", title=_t("vizHexagons"), **_ctx(username))
 
 
 @bp.route("/u/<username>/viz/heatmap")
 @login_required
 def heatmap(username):
-    return render_template("viz/heatmap.html", title="Heatmap", **_ctx(username))
+    return render_template("viz/heatmap.html", title=_t("vizHeatmap"), **_ctx(username))
 
 
 @bp.route("/u/<username>/viz/calendar")
@@ -230,7 +299,7 @@ def heatmap(username):
 def calendar(username):
     from flask import url_for as _uf
     return render_template(
-        "viz/calendar.html", title="Calendar",
+        "viz/calendar.html", title=_t("vizCalendar"),
         trips_url=_uf("dynamic_trips", username=username, time="trips"),
         **_ctx(username),
     )
@@ -239,10 +308,16 @@ def calendar(username):
 @bp.route("/u/<username>/viz/arcs")
 @login_required
 def arcs(username):
-    return render_template("viz/arcs.html", title="Arc flow", **_ctx(username))
+    return render_template("viz/arcs.html", title=_t("vizArcs"), **_ctx(username))
 
 
 @bp.route("/u/<username>/viz/trips")
 @login_required
 def trips_page(username):
-    return render_template("viz/trips.html", title="Trip Replay", **_ctx(username))
+    return render_template("viz/trips.html", title=_t("vizReplay"), **_ctx(username))
+
+
+@bp.route("/u/<username>/viz/airports")
+@login_required
+def airports_page(username):
+    return render_template("viz/airports.html", title=_t("vizAirports"), **_ctx(username))

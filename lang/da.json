@@ -1578,5 +1578,119 @@
     "stopStand": "Perron",
     "motisPier": "Kaj {track}",
     "stopPier": "Kaj",
-    "swapEnds": "Byt om på start og destination"
+    "swapEnds": "Byt om på start og destination",
+    "vizTitle": "Visualiseringer",
+    "vizLoading": "Indlæser…",
+    "vizFailed": "Indlæsning mislykkedes",
+    "vizSettings": "Visningsindstillinger",
+    "vizTripTypes": "Rejsetyper",
+    "vizOpacity": "Gennemsigtighed",
+    "vizTrips": {
+        "one": "{n} rejse",
+        "other": "{n} rejser"
+    },
+    "vizHexagons": "Bedstekanter",
+    "vizHexagonsSub": "Hvor du rejser mest, i 3D-søjler",
+    "vizCalendar": "Kalender",
+    "vizCalendarSub": "Dine rejsedage, år efter år",
+    "vizArcs": "Forbindelseskort",
+    "vizArcsSub": "Hver afgang forbundet med sin ankomst",
+    "vizHeatmap": "Varmekort",
+    "vizHeatmapSub": "De strækninger, du rejser mest på",
+    "vizAirports": "Flynetværk",
+    "vizAirportsSub": "Dine lufthavne og flyvningerne imellem dem",
+    "vizStations": "Stationskort",
+    "vizStationsSub": "Hver afgang og ankomst på dine rejser",
+    "vizReplay": "Rejser i tidsforløb",
+    "vizReplaySub": "Dine rejser i rækkefølge, dag for dag",
+    "vizPersonal": "Personlig",
+    "vizCommunity": "Fællesskab",
+    "vizGlobalHexSub": "Hvor alle Trainlog-brugere rejser",
+    "vizRadius": "Radius",
+    "vizHeightScale": "Højdeskala",
+    "vizCoverage": "Dækning",
+    "vizExtrusion": "3D-ekstrudering",
+    "vizSensitivity": "Følsomhed: øverste {n} % → varm",
+    "vizHotThreshold": {
+        "one": "≥ {n} rejse på en korridor → varm",
+        "other": "≥ {n} rejser på en korridor → varm"
+    },
+    "vizGlowSize": "Glødstørrelse",
+    "vizMergeRadius": "Sammenlægningsradius",
+    "vizMaxArcWidth": "Maks. buebredde",
+    "vizArcCount": {
+        "one": "{n} bue",
+        "other": "{n} buer"
+    },
+    "vizTravelDate": "Rejsedato",
+    "vizLogDate": "Registreringsdato",
+    "vizTripsMode": "Rejser",
+    "vizTotalTrips": "Rejser i alt",
+    "vizTotalDistance": "Samlet distance",
+    "vizDaysWithTravel": "Rejsedage",
+    "vizBusiestYear": "Travleste år",
+    "vizBusiestWeekday": "Travleste ugedag",
+    "vizBusiestMonth": "Travleste måned",
+    "vizLess": "Mindre",
+    "vizMore": "Mere",
+    "vizSpeed": "Hastighed",
+    "vizDaysPerSecond": "dage/s",
+    "vizTrail": "Spor",
+    "vizDaysUnit": "dage",
+    "vizWidth": "Bredde",
+    "vizPlaying": "Afspiller",
+    "vizCumulative": "Kumulativ (ingen udtoning)",
+    "vizAutoSkip": "Spring huller over automatisk",
+    "vizSkipGapsOver": "Spring huller over på mere end",
+    "vizFrom": "Fra",
+    "vizTo": "Til",
+    "vizAll": "Alle",
+    "vizNone": "Ingen",
+    "vizPlayPause": "Afspil / pause",
+    "vizNoTimestamps": "Ingen rejser med tidspunkter",
+    "vizGapSkipped": {
+        "one": "Ingen rejser — {n} dag (sprunget over)",
+        "other": "Ingen rejser — {n} dage (sprunget over)"
+    },
+    "vizUndirected": "Urettet",
+    "vizDirected": "Rettet",
+    "vizYear": "År",
+    "vizAllYears": "Alle år",
+    "vizMinFlights": "Min. fly pr. forbindelse",
+    "vizDisplay": "Visning",
+    "vizAlwaysCounts": "Vis altid antal",
+    "vizCityNames": "Bynavne",
+    "vizSizeByTraffic": "Størrelse efter trafik",
+    "vizLayout": "Layout",
+    "vizGeoPull": "Geografisk tiltrækning",
+    "vizEdgeLength": "Forbindelseslængde",
+    "vizRepulsion": "Frastødning",
+    "vizDownloadSvg": "Download SVG",
+    "vizAirportCount": {
+        "one": "{n} lufthavn",
+        "other": "{n} lufthavne"
+    },
+    "vizEdgeCount": {
+        "one": "{n} forbindelse",
+        "other": "{n} forbindelser"
+    },
+    "vizFlightCount": {
+        "one": "{n} flyrejse",
+        "other": "{n} flyrejser"
+    },
+    "vizConnectionCount": {
+        "one": "{n} forbindelse",
+        "other": "{n} forbindelser"
+    },
+    "vizGroupStations": "Gruppér nærliggende stationer",
+    "vizSizeByVisits": "Størrelse efter besøg",
+    "vizStationCount": {
+        "one": "{n} station",
+        "other": "{n} stationer"
+    },
+    "vizVisitCount": {
+        "one": "{n} besøg",
+        "other": "{n} besøg"
+    },
+    "vizClickToZoom": "klik for at zoome ind"
 }

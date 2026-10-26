@@ -1574,5 +1574,109 @@
     "stopStand": "のりば",
     "motisPier": "{track}番桟橋",
     "stopPier": "桟橋",
-    "swapEnds": "出発地と到着地を入れ替え"
+    "swapEnds": "出発地と到着地を入れ替え",
+    "vizTitle": "ビジュアライゼーション",
+    "vizLoading": "読み込み中…",
+    "vizFailed": "読み込みに失敗しました",
+    "vizSettings": "表示設定",
+    "vizTripTypes": "移動の種類",
+    "vizOpacity": "不透明度",
+    "vizTrips": {
+        "other": "{n}件の旅行"
+    },
+    "vizHexagons": "ベスタゴン",
+    "vizHexagonsSub": "よく移動する場所を3Dの柱で",
+    "vizCalendar": "カレンダー",
+    "vizCalendarSub": "移動した日を年ごとに",
+    "vizArcs": "路線マップ",
+    "vizArcsSub": "出発地と到着地を結ぶ線",
+    "vizHeatmap": "ヒートマップ",
+    "vizHeatmapSub": "よく利用する路線",
+    "vizAirports": "航空ネットワーク",
+    "vizAirportsSub": "利用した空港とそれを結ぶ便",
+    "vizStations": "駅マップ",
+    "vizStationsSub": "すべての旅行の出発地と到着地",
+    "vizReplay": "早送りの旅",
+    "vizReplaySub": "旅行を日ごとに順番に再生",
+    "vizPersonal": "個人",
+    "vizCommunity": "コミュニティ",
+    "vizGlobalHexSub": "Trainlogの全ユーザーが移動する場所",
+    "vizRadius": "半径",
+    "vizHeightScale": "高さの倍率",
+    "vizCoverage": "カバー率",
+    "vizExtrusion": "3D押し出し",
+    "vizSensitivity": "感度：上位{n}% → ホット",
+    "vizHotThreshold": {
+        "other": "回廊あたり{n}件以上の旅行 → ホット"
+    },
+    "vizGlowSize": "グローの大きさ",
+    "vizMergeRadius": "統合半径",
+    "vizMaxArcWidth": "アークの最大幅",
+    "vizArcCount": {
+        "other": "{n}本のアーク"
+    },
+    "vizTravelDate": "旅行日",
+    "vizLogDate": "記録日",
+    "vizTripsMode": "旅行",
+    "vizTotalTrips": "旅行の合計",
+    "vizTotalDistance": "総距離",
+    "vizDaysWithTravel": "移動した日数",
+    "vizBusiestYear": "最も多い年",
+    "vizBusiestWeekday": "最も多い曜日",
+    "vizBusiestMonth": "最も多い月",
+    "vizLess": "少",
+    "vizMore": "多",
+    "vizSpeed": "速度",
+    "vizDaysPerSecond": "日/秒",
+    "vizTrail": "軌跡",
+    "vizDaysUnit": "日",
+    "vizWidth": "幅",
+    "vizPlaying": "再生中",
+    "vizCumulative": "累積（フェードなし）",
+    "vizAutoSkip": "空白期間を自動でスキップ",
+    "vizSkipGapsOver": "次の日数を超える空白をスキップ",
+    "vizFrom": "開始",
+    "vizTo": "終了",
+    "vizAll": "すべて",
+    "vizNone": "なし",
+    "vizPlayPause": "再生 / 一時停止",
+    "vizNoTimestamps": "時刻のある旅行がありません",
+    "vizGapSkipped": {
+        "other": "移動なし — {n}日（スキップ）"
+    },
+    "vizUndirected": "無向",
+    "vizDirected": "有向",
+    "vizYear": "年",
+    "vizAllYears": "すべての年",
+    "vizMinFlights": "1路線あたりの最小便数",
+    "vizDisplay": "表示",
+    "vizAlwaysCounts": "常に数を表示",
+    "vizCityNames": "都市名",
+    "vizSizeByTraffic": "利用数で大きさを変える",
+    "vizLayout": "レイアウト",
+    "vizGeoPull": "地理的な引力",
+    "vizEdgeLength": "線の長さ",
+    "vizRepulsion": "反発力",
+    "vizDownloadSvg": "SVGをダウンロード",
+    "vizAirportCount": {
+        "other": "{n}空港"
+    },
+    "vizEdgeCount": {
+        "other": "{n}路線"
+    },
+    "vizFlightCount": {
+        "other": "{n}便"
+    },
+    "vizConnectionCount": {
+        "other": "{n}接続"
+    },
+    "vizGroupStations": "近くの駅をまとめる",
+    "vizSizeByVisits": "訪問数で大きさを変える",
+    "vizStationCount": {
+        "other": "{n}駅"
+    },
+    "vizVisitCount": {
+        "other": "{n}回の訪問"
+    },
+    "vizClickToZoom": "クリックで拡大"
 }

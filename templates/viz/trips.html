@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
+{% import 'viz/_i18n.html' as i18n with context %}
 
 <link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 <style>
@@ -58,44 +59,44 @@
 <div id="map"></div>
 
 <div id="info">
-  <b>Trip Replay</b><br>
-  <span id="status">Loading…</span>
+  <b>{{ vizReplay }}</b><br>
+  <span id="status">{{ vizLoading }}</span>
   <div id="clock"></div>
 </div>
 
 <div id="controls">
-  <label>Speed: <span id="speed-val">30</span> days/s
+  <label>{{ vizSpeed }}: <span id="speed-val">30</span> {{ vizDaysPerSecond }}
     <input type="range" id="speed" min="1" max="365" step="1" value="30">
   </label>
-  <label>Trail: <span id="trail-val">14</span> days
+  <label>{{ vizTrail }}: <span id="trail-val">14</span> {{ vizDaysUnit }}
     <input type="range" id="trail" min="1" max="180" step="1" value="14">
   </label>
-  <label>Width: <span id="width-val">4</span>px
+  <label>{{ vizWidth }}: <span id="width-val">4</span>px
     <input type="range" id="width" min="1" max="12" step="1" value="4">
   </label>
-  <label><input type="checkbox" id="playing" checked>Playing</label>
+  <label><input type="checkbox" id="playing" checked>{{ vizPlaying }}</label>
 
   <hr>
-  <label><input type="checkbox" id="cumulative">Cumulative (no fade)</label>
-  <label><input type="checkbox" id="autoskip" checked>Auto-skip gaps</label>
-  <label id="gap-label">Skip gaps over: <span id="gap-val">30</span> days
+  <label><input type="checkbox" id="cumulative">{{ vizCumulative }}</label>
+  <label><input type="checkbox" id="autoskip" checked>{{ vizAutoSkip }}</label>
+  <label id="gap-label">{{ vizSkipGapsOver }}: <span id="gap-val">30</span> {{ vizDaysUnit }}
     <input type="range" id="gap" min="3" max="180" step="1" value="30">
   </label>
 
   <hr>
-  <label>From</label>
+  <label>{{ vizFrom }}</label>
   <input type="date" id="date-from">
-  <label>To</label>
+  <label>{{ vizTo }}</label>
   <input type="date" id="date-to">
 
   <hr>
-  <label>Trip types</label>
-  <div id="type-actions"><a id="type-all">All</a><a id="type-none">None</a></div>
+  <label>{{ vizTripTypes }}</label>
+  <div id="type-actions"><a id="type-all">{{ vizAll }}</a><a id="type-none">{{ vizNone }}</a></div>
   <div id="type-filters"></div>
 </div>
 
 <div id="timeline">
-  <button id="playpause" type="button" title="Play / pause"><i class="fa-solid fa-pause"></i></button>
+  <button id="playpause" type="button" title="{{ vizPlayPause }}"><i class="fa-solid fa-pause"></i></button>
   <div id="progress">
     <div id="gaps"></div>
     <div id="progress-fill"></div>
@@ -108,7 +109,10 @@
 <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 
+{{ i18n.type_labels() }}
 <script>
+const VIZ_TRIPS = {{ vizTrips | tojson }};
+const VIZ_GAP = {{ vizGapSkipped | tojson }};
 const DATA_URL = "{{ data_url }}";
 const TYPE_COLORS = {
   train: [82,176,254], tram: [162,215,255], metro: [0,69,149],
@@ -221,7 +225,7 @@ function applyFilters() {
   maxTs = hi;
   if (currentTime < minTs || currentTime > maxTs) currentTime = minTs;
 
-  $('status').textContent = trips.length + ' / ' + allTrips.length + ' trips';
+  $('status').textContent = trips.length + ' / ' + pluralize(VIZ_TRIPS, allTrips.length);
   renderGaps();
   refresh();
   updateClock();
@@ -259,14 +263,14 @@ function renderGaps() {
     el.style.left  = ((g.start - minTs) / span * 100) + '%';
     el.style.width = ((g.end - g.start) / span * 100) + '%';
     const days = Math.round((g.end - g.start) / DAY);
-    el.title = 'No travel — ' + days + ' day' + (days === 1 ? '' : 's') + ' (skipped)';
+    el.title = pluralize(VIZ_GAP, days);
     c.appendChild(el);
   }
 }
 
 function updateClock() {
   const d = new Date(currentTime * 1000);
-  const label = d.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' });
+  const label = d.toLocaleDateString(document.documentElement.lang || undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   $('clock').textContent = label;
   $('time-label').textContent = label;
   const span = maxTs - minTs;
@@ -368,7 +372,7 @@ function buildTypeFilters(types) {
     row.innerHTML =
       `<input type="checkbox" value="${type}" checked>` +
       `<span class="swatch" style="background:rgb(${col[0]},${col[1]},${col[2]})"></span>` +
-      `${type}`;
+      `${typeLabel(type)}`;
     row.querySelector('input').addEventListener('change', applyFilters);
     c.appendChild(row);
   });
@@ -383,7 +387,7 @@ MapLibreUtils.initializeMapLibre({
       this._c = document.createElement('div');
       this._c.className = 'maplibregl-ctrl maplibregl-ctrl-group';
       const b = document.createElement('button');
-      b.type = 'button'; b.title = 'Display settings';
+      b.type = 'button'; b.title = {{ vizSettings | tojson }};
       b.innerHTML = '<i class="fa-solid fa-sliders"></i>';
       b.onclick = () => document.getElementById('controls').classList.toggle('open');
       this._c.appendChild(b);
@@ -397,7 +401,7 @@ MapLibreUtils.initializeMapLibre({
     overlay = new deck.MapboxOverlay({
       interleaved: false, layers: [],
       getTooltip: ({ object }) => object && {
-        html: `<b>${object.from}</b> → <b>${object.to}</b> <i>(${object.type})</i>`,
+        html: `<b>${object.from}</b> → <b>${object.to}</b> <i>(${typeLabel(object.type)})</i>`,
         style: { background:'rgba(0,0,0,0.85)', color:'#fff', padding:'6px 8px', borderRadius:'6px',
                  maxWidth:'280px', maxHeight:'40vh', overflowX:'hidden', overflowY:'auto',
                  whiteSpace:'normal', wordBreak:'break-word', overflowWrap:'anywhere' }
@@ -409,7 +413,7 @@ MapLibreUtils.initializeMapLibre({
       // Only trips that have timestamps
       allTrips = data.filter(t => t.timestamps && t.timestamps.length >= 2);
       if (!allTrips.length) {
-        $('status').textContent = 'No trips with timestamps';
+        $('status').textContent = {{ vizNoTimestamps | tojson }};
         document.querySelector('.spinner-container').style.display = 'none';
         return;
       }
@@ -431,7 +435,7 @@ MapLibreUtils.initializeMapLibre({
       document.querySelector('.spinner-container').style.display = 'none';
       raf = requestAnimationFrame(animate);
     }).catch(() => {
-      $('status').textContent = 'Failed to load';
+      $('status').textContent = {{ vizFailed | tojson }};
       document.querySelector('.spinner-container').style.display = 'none';
     });
   });

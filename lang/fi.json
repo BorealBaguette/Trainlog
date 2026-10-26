@@ -1576,5 +1576,119 @@
     "stopStand": "Laituri",
     "motisPier": "Laituri {track}",
     "stopPier": "Laituri",
-    "swapEnds": "Vaihda lähtö ja määränpää"
+    "swapEnds": "Vaihda lähtö ja määränpää",
+    "vizTitle": "Visualisoinnit",
+    "vizLoading": "Ladataan…",
+    "vizFailed": "Lataus epäonnistui",
+    "vizSettings": "Näyttöasetukset",
+    "vizTripTypes": "Matkatyypit",
+    "vizOpacity": "Peittävyys",
+    "vizTrips": {
+        "one": "{n} matka",
+        "other": "{n} matkaa"
+    },
+    "vizHexagons": "Paraskulmiot",
+    "vizHexagonsSub": "Missä liikut eniten, 3D-pylväinä",
+    "vizCalendar": "Kalenteri",
+    "vizCalendarSub": "Matkapäiväsi vuosi vuodelta",
+    "vizArcs": "Yhteyskartta",
+    "vizArcsSub": "Jokainen lähtö yhdistettynä määränpäähänsä",
+    "vizHeatmap": "Lämpökartta",
+    "vizHeatmapSub": "Reitit, joilla matkustat eniten",
+    "vizAirports": "Lentoverkosto",
+    "vizAirportsSub": "Lentoasemasi ja niiden väliset lennot",
+    "vizStations": "Asemakartta",
+    "vizStationsSub": "Matkojesi jokainen lähtö ja saapuminen",
+    "vizReplay": "Matkat pikakelauksella",
+    "vizReplaySub": "Matkasi järjestyksessä, päivä päivältä",
+    "vizPersonal": "Oma",
+    "vizCommunity": "Yhteisö",
+    "vizGlobalHexSub": "Missä kaikki Trainlogin käyttäjät matkustavat",
+    "vizRadius": "Säde",
+    "vizHeightScale": "Korkeusasteikko",
+    "vizCoverage": "Kattavuus",
+    "vizExtrusion": "3D-pursotus",
+    "vizSensitivity": "Herkkyys: ylin {n} % → kuuma",
+    "vizHotThreshold": {
+        "one": "≥ {n} matka käytävällä → kuuma",
+        "other": "≥ {n} matkaa käytävällä → kuuma"
+    },
+    "vizGlowSize": "Hehkun koko",
+    "vizMergeRadius": "Yhdistämissäde",
+    "vizMaxArcWidth": "Kaaren enimmäisleveys",
+    "vizArcCount": {
+        "one": "{n} kaari",
+        "other": "{n} kaarta"
+    },
+    "vizTravelDate": "Matkapäivä",
+    "vizLogDate": "Kirjauspäivä",
+    "vizTripsMode": "Matkat",
+    "vizTotalTrips": "Matkoja yhteensä",
+    "vizTotalDistance": "Kokonaismatka",
+    "vizDaysWithTravel": "Matkapäiviä",
+    "vizBusiestYear": "Vilkkain vuosi",
+    "vizBusiestWeekday": "Vilkkain viikonpäivä",
+    "vizBusiestMonth": "Vilkkain kuukausi",
+    "vizLess": "Vähemmän",
+    "vizMore": "Enemmän",
+    "vizSpeed": "Nopeus",
+    "vizDaysPerSecond": "päivää/s",
+    "vizTrail": "Jälki",
+    "vizDaysUnit": "päivää",
+    "vizWidth": "Leveys",
+    "vizPlaying": "Toistetaan",
+    "vizCumulative": "Kertyvä (ei häivytystä)",
+    "vizAutoSkip": "Ohita tauot automaattisesti",
+    "vizSkipGapsOver": "Ohita tauot, jotka ylittävät",
+    "vizFrom": "Alkaen",
+    "vizTo": "Asti",
+    "vizAll": "Kaikki",
+    "vizNone": "Ei mitään",
+    "vizPlayPause": "Toista / tauko",
+    "vizNoTimestamps": "Ei matkoja, joilla on ajat",
+    "vizGapSkipped": {
+        "one": "Ei matkoja — {n} päivä (ohitettu)",
+        "other": "Ei matkoja — {n} päivää (ohitettu)"
+    },
+    "vizUndirected": "Suuntaamaton",
+    "vizDirected": "Suunnattu",
+    "vizYear": "Vuosi",
+    "vizAllYears": "Kaikki vuodet",
+    "vizMinFlights": "Väh. lentoja yhteyttä kohden",
+    "vizDisplay": "Näyttö",
+    "vizAlwaysCounts": "Näytä määrät aina",
+    "vizCityNames": "Kaupunkien nimet",
+    "vizSizeByTraffic": "Koko liikenteen mukaan",
+    "vizLayout": "Asettelu",
+    "vizGeoPull": "Maantieteellinen veto",
+    "vizEdgeLength": "Yhteyden pituus",
+    "vizRepulsion": "Hylkivyys",
+    "vizDownloadSvg": "Lataa SVG",
+    "vizAirportCount": {
+        "one": "{n} lentoasema",
+        "other": "{n} lentoasemaa"
+    },
+    "vizEdgeCount": {
+        "one": "{n} yhteys",
+        "other": "{n} yhteyttä"
+    },
+    "vizFlightCount": {
+        "one": "{n} lento",
+        "other": "{n} lentoa"
+    },
+    "vizConnectionCount": {
+        "one": "{n} yhteys",
+        "other": "{n} yhteyttä"
+    },
+    "vizGroupStations": "Ryhmitä lähekkäiset asemat",
+    "vizSizeByVisits": "Koko käyntien mukaan",
+    "vizStationCount": {
+        "one": "{n} asema",
+        "other": "{n} asemaa"
+    },
+    "vizVisitCount": {
+        "one": "{n} käynti",
+        "other": "{n} käyntiä"
+    },
+    "vizClickToZoom": "lähennä napsauttamalla"
 }

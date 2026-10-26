@@ -1574,5 +1574,109 @@
     "stopStand": "Peron",
     "motisPier": "İskele {track}",
     "stopPier": "İskele",
-    "swapEnds": "Kalkış ve varışı değiştir"
+    "swapEnds": "Kalkış ve varışı değiştir",
+    "vizTitle": "Görselleştirmeler",
+    "vizLoading": "Yükleniyor…",
+    "vizFailed": "Yüklenemedi",
+    "vizSettings": "Görünüm ayarları",
+    "vizTripTypes": "Yolculuk türleri",
+    "vizOpacity": "Opaklık",
+    "vizTrips": {
+        "other": "{n} yolculuk"
+    },
+    "vizHexagons": "Bestagonlar",
+    "vizHexagonsSub": "En çok seyahat ettiğiniz yerler, 3B sütunlarla",
+    "vizCalendar": "Takvim",
+    "vizCalendarSub": "Seyahat günleriniz, yıl yıl",
+    "vizArcs": "Bağlantı haritası",
+    "vizArcsSub": "Her kalkış, varışına bağlı",
+    "vizHeatmap": "Isı haritası",
+    "vizHeatmapSub": "En çok kullandığınız hatlar",
+    "vizAirports": "Uçuş ağı",
+    "vizAirportsSub": "Havalimanlarınız ve aralarındaki uçuşlar",
+    "vizStations": "İstasyon haritası",
+    "vizStationsSub": "Yolculuklarınızın her kalkışı ve varışı",
+    "vizReplay": "Hızlandırılmış yolculuklar",
+    "vizReplaySub": "Yolculuklarınız sırayla, gün gün",
+    "vizPersonal": "Kişisel",
+    "vizCommunity": "Topluluk",
+    "vizGlobalHexSub": "Tüm Trainlog kullanıcılarının seyahat ettiği yerler",
+    "vizRadius": "Yarıçap",
+    "vizHeightScale": "Yükseklik ölçeği",
+    "vizCoverage": "Kapsama",
+    "vizExtrusion": "3B yükseltme",
+    "vizSensitivity": "Hassasiyet: en üst %{n} → sıcak",
+    "vizHotThreshold": {
+        "other": "Bir koridorda ≥ {n} yolculuk → sıcak"
+    },
+    "vizGlowSize": "Parıltı boyutu",
+    "vizMergeRadius": "Birleştirme yarıçapı",
+    "vizMaxArcWidth": "Maks. yay genişliği",
+    "vizArcCount": {
+        "other": "{n} yay"
+    },
+    "vizTravelDate": "Yolculuk tarihi",
+    "vizLogDate": "Kayıt tarihi",
+    "vizTripsMode": "Yolculuklar",
+    "vizTotalTrips": "Toplam yolculuk",
+    "vizTotalDistance": "Toplam mesafe",
+    "vizDaysWithTravel": "Seyahat edilen gün",
+    "vizBusiestYear": "En yoğun yıl",
+    "vizBusiestWeekday": "En yoğun gün",
+    "vizBusiestMonth": "En yoğun ay",
+    "vizLess": "Az",
+    "vizMore": "Çok",
+    "vizSpeed": "Hız",
+    "vizDaysPerSecond": "gün/sn",
+    "vizTrail": "İz",
+    "vizDaysUnit": "gün",
+    "vizWidth": "Genişlik",
+    "vizPlaying": "Oynatılıyor",
+    "vizCumulative": "Birikimli (solma yok)",
+    "vizAutoSkip": "Boşlukları otomatik atla",
+    "vizSkipGapsOver": "Şu süreden uzun boşlukları atla",
+    "vizFrom": "Başlangıç",
+    "vizTo": "Bitiş",
+    "vizAll": "Tümü",
+    "vizNone": "Hiçbiri",
+    "vizPlayPause": "Oynat / duraklat",
+    "vizNoTimestamps": "Saat bilgisi olan yolculuk yok",
+    "vizGapSkipped": {
+        "other": "Yolculuk yok — {n} gün (atlandı)"
+    },
+    "vizUndirected": "Yönsüz",
+    "vizDirected": "Yönlü",
+    "vizYear": "Yıl",
+    "vizAllYears": "Tüm yıllar",
+    "vizMinFlights": "Bağlantı başına min. uçuş",
+    "vizDisplay": "Görünüm",
+    "vizAlwaysCounts": "Sayıları her zaman göster",
+    "vizCityNames": "Şehir adları",
+    "vizSizeByTraffic": "Trafiğe göre boyut",
+    "vizLayout": "Yerleşim",
+    "vizGeoPull": "Coğrafi çekim",
+    "vizEdgeLength": "Bağlantı uzunluğu",
+    "vizRepulsion": "İtme",
+    "vizDownloadSvg": "SVG indir",
+    "vizAirportCount": {
+        "other": "{n} havalimanı"
+    },
+    "vizEdgeCount": {
+        "other": "{n} bağlantı"
+    },
+    "vizFlightCount": {
+        "other": "{n} uçuş"
+    },
+    "vizConnectionCount": {
+        "other": "{n} bağlantı"
+    },
+    "vizGroupStations": "Yakın istasyonları grupla",
+    "vizSizeByVisits": "Ziyarete göre boyut",
+    "vizStationCount": {
+        "other": "{n} istasyon"
+    },
+    "vizVisitCount": {
+        "other": "{n} ziyaret"
+    },
+    "vizClickToZoom": "yakınlaştırmak için tıklayın"
 }

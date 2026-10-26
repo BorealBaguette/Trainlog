@@ -1575,5 +1575,119 @@
     "stopStand": "Stand",
     "motisPier": "Pier {track}",
     "stopPier": "Pier",
-    "swapEnds": "Swap origin and destination"
+    "swapEnds": "Swap origin and destination",
+    "vizTitle": "Visualizations",
+    "vizLoading": "Loading…",
+    "vizFailed": "Failed to load",
+    "vizSettings": "Display settings",
+    "vizTripTypes": "Trip types",
+    "vizOpacity": "Opacity",
+    "vizTrips": {
+        "one": "{n} trip",
+        "other": "{n} trips"
+    },
+    "vizHexagons": "Bestagons",
+    "vizHexagonsSub": "Where you travel most, in 3D columns",
+    "vizCalendar": "Calendar",
+    "vizCalendarSub": "Your travel days, year after year",
+    "vizArcs": "Connections map",
+    "vizArcsSub": "Every departure linked to its arrival",
+    "vizHeatmap": "Heatmap",
+    "vizHeatmapSub": "The lines you ride the most",
+    "vizAirports": "Flight network",
+    "vizAirportsSub": "Your airports and the flights between them",
+    "vizStations": "Station map",
+    "vizStationsSub": "Every departure and arrival of your trips",
+    "vizReplay": "Travel time-lapse",
+    "vizReplaySub": "Your trips playing out in order, day by day",
+    "vizPersonal": "Personal",
+    "vizCommunity": "Community",
+    "vizGlobalHexSub": "Where all Trainlog users travel",
+    "vizRadius": "Radius",
+    "vizHeightScale": "Height scale",
+    "vizCoverage": "Coverage",
+    "vizExtrusion": "3D extrusion",
+    "vizSensitivity": "Sensitivity: top {n}% → hot",
+    "vizHotThreshold": {
+        "one": "≥ {n} trip on a corridor → hot",
+        "other": "≥ {n} trips on a corridor → hot"
+    },
+    "vizGlowSize": "Glow size",
+    "vizMergeRadius": "Merge radius",
+    "vizMaxArcWidth": "Max arc width",
+    "vizArcCount": {
+        "one": "{n} arc",
+        "other": "{n} arcs"
+    },
+    "vizTravelDate": "Travel date",
+    "vizLogDate": "Log date",
+    "vizTripsMode": "Trips",
+    "vizTotalTrips": "Total trips",
+    "vizTotalDistance": "Total distance",
+    "vizDaysWithTravel": "Days with travel",
+    "vizBusiestYear": "Busiest year",
+    "vizBusiestWeekday": "Busiest weekday",
+    "vizBusiestMonth": "Busiest month",
+    "vizLess": "Less",
+    "vizMore": "More",
+    "vizSpeed": "Speed",
+    "vizDaysPerSecond": "days/s",
+    "vizTrail": "Trail",
+    "vizDaysUnit": "days",
+    "vizWidth": "Width",
+    "vizPlaying": "Playing",
+    "vizCumulative": "Cumulative (no fade)",
+    "vizAutoSkip": "Auto-skip gaps",
+    "vizSkipGapsOver": "Skip gaps over",
+    "vizFrom": "From",
+    "vizTo": "To",
+    "vizAll": "All",
+    "vizNone": "None",
+    "vizPlayPause": "Play / pause",
+    "vizNoTimestamps": "No trips with timestamps",
+    "vizGapSkipped": {
+        "one": "No travel — {n} day (skipped)",
+        "other": "No travel — {n} days (skipped)"
+    },
+    "vizUndirected": "Undirected",
+    "vizDirected": "Directed",
+    "vizYear": "Year",
+    "vizAllYears": "All years",
+    "vizMinFlights": "Min. flights per edge",
+    "vizDisplay": "Display",
+    "vizAlwaysCounts": "Always show counts",
+    "vizCityNames": "City names",
+    "vizSizeByTraffic": "Size by traffic",
+    "vizLayout": "Layout",
+    "vizGeoPull": "Geographic pull",
+    "vizEdgeLength": "Edge length",
+    "vizRepulsion": "Repulsion",
+    "vizDownloadSvg": "Download SVG",
+    "vizAirportCount": {
+        "one": "{n} airport",
+        "other": "{n} airports"
+    },
+    "vizEdgeCount": {
+        "one": "{n} edge",
+        "other": "{n} edges"
+    },
+    "vizFlightCount": {
+        "one": "{n} flight",
+        "other": "{n} flights"
+    },
+    "vizConnectionCount": {
+        "one": "{n} connection",
+        "other": "{n} connections"
+    },
+    "vizGroupStations": "Group nearby stations",
+    "vizSizeByVisits": "Size by visits",
+    "vizStationCount": {
+        "one": "{n} station",
+        "other": "{n} stations"
+    },
+    "vizVisitCount": {
+        "one": "{n} visit",
+        "other": "{n} visits"
+    },
+    "vizClickToZoom": "click to zoom in"
 }

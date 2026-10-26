@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
+{% import 'viz/_i18n.html' as i18n with context %}
 
 <link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 <style>
@@ -31,21 +32,21 @@
 <div id="map"></div>
 
 <div id="info">
-  <b>Arc flow</b><br>
-  <span id="status">Loading…</span>
+  <b>{{ vizArcs }}</b><br>
+  <span id="status">{{ vizLoading }}</span>
 </div>
 
 <div id="controls">
-  <label>Merge radius: <span id="snap-val">0.2</span>°
+  <label>{{ vizMergeRadius }}: <span id="snap-val">0.2</span>°
     <input type="range" id="snap" min="0.05" max="2" step="0.05" value="0.2">
   </label>
-  <label>Max arc width: <span id="maxw-val">20</span>px
+  <label>{{ vizMaxArcWidth }}: <span id="maxw-val">20</span>px
     <input type="range" id="maxw" min="2" max="60" step="1" value="20">
   </label>
-  <label>Opacity: <span id="opacity-val">80</span>%
+  <label>{{ vizOpacity }}: <span id="opacity-val">80</span>%
     <input type="range" id="opacity" min="10" max="100" step="5" value="80">
   </label>
-  <h6>Trip types</h6>
+  <h6>{{ vizTripTypes }}</h6>
   <div id="type-filters"></div>
 </div>
 
@@ -53,7 +54,10 @@
 <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 
+{{ i18n.type_labels() }}
 <script>
+const VIZ_TRIPS = {{ vizTrips | tojson }};
+const VIZ_ARCS = {{ vizArcCount | tojson }};
 const DATA_URL = "{{ url_for('viz.arc_trips_api', username=username) }}";
 const TYPE_COLORS = {
   train: [82,176,254], tram: [162,215,255], metro: [0,69,149], bus: [159,75,187],
@@ -111,12 +115,12 @@ function refresh() {
   overlay.setProps({
     layers: [buildLayer(arcs)],
     getTooltip: ({ object }) => object && {
-      html: `<b>${object.type}</b> × ${object.count}`,
+      html: `<b>${typeLabel(object.type)}</b> × ${object.count}`,
       style: { background: 'rgba(0,0,0,0.85)', color: '#fff', padding: '6px 8px', borderRadius: '6px' }
     }
   });
   document.getElementById('status').textContent =
-    `${arcs.length} arcs · ${rawTrips.length} trips`;
+    `${pluralize(VIZ_ARCS, arcs.length)} · ${pluralize(VIZ_TRIPS, rawTrips.length)}`;
 }
 
 ['snap','maxw','opacity'].forEach(id => {
@@ -139,7 +143,7 @@ function buildTypeFilters() {
     row.innerHTML = `
       <input type="checkbox" data-type="${type}" checked>
       <span class="type-dot" style="background:${color}"></span>
-      <span>${type} <span style="color:#9fb0c3">(${n})</span></span>
+      <span>${typeLabel(type)} <span style="color:#9fb0c3">(${n})</span></span>
     `;
     row.querySelector('input').addEventListener('change', e => {
       if (e.target.checked) activeTypes.add(type); else activeTypes.delete(type);
@@ -158,7 +162,7 @@ MapLibreUtils.initializeMapLibre({
       this._c = document.createElement('div');
       this._c.className = 'maplibregl-ctrl maplibregl-ctrl-group';
       const b = document.createElement('button');
-      b.type = 'button'; b.title = 'Display settings';
+      b.type = 'button'; b.title = {{ vizSettings | tojson }};
       b.innerHTML = '<i class="fa-solid fa-sliders"></i>';
       b.onclick = () => document.getElementById('controls').classList.toggle('open');
       this._c.appendChild(b);
@@ -180,7 +184,7 @@ MapLibreUtils.initializeMapLibre({
       refresh();
       document.querySelector('.spinner-container').style.display = 'none';
     }).catch(() => {
-      document.getElementById('status').textContent = 'Failed to load';
+      document.getElementById('status').textContent = {{ vizFailed | tojson }};
       document.querySelector('.spinner-container').style.display = 'none';
     });
   });

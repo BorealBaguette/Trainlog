@@ -1,0 +1,430 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<style>
+  #graph { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; cursor: grab; }
+  #graph:active { cursor: grabbing; }
+  #info { position: fixed; top: 80px; left: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
+  #settings-btn { position: fixed; top: 80px; right: 12px; z-index: 6;
+    width: 34px; height: 34px; border: none; border-radius: 8px;
+    background: rgba(20,28,40,0.92); color: #e8edf3; cursor: pointer; }
+  #controls { position: fixed; top: 122px; right: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 220px;
+    max-height: calc(100vh - 140px); overflow-y: auto; display: none; }
+  #controls.open { display: block; }
+  #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
+  #controls input[type=range], #controls select { width: 100%; }
+  #controls select { background: #14202e; color: #e8edf3; border: 1px solid #2a3a4d; border-radius: 6px; padding: 3px; }
+  #controls .check { display: flex; align-items: center; gap: 7px; color: #e8edf3; cursor: pointer; }
+  #controls h6 { margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #2a3a4d;
+    color: #8fa6bd; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.04em; font-weight: bold; }
+  .seg { display: flex; border: 1px solid #2a3a4d; border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; background: transparent; color: #8fa6bd; border: none; padding: 5px 0; cursor: pointer; }
+  .seg button.on { background: #2a3a4d; color: #e8edf3; }
+  #download { width: 100%; margin-top: 10px; padding: 6px; border-radius: 6px; cursor: pointer;
+    background: #14202e; color: #e8edf3; border: 1px solid #2a3a4d; }
+  #tooltip { position: fixed; z-index: 10; pointer-events: none; display: none; max-width: 260px;
+    background: rgba(0,0,0,0.85); color: #fff; padding: 6px 9px; border-radius: 6px;
+    font-family: "Century Gothic", sans-serif; font-size: 0.82em; }
+  #tooltip .sub { color: #9fb0c3; }
+
+  .link { fill: #8fa6bd; stroke: none; pointer-events: none; }
+  .hit { fill: none; stroke: transparent; stroke-width: 10px; cursor: pointer; }
+  .link-label { fill: #e8edf3; font: bold 11px "Century Gothic", sans-serif; text-anchor: middle;
+    dominant-baseline: central; paint-order: stroke; stroke: #0d1b2a; stroke-width: 3px; pointer-events: none;
+    display: none; }
+  svg.counts .link-label, .link-label.hl { display: block; }
+  .node circle { fill: #14202e; stroke: #40b91f; stroke-width: 2px; cursor: pointer; }
+  .node .code { fill: #e8edf3; font: bold 11px "Century Gothic", sans-serif; text-anchor: middle;
+    dominant-baseline: central; pointer-events: none; }
+  .node .city { fill: #8fa6bd; font: 10px "Century Gothic", sans-serif; text-anchor: middle; pointer-events: none; }
+  svg.focus .link, svg.focus .link-label, svg.focus .node { opacity: 0.12; }
+  svg.focus .link.hl { opacity: 1; fill: #40b91f; fill-opacity: 0.95 !important; }
+  svg.focus .link-label.hl, svg.focus .node.hl { opacity: 1; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<svg id="graph"></svg>
+<div id="tooltip"></div>
+
+<div id="info">
+  <b>{{ vizAirports }}</b><br>
+  <span id="status">{{ vizLoading }}</span>
+</div>
+
+<button id="settings-btn" type="button" title="{{ vizSettings }}"><i class="fa-solid fa-sliders"></i></button>
+<div id="controls">
+  <div class="seg" id="direction">
+    <button type="button" data-v="0">{{ vizUndirected }}</button>
+    <button type="button" data-v="1" class="on">{{ vizDirected }}</button>
+  </div>
+  <label>{{ vizYear }}
+    <select id="year"><option value="all">{{ vizAllYears }}</option></select>
+  </label>
+  <label>{{ vizMinFlights }}: <span id="min-val">1</span>
+    <input type="range" id="min" min="1" max="10" step="1" value="1">
+  </label>
+  <h6>{{ vizDisplay }}</h6>
+  <label class="check"><input type="checkbox" id="counts"> {{ vizAlwaysCounts }}</label>
+  <label class="check"><input type="checkbox" id="cities"> {{ vizCityNames }}</label>
+  <label class="check"><input type="checkbox" id="sized" checked> {{ vizSizeByTraffic }}</label>
+  <h6>{{ vizLayout }}</h6>
+  <label class="check"><input type="checkbox" id="geo"> {{ vizGeoPull }}</label>
+  <label>{{ vizEdgeLength }}: <span id="dist-val">120</span>
+    <input type="range" id="dist" min="40" max="300" step="10" value="120">
+  </label>
+  <label>{{ vizRepulsion }}: <span id="charge-val">300</span>
+    <input type="range" id="charge" min="50" max="1200" step="50" value="300">
+  </label>
+  <button id="download" type="button"><i class="fa-solid fa-download"></i> {{ vizDownloadSvg }}</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+
+<script>
+const DATA_URL = "{{ url_for('viz.airport_graph_api', username=username) }}";
+const ACCENT = '#40b91f';
+const T = {
+  airports: {{ vizAirportCount | tojson }}, edges: {{ vizEdgeCount | tojson }},
+  flights: {{ vizFlightCount | tojson }}, connections: {{ vizConnectionCount | tojson }},
+};
+
+const svg = d3.select('#graph');
+const root = svg.append('g');
+const linkLayer = root.append('g');
+const hitLayer = root.append('g');
+const labelLayer = root.append('g');
+const nodeLayer = root.append('g');
+const tooltip = document.getElementById('tooltip');
+
+// The view follows the graph (fitView) until the user pans, zooms or drags; a new filter hands it back.
+let userMoved = false;
+const zoom = d3.zoom().scaleExtent([0.1, 6]).on('zoom', e => {
+  root.attr('transform', e.transform);
+  if (e.sourceEvent) userMoved = true;
+});
+svg.call(zoom);
+
+let airports = {}, rawEdges = [];
+let nodes = [], links = [];
+const nodeByCode = new Map();  // kept across rebuilds so bubbles stay where they floated to
+let directed = true;
+
+const sim = d3.forceSimulation()
+  .force('link', d3.forceLink().id(d => d.code))
+  .force('charge', d3.forceManyBody())
+  .force('collide', d3.forceCollide().radius(d => d.r + 6))
+  .force('x', d3.forceX())
+  .force('y', d3.forceY())
+  .on('tick', tick)
+  .on('end', () => { if (!userMoved) fitView(600); });
+
+function flag(country) {
+  return country && country.length === 2
+    ? String.fromCodePoint(...[...country.toUpperCase()].map(c => 0x1F1A5 + c.charCodeAt(0))) : '';
+}
+
+function val(id) { return document.getElementById(id).value; }
+function checked(id) { return document.getElementById(id).checked; }
+
+// One edge per airport pair of the chosen year, both directions summed (ab / ba keep
+// the split for the arrowheads and tooltip); nodes are the airports they touch.
+function aggregate() {
+  const year = val('year'), min = Number(val('min'));
+  const byKey = new Map();
+  for (const e of rawEdges) {
+    if (e.src === e.dst || (year !== 'all' && String(e.year) !== year)) continue;
+    const [a, b] = e.src < e.dst ? [e.src, e.dst] : [e.dst, e.src];
+    const key = a + '-' + b;
+    if (!byKey.has(key)) byKey.set(key, { key, a, b, count: 0, ab: 0, ba: 0 });
+    const l = byKey.get(key);
+    l.count += e.count;
+    if (e.src === a) l.ab += e.count; else l.ba += e.count;
+  }
+  // Light edges first, so the heavy ones are drawn on top.
+  const kept = [...byKey.values()].filter(l => l.count >= min).sort((x, y) => x.count - y.count);
+
+  const traffic = new Map(), degree = new Map();
+  kept.forEach(l => {
+    for (const c of [l.a, l.b]) {
+      traffic.set(c, (traffic.get(c) || 0) + l.count);
+      degree.set(c, (degree.get(c) || 0) + 1);
+    }
+  });
+  const maxTraffic = Math.max(1, ...traffic.values());
+  const sized = checked('sized');
+  const nextNodes = [...traffic.keys()].map(code => {
+    if (!nodeByCode.has(code)) nodeByCode.set(code, { code, ...airports[code] });
+    const n = nodeByCode.get(code);
+    n.traffic = traffic.get(code);
+    n.degree = degree.get(code);
+    n.r = sized ? 13 + 13 * Math.sqrt(n.traffic / maxTraffic) : 16;
+    return n;
+  });
+  return { nextNodes, kept };
+}
+
+function rebuild() {
+  const { nextNodes, kept } = aggregate();
+  nodes = nextNodes;
+  links = kept.map(l => ({ ...l, source: l.a, target: l.b }));
+  const maxCount = Math.max(1, ...links.map(l => l.count));
+
+  // Frequency is width and brightness: one-off flights stay thin and faint. Without
+  // "Size by traffic" every edge is drawn alike, as every bubble is.
+  const sized = checked('sized');
+  const weight = d => !sized ? 0.15 : maxCount > 1 ? Math.sqrt((d.count - 1) / (maxCount - 1)) : 0;
+  linkLayer.selectAll('path').data(links, d => d.key).join('path')
+    .attr('class', 'link')
+    .each(d => { d.w = 0.8 + 6 * weight(d); })
+    .attr('fill-opacity', d => 0.22 + 0.6 * weight(d));
+
+  // Wide invisible twins, so thin edges can still be hovered.
+  hitLayer.selectAll('path').data(links, d => d.key).join('path')
+    .attr('class', 'hit')
+    .on('mouseenter', (e, d) => focusLink(d))
+    .on('mousemove', (e, d) => showTip(e, linkTip(d)))
+    .on('mouseleave', () => { unfocus(); hideTip(); });
+
+  svg.classed('counts', checked('counts'));
+  labelLayer.selectAll('text').data(links, d => d.key).join('text')
+    .attr('class', 'link-label').text(d => d.count);
+
+  const g = nodeLayer.selectAll('g.node').data(nodes, d => d.code).join(enter => {
+    const g = enter.append('g').attr('class', 'node');
+    g.append('circle');
+    g.append('text').attr('class', 'code');
+    g.append('text').attr('class', 'city');
+    return g;
+  });
+  g.select('circle').attr('r', d => d.r);
+  g.select('.code').text(d => d.code).style('font-size', d => Math.max(10, d.r * 0.62) + 'px');
+  g.select('.city').text(d => checked('cities') ? d.city : '').attr('y', d => d.r + 12);
+  g.on('mouseenter', (e, d) => focus(d))
+    .on('mousemove', (e, d) => showTip(e, nodeTip(d)))
+    .on('mouseleave', () => { unfocus(); hideTip(); })
+    .call(d3.drag()
+      .on('start', (e, d) => { userMoved = true; if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  sim.nodes(nodes);
+  sim.force('link').links(links);
+  applyForces();
+  userMoved = false;
+  sim.alpha(0.8).restart();
+
+  const flights = links.reduce((s, l) => s + l.count, 0);
+  document.getElementById('status').textContent =
+    `${pluralize(T.airports, nodes.length)} · ${pluralize(T.edges, links.length)} · ${pluralize(T.flights, flights)}`;
+}
+
+// "Geographic pull" draws each bubble towards its airport on an equirectangular projection.
+function applyForces() {
+  const { width, height } = svg.node().getBoundingClientRect();
+  const geo = checked('geo');
+  const located = nodes.filter(n => n.lat != null);
+  const project = d3.geoEquirectangular().fitExtent(
+    [[60, 60], [width - 60, height - 60]],
+    { type: 'MultiPoint', coordinates: located.length ? located.map(n => [n.lng, n.lat]) : [[0, 0]] });
+  nodes.forEach(n => {
+    [n.gx, n.gy] = geo && n.lat != null ? project([n.lng, n.lat]) : [width / 2, height / 2];
+    if (n.x == null) { n.x = n.gx + (Math.random() - 0.5) * 50; n.y = n.gy + (Math.random() - 0.5) * 50; }
+  });
+  const strength = geo ? 0.25 : 0.04;
+  sim.force('x').x(d => d.gx).strength(strength);
+  sim.force('y').y(d => d.gy).strength(strength);
+  // Hubs push harder and sit further from each other, so their spokes fan out instead of
+  // knotting in the middle; leaves are held by their one link (d3's 1 / min degree).
+  const dist = Number(val('dist'));
+  sim.force('link')
+    .distance(l => dist * (0.6 + 0.2 * Math.sqrt(Math.min(l.source.degree, l.target.degree))))
+    .strength(l => geo ? 0.05 : 1 / Math.min(l.source.degree, l.target.degree));
+  sim.force('charge').strength(d => -Number(val('charge')) * (0.5 + 0.5 * Math.sqrt(d.degree)));
+  sim.force('collide').radius(d => d.r + (checked('cities') ? 14 : 8));
+}
+
+// A gently bowed edge from bubble rim to bubble rim, drawn as one filled outline: a shaft of
+// the edge's width along the curve, with (directed mode) a head sized to it on each end that
+// was flown into.
+const CURVE_STEPS = 12;
+
+function geometry(l) {
+  const s = l.source, t = l.target;
+  const dx = t.x - s.x, dy = t.y - s.y, len = Math.hypot(dx, dy) || 1;
+  const bend = Math.min(40, len * 0.15);
+  const cx = (s.x + t.x) / 2 - dy / len * bend, cy = (s.y + t.y) / 2 + dx / len * bend;
+  const trim = (p, r) => { const d = Math.hypot(cx - p.x, cy - p.y) || 1; return [p.x + (cx - p.x) * r / d, p.y + (cy - p.y) * r / d]; };
+  const [x1, y1] = trim(s, s.r + 1);
+  const [x2, y2] = trim(t, t.r + 1);
+
+  // The quadratic Bézier P1 → C → P2, and its unit normal.
+  const at = u => [(1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2,
+                   (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2];
+  const normal = u => {
+    const tx = 2 * (1 - u) * (cx - x1) + 2 * u * (x2 - cx), ty = 2 * (1 - u) * (cy - y1) + 2 * u * (y2 - cy);
+    const n = Math.hypot(tx, ty) || 1;
+    return [-ty / n, tx / n];
+  };
+  const side = (u, k) => { const [px, py] = at(u), [nx, ny] = normal(u); return `${px + nx * k},${py + ny * k}`; };
+
+  const arc = Math.hypot(cx - x1, cy - y1) + Math.hypot(x2 - cx, y2 - cy);  // close enough for a gentle bow
+  const hw = l.w / 2, hh = Math.max(5, l.w * 1.2);
+  const startHead = directed && l.ba > 0, endHead = directed && l.ab > 0;
+  const heads = (startHead ? 1 : 0) + (endHead ? 1 : 0);
+  const headLen = heads ? Math.min(hh * 1.7, Math.max(0, arc - 2) / heads) : 0;
+  const u0 = startHead ? headLen / arc : 0, u1 = endHead ? 1 - headLen / arc : 1;
+  const us = d3.range(CURVE_STEPS + 1).map(i => u0 + (u1 - u0) * i / CURVE_STEPS);
+
+  let d = startHead ? `M${x1},${y1}L${side(u0, hh)}` : `M${side(u0, hw)}`;
+  d += us.map(u => `L${side(u, hw)}`).join('');
+  if (endHead) d += `L${side(u1, hh)}L${x2},${y2}L${side(u1, -hh)}`;
+  d += us.reverse().map(u => `L${side(u, -hw)}`).join('');
+  d += startHead ? `L${side(u0, -hh)}Z` : 'Z';
+
+  const [lx, ly] = at(0.5);
+  return { d, line: `M${x1},${y1}Q${cx},${cy} ${x2},${y2}`, lx, ly };
+}
+
+// Zoom so every bubble (and its city label) is in view, below the navbar and info box.
+function fitView(duration) {
+  if (!nodes.length) return;
+  const { width, height } = svg.node().getBoundingClientRect();
+  const below = checked('cities') ? 16 : 0;
+  const x0 = d3.min(nodes, n => n.x - n.r), x1 = d3.max(nodes, n => n.x + n.r);
+  const y0 = d3.min(nodes, n => n.y - n.r), y1 = d3.max(nodes, n => n.y + n.r + below);
+  const top = 70, pad = 30;
+  const k = Math.min(2, (width - 2 * pad) / Math.max(1, x1 - x0), (height - top - 2 * pad) / Math.max(1, y1 - y0));
+  const transform = d3.zoomIdentity
+    .translate(width / 2 - k * (x0 + x1) / 2, top + (height - top) / 2 - k * (y0 + y1) / 2)
+    .scale(k);
+  (duration ? svg.transition().duration(duration) : svg).call(zoom.transform, transform);
+}
+
+function tick() {
+  const geo = new Map(links.map(l => [l.key, geometry(l)]));
+  linkLayer.selectAll('path').attr('d', d => geo.get(d.key).d);
+  hitLayer.selectAll('path').attr('d', d => geo.get(d.key).line);
+  labelLayer.selectAll('text').attr('x', d => geo.get(d.key).lx).attr('y', d => geo.get(d.key).ly);
+  nodeLayer.selectAll('g.node').attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+// Highlight the edges `on` picks, their counts and both their airports; dim the rest.
+function highlight(on) {
+  const near = new Set();
+  svg.classed('focus', true);
+  linkLayer.selectAll('path').classed('hl', l => {
+    const hit = on(l);
+    if (hit) { near.add(l.source.code); near.add(l.target.code); }
+    return hit;
+  });
+  labelLayer.selectAll('text').classed('hl', on);
+  nodeLayer.selectAll('g.node').classed('hl', d => near.has(d.code));
+}
+
+function focus(n) { highlight(l => l.source === n || l.target === n); }
+function focusLink(link) { highlight(l => l === link); }
+
+function unfocus() {
+  svg.classed('focus', false);
+  linkLayer.selectAll('path').classed('hl', false);
+  labelLayer.selectAll('text').classed('hl', false);
+  nodeLayer.selectAll('g.node').classed('hl', false);
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function nodeTip(n) {
+  const mine = links.filter(l => l.source === n || l.target === n)
+    .map(l => ({ other: l.source === n ? l.target.code : l.source.code, count: l.count,
+                 out: l.source === n ? l.ab : l.ba, in: l.source === n ? l.ba : l.ab }))
+    .sort((a, b) => b.count - a.count);
+  const top = mine.slice(0, 6).map(m => `${esc(m.other)} <span class="sub">×${m.count}`
+    + (directed ? ` (${m.out} →, ${m.in} ←)` : '') + '</span>').join('<br>');
+  return `<b>${flag(n.country)} ${esc(n.code)}</b> ${esc(n.city)}<br><span class="sub">${esc(n.name)}</span><br>`
+    + `${pluralize(T.flights, n.traffic)} · ${pluralize(T.connections, mine.length)}<br>${top}${mine.length > 6 ? '<br>…' : ''}`;
+}
+
+function linkTip(l) {
+  const s = esc(l.source.code), t = esc(l.target.code);
+  return `<b>${s} ↔ ${t}</b> · ${pluralize(T.flights, l.count)}`
+    + `<br><span class="sub">${s} → ${t}: ${l.ab}<br>${t} → ${s}: ${l.ba}</span>`;
+}
+
+function showTip(e, html) {
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+  tooltip.style.left = Math.min(e.clientX + 14, window.innerWidth - tooltip.offsetWidth - 8) + 'px';
+  tooltip.style.top = Math.min(e.clientY + 14, window.innerHeight - tooltip.offsetHeight - 8) + 'px';
+}
+function hideTip() { tooltip.style.display = 'none'; }
+
+function downloadSvg() {
+  const clone = svg.node().cloneNode(true);
+  const { width, height } = svg.node().getBoundingClientRect();
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('width', width);
+  clone.setAttribute('height', height);
+  clone.classList.remove('focus');
+  const style = document.createElement('style');
+  style.textContent = [...document.styleSheets].flatMap(sheet => {
+    try { return [...sheet.cssRules].map(r => r.cssText); } catch { return []; }
+  }).filter(css => /^(\.link|\.node|svg)/.test(css)).join('\n');
+  clone.prepend(style);
+  clone.insertAdjacentHTML('afterbegin', `<rect width="100%" height="100%" fill="#0d1b2a"/>`);
+  const url = URL.createObjectURL(new Blob([clone.outerHTML], { type: 'image/svg+xml' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'airport-graph.svg' });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('settings-btn').onclick = () => document.getElementById('controls').classList.toggle('open');
+document.querySelectorAll('#direction button').forEach(b => b.onclick = () => {
+  directed = b.dataset.v === '1';
+  document.querySelectorAll('#direction button').forEach(x => x.classList.toggle('on', x === b));
+  rebuild();
+});
+['year', 'counts', 'cities', 'sized'].forEach(id => document.getElementById(id).addEventListener('change', rebuild));
+document.getElementById('min').addEventListener('input', () => {
+  document.getElementById('min-val').textContent = val('min');
+  rebuild();
+});
+['dist', 'charge'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+  document.getElementById(id + '-val').textContent = val(id);
+  applyForces();
+  sim.alpha(0.5).restart();
+}));
+document.getElementById('geo').addEventListener('change', () => { userMoved = false; applyForces(); sim.alpha(0.8).restart(); });
+document.getElementById('download').onclick = downloadSvg;
+window.addEventListener('resize', () => { applyForces(); sim.alpha(0.3).restart(); if (!userMoved) fitView(0); });
+
+fetch(DATA_URL).then(r => r.json()).then(data => {
+  airports = Object.fromEntries(data.nodes.map(n => [n.code, n]));
+  rawEdges = data.edges;
+  const years = [...new Set(rawEdges.map(e => e.year).filter(y => y != null))].sort((a, b) => b - a);
+  const select = document.getElementById('year');
+  years.forEach(y => select.add(new Option(y, y)));
+  const maxEdge = Math.max(1, ...rawEdges.map(e => e.count));
+  document.getElementById('min').max = Math.max(2, Math.min(20, maxEdge));
+  rebuild();
+  sim.stop();
+  while (sim.alpha() > sim.alphaMin()) sim.tick();
+  tick();
+  fitView(0);
+  document.querySelector('.spinner-container').style.display = 'none';
+}).catch(() => {
+  document.getElementById('status').textContent = {{ vizFailed | tojson }};
+  document.querySelector('.spinner-container').style.display = 'none';
+});
+</script>
+
+{% endblock %}

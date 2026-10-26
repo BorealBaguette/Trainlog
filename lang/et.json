@@ -1575,5 +1575,119 @@
     "stopStand": "Perroon",
     "motisPier": "Kai {track}",
     "stopPier": "Kai",
-    "swapEnds": "Vaheta algus- ja sihtpunkt"
+    "swapEnds": "Vaheta algus- ja sihtpunkt",
+    "vizTitle": "Visualiseeringud",
+    "vizLoading": "Laadimine…",
+    "vizFailed": "Laadimine ebaõnnestus",
+    "vizSettings": "Kuvaseaded",
+    "vizTripTypes": "Reisitüübid",
+    "vizOpacity": "Läbipaistmatus",
+    "vizTrips": {
+        "one": "{n} reis",
+        "other": "{n} reisi"
+    },
+    "vizHexagons": "Parimnurgad",
+    "vizHexagonsSub": "Kus sa kõige rohkem liigud, 3D-sammastena",
+    "vizCalendar": "Kalender",
+    "vizCalendarSub": "Sinu reisipäevad aastast aastasse",
+    "vizArcs": "Ühenduste kaart",
+    "vizArcsSub": "Iga lähtekoht seotud oma sihtkohaga",
+    "vizHeatmap": "Soojuskaart",
+    "vizHeatmapSub": "Liinid, millel sa kõige rohkem sõidad",
+    "vizAirports": "Lennuvõrk",
+    "vizAirportsSub": "Sinu lennujaamad ja nendevahelised lennud",
+    "vizStations": "Jaamade kaart",
+    "vizStationsSub": "Sinu reiside iga algus- ja lõpp-punkt",
+    "vizReplay": "Reisid kiirendatult",
+    "vizReplaySub": "Sinu reisid järjest, päev päeva järel",
+    "vizPersonal": "Isiklik",
+    "vizCommunity": "Kogukond",
+    "vizGlobalHexSub": "Kus reisivad kõik Trainlogi kasutajad",
+    "vizRadius": "Raadius",
+    "vizHeightScale": "Kõrguse skaala",
+    "vizCoverage": "Katvus",
+    "vizExtrusion": "3D-ekstrusioon",
+    "vizSensitivity": "Tundlikkus: ülemised {n}% → kuum",
+    "vizHotThreshold": {
+        "one": "≥ {n} reis koridoris → kuum",
+        "other": "≥ {n} reisi koridoris → kuum"
+    },
+    "vizGlowSize": "Kuma suurus",
+    "vizMergeRadius": "Ühendamisraadius",
+    "vizMaxArcWidth": "Kaare max laius",
+    "vizArcCount": {
+        "one": "{n} kaar",
+        "other": "{n} kaart"
+    },
+    "vizTravelDate": "Reisi kuupäev",
+    "vizLogDate": "Sisestamise kuupäev",
+    "vizTripsMode": "Reisid",
+    "vizTotalTrips": "Reise kokku",
+    "vizTotalDistance": "Kogu vahemaa",
+    "vizDaysWithTravel": "Reisipäevi",
+    "vizBusiestYear": "Tihedaim aasta",
+    "vizBusiestWeekday": "Tihedaim nädalapäev",
+    "vizBusiestMonth": "Tihedaim kuu",
+    "vizLess": "Vähem",
+    "vizMore": "Rohkem",
+    "vizSpeed": "Kiirus",
+    "vizDaysPerSecond": "päeva/s",
+    "vizTrail": "Jälg",
+    "vizDaysUnit": "päeva",
+    "vizWidth": "Laius",
+    "vizPlaying": "Esitamine",
+    "vizCumulative": "Kumulatiivne (ilma hääbumiseta)",
+    "vizAutoSkip": "Jäta lüngad automaatselt vahele",
+    "vizSkipGapsOver": "Jäta vahele lüngad üle",
+    "vizFrom": "Alates",
+    "vizTo": "Kuni",
+    "vizAll": "Kõik",
+    "vizNone": "Mitte ühtegi",
+    "vizPlayPause": "Esita / paus",
+    "vizNoTimestamps": "Aegadega reise pole",
+    "vizGapSkipped": {
+        "one": "Reise pole — {n} päev (vahele jäetud)",
+        "other": "Reise pole — {n} päeva (vahele jäetud)"
+    },
+    "vizUndirected": "Suunamata",
+    "vizDirected": "Suunatud",
+    "vizYear": "Aasta",
+    "vizAllYears": "Kõik aastad",
+    "vizMinFlights": "Min lende ühenduse kohta",
+    "vizDisplay": "Kuva",
+    "vizAlwaysCounts": "Näita alati arve",
+    "vizCityNames": "Linnade nimed",
+    "vizSizeByTraffic": "Suurus liikluse järgi",
+    "vizLayout": "Paigutus",
+    "vizGeoPull": "Geograafiline tõmme",
+    "vizEdgeLength": "Ühenduse pikkus",
+    "vizRepulsion": "Tõukumine",
+    "vizDownloadSvg": "Laadi alla SVG",
+    "vizAirportCount": {
+        "one": "{n} lennujaam",
+        "other": "{n} lennujaama"
+    },
+    "vizEdgeCount": {
+        "one": "{n} ühendus",
+        "other": "{n} ühendust"
+    },
+    "vizFlightCount": {
+        "one": "{n} lend",
+        "other": "{n} lendu"
+    },
+    "vizConnectionCount": {
+        "one": "{n} ühendus",
+        "other": "{n} ühendust"
+    },
+    "vizGroupStations": "Rühmita lähedased jaamad",
+    "vizSizeByVisits": "Suurus külastuste järgi",
+    "vizStationCount": {
+        "one": "{n} jaam",
+        "other": "{n} jaama"
+    },
+    "vizVisitCount": {
+        "one": "{n} külastus",
+        "other": "{n} külastust"
+    },
+    "vizClickToZoom": "suurendamiseks klõpsa"
 }

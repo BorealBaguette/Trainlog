@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
+{% import 'viz/_i18n.html' as i18n with context %}
 
 <link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 <style>
@@ -31,26 +32,29 @@
 <div id="map"></div>
 
 <div id="info">
-  <b>Heatmap</b><br>
-  <span id="status">Loading…</span>
+  <b>{{ vizHeatmap }}</b><br>
+  <span id="status">{{ vizLoading }}</span>
 </div>
 
 <div id="controls">
-  <label>Sensitivity: top <span id="sens-val">5</span>% → hot
+  <label>{{ i18n.slot(vizSensitivity, '<span id="sens-val">5</span>') }}
     <input type="range" id="sens" min="1" max="99" step="1" value="5">
   </label>
   <div id="thresh-info" style="color:#9fb0c3;font-size:0.9em;margin-top:2px;"></div>
-  <label>Glow size: <span id="glow-val">10</span>px
+  <label>{{ vizGlowSize }}: <span id="glow-val">10</span>px
     <input type="range" id="glow" min="4" max="60" step="2" value="10">
   </label>
-  <h6>Trip types</h6>
+  <h6>{{ vizTripTypes }}</h6>
   <div id="type-filters"></div>
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 
+{{ i18n.type_labels() }}
 <script>
+const VIZ_TRIPS = {{ vizTrips | tojson }};
+const VIZ_HOT = {{ vizHotThreshold | tojson }};
 const DATA_URL = "{{ url_for('viz.heatmap_geojson', username=username) }}";
 
 const TYPE_COLORS = {
@@ -132,7 +136,7 @@ function updatePaint() {
   const threshold = countAtPercentile(1 - pct);
   const o = 1 / threshold;
   document.getElementById('thresh-info').textContent =
-    `≥ ${threshold} trip${threshold === 1 ? '' : 's'} on a corridor → hot`;
+    pluralize(VIZ_HOT, threshold);
 
   map.setPaintProperty('heat-outer', 'line-width',   glow);
   map.setPaintProperty('heat-outer', 'line-blur',    glow * 0.6);
@@ -162,7 +166,7 @@ function buildTypeFilters(features) {
     row.innerHTML = `
       <input type="checkbox" data-type="${type}" checked>
       <span class="type-dot" style="background:${color}"></span>
-      <span>${type} <span style="color:#9fb0c3">(${n})</span></span>
+      <span>${typeLabel(type)} <span style="color:#9fb0c3">(${n})</span></span>
     `;
     row.querySelector('input').addEventListener('change', e => {
       if (e.target.checked) activeTypes.add(type); else activeTypes.delete(type);
@@ -190,7 +194,7 @@ MapLibreUtils.initializeMapLibre({
       this._c = document.createElement('div');
       this._c.className = 'maplibregl-ctrl maplibregl-ctrl-group';
       const b = document.createElement('button');
-      b.type = 'button'; b.title = 'Display settings';
+      b.type = 'button'; b.title = {{ vizSettings | tojson }};
       b.innerHTML = '<i class="fa-solid fa-sliders"></i>';
       b.onclick = () => document.getElementById('controls').classList.toggle('open');
       this._c.appendChild(b);
@@ -220,10 +224,10 @@ MapLibreUtils.initializeMapLibre({
       updatePaint();
       applyFilter();
 
-      document.getElementById('status').textContent = allFeatures.length + ' trips';
+      document.getElementById('status').textContent = pluralize(VIZ_TRIPS, allFeatures.length);
       document.querySelector('.spinner-container').style.display = 'none';
     }).catch(() => {
-      document.getElementById('status').textContent = 'Failed to load';
+      document.getElementById('status').textContent = {{ vizFailed | tojson }};
       document.querySelector('.spinner-container').style.display = 'none';
     });
   });

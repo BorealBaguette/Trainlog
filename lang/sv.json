@@ -1578,5 +1578,119 @@
     "stopStand": "Läge",
     "motisPier": "Kaj {track}",
     "stopPier": "Kaj",
-    "swapEnds": "Byt avgång och ankomst"
+    "swapEnds": "Byt avgång och ankomst",
+    "vizTitle": "Visualiseringar",
+    "vizLoading": "Laddar…",
+    "vizFailed": "Det gick inte att ladda",
+    "vizSettings": "Visningsinställningar",
+    "vizTripTypes": "Resetyper",
+    "vizOpacity": "Opacitet",
+    "vizTrips": {
+        "one": "{n} resa",
+        "other": "{n} resor"
+    },
+    "vizHexagons": "Bästhörningar",
+    "vizHexagonsSub": "Där du reser mest, i 3D-pelare",
+    "vizCalendar": "Kalender",
+    "vizCalendarSub": "Dina resdagar, år efter år",
+    "vizArcs": "Förbindelsekarta",
+    "vizArcsSub": "Varje avresa kopplad till sin ankomst",
+    "vizHeatmap": "Värmekarta",
+    "vizHeatmapSub": "Sträckorna du åker mest",
+    "vizAirports": "Flygnätverk",
+    "vizAirportsSub": "Dina flygplatser och flygen mellan dem",
+    "vizStations": "Stationskarta",
+    "vizStationsSub": "Varje avgång och ankomst på dina resor",
+    "vizReplay": "Resor i timelapse",
+    "vizReplaySub": "Dina resor i ordning, dag för dag",
+    "vizPersonal": "Personlig",
+    "vizCommunity": "Gemenskap",
+    "vizGlobalHexSub": "Där alla Trainlog-användare reser",
+    "vizRadius": "Radie",
+    "vizHeightScale": "Höjdskala",
+    "vizCoverage": "Täckning",
+    "vizExtrusion": "3D-extrudering",
+    "vizSensitivity": "Känslighet: översta {n} % → het",
+    "vizHotThreshold": {
+        "one": "≥ {n} resa på en korridor → het",
+        "other": "≥ {n} resor på en korridor → het"
+    },
+    "vizGlowSize": "Glödstorlek",
+    "vizMergeRadius": "Sammanslagningsradie",
+    "vizMaxArcWidth": "Max. bågbredd",
+    "vizArcCount": {
+        "one": "{n} båge",
+        "other": "{n} bågar"
+    },
+    "vizTravelDate": "Resdatum",
+    "vizLogDate": "Registreringsdatum",
+    "vizTripsMode": "Resor",
+    "vizTotalTrips": "Resor totalt",
+    "vizTotalDistance": "Total sträcka",
+    "vizDaysWithTravel": "Resdagar",
+    "vizBusiestYear": "Mest intensiva året",
+    "vizBusiestWeekday": "Mest intensiva veckodagen",
+    "vizBusiestMonth": "Mest intensiva månaden",
+    "vizLess": "Mindre",
+    "vizMore": "Mer",
+    "vizSpeed": "Hastighet",
+    "vizDaysPerSecond": "dagar/s",
+    "vizTrail": "Spår",
+    "vizDaysUnit": "dagar",
+    "vizWidth": "Bredd",
+    "vizPlaying": "Spelar upp",
+    "vizCumulative": "Kumulativ (ingen uttoning)",
+    "vizAutoSkip": "Hoppa över luckor automatiskt",
+    "vizSkipGapsOver": "Hoppa över luckor längre än",
+    "vizFrom": "Från",
+    "vizTo": "Till",
+    "vizAll": "Alla",
+    "vizNone": "Inga",
+    "vizPlayPause": "Spela upp / pausa",
+    "vizNoTimestamps": "Inga resor med tider",
+    "vizGapSkipped": {
+        "one": "Ingen resa — {n} dag (överhoppad)",
+        "other": "Ingen resa — {n} dagar (överhoppade)"
+    },
+    "vizUndirected": "Oriktad",
+    "vizDirected": "Riktad",
+    "vizYear": "År",
+    "vizAllYears": "Alla år",
+    "vizMinFlights": "Min. flyg per förbindelse",
+    "vizDisplay": "Visning",
+    "vizAlwaysCounts": "Visa alltid antal",
+    "vizCityNames": "Ortnamn",
+    "vizSizeByTraffic": "Storlek efter trafik",
+    "vizLayout": "Layout",
+    "vizGeoPull": "Geografisk dragning",
+    "vizEdgeLength": "Förbindelselängd",
+    "vizRepulsion": "Repulsion",
+    "vizDownloadSvg": "Ladda ner SVG",
+    "vizAirportCount": {
+        "one": "{n} flygplats",
+        "other": "{n} flygplatser"
+    },
+    "vizEdgeCount": {
+        "one": "{n} förbindelse",
+        "other": "{n} förbindelser"
+    },
+    "vizFlightCount": {
+        "one": "{n} flygning",
+        "other": "{n} flygningar"
+    },
+    "vizConnectionCount": {
+        "one": "{n} förbindelse",
+        "other": "{n} förbindelser"
+    },
+    "vizGroupStations": "Gruppera närliggande stationer",
+    "vizSizeByVisits": "Storlek efter besök",
+    "vizStationCount": {
+        "one": "{n} station",
+        "other": "{n} stationer"
+    },
+    "vizVisitCount": {
+        "one": "{n} besök",
+        "other": "{n} besök"
+    },
+    "vizClickToZoom": "klicka för att zooma in"
 }

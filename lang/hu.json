@@ -1574,5 +1574,109 @@
     "stopStand": "Kocsiállás",
     "motisPier": "{track}. kikötő",
     "stopPier": "Kikötő",
-    "swapEnds": "Indulás és érkezés felcserélése"
+    "swapEnds": "Indulás és érkezés felcserélése",
+    "vizTitle": "Vizualizációk",
+    "vizLoading": "Betöltés…",
+    "vizFailed": "A betöltés sikertelen",
+    "vizSettings": "Megjelenítési beállítások",
+    "vizTripTypes": "Utazástípusok",
+    "vizOpacity": "Átlátszatlanság",
+    "vizTrips": {
+        "other": "{n} utazás"
+    },
+    "vizHexagons": "Legjobbszögek",
+    "vizHexagonsSub": "A legtöbbet bejárt helyek, 3D-oszlopokban",
+    "vizCalendar": "Naptár",
+    "vizCalendarSub": "Az utazással töltött napok, évről évre",
+    "vizArcs": "Kapcsolatok térképe",
+    "vizArcsSub": "Minden indulás összekötve az érkezéssel",
+    "vizHeatmap": "Hőtérkép",
+    "vizHeatmapSub": "A leggyakrabban használt vonalak",
+    "vizAirports": "Légi hálózat",
+    "vizAirportsSub": "A repülőterek és a köztük lévő járatok",
+    "vizStations": "Állomástérkép",
+    "vizStationsSub": "Az utazások minden indulása és érkezése",
+    "vizReplay": "Utazások gyorsítva",
+    "vizReplaySub": "Az utazások sorban, napról napra",
+    "vizPersonal": "Saját",
+    "vizCommunity": "Közösség",
+    "vizGlobalHexSub": "Ahol a Trainlog összes felhasználója utazik",
+    "vizRadius": "Sugár",
+    "vizHeightScale": "Magasságskála",
+    "vizCoverage": "Lefedettség",
+    "vizExtrusion": "3D-kiemelés",
+    "vizSensitivity": "Érzékenység: felső {n}% → forró",
+    "vizHotThreshold": {
+        "other": "≥ {n} utazás egy folyosón → forró"
+    },
+    "vizGlowSize": "Ragyogás mérete",
+    "vizMergeRadius": "Összevonási sugár",
+    "vizMaxArcWidth": "Max. ívszélesség",
+    "vizArcCount": {
+        "other": "{n} ív"
+    },
+    "vizTravelDate": "Utazás dátuma",
+    "vizLogDate": "Rögzítés dátuma",
+    "vizTripsMode": "Utazások",
+    "vizTotalTrips": "Összes utazás",
+    "vizTotalDistance": "Teljes távolság",
+    "vizDaysWithTravel": "Utazási napok",
+    "vizBusiestYear": "Legforgalmasabb év",
+    "vizBusiestWeekday": "Legforgalmasabb hétköznap",
+    "vizBusiestMonth": "Legforgalmasabb hónap",
+    "vizLess": "Kevesebb",
+    "vizMore": "Több",
+    "vizSpeed": "Sebesség",
+    "vizDaysPerSecond": "nap/s",
+    "vizTrail": "Nyom",
+    "vizDaysUnit": "nap",
+    "vizWidth": "Szélesség",
+    "vizPlaying": "Lejátszás",
+    "vizCumulative": "Halmozott (elhalványulás nélkül)",
+    "vizAutoSkip": "Szünetek automatikus átugrása",
+    "vizSkipGapsOver": "Szünetek átugrása, ha hosszabb mint",
+    "vizFrom": "Ettől",
+    "vizTo": "Eddig",
+    "vizAll": "Mind",
+    "vizNone": "Egyik sem",
+    "vizPlayPause": "Lejátszás / szünet",
+    "vizNoTimestamps": "Nincs időpontokkal rendelkező utazás",
+    "vizGapSkipped": {
+        "other": "Nincs utazás — {n} nap (átugorva)"
+    },
+    "vizUndirected": "Irányítatlan",
+    "vizDirected": "Irányított",
+    "vizYear": "Év",
+    "vizAllYears": "Minden év",
+    "vizMinFlights": "Min. járat élenként",
+    "vizDisplay": "Megjelenítés",
+    "vizAlwaysCounts": "Számok mindig látszanak",
+    "vizCityNames": "Városnevek",
+    "vizSizeByTraffic": "Méret forgalom szerint",
+    "vizLayout": "Elrendezés",
+    "vizGeoPull": "Földrajzi vonzás",
+    "vizEdgeLength": "Élhossz",
+    "vizRepulsion": "Taszítás",
+    "vizDownloadSvg": "SVG letöltése",
+    "vizAirportCount": {
+        "other": "{n} repülőtér"
+    },
+    "vizEdgeCount": {
+        "other": "{n} él"
+    },
+    "vizFlightCount": {
+        "other": "{n} járat"
+    },
+    "vizConnectionCount": {
+        "other": "{n} kapcsolat"
+    },
+    "vizGroupStations": "Közeli állomások csoportosítása",
+    "vizSizeByVisits": "Méret látogatások szerint",
+    "vizStationCount": {
+        "other": "{n} állomás"
+    },
+    "vizVisitCount": {
+        "other": "{n} látogatás"
+    },
+    "vizClickToZoom": "kattints a nagyításhoz"
 }

@@ -1576,5 +1576,119 @@
     "stopStand": "Steig",
     "motisPier": "Steg {track}",
     "stopPier": "Steg",
-    "swapEnds": "Start und Ziil tuusche"
+    "swapEnds": "Start und Ziil tuusche",
+    "vizTitle": "Visualisierige",
+    "vizLoading": "Wird glade…",
+    "vizFailed": "Lade fählgschlage",
+    "vizSettings": "Aazeigiistellige",
+    "vizTripTypes": "Reisearte",
+    "vizOpacity": "Deckchraft",
+    "vizTrips": {
+        "one": "{n} Reis",
+        "other": "{n} Reise"
+    },
+    "vizHexagons": "Bestegge",
+    "vizHexagonsSub": "Wo Sie am meischte underwägs sind, i 3D-Süüle",
+    "vizCalendar": "Kaländer",
+    "vizCalendarSub": "Ihri Reisetäg, Johr für Johr",
+    "vizArcs": "Verbindigskarte",
+    "vizArcsSub": "Jede Abfahrtsort mit sim Ziel verbunde",
+    "vizHeatmap": "Heatmap",
+    "vizHeatmapSub": "D Strecke, wo Sie am meischte fahred",
+    "vizAirports": "Flugnetz",
+    "vizAirportsSub": "Ihri Flughäfe und d Flüüg dezwüsche",
+    "vizStations": "Stationskarte",
+    "vizStationsSub": "Jede Start- und Zielort vo Ihrne Reise",
+    "vizReplay": "Reise im Ziitraffer",
+    "vizReplaySub": "Ihri Reise der Reihe nach, Tag für Tag",
+    "vizPersonal": "Persönlich",
+    "vizCommunity": "Community",
+    "vizGlobalHexSub": "Wo alli Trainlog-Nutzer underwägs sind",
+    "vizRadius": "Radius",
+    "vizHeightScale": "Höcheskala",
+    "vizCoverage": "Abdeckig",
+    "vizExtrusion": "3D-Extrusion",
+    "vizSensitivity": "Empfindlichkeit: oberschti {n} % → heiss",
+    "vizHotThreshold": {
+        "one": "≥ {n} Reis uf emne Korridor → heiss",
+        "other": "≥ {n} Reise uf emne Korridor → heiss"
+    },
+    "vizGlowSize": "Lüüchtgrössi",
+    "vizMergeRadius": "Zämefassigsradius",
+    "vizMaxArcWidth": "Max. Bogebreiti",
+    "vizArcCount": {
+        "one": "{n} Boge",
+        "other": "{n} Böge"
+    },
+    "vizTravelDate": "Reisedatum",
+    "vizLogDate": "Erfassigsdatum",
+    "vizTripsMode": "Reise",
+    "vizTotalTrips": "Reise insgesamt",
+    "vizTotalDistance": "Gsamtstrecki",
+    "vizDaysWithTravel": "Reisetäg",
+    "vizBusiestYear": "Aktivschts Johr",
+    "vizBusiestWeekday": "Aktivschte Wuchetag",
+    "vizBusiestMonth": "Aktivschte Monet",
+    "vizLess": "Weniger",
+    "vizMore": "Meh",
+    "vizSpeed": "Gschwindigkeit",
+    "vizDaysPerSecond": "Täg/s",
+    "vizTrail": "Spur",
+    "vizDaysUnit": "Täg",
+    "vizWidth": "Breiti",
+    "vizPlaying": "Widergab",
+    "vizCumulative": "Kumulativ (ohni Uusblände)",
+    "vizAutoSkip": "Lücke automatisch überspringe",
+    "vizSkipGapsOver": "Lücke überspringe ab",
+    "vizFrom": "Vo",
+    "vizTo": "Bis",
+    "vizAll": "Alli",
+    "vizNone": "Keini",
+    "vizPlayPause": "Widergab / Pause",
+    "vizNoTimestamps": "Kei Reise mit Ziitaagabe",
+    "vizGapSkipped": {
+        "one": "Kei Reis — {n} Tag (übersprunge)",
+        "other": "Kei Reis — {n} Täg (übersprunge)"
+    },
+    "vizUndirected": "Ungrichtet",
+    "vizDirected": "Grichtet",
+    "vizYear": "Johr",
+    "vizAllYears": "Alli Johr",
+    "vizMinFlights": "Min. Flüüg pro Kante",
+    "vizDisplay": "Aazeig",
+    "vizAlwaysCounts": "Aazahl immer aazeige",
+    "vizCityNames": "Stadtnäme",
+    "vizSizeByTraffic": "Grössi nach Verchehr",
+    "vizLayout": "Aaornig",
+    "vizGeoPull": "Geografischi Aaziehig",
+    "vizEdgeLength": "Kantelängi",
+    "vizRepulsion": "Abstossig",
+    "vizDownloadSvg": "SVG abelade",
+    "vizAirportCount": {
+        "one": "{n} Flughafe",
+        "other": "{n} Flughäfe"
+    },
+    "vizEdgeCount": {
+        "one": "{n} Kante",
+        "other": "{n} Kante"
+    },
+    "vizFlightCount": {
+        "one": "{n} Flug",
+        "other": "{n} Flüüg"
+    },
+    "vizConnectionCount": {
+        "one": "{n} Verbindig",
+        "other": "{n} Verbindige"
+    },
+    "vizGroupStations": "Nöchi Statione gruppiere",
+    "vizSizeByVisits": "Grössi nach Bsüech",
+    "vizStationCount": {
+        "one": "{n} Station",
+        "other": "{n} Statione"
+    },
+    "vizVisitCount": {
+        "one": "{n} Bsuech",
+        "other": "{n} Bsüech"
+    },
+    "vizClickToZoom": "zum Vergrössere klicke"
 }
