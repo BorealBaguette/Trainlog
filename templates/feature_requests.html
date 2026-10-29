@@ -13,7 +13,7 @@
         <!-- Sort dropdown -->
         <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                <i class="fa-solid fa-sort"></i> {{ feature_requests_sort_label }} {{ feature_requests_sort_by_score if current_sort == 'score' else feature_requests_sort_by_date }}
+                <i class="fa-solid fa-sort"></i> {{ feature_requests_sort_label }} {{ {'date': feature_requests_sort_by_date, 'closed': feature_requests_sort_by_closed}.get(current_sort, feature_requests_sort_by_score) }}
             </button>
             <ul class="dropdown-menu">
                 <li><a class="dropdown-item {{ 'active' if current_sort == 'score' else '' }}" href="{{ url_for('feature_requests.feature_requests', sort='score') }}">
@@ -21,6 +21,9 @@
                 </a></li>
                 <li><a class="dropdown-item {{ 'active' if current_sort == 'date' else '' }}" href="{{ url_for('feature_requests.feature_requests', sort='date') }}">
                     <i class="fa-solid fa-calendar"></i> {{ feature_requests_sort_by_date }}
+                </a></li>
+                <li><a class="dropdown-item {{ 'active' if current_sort == 'closed' else '' }}" href="{{ url_for('feature_requests.feature_requests', sort='closed') }}">
+                    <i class="fa-solid fa-flag-checkered"></i> {{ feature_requests_sort_by_closed }}
                 </a></li>
             </ul>
         </div>
@@ -35,7 +38,20 @@
             <i class="fa-solid fa-info-circle"></i> {{ feature_requests_login_prompt }}
         </div>
     {% endif %}
-    
+
+    <div class="d-flex gap-2 mb-3">
+        <input type="search" id="frSearch" class="form-control" placeholder="{{ feature_requests_search_placeholder }}">
+        <select id="frStatus" class="form-select" style="width: auto;" aria-label="{{ feature_requests_status }}">
+            <option value="">{{ feature_requests_status }}: {{ all }}</option>
+            <option value="open">{{ feature_requests_status_open }}</option>
+            <option value="working_on_it">{{ feature_requests_status_working }}</option>
+            <option value="planned">{{ feature_requests_status_planned }}</option>
+            <option value="completed">{{ feature_requests_status_completed }}</option>
+            <option value="not_doing">{{ feature_requests_status_not_doing }}</option>
+            <option value="merged">{{ feature_requests_status_merged }}</option>
+        </select>
+    </div>
+
     <!-- Active Feature Requests -->
     <div class="row">
         {% set active_requests = [] %}
@@ -56,7 +72,7 @@
         {% endfor %}
         
         {% for request in active_requests %}
-        <div class="col-12 mb-3">
+        <div class="col-12 mb-3" data-fr-item data-status="{{ request.status }}" data-search="{{ (request.id ~ ' ' ~ request.title ~ ' ' ~ request.description ~ ' ' ~ request.author_display)|lower }}">
             <div class="card">
                 <div class="card-body">
                     <div class="row">
@@ -212,7 +228,7 @@
     </div>
     
     <!-- Collapsible Sections for Hidden Requests -->
-    <div class="mt-4">
+    <div class="mt-4" id="frHiddenSections">
         {% if completed_requests %}
         <div class="accordion mb-3" id="completedAccordion">
             <div class="accordion-item">
@@ -225,7 +241,7 @@
                 <div id="completedCollapse" class="accordion-collapse collapse" aria-labelledby="completedHeading" data-bs-parent="#completedAccordion">
                     <div class="accordion-body">
                         {% for request in completed_requests %}
-                        <div class="card mb-2">
+                        <div class="card mb-2" data-fr-item data-status="{{ request.status }}" data-search="{{ (request.id ~ ' ' ~ request.title ~ ' ' ~ request.description ~ ' ' ~ request.author_display)|lower }}">
                             <div class="card-body">
                                 <h6 class="card-title mb-1">
                                     <a href="{{ url_for('feature_requests.single_feature_request', request_id=request.id) }}" class="text-decoration-none">
@@ -233,7 +249,7 @@
                                     </a>
                                 </h6>
                                 <p class="card-text small">{{ request.description[:150] }}{% if request.description|length > 150 %}...{% endif %}</p>
-                                <small class="text-muted">{{ feature_requests_score }}: {{ request.score }} • {{ request.created.strftime('%Y-%m-%d') if request.created }}</small>
+                                <small class="text-muted">{{ feature_requests_score }}: {{ request.score }} • {{ request.created.strftime('%Y-%m-%d') if request.created }}{% if request.closed_at %} • <i class="fa-solid fa-flag-checkered"></i> {{ request.closed_at.strftime('%Y-%m-%d') }}{% endif %}</small>
                             </div>
                         </div>
                         {% endfor %}
@@ -255,7 +271,7 @@
                 <div id="notDoingCollapse" class="accordion-collapse collapse" aria-labelledby="notDoingHeading" data-bs-parent="#notDoingAccordion">
                     <div class="accordion-body">
                         {% for request in not_doing_requests %}
-                        <div class="card mb-2">
+                        <div class="card mb-2" data-fr-item data-status="{{ request.status }}" data-search="{{ (request.id ~ ' ' ~ request.title ~ ' ' ~ request.description ~ ' ' ~ request.author_display)|lower }}">
                             <div class="card-body">
                                 <h6 class="card-title mb-1">
                                     <a href="{{ url_for('feature_requests.single_feature_request', request_id=request.id) }}" class="text-decoration-none">
@@ -263,7 +279,7 @@
                                     </a>
                                 </h6>
                                 <p class="card-text small">{{ request.description[:150] }}{% if request.description|length > 150 %}...{% endif %}</p>
-                                <small class="text-muted">Score: {{ request.score }} • {{ request.created.strftime('%Y-%m-%d') if request.created }}</small>
+                                <small class="text-muted">Score: {{ request.score }} • {{ request.created.strftime('%Y-%m-%d') if request.created }}{% if request.closed_at %} • <i class="fa-solid fa-flag-checkered"></i> {{ request.closed_at.strftime('%Y-%m-%d') }}{% endif %}</small>
                             </div>
                         </div>
                         {% endfor %}
@@ -285,7 +301,7 @@
                 <div id="negativeCollapse" class="accordion-collapse collapse" aria-labelledby="negativeHeading" data-bs-parent="#negativeAccordion">
                     <div class="accordion-body">
                         {% for request in negative_requests %}
-                        <div class="card mb-2">
+                        <div class="card mb-2" data-fr-item data-status="{{ request.status }}" data-search="{{ (request.id ~ ' ' ~ request.title ~ ' ' ~ request.description ~ ' ' ~ request.author_display)|lower }}">
                             <div class="card-body">
                                 <h6 class="card-title mb-1">
                                     <a href="{{ url_for('feature_requests.single_feature_request', request_id=request.id) }}" class="text-decoration-none">
@@ -293,7 +309,7 @@
                                     </a>
                                 </h6>
                                 <p class="card-text small">{{ request.description[:150] }}{% if request.description|length > 150 %}...{% endif %}</p>
-                                <small class="text-muted">Score: {{ request.score }} • {{ request.created.strftime('%Y-%m-%d') if request.created }}</small>
+                                <small class="text-muted">Score: {{ request.score }} • {{ request.created.strftime('%Y-%m-%d') if request.created }}{% if request.closed_at %} • <i class="fa-solid fa-flag-checkered"></i> {{ request.closed_at.strftime('%Y-%m-%d') }}{% endif %}</small>
                             </div>
                         </div>
                         {% endfor %}

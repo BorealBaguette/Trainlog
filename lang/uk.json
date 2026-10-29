@@ -782,6 +782,8 @@
     "feature_requests_sort_by_score": "Оцінка",
     "feature_requests_sort_by_date": "Дата",
     "feature_requests_sort_label": "Сортувати за",
+    "feature_requests_sort_by_closed": "Дата закриття",
+    "feature_requests_search_placeholder": "Пошук пропозицій…",
     "feature_requests_view_details": "Переглянути деталі",
     "feature_requests_back_to_list": "Назад до запитів функцій",
     "feature_requests_upvotes": "голоси за",

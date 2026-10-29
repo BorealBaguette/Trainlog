@@ -776,6 +776,8 @@
     "feature_requests_sort_by_score": "Tulemus",
     "feature_requests_sort_by_date": "Kuupäev",
     "feature_requests_sort_label": "Sorteeri järgi",
+    "feature_requests_sort_by_closed": "Sulgemise kuupäev",
+    "feature_requests_search_placeholder": "Otsi funktsioonisoove…",
     "feature_requests_view_details": "Vaata üksikasju",
     "feature_requests_back_to_list": "Tagasi funktsioonisoovide juurde",
     "feature_requests_upvotes": "Poolthääled",

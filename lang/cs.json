@@ -784,6 +784,8 @@
     "feature_requests_sort_by_score": "Skóre",
     "feature_requests_sort_by_date": "Datum",
     "feature_requests_sort_label": "Řadit podle",
+    "feature_requests_sort_by_closed": "Datum uzavření",
+    "feature_requests_search_placeholder": "Hledat návrhy funkcí…",
     "feature_requests_view_details": "Zobrazit podrobnosti",
     "feature_requests_back_to_list": "Zpět k požadavkům na funkce",
     "feature_requests_upvotes": "hlasy pro",

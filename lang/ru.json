@@ -782,6 +782,8 @@
     "feature_requests_sort_by_score": "Оценка",
     "feature_requests_sort_by_date": "Дата",
     "feature_requests_sort_label": "Сортировать по",
+    "feature_requests_sort_by_closed": "Дата закрытия",
+    "feature_requests_search_placeholder": "Поиск предложений…",
     "feature_requests_view_details": "Посмотреть детали",
     "feature_requests_back_to_list": "Назад к запросам функций",
     "feature_requests_upvotes": "голоса за",

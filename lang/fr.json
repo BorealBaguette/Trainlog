@@ -807,6 +807,8 @@
     "feature_requests_sort_by_score": "Score",
     "feature_requests_sort_by_date": "Date",
     "feature_requests_sort_label": "Trier par",
+    "feature_requests_sort_by_closed": "Date de clôture",
+    "feature_requests_search_placeholder": "Rechercher des suggestions…",
     "feature_requests_view_details": "Voir les détails",
     "feature_requests_back_to_list": "Retour aux Demandes de Fonctionnalités",
     "feature_requests_upvotes": "votes positifs",

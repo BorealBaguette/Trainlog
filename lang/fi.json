@@ -777,6 +777,8 @@
     "feature_requests_sort_by_score": "Pisteet",
     "feature_requests_sort_by_date": "Päivämäärä",
     "feature_requests_sort_label": "Järjestä mukaan",
+    "feature_requests_sort_by_closed": "Sulkemispäivä",
+    "feature_requests_search_placeholder": "Hae ominaisuustoiveita…",
     "feature_requests_view_details": "Näytä tiedot",
     "feature_requests_back_to_list": "Takaisin ominaisuustoiveisiin",
     "feature_requests_upvotes": "Äänet puolesta",

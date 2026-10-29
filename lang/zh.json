@@ -776,6 +776,8 @@
     "feature_requests_sort_by_score": "得分",
     "feature_requests_sort_by_date": "日期",
     "feature_requests_sort_label": "排序依据",
+    "feature_requests_sort_by_closed": "完成日期",
+    "feature_requests_search_placeholder": "搜索功能请求…",
     "feature_requests_view_details": "查看详情",
     "feature_requests_back_to_list": "返回功能请求",
     "feature_requests_upvotes": "赞成票",

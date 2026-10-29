@@ -776,6 +776,8 @@
     "feature_requests_sort_by_score": "スコア",
     "feature_requests_sort_by_date": "日付",
     "feature_requests_sort_label": "並べ替え基準",
+    "feature_requests_sort_by_closed": "完了日",
+    "feature_requests_search_placeholder": "機能リクエストを検索…",
     "feature_requests_view_details": "詳細を見る",
     "feature_requests_back_to_list": "機能リクエストに戻る",
     "feature_requests_upvotes": "賛成票",

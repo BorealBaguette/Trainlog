@@ -776,6 +776,8 @@
     "feature_requests_sort_by_score": "Puan",
     "feature_requests_sort_by_date": "Tarih",
     "feature_requests_sort_label": "Göre sırala",
+    "feature_requests_sort_by_closed": "Kapanış tarihi",
+    "feature_requests_search_placeholder": "Özellik isteklerinde ara…",
     "feature_requests_view_details": "Detayları görüntüle",
     "feature_requests_back_to_list": "Özellik İsteklerine geri dön",
     "feature_requests_upvotes": "Olumlu oylar",

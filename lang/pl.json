@@ -782,6 +782,8 @@
     "feature_requests_sort_by_score": "Wynik",
     "feature_requests_sort_by_date": "Data",
     "feature_requests_sort_label": "Sortuj według",
+    "feature_requests_sort_by_closed": "Data zamknięcia",
+    "feature_requests_search_placeholder": "Szukaj propozycji funkcji…",
     "feature_requests_view_details": "Zobacz szczegóły",
     "feature_requests_back_to_list": "Wróć do sugestii",
     "feature_requests_upvotes": "Głosy za",

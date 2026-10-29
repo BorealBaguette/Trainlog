@@ -776,6 +776,8 @@
     "feature_requests_sort_by_score": "Pontszám",
     "feature_requests_sort_by_date": "Dátum",
     "feature_requests_sort_label": "Rendezés szerint",
+    "feature_requests_sort_by_closed": "Lezárás dátuma",
+    "feature_requests_search_placeholder": "Funkciókérések keresése…",
     "feature_requests_view_details": "Részletek megtekintése",
     "feature_requests_back_to_list": "Vissza a funkciókérésekhez",
     "feature_requests_upvotes": "Támogató szavazatok",

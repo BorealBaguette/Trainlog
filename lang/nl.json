@@ -779,6 +779,8 @@
     "feature_requests_sort_by_score": "Score",
     "feature_requests_sort_by_date": "Datum",
     "feature_requests_sort_label": "Sorteren op",
+    "feature_requests_sort_by_closed": "Afrondingsdatum",
+    "feature_requests_search_placeholder": "Zoek functieverzoeken…",
     "feature_requests_view_details": "Details bekijken",
     "feature_requests_back_to_list": "Terug naar functieverzoeken",
     "feature_requests_upvotes": "Stemmen voor",

@@ -777,6 +777,8 @@
     "feature_requests_sort_by_score": "Punktzahl",
     "feature_requests_sort_by_date": "Datum",
     "feature_requests_sort_label": "Sortiere noch",
+    "feature_requests_sort_by_closed": "Abschlussdatum",
+    "feature_requests_search_placeholder": "Funktionswünsch dursuechä…",
     "feature_requests_view_details": "Details azeige",
     "feature_requests_back_to_list": "Zrugg zu Funktionsafroge",
     "feature_requests_upvotes": "Positivi Bewertige",

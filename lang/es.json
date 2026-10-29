@@ -779,6 +779,8 @@
     "feature_requests_sort_by_score": "Puntuación",
     "feature_requests_sort_by_date": "Fecha",
     "feature_requests_sort_label": "Ordenar por",
+    "feature_requests_sort_by_closed": "Fecha de cierre",
+    "feature_requests_search_placeholder": "Buscar sugerencias…",
     "feature_requests_view_details": "Ver detalles",
     "feature_requests_back_to_list": "Volver a solicitudes de características",
     "feature_requests_upvotes": "Votos a favor",

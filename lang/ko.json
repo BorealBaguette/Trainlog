@@ -776,6 +776,8 @@
     "feature_requests_sort_by_score": "점수",
     "feature_requests_sort_by_date": "날짜",
     "feature_requests_sort_label": "정렬 기준",
+    "feature_requests_sort_by_closed": "완료일",
+    "feature_requests_search_placeholder": "기능 요청 검색…",
     "feature_requests_view_details": "세부 정보 보기",
     "feature_requests_back_to_list": "기능 요청으로 돌아가기",
     "feature_requests_upvotes": "긍정적 평가",

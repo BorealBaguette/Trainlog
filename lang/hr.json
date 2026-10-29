@@ -782,6 +782,8 @@
     "feature_requests_sort_by_score": "Rezultat",
     "feature_requests_sort_by_date": "Datum",
     "feature_requests_sort_label": "Poredaj prema",
+    "feature_requests_sort_by_closed": "Datum zatvaranja",
+    "feature_requests_search_placeholder": "Pretraži zahtjeve za značajke…",
     "feature_requests_view_details": "Pogledaj detalje",
     "feature_requests_back_to_list": "Natrag na zahtjeve za značajke",
     "feature_requests_upvotes": "Glasovi za",

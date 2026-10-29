@@ -807,6 +807,8 @@
     "feature_requests_sort_by_score": "Score",
     "feature_requests_sort_by_date": "Date",
     "feature_requests_sort_label": "Sort by",
+    "feature_requests_sort_by_closed": "Completion date",
+    "feature_requests_search_placeholder": "Search feature requests…",
     "feature_requests_view_details": "View details",
     "feature_requests_back_to_list": "Back to Feature Requests",
     "feature_requests_upvotes": "upvotes",

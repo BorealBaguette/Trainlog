@@ -779,6 +779,8 @@
     "feature_requests_sort_by_score": "Poengsum",
     "feature_requests_sort_by_date": "Dato",
     "feature_requests_sort_label": "Sorter etter",
+    "feature_requests_sort_by_closed": "Avslutningsdato",
+    "feature_requests_search_placeholder": "Søk i funksjonsønsker…",
     "feature_requests_view_details": "Vis detaljer",
     "feature_requests_back_to_list": "Tilbake til funksjonsforespørsler",
     "feature_requests_upvotes": "Stemmer opp",
