@@ -420,7 +420,7 @@ function applyColorMode() {
     const yearLegend = document.getElementById('yearLegend');
     document.getElementById('typeLegend').style.display = byYear ? 'none' : '';
     yearLegend.style.display = byYear ? '' : 'none';
-    const entries = Object.entries(colors);
+    const entries = byYear ? Object.entries(colors) : [];
     if (!byYear) {
         yearLegend.innerHTML = '';
     } else if (entries.length <= 10) {
