@@ -73,8 +73,11 @@
 
     if (document.documentElement.getAttribute('data-bs-theme') !== 'dark') return;
 
-    // .tl-logo marks any other logo image that should get the same treatment
-    const LOGOS = '.tl-logo, .operatorLogo, .operatorGridLogo, .operatorListLogo, .op-pill img,'
+    // Every operator logo is served from operator_logos/ or its resized/ copies, so
+    // matching the path catches them whatever their class; the classes stay for logos
+    // that come as data or from elsewhere. .tl-logo marks any other image to treat.
+    const LOGOS = 'img[src*="/operator_logos/"], img[src*="/images/resized/"],'
+        + ' .tl-logo, .itineraryOperatorLogo, .operatorLogo, .operatorGridLogo, .operatorListLogo, .op-pill img,'
         + ' .op-suggestion-logo, .ticket-logo img, .ticket-table-logo img, .ticket-row-logo,'
         + ' .ticket-operator img, .ticket-pill-logo, .ticket-picker-logo img';
 
@@ -108,8 +111,10 @@
 
     function process(img) {
         const src = img.getAttribute('src');
-        // Trip-type pictograms share .operatorLogo; theme.css inverts those
-        if (!src || src.startsWith('data:') || src.includes('/trip_logos/')) return;
+        // Trip-type pictograms share .operatorLogo; theme.css inverts those. The stats
+        // tooltip shows the logo on a light box of its own, kept as drawn
+        if (!src || src.startsWith('data:') || src.includes('/trip_logos/')
+            || img.closest('.statsTipMedia')) return;
         lighten(src).then(url => {
             if (url && img.getAttribute('src') === src) img.src = url;
         });
