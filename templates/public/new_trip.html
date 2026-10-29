@@ -13,7 +13,7 @@
   vertical-align: baseline;
 }
 .publicTsToggle:hover,
-.publicTsToggle.open { color: #0d6efd; }
+.publicTsToggle.open { color: light-dark(#0d6efd, #7aa8eb); }
 /* Poster, ride-along, tag Play and plan copy are all rarely used, so they live behind
    one more-actions button in the map control stack rather than a row of their own. */
 .tripActions { position: relative; }
@@ -94,7 +94,7 @@
    sit below the station names in the hierarchy rather than above them. */
 .legIconLine   { color: light-dark(#8c9bb0, var(--bs-secondary-color)); }
 .legIconTicket { color: light-dark(#6f9e6f, var(--bs-secondary-color)); }
-.legIconPrice  { color: #bfa055; }
+.legIconPrice  { color: light-dark(#bfa055, #ccbd99); }
 /* Line name: same icon+value shape as the measurements, but a shade darker and a
    touch heavier — it names the service rather than measuring it. */
 .events .legLine {
@@ -166,7 +166,7 @@
 .publicVehicleMedia.is-clickable:hover { opacity: 0.85; }
 .publicVehicleMedia.is-loading { opacity: 0.5; }
 .publicVehiclePhotoBtn { color: light-dark(#a8adb3, var(--bs-secondary-color)); text-decoration: none; font-size: 0.95em; }
-.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: #0d6efd; }
+.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: light-dark(#0d6efd, #7aa8eb); }
 /* Third-party thumbnails vary wildly in size — cap and frame them so every leg
    looks the same regardless of what comes back. */
 .publicVehicle .vehiclePhotoContainer {
@@ -446,7 +446,7 @@ body.markers-hidden .marker-numbered {
 }
 
 .carbon {
-  color: #28a745; /* Green color for sustainability */
+  color: light-dark(#28a745, #8fd69f); /* Green color for sustainability */
 }
 
 .carbon-icon {
@@ -461,11 +461,11 @@ body.markers-hidden .marker-numbered {
 }
 
 .delay-time {
-  color: #dc3545;
+  color: light-dark(#dc3545, #db8a92);
 }
 
 .early-time {
-  color: #28a745;
+  color: light-dark(#28a745, #8fd69f);
 }
 
 .events .delay-time,

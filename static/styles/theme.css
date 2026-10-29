@@ -499,36 +499,36 @@
 /* ── MapLibre ──────────────────────────────────────────────────────────────
    Same as Leaflet above: the popups and controls, not the tiles. The control
    icons are dark SVG backgrounds, so they are inverted like the pictograms. */
-[data-bs-theme="dark"] .maplibregl-popup-content,
-[data-bs-theme="dark"] .maplibregl-ctrl-group,
-[data-bs-theme="dark"] .maplibregl-ctrl-attrib {
+:root[data-bs-theme="dark"] .maplibregl-popup-content,
+:root[data-bs-theme="dark"] .maplibregl-ctrl-group,
+:root[data-bs-theme="dark"] .maplibregl-ctrl-attrib {
   background-color: var(--bs-body-bg);
   color: var(--bs-body-color);
 }
-[data-bs-theme="dark"] .maplibregl-popup-anchor-top .maplibregl-popup-tip,
-[data-bs-theme="dark"] .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
-[data-bs-theme="dark"] .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
   border-bottom-color: var(--bs-body-bg);
 }
-[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
-[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
-[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
   border-top-color: var(--bs-body-bg);
 }
-[data-bs-theme="dark"] .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-left .maplibregl-popup-tip {
   border-right-color: var(--bs-body-bg);
 }
-[data-bs-theme="dark"] .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+:root[data-bs-theme="dark"] .maplibregl-popup-anchor-right .maplibregl-popup-tip {
   border-left-color: var(--bs-body-bg);
 }
-[data-bs-theme="dark"] .maplibregl-ctrl-group button + button {
+:root[data-bs-theme="dark"] .maplibregl-ctrl-group button + button {
   border-top-color: var(--bs-border-color);
 }
-[data-bs-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon,
-[data-bs-theme="dark"] .maplibregl-ctrl-attrib-button {
+:root[data-bs-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon,
+:root[data-bs-theme="dark"] .maplibregl-ctrl-attrib-button {
   filter: invert(1) brightness(0.85);
 }
-[data-bs-theme="dark"] .maplibregl-ctrl-attrib a {
+:root[data-bs-theme="dark"] .maplibregl-ctrl-attrib a {
   color: var(--bs-link-color);
 }
 
@@ -547,4 +547,63 @@
 [data-bs-theme="dark"] div.dt-container .dt-paging .dt-paging-button.disabled:hover,
 [data-bs-theme="dark"] div.dt-container .dt-paging .dt-paging-button.disabled:active {
   color: var(--bs-body-color) !important;
+}
+
+/* ── Pages without Bootstrap ───────────────────────────────────────────────
+   templates/layout.html loads no Bootstrap, so what Bootstrap's dark theme does on
+   its own is restated here: the colour scheme light-dark() reads, the page's own
+   background and text, and the two subtle borders the converted pages name.
+   Identical to Bootstrap's where it is loaded. */
+:root[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary-border-subtle: #084298;
+  --bs-danger-border-subtle: #842029;
+}
+/* Zero specificity: pages with a dark design of their own (the visualisations) keep
+   their body colours */
+:where([data-bs-theme="dark"]) body {
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+
+/* ── Trip-type colours ─────────────────────────────────────────────────────
+   Picked for a white page: on a dark one ferry's navy sinks and train's sky blue
+   glares. Same toning as the stats charts: lightness pulled into one band (each
+   type keeping its place in it), saturation trimmed by a quarter, hue kept.
+   :root[data-bs-theme] outranks the plain :root of style2.css and new_map.css. */
+:root[data-bs-theme="dark"] {
+  --air: #52b637;
+  --train: #2c8ee0;
+  --tram: #3d9ce3;
+  --metro: #1c68c1;
+  --bus: #9252a7;
+  --ferry: #3c3ca2;
+  --car: #7e65aa;
+  --cycle: #9f433a;
+  --scooter: #1dce8e;
+  --funicular: #3e71ce;
+  --rail: #3598e2;
+  --ski: #5bb3c7;
+  --walk: #d38c1e;
+  --aerialway: #9db644;
+  --other: #5c5c5c;
+  --poi: #5c5c5c;
+  --restaurant: #5c5c5c;
+  --accommodation: #5c5c5c;
+}
+
+/* The trip timeline's stops are discs carrying the black type pictogram as a
+   background image, which a dark disc would swallow. The whole disc is inverted
+   instead, from colours chosen so that it lands on the card grey and border with a
+   light pictogram. */
+[data-bs-theme="dark"] .events time::after {
+  background-color: #c7c2bb;
+  border-color: #aba49a;
+  filter: invert(1) brightness(0.82);
+}
+
+/* The trip page's totals icons (#, ruler, clock) are inline SVGs with no fill, so
+   the default black */
+[data-bs-theme="dark"] .modeProportionIcon {
+  fill: var(--bs-body-color);
 }

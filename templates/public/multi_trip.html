@@ -63,12 +63,12 @@
 #user-sidebar-header h4 {
     margin: 0;
     font-size: 14px;
-    color: #333;
+    color: light-dark(#333, var(--bs-emphasis-color));
 }
 
 #user-sidebar-header .toggle-icon {
     font-size: 12px;
-    color: #666;
+    color: light-dark(#666, var(--bs-body-color));
     transition: transform 0.2s;
 }
 
@@ -79,7 +79,7 @@
 #user-list-container {
     max-height: 300px;
     overflow-y: auto;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid light-dark(#ddd, var(--bs-border-color));
     padding: 8px 12px;
 }
 
@@ -95,7 +95,7 @@
 }
 
 .user-item:hover {
-    background: rgba(0,0,0,0.05);
+    background: light-dark(rgba(0,0,0,0.05), rgba(255, 255, 255, 0.05));
     border-radius: 4px;
 }
 
@@ -104,12 +104,12 @@
     height: 12px;
     border-radius: 50%;
     margin-right: 8px;
-    border: 1px solid rgba(0,0,0,0.2);
+    border: 1px solid light-dark(rgba(0,0,0,0.2), rgba(255, 255, 255, 0.2));
 }
 
 .user-name {
     font-size: 13px;
-    color: #333;
+    color: light-dark(#333, var(--bs-emphasis-color));
 }
 
 #time-slider-container {
@@ -128,7 +128,7 @@
 #current-time-display {
     margin-top: 10px;
     text-align: center;
-    color: #555;
+    color: light-dark(#555, var(--bs-body-color));
     font-size: 16px;
     background-color: rgba(255, 255, 255, 0.8);
     padding: 5px 10px;
@@ -137,7 +137,7 @@
 
 .maplibregl-popup-content {
     font-size: 14px;
-    color: #333;
+    color: light-dark(#333, var(--bs-emphasis-color));
     padding: 10px;
 }
 </style>

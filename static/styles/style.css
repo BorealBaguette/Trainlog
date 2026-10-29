@@ -85,8 +85,8 @@ ul.navigation {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px solid #e7e7e7;
-  background-color: #f3f3f3;
+  border: 1px solid light-dark(#e7e7e7, var(--bs-border-color));
+  background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
 }
 
 ul.navigation li {
@@ -96,7 +96,7 @@ ul.navigation li {
 ul.navigation li a {
   font-family: Arial, Helvetica, sans-serif;
   display: block;
-  color: #666;
+  color: light-dark(#666, var(--bs-body-color));
   text-align: center;
   padding: 14px 16px;
   text-decoration: none;
@@ -110,7 +110,7 @@ ul.navigation li a {
 }
 
 ul.navigation li a:hover:not(.active) {
-  background-color: #ddd;
+  background-color: light-dark(#ddd, var(--bs-secondary-bg));
 }
 
 ul.navigation li a.active {
@@ -147,7 +147,7 @@ nav .current{
   nav .mobileOnly{
     display: block;
     text-align: center;
-    background-color: #f3f3f3;
+    background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
     font-size: 40px;
   }
 
@@ -249,7 +249,7 @@ nav .current{
 }
 
 .sortTable td, .sortTable th {
-  border: 1px solid #ddd;
+  border: 1px solid light-dark(#ddd, var(--bs-border-color));
   padding: 8px;
 }
 
@@ -294,7 +294,7 @@ nav .current{
   display:inline-block;
 }
 
-.sortTable tr:nth-child(even){background-color: #f2f2f2;}
+.sortTable tr:nth-child(even){background-color: light-dark(#f2f2f2, var(--bs-tertiary-bg));}
 
 .sortTable th {
   padding-top: 12px;
@@ -325,13 +325,13 @@ nav .current{
 }
 
 .individualTableSmall tr {
-  border-bottom: 3px solid #ddd;
+  border-bottom: 3px solid light-dark(#ddd, var(--bs-border-color));
   display: block;
   margin-bottom: .625em;
 }
 
 .individualTableSmall td {
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid light-dark(#ddd, var(--bs-border-color));
   display: block;
   text-align: right;
 }
@@ -340,7 +340,7 @@ nav .current{
   content: attr(data-label);
   float: left;
   font-weight: bold;
-  color: #207cca;
+  color: light-dark(#207cca, #89b6dc);
 }
 
 .individualTableSmall {
@@ -354,7 +354,7 @@ nav .current{
 }
 
 @media screen and (min-width: 600px) {
-  .sortTable tr:hover {background-color: #ddd;}
+  .sortTable tr:hover {background-color: light-dark(#ddd, var(--bs-secondary-bg));}
 }
 
 @media screen and (max-width: 600px) {
@@ -388,13 +388,13 @@ nav .current{
   }
   
   .sortTable tr {
-    border-bottom: 3px solid #ddd;
+    border-bottom: 3px solid light-dark(#ddd, var(--bs-border-color));
     display: block;
     margin-bottom: .625em;
   }
   
   .sortTable td {
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid light-dark(#ddd, var(--bs-border-color));
     display: block;
     text-align: right;
   }
@@ -403,7 +403,7 @@ nav .current{
     content: attr(data-label);
     float: left;
     font-weight: bold;
-    color: #207cca;
+    color: light-dark(#207cca, #89b6dc);
   }
   
   table td:last-child {
@@ -461,10 +461,10 @@ nav .current{
   display: inline-block;
   vertical-align: middle;
   padding: 1px 7px !important;
-  border: 1px solid #e2e2e2;
+  border: 1px solid light-dark(#e2e2e2, var(--bs-border-color));
   border-radius: 999px;
-  background: #f7f7f8;
-  color: #444;
+  background: light-dark(#f7f7f8, var(--bs-tertiary-bg));
+  color: light-dark(#444, var(--bs-emphasis-color));
   font-size: 0.82em;
   line-height: 1.5;
   /* A long name wraps inside its chip rather than pushing the leg wider. */
@@ -484,13 +484,13 @@ nav .current{
   left:30px;
   margin-top: 20px;
   margin-bottom: 20px;
-  color: #999;
+  color: light-dark(#999, var(--bs-secondary-color));
   font-size: 1.7em;
 }
 
 #hiddenTripsInfo {
   font-size: 0.7em;
-  color: #999;
+  color: light-dark(#999, var(--bs-secondary-color));
 }
 
 #tripTotals{
@@ -499,7 +499,7 @@ nav .current{
 
 .events li { 
   display: flex; 
-  color: #999;
+  color: light-dark(#999, var(--bs-secondary-color));
 }
 
 .events time { 
@@ -516,11 +516,11 @@ nav .current{
    top: 0;
    transform: translateX(50%) translateY(-15%);
    border-radius: 50%;
-   background: #fff;
+   background: light-dark(#fff, var(--bs-body-bg));
    background-size: 80%;
    background-repeat: no-repeat;
    background-position: 50% 50%;
-   border: 1px #ccc solid;
+   border: 1px light-dark(#ccc, var(--bs-border-color)) solid;
    width: 2em;
    height: 2em;
 }
@@ -666,13 +666,13 @@ nav .current{
 }
 
 .events li:not(:last-child) .trainChange::before {
-  border-left: 4px #ccc dotted;
+  border-left: 4px light-dark(#ccc, var(--bs-border-color)) dotted;
 }
 .events li:not(:last-child) .tripChange::before {
   display: none;
 }
 .events li:not(:last-child) .tripEnds::before {
-  border-left: 4px #ccc dotted;
+  border-left: 4px light-dark(#ccc, var(--bs-border-color)) dotted;
 }
 
 .events strong {
@@ -688,7 +688,7 @@ nav .current{
 .itinerary_tag_description{
   margin-left:-35px;
   margin-bottom: 20px;
-  color:#3a3a3a;
+  color:light-dark(#3a3a3a, var(--bs-emphasis-color));
 }
 
 .itinerary_tag_description .text-nowrap {

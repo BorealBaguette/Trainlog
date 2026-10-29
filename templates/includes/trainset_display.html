@@ -27,14 +27,14 @@
     .trainset-inline-scroll { display: block; overflow-x: auto; overflow-y: hidden; padding-bottom: 16px; }
     .trainset-inline-scroll .compo-strip { min-width: unset; }
     /* Wagon labels on light background */
-    .ts-nom-inline { color: #444 !important; background: rgba(0,0,0,0.07) !important; }
+    .ts-nom-inline { color: light-dark(#444, var(--bs-emphasis-color)) !important; background: light-dark(rgba(0,0,0,0.07), rgba(255, 255, 255, 0.07)) !important; }
     /* Inline trainset: strip then label as caption below */
     .ts-inline-wrapper { display: flex; flex-direction: column; align-items: flex-start; gap: 0; margin-top: 4px; }
     .ts-inline-header { display: flex; align-items: center; gap: 4px; }
-    .ts-inline-label { font-size: 0.82em; line-height: 1.3; color: #666; margin-top: 1px; }
+    .ts-inline-label { font-size: 0.82em; line-height: 1.3; color: light-dark(#666, var(--bs-body-color)); margin-top: 1px; }
     .ts-inline-personal { display: inline; font-style: italic; }
     .ts-inline-saved { display: inline; font-weight: 600; }
-    .ts-inline-personal + .ts-inline-saved::before { content: ' · '; font-style: normal; font-weight: normal; color: #aaa; }
+    .ts-inline-personal + .ts-inline-saved::before { content: ' · '; font-style: normal; font-weight: normal; color: light-dark(#aaa, var(--bs-secondary-color)); }
     .ts-attr-icon { cursor: pointer; color: rgba(0,0,0,0.4); font-size: 0.7em; position: absolute; top: 1px; left: 2px; z-index: 5; line-height: 1; }
     @media (max-width: 767px) {
         /* Fallback for callers that don't measure the row themselves. Deliberately
@@ -107,25 +107,25 @@
     .compo-class-dot.c-service   { background: #616161; }
 
     /* Misc */
-    .compo-trigger { cursor: pointer; color: #0d6efd; }
+    .compo-trigger { cursor: pointer; color: light-dark(#0d6efd, #7aa8eb); }
     .compo-trigger:hover { text-decoration: underline; }
     .compo-source {
         font-size: 0.7rem;
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-body-color));
         text-align: right;
         margin-top: 6px;
         padding: 4px 12px 0;
         letter-spacing: 0.02em;
     }
     .compo-source a {
-        color: #495057;
+        color: light-dark(#495057, var(--bs-body-color));
         text-decoration: none;
         font-weight: 500;
         transition: color 0.15s ease;
     }
     .compo-source a:hover,
     .compo-source a:focus {
-        color: #212529;
+        color: light-dark(#212529, var(--bs-emphasis-color));
         text-decoration: none;
     }
 
@@ -158,7 +158,7 @@
         width: calc(100% - 4px);          /* full-length plate, 4px clear of its neighbours */
         margin-top: 0;
         box-sizing: border-box;
-        font-size: 0.6rem; color: #ccc; text-align: center;
+        font-size: 0.6rem; color: light-dark(#ccc, var(--bs-tertiary-color)); text-align: center;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
 
@@ -171,7 +171,7 @@
     .compo-seat-marker {
         font-size: 0.65rem;
         line-height: 1.2;
-        color: #198754;
+        color: light-dark(#198754, #8bdab5);
         font-weight: 700;
         text-align: center;
         white-space: nowrap;

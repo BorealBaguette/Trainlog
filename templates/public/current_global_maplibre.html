@@ -23,8 +23,8 @@
   .spinner-container.hidden { opacity: 0; }
   .spinner-container .lds-spinner { top: auto; margin-top: 0; }
 
-  .delay-time { color: #dc3545; }
-  .early-time  { color: #28a745; }
+  .delay-time { color: light-dark(#dc3545, #db8a92); }
+  .early-time  { color: light-dark(#28a745, #8fd69f); }
 
   /* Trainset strip in popups — same look as the public trip pages: images
      scaled to half natural size (uniform factor preserves relative proportions),
@@ -38,8 +38,8 @@
   .popup-media.is-clickable { cursor: pointer; }
   .popup-media.is-clickable:hover { opacity: 0.85; }
   .popup-media.is-loading { opacity: 0.5; }
-  .popup-photo-btn { color: #0d6efd; text-decoration: none; font-size: 0.95em; }
-  .popup-photo-btn:hover, .popup-photo-btn.open { color: #0a58ca; }
+  .popup-photo-btn { color: light-dark(#0d6efd, #7aa8eb); text-decoration: none; font-size: 0.95em; }
+  .popup-photo-btn:hover, .popup-photo-btn.open { color: light-dark(#0a58ca, #7fa9e6); }
 
   /* The global .airframe rule offsets it for a table row's baseline; in the popup
      it is a block of its own. */
@@ -64,7 +64,7 @@
   /* The global .flag rule jumps to 26px above 1500px — sized for table rows, not
      for a popup line. */
   .popup-vehicle .flag { font-size: 1.15em !important; line-height: 1; vertical-align: baseline !important; }
-  .popup-vehicle-type + .popup-reg::before { content: "·"; color: #bbb; margin-right: 3px; }
+  .popup-vehicle-type + .popup-reg::before { content: "·"; color: light-dark(#bbb, var(--bs-tertiary-color)); margin-right: 3px; }
   /* Third-party thumbnails vary in size — cap and frame them so every popup matches. */
   .popup-media .vehiclePhotoContainer {
     max-width: min(260px, 100%);
@@ -365,7 +365,7 @@ function getPopupContent(tripObj) {
           <div style="font-weight:bold;font-size:1.05em;margin-bottom:6px;">
             <a href="${profileUrl}" target="_blank" style="text-decoration:none;color:inherit;">${tripObj.username}</a>
           </div>
-          <div style="font-size:0.9em;color:#333;line-height:1.7;">
+          <div style="font-size:0.9em;color:light-dark(#333, var(--bs-emphasis-color));line-height:1.7;">
             <div>${icon}&nbsp;<span style="text-transform: capitalize; font-weight: bold">${trip.type === 'poi' ? 'Activity' : trip.type}</strong></div>
             <div>${origin}</div>
             <div><strong>Date:</strong> ${startDate}</div>
@@ -400,7 +400,7 @@ function getPopupContent(tripObj) {
       <div style="font-weight:bold;font-size:1.05em;margin-bottom:6px;">
         <a href="${profileUrl}" target="_blank" style="text-decoration:none;color:inherit;">${tripObj.username}</a>
       </div>
-      <div style="font-size:0.9em;color:#333;line-height:1.7;">
+      <div style="font-size:0.9em;color:light-dark(#333, var(--bs-emphasis-color));line-height:1.7;">
         <div><strong>From:</strong> ${origin}</div>
         <div><strong>To:</strong> ${destination}</div>
         <div><strong>Date:</strong> ${startDate}</div>

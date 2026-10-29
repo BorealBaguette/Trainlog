@@ -7,11 +7,11 @@
   }
 
   .delay-time {
-    color: #dc3545;
+    color: light-dark(#dc3545, #db8a92);
   }
 
   .early-time {
-    color: #28a745;
+    color: light-dark(#28a745, #8fd69f);
   }
 </style>
 
@@ -163,7 +163,7 @@ let infoHTML = `
       ">
       <a href="${profile_url}" target="_blank" style="text-decoration: none;">${username}</a>
     </div>
-    <div class="trip-info" style="font-size: 0.9em; color: #333;">
+    <div class="trip-info" style="font-size: 0.9em; color: light-dark(#333, var(--bs-emphasis-color));">
       <div><strong>From:</strong> ${origin}</div>
       <div><strong>To:</strong> ${destination}</div>
       <div><strong>Date:</strong> ${startDate}</div>
