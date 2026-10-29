@@ -271,7 +271,7 @@
             <h3 class="settings2-card-title"><i class="fa-solid fa-map"></i> {{ settingsSectionAppearance }}</h3>
 
             {% if is_alpha %}
-            <label class="settings2-label mt-0" for="theme">{{ theme_setting }}
+            <label class="settings2-label mt-0 d-flex align-items-center" for="theme">{{ theme_setting }}
               <span class="settings2-beta settings2-alpha">{{ roleAlpha }}</span></label>
             <select class="form-select mb-3" name="theme" id="theme" form="settingsForm">
               <option value="auto" {% if user_theme == 'auto' %}selected{% endif %}>{{ theme_auto }}</option>

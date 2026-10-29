@@ -146,31 +146,6 @@
 [data-bs-theme="dark"] img[src*="/icons/trip_logos/"],
 [data-bs-theme="dark"] .tl-logo-square {
   filter: invert(1) brightness(0.82);
-  /* Type icons share .operatorLogo with the real logos, so they have to hand back the
-     white plate the rule below hands out. */
-  background-color: transparent;
-  padding: 0;
-}
-
-/* Operator logos are full-colour artwork drawn for a white page — many are dark
-   wordmarks that disappear outright. They cannot be inverted, so they get the white
-   plate the light theme already puts behind them in a selected row. Matched on the
-   class rather than on the cells that hold it: Responsive clones the operator cell
-   into the expanded detail row, where none of those containers apply. */
-[data-bs-theme="dark"] .operatorLogo,
-[data-bs-theme="dark"] .operatorGridLogo,
-[data-bs-theme="dark"] .operatorListLogo,
-[data-bs-theme="dark"] .op-pill img,
-[data-bs-theme="dark"] .op-suggestion-logo,
-[data-bs-theme="dark"] .ticket-logo img,
-[data-bs-theme="dark"] .ticket-table-logo img,
-[data-bs-theme="dark"] .ticket-row-logo,
-[data-bs-theme="dark"] .ticket-operator img,
-[data-bs-theme="dark"] .ticket-pill-logo,
-[data-bs-theme="dark"] .ticket-picker-logo img {
-  background-color: #fff;
-  padding: 3px;
-  border-radius: 4px;
 }
 
 /* style2.css plates every image in a selected row in white, which is what makes the
@@ -562,4 +537,12 @@
 [data-bs-theme="dark"] .link-dark:focus {
   color: rgba(var(--bs-emphasis-color-rgb), var(--bs-link-opacity, 1)) !important;
   text-decoration-color: rgba(var(--bs-emphasis-color-rgb), var(--bs-link-underline-opacity, 1)) !important;
+}
+
+/* DataTables dims its disabled pager buttons (Previous on the first page) with a
+   near-black, which vanishes on a dark page: same text colour as the others. */
+[data-bs-theme="dark"] div.dt-container .dt-paging .dt-paging-button.disabled,
+[data-bs-theme="dark"] div.dt-container .dt-paging .dt-paging-button.disabled:hover,
+[data-bs-theme="dark"] div.dt-container .dt-paging .dt-paging-button.disabled:active {
+  color: var(--bs-body-color) !important;
 }

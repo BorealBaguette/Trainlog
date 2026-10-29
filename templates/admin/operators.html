@@ -542,7 +542,7 @@
                                     onclick="showLogoCarousel(${row.operator_id})">
                               <i class="fa-solid fa-upload"></i> Add logo
                             </button>`;
-                return `<img src="/static/${data}" width="100px" loading="lazy" id="logo-img-${row.operator_id}"` +
+                return `<img src="/static/${data}" class="tl-logo" width="100px" loading="lazy" id="logo-img-${row.operator_id}"` +
                     `alt="logo for ${row.short_name}" onclick="showLogoCarousel(${row.operator_id})" style="cursor: pointer;"">`
               }
             },
@@ -741,7 +741,7 @@
         const target = operatorById(Number(targetId)) || {};
         const logo = row && row.logo_url
             ? `<img src="/static/${row.logo_url}" alt="" width="60"
-                    class="me-2 flex-shrink-0" style="object-fit:contain">`
+                    class="tl-logo me-2 flex-shrink-0" style="object-fit:contain">`
             : '';
         // Long name disambiguates when the two share a short name (the whole point of
         // the clash), and it makes the merge direction unambiguous: source → survivor.
@@ -987,7 +987,7 @@
                     const effectiveDate = logo.effective_date ? new Date(logo.effective_date).toLocaleDateString() : 'None';
                     carouselInner.append(`
                         <div class="carousel-item ${isActive}" data-logo-id="${logo.operator_id}">
-                            <img src="/static/${logo.logo_url}" class="d-block w-75" alt="Logo ${index}">
+                            <img src="/static/${logo.logo_url}" class="tl-logo d-block w-75" alt="Logo ${index}">
                             <div class="carousel-caption d-none d-md-block">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <h5 class="mb-0">Effective Date: ${effectiveDate}</h5>
