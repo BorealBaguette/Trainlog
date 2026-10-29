@@ -8,9 +8,9 @@
         gap: .35rem;
         min-height: 38px;
         padding: .3rem .4rem;
-        border: 1px solid #ced4da;
+        border: 1px solid light-dark(#ced4da, var(--bs-border-color));
         border-radius: .375rem;
-        background: #fff;
+        background: light-dark(#fff, var(--bs-body-bg));
         cursor: pointer;
     }
     .ticket-pill {
@@ -19,9 +19,9 @@
         gap: .35rem;
         max-width: 100%;
         padding: .15rem .3rem .15rem .45rem;
-        border: 1px solid #dee2e6;
+        border: 1px solid light-dark(#dee2e6, var(--bs-border-color));
         border-radius: 1rem;
-        background: #f8f9fa;
+        background: light-dark(#f8f9fa, var(--bs-tertiary-bg));
         font-size: .9rem;
     }
     .ticket-pill-logo {
@@ -39,11 +39,11 @@
         background: none;
         padding: 0 .2rem;
         line-height: 1;
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-body-color));
     }
     .ticket-pill-x:hover { color: var(--bs-danger); }
     .ticket-picker-add {
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-body-color));
         font-size: .9rem;
         padding: 0 .3rem;
     }
@@ -51,11 +51,11 @@
         font-size: .75rem;
         text-transform: uppercase;
         letter-spacing: .03em;
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-body-color));
         margin: .5rem 0 .3rem;
     }
     .ticket-picker-row { cursor: pointer; }
-    .ticket-picker-row.active-pick { background: #f0f6ff; }
+    .ticket-picker-row.active-pick { background: light-dark(#f0f6ff, rgba(55, 135, 255, 0.16)); }
     .ticket-picker-logo {
         width: 48px;
         height: 28px;

@@ -23,64 +23,64 @@
         display: grid; grid-template-columns: 22px minmax(0, 1fr) 104px 104px 64px 76px;
         column-gap: 8px; align-items: start;
     }
-    #stopsModal .stops-head { font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+    #stopsModal .stops-head { font-size: .72rem; color: light-dark(#9aa3af, var(--bs-secondary-color)); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
     /* Every row as tall, hint or not, so the columns stay in line */
     #stopsModal .stop-row { min-height: 52px; }
     #stopsModal .stop-row input { margin: 0; padding: 4px 8px; height: 32px; width: 100%; font-size: .875rem;
-        border: 1px solid #dfe3e8; border-radius: 6px; background: #fff; }
+        border: 1px solid light-dark(#dfe3e8, var(--bs-border-color)); border-radius: 6px; background: light-dark(#fff, var(--bs-body-bg)); }
     #stopsModal .stop-row input:focus { border-color: #86b7fe; outline: 0; box-shadow: 0 0 0 .15rem rgba(13,110,253,.12); }
-    #stopsModal .stop-row input:disabled { background: #f6f7f9; }
-    #stopsModal .stop-row.plain .stop-station { color: #6b7280; }
+    #stopsModal .stop-row input:disabled { background: light-dark(#f6f7f9, var(--bs-tertiary-bg)); }
+    #stopsModal .stop-row.plain .stop-station { color: light-dark(#6b7280, var(--bs-body-color)); }
     /* The line down the left, a dot per stop, a flag at each end */
     #stopsModal .stop-track { position: relative; align-self: stretch; }
     #stopsModal .stop-track::before {
-        content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #dfe3e8;
+        content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: light-dark(#dfe3e8, var(--bs-secondary-bg));
     }
     #stopsModal .stop-origin .stop-track::before { top: 16px; }
     #stopsModal .stop-destination .stop-track::before { bottom: auto; height: 16px; }
     #stopsModal .stop-dot {
         position: absolute; left: 50%; top: 16px; width: 10px; height: 10px; margin: -5px 0 0 -5px;
-        border-radius: 50%; background: #fff; border: 2px solid #9aa3af;
+        border-radius: 50%; background: light-dark(#fff, var(--bs-body-bg)); border: 2px solid #9aa3af;
     }
     #stopsModal .stop-row.plain .stop-dot { width: 6px; height: 6px; margin: -3px 0 0 -3px; border-width: 0; background: #c4cad2; }
     #stopsModal .stop-end .stop-dot {
-        width: 20px; height: 20px; margin: -10px 0 0 -10px; border: 0; background: #e8eefb; color: #3b63b8;
+        width: 20px; height: 20px; margin: -10px 0 0 -10px; border: 0; background: light-dark(#e8eefb, rgba(55, 107, 220, 0.16)); color: #3b63b8;
         display: flex; align-items: center; justify-content: center; font-size: .65rem;
     }
-    #stopsModal .stop-end-name { line-height: 32px; font-weight: 600; color: #1f2733; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #stopsModal .stop-end-name { line-height: 32px; font-weight: 600; color: light-dark(#1f2733, var(--bs-emphasis-color)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #stopsModal .stop-cell { display: flex; flex-direction: column; min-width: 0; }
     #stopsModal .stop-row.stop-closed { cursor: pointer; border-radius: 6px; }
-    #stopsModal .stop-row.stop-closed:hover { background: #f5f7fa; }
+    #stopsModal .stop-row.stop-closed:hover { background: light-dark(#f5f7fa, var(--bs-tertiary-bg)); }
     #stopsModal .stop-name, #stopsModal .stop-value {
-        line-height: 32px; font-size: .875rem; color: #1f2733; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        line-height: 32px; font-size: .875rem; color: light-dark(#1f2733, var(--bs-emphasis-color)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    #stopsModal .stop-row.plain .stop-name { color: #6b7280; }
+    #stopsModal .stop-row.plain .stop-name { color: light-dark(#6b7280, var(--bs-body-color)); }
     #stopsModal .stop-value { padding-left: 8px; font-variant-numeric: tabular-nums; }
     #stopsModal .stop-text .stop-sched { padding-left: 8px; }
     /* The opened row: name and buttons, then scheduled | delay | actual per time */
     #stopsModal .stop-editor {
         grid-column: 2 / -1; min-width: 0; margin-bottom: 8px; padding: 8px 10px 10px;
-        border: 1px solid #dfe3e8; border-radius: 8px; background: #fafbfc;
+        border: 1px solid light-dark(#dfe3e8, var(--bs-border-color)); border-radius: 8px; background: light-dark(#fafbfc, var(--bs-tertiary-bg));
     }
     #stopsModal .stop-editor-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     #stopsModal .stop-editor-top .stop-station, #stopsModal .stop-editor-top .stop-end-name { flex: 1 1 auto; min-width: 0; }
     #stopsModal .stop-when { display: flex; gap: 4px; min-width: 0; }
     #stopsModal .stop-when input { flex: 0 0 104px; }
     #stopsModal .stop-day {
-        min-width: 0; height: 32px; padding: 0 4px; font-size: .8rem; color: #4b5563;
-        border: 1px solid #dfe3e8; border-radius: 6px; background: #fff;
+        min-width: 0; height: 32px; padding: 0 4px; font-size: .8rem; color: light-dark(#4b5563, var(--bs-body-color));
+        border: 1px solid light-dark(#dfe3e8, var(--bs-border-color)); border-radius: 6px; background: light-dark(#fff, var(--bs-body-bg));
     }
     #stopsModal .stop-day-break {
         display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; height: 22px;
-        font-size: .75rem; color: #6b7280; font-weight: 600;
+        font-size: .75rem; color: light-dark(#6b7280, var(--bs-body-color)); font-weight: 600;
     }
     #stopsModal .stop-day-break > span:last-child::first-letter { text-transform: uppercase; }
-    #stopsModal .stop-day-break > span:last-child { line-height: 22px; border-top: 1px dashed #dfe3e8; }    #stopsModal .stop-fields {
+    #stopsModal .stop-day-break > span:last-child { line-height: 22px; border-top: 1px dashed light-dark(#dfe3e8, var(--bs-border-color)); }    #stopsModal .stop-fields {
         display: grid; grid-template-columns: auto auto 88px minmax(0, 1fr); gap: 4px 8px; align-items: center;
     }
     #stopsModal .stop-fields.no-delays { grid-template-columns: auto auto minmax(0, 1fr); }
-    #stopsModal .stop-caption { font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; line-height: 1.2; }
-    #stopsModal .stop-label { font-size: .8rem; color: #6b7280; padding-right: 4px; }
+    #stopsModal .stop-caption { font-size: .72rem; color: light-dark(#9aa3af, var(--bs-secondary-color)); text-transform: uppercase; letter-spacing: .04em; line-height: 1.2; }
+    #stopsModal .stop-label { font-size: .8rem; color: light-dark(#6b7280, var(--bs-body-color)); padding-right: 4px; }
     #stopsModal .stop-actual { font-size: .875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
     #stopsModal .stop-row .stop-platform-actual { max-width: 88px; }
     #stopsModal .stop-open .stop-dot { top: 25px; }   /* the middle of the editor's first line */
@@ -88,15 +88,15 @@
     #stopsModal .stop-destination.stop-open .stop-track::before { height: 25px; }
     /* The day, in the origin's arrival / destination's departure slot */
     #stopsModal .stop-end-date {
-        height: 32px; line-height: 32px; padding-left: 8px; font-size: .8rem; color: #9aa3af;
+        height: 32px; line-height: 32px; padding-left: 8px; font-size: .8rem; color: light-dark(#9aa3af, var(--bs-secondary-color));
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     /* The scheduled value under the actual one, when they differ: "~~15:37~~ +12" */
-    #stopsModal .stop-sched { font-size: .72rem; color: #9aa3af; line-height: 1.5; padding-left: 4px; }
+    #stopsModal .stop-sched { font-size: .72rem; color: light-dark(#9aa3af, var(--bs-secondary-color)); line-height: 1.5; padding-left: 4px; }
     #stopsModal .stop-sched:empty { display: none; }
-    #stopsModal .stop-delay { font-weight: 600; color: #6b7280; }
+    #stopsModal .stop-delay { font-weight: 600; color: light-dark(#6b7280, var(--bs-body-color)); }
     #stopsModal .stop-delay.late { color: #c0392b; }
-    #stopsModal .stop-value s { color: #9aa3af; }
+    #stopsModal .stop-value s { color: light-dark(#9aa3af, var(--bs-secondary-color)); }
     /* The actual time, under the struck scheduled one (and in the opened row) */
     #stopsModal .stop-ran, #stopsModal .stop-actual { font-weight: 600; color: #1e8449; }
     #stopsModal .stop-ran { font-size: .8rem; font-variant-numeric: tabular-nums; }
@@ -104,46 +104,46 @@
     #stopsModal .stop-actual:not(.late):not(.early) { color: inherit; font-weight: normal; }
     #stopsModal .stop-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; }
     #stopsModal .stop-grip, #stopsModal .stop-remove, #stopsModal .stop-edit, #stopsModal .stop-close {
-        border: 0; background: transparent; color: #9aa3af; padding: 0 4px; line-height: 1; cursor: pointer;
+        border: 0; background: transparent; color: light-dark(#9aa3af, var(--bs-secondary-color)); padding: 0 4px; line-height: 1; cursor: pointer;
     }
     #stopsModal .stop-grip { font-size: .9rem; height: 32px; cursor: grab; touch-action: none; }
     #stopsModal .stop-grip:disabled { visibility: hidden; }
     #stopsModal .stop-row.dragging {
-        z-index: 1070; background: #fff; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.18); pointer-events: none;
+        z-index: 1070; background: light-dark(#fff, var(--bs-body-bg)); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.18); pointer-events: none;
     }
-    #stopsModal .stop-gap { border: 2px dashed #c7d6f5; border-radius: 6px; background: #f5f8fe; margin-left: 30px; }
+    #stopsModal .stop-gap { border: 2px dashed light-dark(#c7d6f5, var(--bs-primary-border-subtle)); border-radius: 6px; background: light-dark(#f5f8fe, rgba(55, 115, 235, 0.16)); margin-left: 30px; }
     #stopsModal .stop-row.dragging, #stopsModal .stop-row.dragging .stop-grip { cursor: grabbing; }
     #stopsModal .stop-remove, #stopsModal .stop-edit, #stopsModal .stop-close { font-size: .95rem; height: 32px; }
     #stopsModal .stop-edit { font-size: .8rem; }
     #stopsModal .stop-close { color: #3b63b8; }
-    #stopsModal .stop-grip:hover, #stopsModal .stop-remove:hover, #stopsModal .stop-edit:hover, #stopsModal .stop-close:hover { color: #1f2733; }
+    #stopsModal .stop-grip:hover, #stopsModal .stop-remove:hover, #stopsModal .stop-edit:hover, #stopsModal .stop-close:hover { color: light-dark(#1f2733, var(--bs-emphasis-color)); }
     #stopsModal .stops-note { font-size: .8rem; color: #8a5a00; margin: 8px 0 0; }
     #stopsModal .stops-note.stops-wrong { color: #b42318; }
     /* A time before the one above it */
-    #stopsModal .stop-row.stop-wrong { background: #fdecea; border-radius: 6px; }
+    #stopsModal .stop-row.stop-wrong { background: light-dark(#fdecea, rgba(236, 74, 55, 0.16)); border-radius: 6px; }
     #stopsModal .stop-row.stop-wrong .stop-value, #stopsModal .stop-row.stop-wrong .stop-value s { color: #b42318; }
     #stopsModal .stop-row.stop-wrong .stop-dot { border-color: #b42318; }
-    #stopsModal .stop-row.stop-wrong .stop-editor { border-color: #f1aeb5; background: #fdf3f4; }
+    #stopsModal .stop-row.stop-wrong .stop-editor { border-color: light-dark(#f1aeb5, var(--bs-danger-border-subtle)); background: light-dark(#fdf3f4, rgba(222, 55, 72, 0.16)); }
     /* The Transitous run the stops are from */
-    #stopsModal .stops-linked { font-size: .75rem; color: #6b7280; margin: 8px 0 0 30px; display: flex; align-items: center; gap: 5px; }
+    #stopsModal .stops-linked { font-size: .75rem; color: light-dark(#6b7280, var(--bs-body-color)); margin: 8px 0 0 30px; display: flex; align-items: center; gap: 5px; }
     #stopsModal .stops-linked img { width: 12px; height: 12px; }
     #stopsModal .stops-linked a { color: inherit; }
     #stopsModal .stops-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-left: 30px; }
     /* The runs to pick from (pickRun), as the new-trip form's timetable list */
-    #stopsModal .stops-runs { margin: 10px 0 0 30px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
-    #stopsModal .stops-runs-title { padding: 6px 12px; font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; background: #f9fafb; }
+    #stopsModal .stops-runs { margin: 10px 0 0 30px; border: 1px solid light-dark(#e5e7eb, var(--bs-border-color)); border-radius: 8px; overflow: hidden; }
+    #stopsModal .stops-runs-title { padding: 6px 12px; font-size: .72rem; color: light-dark(#9aa3af, var(--bs-secondary-color)); text-transform: uppercase; letter-spacing: .04em; background: light-dark(#f9fafb, var(--bs-tertiary-bg)); }
     #stopsModal #stopsRunsList { max-height: 235px; overflow-y: auto; }   /* about three runs between the two bars */
     #stopsModal .stops-run {
         display: grid; grid-template-columns: 30px auto minmax(0, 1fr) auto; align-items: center; gap: 2px 10px;
-        width: 100%; padding: 7px 12px 7px 10px; border: 0; border-top: 1px solid #f0f1f3; text-align: left;
+        width: 100%; padding: 7px 12px 7px 10px; border: 0; border-top: 1px solid light-dark(#f0f1f3, var(--bs-border-color)); text-align: left;
         border-left: 4px solid var(--line-color, transparent);
         background: color-mix(in srgb, var(--line-color, transparent) 6%, #fff); font-size: .85rem; cursor: pointer;
     }
     #stopsModal .stops-run:hover { background: color-mix(in srgb, var(--line-color, #999) 14%, #fff); }
-    #stopsModal .stops-more { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 6px; border: 0; background: #f9fafb; color: #6b7280; font-size: .8rem; position: sticky; z-index: 1; }
+    #stopsModal .stops-more { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 6px; border: 0; background: light-dark(#f9fafb, var(--bs-tertiary-bg)); color: light-dark(#6b7280, var(--bs-body-color)); font-size: .8rem; position: sticky; z-index: 1; }
     #stopsModal .stops-more[data-direction=earlier] { top: 0; }
     #stopsModal .stops-more[data-direction=later] { bottom: 0; }
-    #stopsModal .stops-more:hover:not(:disabled) { background: #eef0f3; color: #1f2733; }
+    #stopsModal .stops-more:hover:not(:disabled) { background: light-dark(#eef0f3, var(--bs-tertiary-bg)); color: light-dark(#1f2733, var(--bs-emphasis-color)); }
     #stopsModal .stops-run.best { box-shadow: inset 0 0 0 2px #86b7fe; }
     #stopsModal .stops-run img { grid-row: 1 / 3; width: 30px; height: 24px; object-fit: contain; }
     #stopsModal .stops-run .run-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -152,8 +152,8 @@
         flex: none; padding: 0 6px; border-radius: 4px; font-size: .78rem; font-weight: 600;
         border: 1px solid var(--line-color, #ccc); background: color-mix(in srgb, var(--line-color, #ddd) 18%, #fff);
     }
-    #stopsModal .stops-run .run-headsign { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #444; }
-    #stopsModal .stops-run .run-meta { grid-column: 2 / 4; font-size: .75rem; color: #777; }
+    #stopsModal .stops-run .run-headsign { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: light-dark(#444, var(--bs-emphasis-color)); }
+    #stopsModal .stops-run .run-meta { grid-column: 2 / 4; font-size: .75rem; color: light-dark(#777, var(--bs-body-color)); }
     #stopsModal .stops-run .run-delay { grid-row: 1 / 3; grid-column: 4; }
     /* Station suggestions (jQuery UI, appended to body) above the dialog */
     .ui-autocomplete { z-index: 6000 !important; }
@@ -258,11 +258,11 @@
 
     /* GPX Import Styles */
     .gpx-drop-zone {
-        border: 2px dashed #dee2e6;
+        border: 2px dashed light-dark(#dee2e6, var(--bs-border-color));
         border-radius: 0.375rem;
         padding: 2rem;
         text-align: center;
-        background-color: #f8f9fa;
+        background-color: light-dark(#f8f9fa, var(--bs-tertiary-bg));
         cursor: pointer;
         transition: all 0.3s ease;
         margin-bottom: 1rem;
@@ -270,8 +270,8 @@
 
     .gpx-drop-zone:hover,
     .gpx-drop-zone.dragover {
-        border-color: #0d6efd;
-        background-color: #e7f1ff;
+        border-color: light-dark(#0d6efd, var(--bs-primary));
+        background-color: light-dark(#e7f1ff, rgba(var(--bs-primary-rgb), 0.1));
     }
 
     .gpx-file-input {
@@ -299,7 +299,7 @@
     /* The icon in a darker strip on the left, centred with room around it */
     .path-import-buttons .btn-label {
         position: static; align-self: stretch; display: flex; align-items: center; justify-content: center;
-        width: 40px; padding: 0; border-radius: 3px 0 0 3px; background: rgba(0, 0, 0, 0.15);
+        width: 40px; padding: 0; border-radius: 3px 0 0 3px; background: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.15));
     }
     .path-import-buttons .btn-label { flex: none; }
     .path-import-buttons .btn-label-label { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -309,15 +309,15 @@
        a button turned green once its way was used (updatePathButtonSuccess) keeps the
        solid look with its darker strip, as the blue ones do. */
     .path-import-buttons .btn-labeled.btn-secondary {
-        background: #fff; color: #495057; border: 1px solid #ced4da;
+        background: light-dark(#fff, var(--bs-body-bg)); color: light-dark(#495057, var(--bs-body-color)); border: 1px solid light-dark(#ced4da, var(--bs-border-color));
     }
     .path-import-buttons .btn-labeled.btn-secondary:hover {
-        background: #f3f4f6; color: #1f2733;
+        background: light-dark(#f3f4f6, var(--bs-tertiary-bg)); color: light-dark(#1f2733, var(--bs-emphasis-color));
     }
     .path-import-buttons .btn-labeled.btn-secondary .btn-label {
-        background: #e9ecef; color: #495057; border-right: 1px solid #ced4da;
+        background: light-dark(#e9ecef, var(--bs-secondary-bg)); color: light-dark(#495057, var(--bs-body-color)); border-right: 1px solid light-dark(#ced4da, var(--bs-border-color));
     }
-    .path-import-buttons .badge.bg-light { background: #e9ecef !important; }
+    .path-import-buttons .badge.bg-light { background: light-dark(#e9ecef, var(--bs-secondary-bg)) !important; }
 
     .progress-container {
         margin-top: 15px;
@@ -332,23 +332,23 @@
         padding-left: 8px;
         padding-right: 8px;
     }
-    .ts-btn { padding: 6px 16px; border: 0; background-color: #f3f3f3;
+    .ts-btn { padding: 6px 16px; border: 0; background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
               cursor: pointer; font-size: 0.875rem; line-height: 1.4; }
-    .ts-btn:hover { background-color: #e8e8e8; }
+    .ts-btn:hover { background-color: light-dark(#e8e8e8, var(--bs-secondary-bg)); }
 
-    .power-type-group { display: flex; border: 1px solid #ced4da; border-radius: 0.375rem; overflow: hidden; }
+    .power-type-group { display: flex; border: 1px solid light-dark(#ced4da, var(--bs-border-color)); border-radius: 0.375rem; overflow: hidden; }
     .power-type-group input[type="radio"] { display: none; }
     .power-type-group label {
         flex: 1; text-align: center; padding: 0.375rem 0.75rem; margin: 0;
-        cursor: pointer; font-size: 0.875rem; color: #6c757d;
-        background-color: #fff; border-right: 1px solid #ced4da;
+        cursor: pointer; font-size: 0.875rem; color: light-dark(#6c757d, var(--bs-secondary-color));
+        background-color: light-dark(#fff, var(--bs-body-bg)); border-right: 1px solid light-dark(#ced4da, var(--bs-border-color));
         transition: background-color 0.15s, color 0.15s;
     }
     .power-type-group label:last-of-type { border-right: none; }
     .power-type-group input[type="radio"]:checked + label {
-        background-color: #e9ecef; color: #333; font-weight: 500;
+        background-color: light-dark(#e9ecef, var(--bs-secondary-bg)); color: light-dark(#333, var(--bs-emphasis-color)); font-weight: 500;
     }
-    .power-type-group label:hover { background-color: #f8f9fa; color: #444; }
+    .power-type-group label:hover { background-color: light-dark(#f8f9fa, var(--bs-tertiary-bg)); color: light-dark(#444, var(--bs-emphasis-color)); }
 </style>
 
 <!-- GPX Import Modal -->
@@ -604,10 +604,10 @@
                 value="{{tripMaterialTypeAdvanced}}">
             {% if tripType in ('train', 'metro', 'tram') %}
             <div id="ts-active-display" style="display:none; margin-bottom:1rem">
-                <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:#f3f3f3; font-size:0.875rem">
-                    <i class="fas fa-train" style="color:#666; flex-shrink:0"></i>
+                <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:light-dark(#f3f3f3, var(--bs-tertiary-bg)); font-size:0.875rem">
+                    <i class="fas fa-train" style="color:light-dark(#666, var(--bs-secondary-color)); flex-shrink:0"></i>
                     <span id="ts-active-label" style="flex:1"></span>
-                    <button type="button" onclick="clearMaterialTypeJson()" style="border:0; background:none; cursor:pointer; padding:0; color:#999; font-size:1.1rem; line-height:1; flex-shrink:0" title="Clear">×</button>
+                    <button type="button" onclick="clearMaterialTypeJson()" style="border:0; background:none; cursor:pointer; padding:0; color:light-dark(#999, var(--bs-secondary-color)); font-size:1.1rem; line-height:1; flex-shrink:0" title="Clear">×</button>
                 </div>
             </div>
             <div style="margin-bottom:1rem">
@@ -761,9 +761,9 @@
           /* In relative mode everything between the relative group and the path
              section is hidden -> drop the now-pointless first separator. */
           #form :has(input[id=radioRelative]:checked) #precisionSep { display: none; }
-          .wd-toggle { border: 1px solid #cbd2db; background: transparent; border-radius: 6px;
+          .wd-toggle { border: 1px solid light-dark(#cbd2db, var(--bs-border-color)); background: transparent; border-radius: 6px;
                        padding: .15rem .45rem; font-size: .8rem; cursor: pointer; }
-          .wd-toggle.on { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+          .wd-toggle.on { background: light-dark(#4b78d6, var(--plan-accent-solid)); border-color: light-dark(#4b78d6, var(--plan-accent-solid)); color: #fff; }
         </style>
         <group id="relativeDates">
             {# Either/or: a leg is timed (Day + time) OR duration-based (Day + duration) —
@@ -1020,7 +1020,7 @@
                     .router-pop > summary { list-style: none; }
                     .router-pop > summary::-webkit-details-marker { display: none; }
                     .router-pop > summary::marker { content: ""; }
-                    .router-pop[open] > summary { background: #e8eeff; border-color: #c7d6f5; color: #3b63b8; }
+                    .router-pop[open] > summary { background: light-dark(#e8eeff, rgba(55, 107, 255, 0.16)); border-color: light-dark(#c7d6f5, var(--bs-primary-border-subtle)); color: #3b63b8; }
                     /* Highlighted while off the default, i.e. on the legacy router */
                     .router-pop:has(#newRouterToggleModal:checked) > summary { background: #4b78d6; border-color: #4b78d6; color: #fff; }
                     .router-pop:has(.router-filter-count:not(:empty)) > summary { border-color: #3b63b8; color: #3b63b8; }
@@ -1028,7 +1028,7 @@
                     .router-pop-bubble {
                         position: absolute; top: calc(100% + 8px); left: 0; z-index: 1200;
                         width: min(340px, calc(100vw - 32px)); max-height: 60vh; overflow-y: auto; margin: 0;
-                        background: #fff; border: 1px solid #e5e7eb;
+                        background: light-dark(#fff, var(--bs-body-bg)); border: 1px solid light-dark(#e5e7eb, var(--bs-border-color));
                         box-shadow: 0 10px 30px rgba(17, 24, 39, .14), 0 2px 6px rgba(17, 24, 39, .06);
                     }
                 </style>

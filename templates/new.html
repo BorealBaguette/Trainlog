@@ -10,63 +10,63 @@
 {% include "bootstrap/navigation.html"%}
 
 <style>
-    .ts-btn { padding: 6px 16px; border: 0; background-color: #f3f3f3;
+    .ts-btn { padding: 6px 16px; border: 0; background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
               cursor: pointer; font-size: 0.875rem; line-height: 1.4; }
-    .ts-btn:hover { background-color: #e8e8e8; }
+    .ts-btn:hover { background-color: light-dark(#e8e8e8, var(--bs-secondary-bg)); }
 
-    .power-type-group { display: flex; border: 1px solid #ced4da; border-radius: 0.375rem; overflow: hidden; }
+    .power-type-group { display: flex; border: 1px solid light-dark(#ced4da, var(--bs-border-color)); border-radius: 0.375rem; overflow: hidden; }
     .power-type-group input[type="radio"] { display: none; }
     .power-type-group label {
         flex: 1; text-align: center; padding: 0.375rem 0.75rem; margin: 0;
-        cursor: pointer; font-size: 0.875rem; color: #6c757d;
-        background-color: #fff; border-right: 1px solid #ced4da;
+        cursor: pointer; font-size: 0.875rem; color: light-dark(#6c757d, var(--bs-secondary-color));
+        background-color: light-dark(#fff, var(--bs-body-bg)); border-right: 1px solid light-dark(#ced4da, var(--bs-border-color));
         transition: background-color 0.15s, color 0.15s;
     }
     .power-type-group label:last-of-type { border-right: none; }
     .power-type-group input[type="radio"]:checked + label {
-        background-color: #e9ecef; color: #333; font-weight: 500;
+        background-color: light-dark(#e9ecef, var(--bs-secondary-bg)); color: light-dark(#333, var(--bs-emphasis-color)); font-weight: 500;
     }
-    .power-type-group label:hover { background-color: #f8f9fa; color: #444; }
+    .power-type-group label:hover { background-color: light-dark(#f8f9fa, var(--bs-tertiary-bg)); color: light-dark(#444, var(--bs-emphasis-color)); }
 
     /* A via: its field, then its times and track dropdown, then its remove button, side by side
        on the field's grey, so a long name ends ("…") where they start. #form to outrank
        style2.css's #form input[type=text]. */
-    #form .via-row { display: flex; align-items: center; background-color: #f3f3f3; margin-bottom: 1rem; }
+    #form .via-row { display: flex; align-items: center; background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg)); margin-bottom: 1rem; }
     #form .via-row input.viaStation {
         flex: 1 1 auto; min-width: 0; margin: 0; padding-right: 6px;
         background: transparent; text-overflow: ellipsis;
     }
     #form .via-row .via-tail { flex: 0 0 auto; display: flex; align-items: center; height: 32px; }
     #form .via-row .via-time {
-        line-height: 32px; font-size: 0.8rem; color: #888; font-variant-numeric: tabular-nums;
+        line-height: 32px; font-size: 0.8rem; color: light-dark(#888, var(--bs-secondary-color)); font-variant-numeric: tabular-nums;
         pointer-events: none; white-space: nowrap;
     }
     #form .via-row .via-tail .track-dropdown { position: static; }
     #form .via-row .via-tail .track-toggle { padding: 0 6px 0 8px; }
     #form .via-row .via-remove {
         flex: 0 0 32px; height: 32px; border: 0; background: transparent; cursor: pointer;
-        color: #999; font-size: 1.2rem; line-height: 1; padding: 0;
+        color: light-dark(#999, var(--bs-secondary-color)); font-size: 1.2rem; line-height: 1; padding: 0;
     }
-    #form .via-row .via-remove:hover { color: #333; }
+    #form .via-row .via-remove:hover { color: light-dark(#333, var(--bs-emphasis-color)); }
 
     /* More than a few vias (a timetable service's stops): fold them into one summary row */
     .via-summary {
         display: flex; align-items: center; gap: 8px; margin-bottom: 0.6rem;
-        padding: 0 4px 0 16px; min-height: 32px; background-color: #f3f3f3;
+        padding: 0 4px 0 16px; min-height: 32px; background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
         font-size: 0.875rem; cursor: pointer; user-select: none;
     }
-    .via-summary:hover { background-color: #e8e8e8; }
-    .via-summary .via-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; }
+    .via-summary:hover { background-color: light-dark(#e8e8e8, var(--bs-secondary-bg)); }
+    .via-summary .via-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: light-dark(#555, var(--bs-body-color)); }
     .via-summary .via-summary-count { background: #888; color: #fff; border-radius: 10px; padding: 0 7px; font-size: 0.75rem; }
     .via-summary .via-summary-clear {
-        border: 0; background: transparent; cursor: pointer; color: #999;
+        border: 0; background: transparent; cursor: pointer; color: light-dark(#999, var(--bs-secondary-color));
         font-size: 1.2rem; line-height: 1; width: 28px; height: 32px; padding: 0;
     }
-    .via-summary .via-summary-clear:hover { color: #333; }
+    .via-summary .via-summary-clear:hover { color: light-dark(#333, var(--bs-emphasis-color)); }
     #viaGroup.via-collapsed #viaContainer { display: none; }
     /* Under the summary row, the stops read as its children: indented on a guide line */
     #viaGroup.via-has-summary #viaContainer {
-        margin: -0.3rem 0 0.6rem 13px; padding: 0.3rem 0 0 14px; border-left: 2px solid #e2e2e2;
+        margin: -0.3rem 0 0.6rem 13px; padding: 0.3rem 0 0 14px; border-left: 2px solid light-dark(#e2e2e2, var(--bs-border-color));
     }
 
     /* Timetable (MOTIS) departures between the chosen stations */
@@ -79,13 +79,13 @@
        the station fields and the Via button (style2.css, .ts-btn). */
     #motisGroup .motis-toggle {
         display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-        padding: 0 4px 0 16px; min-height: 32px; border: 0; background-color: #f3f3f3; color: #333;
+        padding: 0 4px 0 16px; min-height: 32px; border: 0; background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg)); color: light-dark(#333, var(--bs-emphasis-color));
         font-size: 0.875rem; line-height: 1.4; cursor: pointer;
     }
     .via-summary > .fa-route, #motisGroup .motis-clock, #motisGroup .motis-spinner { flex: none; width: 16px; text-align: center; }
     #motisGroup #motisChevron { margin-right: 8px; }
-    #motisGroup .motis-toggle:hover { background-color: #e8e8e8; }
-    #motisGroup .motis-toggle[disabled] { cursor: default; color: #888; background-color: #f8f8f8; }
+    #motisGroup .motis-toggle:hover { background-color: light-dark(#e8e8e8, var(--bs-secondary-bg)); }
+    #motisGroup .motis-toggle[disabled] { cursor: default; color: light-dark(#888, var(--bs-secondary-color)); background-color: light-dark(#f8f8f8, var(--bs-tertiary-bg)); }
     /* While searching: a spinner for the clock, and a bar sweeping along the bottom */
     #motisGroup .motis-toggle { position: relative; overflow: hidden; }
     #motisGroup .motis-toggle .motis-spinner { display: none; }
@@ -108,15 +108,15 @@
         border-left: 4px solid var(--line-color, transparent);
         background-color: color-mix(in srgb, var(--line-color, transparent) 6%, transparent);
     }
-    #motisGroup .motis-item + .motis-item { border-top: 1px solid #eee; }
+    #motisGroup .motis-item + .motis-item { border-top: 1px solid light-dark(#eee, var(--bs-border-color)); }
     #motisGroup .motis-item:hover, #motisGroup .motis-item:focus {
         background-color: color-mix(in srgb, var(--line-color, #999) 14%, #fff);
     }
     #motisGroup .motis-item.active { color: inherit; background-color: color-mix(in srgb, var(--line-color, #4b78d6) 20%, #fff); }
     #motisGroup .motis-logo { grid-row: 1 / 3; width: 34px; height: 26px; object-fit: contain; }
     #motisGroup .motis-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    #motisGroup .motis-time sup { font-weight: 400; color: #888; }
-    #motisGroup .motis-day { grid-column: 2; font-size: 0.75rem; color: #777; white-space: nowrap; }
+    #motisGroup .motis-time sup { font-weight: 400; color: light-dark(#888, var(--bs-secondary-color)); }
+    #motisGroup .motis-day { grid-column: 2; font-size: 0.75rem; color: light-dark(#777, var(--bs-body-color)); white-space: nowrap; }
     #motisGroup .motis-line {
         justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         padding: 0 6px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
@@ -126,23 +126,23 @@
     #motisGroup .motis-head { grid-column: 3; display: flex; align-items: center; gap: 6px; min-width: 0; }
     #motisGroup .motis-head .motis-line { flex: none; max-width: 65%; }
     #motisGroup .motis-headsign {
-        min-width: 0; font-size: 0.85rem; line-height: 1.2; color: #444; overflow: hidden;
+        min-width: 0; font-size: 0.85rem; line-height: 1.2; color: light-dark(#444, var(--bs-emphasis-color)); overflow: hidden;
         /* Long termini wrap to a second line before being cut */
         display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
     }
-    #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: light-dark(#777, var(--bs-body-color)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #motisGroup .motis-bus { margin-left: 4px; color: #b45309; }
     #motisGroup .motis-type { height: 14px; margin-left: 4px; vertical-align: -2px; }
     #motisGroup .motis-more {
         display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
-        padding: 6px 12px; border: 0; background: #fafafa; color: #4b78d6;
+        padding: 6px 12px; border: 0; background: light-dark(#fafafa, var(--bs-tertiary-bg)); color: #4b78d6;
         font-size: 0.8rem; cursor: pointer;
     }
-    #motisGroup .motis-more:hover { background: #f0f3fa; }
-    #motisGroup .motis-more[disabled] { color: #999; cursor: default; }
-    #motisGroup li:first-child > .motis-more { border-bottom: 1px solid #eee; }
-    #motisGroup li:nth-last-child(2) > .motis-more { border-top: 1px solid #eee; }
-    #motisGroup .motis-source { padding: 4px 12px; font-size: 0.7rem; color: #999; text-align: right; border-top: 1px solid #eee; }
+    #motisGroup .motis-more:hover { background: light-dark(#f0f3fa, rgba(55, 95, 188, 0.16)); }
+    #motisGroup .motis-more[disabled] { color: light-dark(#999, var(--bs-secondary-color)); cursor: default; }
+    #motisGroup li:first-child > .motis-more { border-bottom: 1px solid light-dark(#eee, var(--bs-border-color)); }
+    #motisGroup li:nth-last-child(2) > .motis-more { border-top: 1px solid light-dark(#eee, var(--bs-border-color)); }
+    #motisGroup .motis-source { padding: 4px 12px; font-size: 0.7rem; color: light-dark(#999, var(--bs-secondary-color)); text-align: right; border-top: 1px solid light-dark(#eee, var(--bs-border-color)); }
     /* Phones: the third column is too narrow for the line badge and headsign, so each
        entry stacks into rows — times + journey info, then line → headsign at full
        width, then the day. */
@@ -370,7 +370,7 @@
       {% if vehicle_type != 'air' %}
       <group id="viaGroup" class="non_poi">
         <div id="viaSummary" class="via-summary" style="display:none" role="button" aria-expanded="false">
-          <i class="fa-solid fa-route" style="color:#888"></i>
+          <i class="fa-solid fa-route" style="color:light-dark(#888, var(--bs-secondary-color))"></i>
           <span class="via-summary-text" id="viaSummaryText"></span>
           <span class="via-summary-count" id="viaSummaryCount"></span>
           <i class="fa-solid fa-chevron-down" id="viaSummaryChevron"></i>
@@ -475,10 +475,10 @@
         <input type="hidden" name="material_type_advanced" id="material_type_advanced">
         {% if vehicle_type in ('train', 'metro', 'tram') %}
         <div id="ts-active-display" class="non_poi" style="display:none; margin-bottom:1rem">
-            <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:#f3f3f3; font-size:0.875rem">
-                <i class="fas fa-train" style="color:#666; flex-shrink:0"></i>
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:light-dark(#f3f3f3, var(--bs-tertiary-bg)); font-size:0.875rem">
+                <i class="fas fa-train" style="color:light-dark(#666, var(--bs-secondary-color)); flex-shrink:0"></i>
                 <span id="ts-active-label" style="flex:1"></span>
-                <button type="button" onclick="clearMaterialTypeJson()" style="border:0; background:none; cursor:pointer; padding:0; color:#999; font-size:1.1rem; line-height:1; flex-shrink:0" title="Clear">×</button>
+                <button type="button" onclick="clearMaterialTypeJson()" style="border:0; background:none; cursor:pointer; padding:0; color:light-dark(#999, var(--bs-secondary-color)); font-size:1.1rem; line-height:1; flex-shrink:0" title="Clear">×</button>
             </div>
         </div>
         <div class="non_poi" style="margin-bottom:1rem">
@@ -690,9 +690,9 @@
         #form #manDuration.rel-duration { display: grid; }
         /* Duration mode hides the time column -> let the day input take the full row. */
         #form #relativeDates.rel-dur .fieldset-datetime { grid-template-columns: 1fr; }
-        .wd-toggle { border: 1px solid #cbd2db; background: transparent; border-radius: 6px;
+        .wd-toggle { border: 1px solid light-dark(#cbd2db, var(--bs-border-color)); background: transparent; border-radius: 6px;
                      padding: .15rem .45rem; font-size: .8rem; cursor: pointer; }
-        .wd-toggle.on { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+        .wd-toggle.on { background: light-dark(#4b78d6, var(--plan-accent-solid)); border-color: light-dark(#4b78d6, var(--plan-accent-solid)); color: #fff; }
       </style>
       <group id="relativeDates">
         {# Either/or: a leg is timed (Day + time) OR duration-based (Day + duration) —

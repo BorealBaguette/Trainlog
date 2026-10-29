@@ -1,0 +1,565 @@
+/* Dark theme.
+ *
+ * Bootstrap 5.3 themes its own components from `data-bs-theme` on <html>, and
+ * DataTables ships `[data-bs-theme=dark]` rules of its own, so neither needs
+ * anything here. What is left is the widgets that predate CSS variables —
+ * jQuery UI, bootstrap-select, the colorpicker — plus the handful of places
+ * where a colour is baked into an image rather than a property.
+ *
+ * Everything is scoped to [data-bs-theme="dark"]; the light theme is the
+ * stylesheets' own, unchanged.
+ */
+
+/* Bootstrap's own dark palette, softened: its #212529 page reads as flat black on a
+   large screen, and its near-white body text glares against it. Everything else in
+   the stylesheets derives from these, so the whole site moves with them. */
+:root[data-bs-theme="dark"] {
+  --bs-body-bg: #26292e;
+  --bs-body-bg-rgb: 38, 41, 46;
+  --bs-body-color: #b9c0c8;
+  --bs-body-color-rgb: 185, 192, 200;
+  --bs-emphasis-color: #ced4da;
+  --bs-emphasis-color-rgb: 206, 212, 218;
+  --bs-secondary-color: rgba(185, 192, 200, 0.72);
+  --bs-secondary-bg: #34383e;
+  --bs-secondary-bg-rgb: 52, 56, 62;
+  --bs-tertiary-color: rgba(185, 192, 200, 0.5);
+  --bs-tertiary-bg: #2e3238;
+  --bs-tertiary-bg-rgb: 46, 50, 56;
+  --bs-border-color: #454b53;
+
+  /* style2.css uses a flat mid-grey, which reads as a smudge on a dark page. */
+  --tl-shadow: rgba(0, 0, 0, 0.6);
+
+  /* DataTables' row states are its own variables, given as bare RGB triples. Its
+     default selection is Bootstrap blue at full strength, which on a dark row is the
+     same glare the headers had; this is that blue taken well down. */
+  --dt-row-selected: 62, 84, 110;
+  --dt-row-selected-text: 206, 212, 218;
+  --dt-row-selected-link: 206, 212, 218;
+  --dt-row-stripe: 255, 255, 255;
+  --dt-row-hover: 255, 255, 255;
+  --dt-column-ordering: 206, 212, 218;
+}
+
+/* ── jQuery UI ─────────────────────────────────────────────────────────────
+   The station, operator and tag autocompletes, and the date pickers. Its theme
+   is a static stylesheet with no variables, so each surface is restated. */
+[data-bs-theme="dark"] .ui-widget-content,
+[data-bs-theme="dark"] .ui-widget.ui-widget-content {
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .ui-widget-header {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-emphasis-color);
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .ui-menu .ui-menu-item-wrapper,
+[data-bs-theme="dark"] .ui-datepicker td span,
+[data-bs-theme="dark"] .ui-datepicker td a {
+  color: var(--bs-body-color);
+}
+
+/* Hover and keyboard selection, in both the autocomplete list and the datepicker. */
+[data-bs-theme="dark"] .ui-state-active,
+[data-bs-theme="dark"] .ui-widget-content .ui-state-active,
+[data-bs-theme="dark"] .ui-state-focus,
+[data-bs-theme="dark"] .ui-widget-content .ui-state-focus,
+[data-bs-theme="dark"] .ui-menu .ui-menu-item-wrapper.ui-state-active {
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+  color: #fff;
+}
+
+[data-bs-theme="dark"] .ui-state-default,
+[data-bs-theme="dark"] .ui-widget-content .ui-state-default {
+  background: var(--bs-tertiary-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+
+/* The prev/next arrows and the datepicker's close/today buttons are sprite
+   images drawn in dark grey, unreadable against a dark header. */
+[data-bs-theme="dark"] .ui-icon,
+[data-bs-theme="dark"] .ui-widget-content .ui-icon,
+[data-bs-theme="dark"] .ui-widget-header .ui-icon {
+  filter: invert(1) brightness(1.6);
+}
+
+/* ── bootstrap-select ──────────────────────────────────────────────────── */
+[data-bs-theme="dark"] .bootstrap-select > .dropdown-toggle,
+[data-bs-theme="dark"] .bootstrap-select .no-results {
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .bootstrap-select .dropdown-menu {
+  background-color: var(--bs-body-bg);
+  border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .bootstrap-select .dropdown-menu li a {
+  color: var(--bs-body-color);
+}
+
+/* ── bootstrap-colorpicker ─────────────────────────────────────────────── */
+[data-bs-theme="dark"] .colorpicker,
+[data-bs-theme="dark"] .colorpicker-popup {
+  background-color: var(--bs-body-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+
+/* ── Baked-in colours ──────────────────────────────────────────────────── */
+
+/* The chevron on the mobile trips sort button is an inline SVG with a #343a40
+   stroke, so it cannot follow a variable — swap the data URI for a light one. */
+[data-bs-theme="dark"] .dt-sort-btn {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23dee2e6' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+}
+[data-bs-theme="dark"] .dt-sort-btn.sort-asc {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23dee2e6' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 11 6-6 6 6'/%3e%3c/svg%3e");
+}
+
+/* The brand blue that fills table headers in the light theme is a saturated mid-tone;
+   against a dark page it vibrates rather than recedes. Dark mode drops the fill for a
+   raised neutral surface, which is what separates a header row from its body here. */
+[data-bs-theme="dark"] th,
+[data-bs-theme="dark"] #admin th {
+  background-color: var(--bs-secondary-bg) !important;
+  color: var(--bs-emphasis-color);
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+/* ── Images that assume a light page ───────────────────────────────────────
+   Trip-type pictograms are flat black artwork with a transparent ground, so they
+   vanish on a dark row. Inverting the single colour is all they need. */
+[data-bs-theme="dark"] td.col-type .operatorLogo,
+[data-bs-theme="dark"] #operatorGroup .operatorLogo,
+[data-bs-theme="dark"] .leg-icon img,
+[data-bs-theme="dark"] .trip-type-icon,
+[data-bs-theme="dark"] img[src*="/icons/trip_logos/"],
+[data-bs-theme="dark"] .tl-logo-square {
+  filter: invert(1) brightness(0.82);
+  /* Type icons share .operatorLogo with the real logos, so they have to hand back the
+     white plate the rule below hands out. */
+  background-color: transparent;
+  padding: 0;
+}
+
+/* Operator logos are full-colour artwork drawn for a white page — many are dark
+   wordmarks that disappear outright. They cannot be inverted, so they get the white
+   plate the light theme already puts behind them in a selected row. Matched on the
+   class rather than on the cells that hold it: Responsive clones the operator cell
+   into the expanded detail row, where none of those containers apply. */
+[data-bs-theme="dark"] .operatorLogo,
+[data-bs-theme="dark"] .operatorGridLogo,
+[data-bs-theme="dark"] .operatorListLogo,
+[data-bs-theme="dark"] .op-pill img,
+[data-bs-theme="dark"] .op-suggestion-logo,
+[data-bs-theme="dark"] .ticket-logo img,
+[data-bs-theme="dark"] .ticket-table-logo img,
+[data-bs-theme="dark"] .ticket-row-logo,
+[data-bs-theme="dark"] .ticket-operator img,
+[data-bs-theme="dark"] .ticket-pill-logo,
+[data-bs-theme="dark"] .ticket-picker-logo img {
+  background-color: #fff;
+  padding: 3px;
+  border-radius: 4px;
+}
+
+/* style2.css plates every image in a selected row in white, which is what makes the
+   logos legible there in the light theme. A type icon inverted by the rule above would
+   then be a white glyph on a white plate, so it keeps its transparent ground. */
+[data-bs-theme="dark"] tr.selected td.col-type img {
+  background-color: transparent;
+  padding: 0;
+}
+
+/* ── Leaflet ───────────────────────────────────────────────────────────────
+   Map surfaces that are not the tiles themselves: popups, the attribution strip
+   and the zoom/layer controls. The tiles follow the user's tileserver choice,
+   which is a separate setting — this only stops the chrome around them from
+   being a white box on a dark map. */
+[data-bs-theme="dark"] .leaflet-popup-content-wrapper,
+[data-bs-theme="dark"] .leaflet-popup-tip,
+[data-bs-theme="dark"] .leaflet-control-layers,
+[data-bs-theme="dark"] .leaflet-bar a,
+[data-bs-theme="dark"] .leaflet-control-attribution {
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .leaflet-bar a:hover {
+  background-color: var(--bs-tertiary-bg);
+  color: var(--bs-emphasis-color);
+}
+
+[data-bs-theme="dark"] .leaflet-control-attribution a {
+  color: var(--bs-link-color);
+}
+
+/* The trips table draws Responsive's expand arrow itself, on the type column rather
+   than a control column, so DataTables' own dark rule for it never applies. Same
+   knocked-back light as the pictogram beside it. */
+[data-bs-theme="dark"] #dataTable tbody td.col-type::before {
+  border-left-color: rgba(206, 212, 218, 0.5);
+}
+[data-bs-theme="dark"] #dataTable tbody tr.dtr-expanded > td.col-type::before {
+  border-top-color: rgba(206, 212, 218, 0.5);
+  border-left-color: transparent;
+}
+
+/* A grey glow under the navbar: the light theme's drop shadow, which only reads as a
+   shadow over a lighter page. */
+[data-bs-theme="dark"] .navbar {
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* The wordmark is dark artwork with a white variant already drawn; the square mark has
+   none, so it is inverted with the pictograms above. Swapped in CSS rather than picked
+   in the template because "auto" is only resolved in the browser. */
+.tl-logo-dark { display: none; }
+[data-bs-theme="dark"] .tl-logo-light { display: none !important; }
+[data-bs-theme="dark"] .tl-logo-dark { display: inline; }
+
+/* .leaderboardLink brightens on hover, which lifts dark text off the page — against
+   light text there is nothing left to brighten, so the cue is inverted. */
+[data-bs-theme="dark"] .leaderboardLink:hover {
+  filter: brightness(60%);
+}
+
+/* ── Trips card layout ─────────────────────────────────────────────────────
+   The phone view of the trips table is a card list with its own palette, declared
+   as tokens at the top of templates/dynamic_trips.html. Restating the set here is
+   what themes the whole layout — cards, gutter, kebab pill, toolbar panel, pager.
+   :root[data-bs-theme] outranks the plain :root those defaults sit on, which
+   matters because that block is in the body and so parses after this file. */
+:root[data-bs-theme="dark"] {
+  /* Raised off the page rather than sunk into it, so a card still reads as an
+     object; the gutter and the toolbar panel then recess below the card. */
+  --card-bg: #2e3238;
+  --card-border: #3d434a;
+  --card-shadow: rgba(0, 0, 0, 0.35);
+  --card-seam: #4a5058;
+  --card-title: #d3d9df;
+  --card-meta: #99a2ac;
+  --card-icon: #6f7883;
+  --card-sunken: #24272c;
+  --card-sunken-border: #3d434a;
+  --card-gutter-border: #383e45;
+  --card-control-fg: #98a1ab;
+  --card-pressed-bg: #383e45;
+  --card-pressed-fg: #ced4da;
+  --card-label: #b9c0c8;
+  --card-input-border: #454b53;
+  --card-focus-border: #5b87c9;
+  --card-accent-bg: #313d4d;
+  --card-accent-border: #46586f;
+  --card-accent-fg: #7bb0e6;
+  --card-accent-solid: #2f6ea8;
+  --card-sel-bg: #313d4d;
+  --card-sel-border: #4e6a8c;
+  --card-sel-gutter: #37455a;
+  --card-page-fg: #ced4da;
+  --card-check-empty: #5c646d;
+}
+
+/* The trip forms are a panel on the page, held apart from it in the light theme by a
+   near-white fill and a drop shadow. Both of those vanish on a dark page — body-on-body
+   with a black shadow is flat — so the panel takes the raised card surface instead. */
+[data-bs-theme="dark"] #form {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  /* The fields are tertiary-filled, which in the dark theme is the card's own colour;
+     inside the form they sink below it instead, as they stand off the white light one. */
+  --bs-tertiary-bg: var(--card-sunken);
+}
+
+/* ── Plans ─────────────────────────────────────────────────────────────────
+   The plan list and a single plan share one palette, declared in style2.css. Same
+   surface relationship as the trips cards: the card sits above the page, the
+   toolbar and table headers recess below it. */
+:root[data-bs-theme="dark"] {
+  --plan-surface: #2e3238;
+  --plan-sunken: #24272c;
+  --plan-border: #3d434a;
+  --plan-border-input: #454b53;
+  --plan-border-hover: #5a626c;
+  --plan-hairline: #383e45;
+  --plan-row-hover: #34383e;
+  --plan-title: #dfe4e9;
+  --plan-body: #c2c9d1;
+  --plan-muted: #99a2ac;
+  --plan-faint: #8b949f;
+  --plan-chip-fg: #b3bcc6;
+  --plan-chip-bg: #383e45;
+  --plan-accent: #7ba0e0;
+  --plan-accent-solid: #3f6bb5;
+  --plan-accent-bg: #2f3c52;
+  --plan-accent-soft: rgba(123, 160, 224, .16);
+  --plan-icon-from: #2f3c52;
+  --plan-icon-to: #35455e;
+  --plan-archived-bg: #33373d;
+  --plan-archived-fg: #757d87;
+  --plan-action-fg: #98a1ab;
+  --plan-action-hover-fg: #e6e9ec;
+  /* The overlays tint whatever is under them; on a dark page that has to be a lift,
+     not a shade, or the hover states disappear. */
+  --plan-overlay: rgba(255, 255, 255, .07);
+  --plan-overlay-soft: rgba(255, 255, 255, .05);
+  --plan-shadow: rgba(0, 0, 0, .4);
+  --plan-focus: #5b87c9;
+  --plan-focus-ring: rgba(91, 135, 201, .25);
+  --plan-search-icon: #7d858f;
+  --plan-toggle-border: #454b53;
+  --plan-toggle-hover-fg: #ced4da;
+  --plan-sep-label: #98a1ab;
+  --plan-wd-fg: #b49ae0;
+  --plan-wd-bg: rgba(180, 154, 224, .16);
+  --plan-moon: #9096d6;
+  --plan-danger-border: #7d3a42;
+  --plan-danger: #ea868f;
+  --plan-warn: #e0a44a;
+}
+
+/* ── Bootstrap's "light" utilities ─────────────────────────────────────────
+   bg-light, border-light and btn-light are fixed light colours in both of Bootstrap's
+   themes, so on a dark page they are bright patches. text-dark is left alone: on the
+   yellow and cyan badges it sits on it is right in both themes; only on bg-light does
+   it have to follow the page. */
+[data-bs-theme="dark"] .bg-light {
+  background-color: var(--bs-tertiary-bg) !important;
+}
+[data-bs-theme="dark"] .bg-light.text-dark {
+  color: var(--bs-body-color) !important;
+}
+[data-bs-theme="dark"] .border-light {
+  border-color: var(--bs-border-color) !important;
+}
+[data-bs-theme="dark"] .btn-light {
+  --bs-btn-color: var(--bs-body-color);
+  --bs-btn-bg: var(--bs-secondary-bg);
+  --bs-btn-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--bs-emphasis-color);
+  --bs-btn-hover-bg: var(--bs-tertiary-bg);
+  --bs-btn-hover-border-color: var(--bs-border-color);
+  --bs-btn-active-color: var(--bs-emphasis-color);
+  --bs-btn-active-bg: var(--bs-tertiary-bg);
+  --bs-btn-active-border-color: var(--bs-border-color);
+}
+
+/* Native buttons get the browser's own text colour, pure white under a dark
+   colour-scheme, so an unstyled one (the trip form's Via and trainset buttons)
+   outshines everything around it. Zero specificity: any rule that sets a colour wins. */
+:where([data-bs-theme="dark"]) :where(button) {
+  color: inherit;
+}
+
+/* The trip form's fields show the browser's placeholder grey, but Bootstrap's
+   .form-control ones (the tag search) take its lighter secondary text: one dim grey
+   for every placeholder in the form, so none reads as a filled value. */
+[data-bs-theme="dark"] #form ::placeholder {
+  color: var(--bs-tertiary-color);
+  opacity: 1;
+}
+
+/* The submit and sign-up buttons are a saturated brand gradient that, on a dark
+   page, is the brightest thing on screen. Same gradient, taken down a step. */
+[data-bs-theme="dark"] #form button[id=submit],
+[data-bs-theme="dark"] #form button[id=signup] {
+  filter: brightness(0.8) saturate(0.85);
+}
+
+/* Native radios and checkboxes (Bootstrap's .form-check-input theme themselves)
+   draw a bright ring and the browser's vivid blue when checked: the plans' muted
+   accent instead, and the ring dimmed to the page. */
+[data-bs-theme="dark"] input[type=checkbox]:not(.form-check-input),
+[data-bs-theme="dark"] input[type=radio]:not(.form-check-input) {
+  accent-color: var(--plan-accent-solid);
+  filter: brightness(0.8);
+}
+
+/* ── Bootstrap's colours, toned down ─────────────────────────────────────────
+   Bootstrap keeps its saturated light-theme fills in dark mode, so every button and
+   coloured badge glares. Each variant gets a muted base here; hover and press lift it
+   towards white, outline buttons take it as their border with a lighter tint as text.
+   text-* utilities keep Bootstrap's colours, which are the ones legible on a dark page. */
+:root[data-bs-theme="dark"] {
+  --tl-primary: #3567b0;
+  --tl-secondary: #545b64;
+  --tl-success: #2e7a52;
+  --tl-danger: #a8404b;
+  --tl-warning: #c4932f;
+  --tl-info: #2b8a9e;
+}
+
+[data-bs-theme="dark"] .btn-primary {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-primary); --bs-btn-border-color: var(--tl-primary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-primary) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-primary) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-primary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-primary) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-primary); --bs-btn-disabled-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .btn-outline-primary {
+  --bs-btn-color: color-mix(in srgb, var(--tl-primary) 60%, #fff); --bs-btn-border-color: var(--tl-primary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-primary); --bs-btn-hover-border-color: var(--tl-primary);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-primary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-primary) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-primary) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .bg-primary,
+[data-bs-theme="dark"] .text-bg-primary {
+  background-color: var(--tl-primary) !important;
+}
+
+[data-bs-theme="dark"] .btn-secondary {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-secondary); --bs-btn-border-color: var(--tl-secondary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-secondary) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-secondary) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-secondary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-secondary) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-secondary); --bs-btn-disabled-border-color: var(--tl-secondary);
+}
+[data-bs-theme="dark"] .btn-outline-secondary {
+  --bs-btn-color: color-mix(in srgb, var(--tl-secondary) 60%, #fff); --bs-btn-border-color: var(--tl-secondary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-secondary); --bs-btn-hover-border-color: var(--tl-secondary);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-secondary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-secondary) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-secondary) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-secondary);
+}
+[data-bs-theme="dark"] .bg-secondary,
+[data-bs-theme="dark"] .text-bg-secondary {
+  background-color: var(--tl-secondary) !important;
+}
+
+[data-bs-theme="dark"] .btn-success {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-success); --bs-btn-border-color: var(--tl-success);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-success) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-success) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-success) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-success) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-success); --bs-btn-disabled-border-color: var(--tl-success);
+}
+[data-bs-theme="dark"] .btn-outline-success {
+  --bs-btn-color: color-mix(in srgb, var(--tl-success) 60%, #fff); --bs-btn-border-color: var(--tl-success);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-success); --bs-btn-hover-border-color: var(--tl-success);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-success) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-success) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-success) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-success);
+}
+[data-bs-theme="dark"] .bg-success,
+[data-bs-theme="dark"] .text-bg-success {
+  background-color: var(--tl-success) !important;
+}
+
+[data-bs-theme="dark"] .btn-danger {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-danger); --bs-btn-border-color: var(--tl-danger);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-danger) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-danger) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-danger) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-danger) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-danger); --bs-btn-disabled-border-color: var(--tl-danger);
+}
+[data-bs-theme="dark"] .btn-outline-danger {
+  --bs-btn-color: color-mix(in srgb, var(--tl-danger) 60%, #fff); --bs-btn-border-color: var(--tl-danger);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-danger); --bs-btn-hover-border-color: var(--tl-danger);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-danger) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-danger) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-danger) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-danger);
+}
+[data-bs-theme="dark"] .bg-danger,
+[data-bs-theme="dark"] .text-bg-danger {
+  background-color: var(--tl-danger) !important;
+}
+
+[data-bs-theme="dark"] .btn-warning {
+  --bs-btn-color: #1f2226; --bs-btn-bg: var(--tl-warning); --bs-btn-border-color: var(--tl-warning);
+  --bs-btn-hover-color: #1f2226; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-warning) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-warning) 85%, #fff);
+  --bs-btn-active-color: #1f2226; --bs-btn-active-bg: color-mix(in srgb, var(--tl-warning) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-warning) 75%, #fff);
+  --bs-btn-disabled-color: #1f2226; --bs-btn-disabled-bg: var(--tl-warning); --bs-btn-disabled-border-color: var(--tl-warning);
+}
+[data-bs-theme="dark"] .btn-outline-warning {
+  --bs-btn-color: color-mix(in srgb, var(--tl-warning) 60%, #fff); --bs-btn-border-color: var(--tl-warning);
+  --bs-btn-hover-color: #1f2226; --bs-btn-hover-bg: var(--tl-warning); --bs-btn-hover-border-color: var(--tl-warning);
+  --bs-btn-active-color: #1f2226; --bs-btn-active-bg: color-mix(in srgb, var(--tl-warning) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-warning) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-warning) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-warning);
+}
+[data-bs-theme="dark"] .bg-warning,
+[data-bs-theme="dark"] .text-bg-warning {
+  background-color: var(--tl-warning) !important;
+}
+
+[data-bs-theme="dark"] .btn-info {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-info); --bs-btn-border-color: var(--tl-info);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-info) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-info) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-info) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-info) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-info); --bs-btn-disabled-border-color: var(--tl-info);
+}
+[data-bs-theme="dark"] .btn-outline-info {
+  --bs-btn-color: color-mix(in srgb, var(--tl-info) 60%, #fff); --bs-btn-border-color: var(--tl-info);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-info); --bs-btn-hover-border-color: var(--tl-info);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-info) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-info) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-info) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-info);
+}
+[data-bs-theme="dark"] .bg-info,
+[data-bs-theme="dark"] .text-bg-info {
+  background-color: var(--tl-info) !important;
+}
+
+/* The other components that hard-code Bootstrap's blue rather than read a variable */
+[data-bs-theme="dark"] .form-check-input:checked {
+  background-color: var(--tl-primary);
+  border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .nav-pills { --bs-nav-pills-link-active-bg: var(--tl-primary); }
+[data-bs-theme="dark"] .dropdown-menu { --bs-dropdown-link-active-bg: var(--tl-primary); }
+[data-bs-theme="dark"] .pagination {
+  --bs-pagination-active-bg: var(--tl-primary);
+  --bs-pagination-active-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .list-group {
+  --bs-list-group-active-bg: var(--tl-primary);
+  --bs-list-group-active-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .progress,
+[data-bs-theme="dark"] .progress-stacked { --bs-progress-bar-bg: var(--tl-primary); }
+
+/* ── MapLibre ──────────────────────────────────────────────────────────────
+   Same as Leaflet above: the popups and controls, not the tiles. The control
+   icons are dark SVG backgrounds, so they are inverted like the pictograms. */
+[data-bs-theme="dark"] .maplibregl-popup-content,
+[data-bs-theme="dark"] .maplibregl-ctrl-group,
+[data-bs-theme="dark"] .maplibregl-ctrl-attrib {
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-ctrl-group button + button {
+  border-top-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon,
+[data-bs-theme="dark"] .maplibregl-ctrl-attrib-button {
+  filter: invert(1) brightness(0.85);
+}
+[data-bs-theme="dark"] .maplibregl-ctrl-attrib a {
+  color: var(--bs-link-color);
+}
+
+/* Names in the leaderboards, friends and trips lists are .link-dark: Bootstrap's
+   near-black in both themes, so on a dark page they are the emphasis colour instead. */
+[data-bs-theme="dark"] .link-dark,
+[data-bs-theme="dark"] .link-dark:hover,
+[data-bs-theme="dark"] .link-dark:focus {
+  color: rgba(var(--bs-emphasis-color-rgb), var(--bs-link-opacity, 1)) !important;
+  text-decoration-color: rgba(var(--bs-emphasis-color-rgb), var(--bs-link-underline-opacity, 1)) !important;
+}
