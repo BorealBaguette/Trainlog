@@ -2292,7 +2292,7 @@ html, body {
    picked). */
 .track-chip-half {
     font-size: .68em; font-weight: 700; vertical-align: .5em; line-height: 0; margin-left: 1px;
-    color: #6b7a90; letter-spacing: .02em;
+    color: light-dark(#6b7a90, var(--bs-body-color)); letter-spacing: .02em;
 }
 .track-chip.active .track-chip-half { color: inherit; }
 

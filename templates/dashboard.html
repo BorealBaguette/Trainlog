@@ -4,10 +4,10 @@
 
 <style>
   :root {
-    --primary-color: #2563eb;
-    --success-color: #059669;
-    --info-color: #0891b2;
-    --warning-color: #d97706;
+    --primary-color: light-dark(#2563eb, #83a1e2);
+    --success-color: light-dark(#059669, #7de8c7);
+    --info-color: light-dark(#0891b2, #7ed3e7);
+    --warning-color: light-dark(#d97706, #e9b67c);
     --background-light: light-dark(#f8fafc, var(--bs-tertiary-bg));
     --border-color: light-dark(#e2e8f0, var(--bs-border-color));
     --text-muted: light-dark(#64748b, var(--bs-secondary-color));
@@ -24,6 +24,7 @@
   /* ── Hero bar ── */
   .hero-bar {
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 60%, #3b82f6 100%);
+    background: linear-gradient(135deg, light-dark(#1e40af, #22304d) 0%, light-dark(#2563eb, #293d63) 60%, light-dark(#3b82f6, #304876) 100%);
     border-radius: 16px;
     padding: 1.75rem 2rem;
     color: white;
@@ -230,7 +231,7 @@
     height: 30px;
     border-radius: 50%;
     background: light-dark(white, var(--bs-body-bg));
-    color: #065f46;
+    color: light-dark(#065f46, #80e5c9);
     font-size: 0.8rem;
     display: flex;
     align-items: center;
@@ -246,7 +247,7 @@
     height: 13px;
     border-radius: 50%;
     background: #fbbf24;
-    color: #064e3b;
+    color: light-dark(#064e3b, #81e4ca);
     font-size: 0.4rem;
     display: flex;
     align-items: center;
@@ -304,7 +305,7 @@
     height: 16px;
     border-radius: 50%;
     background: light-dark(white, var(--bs-body-bg));
-    color: #065f46;
+    color: light-dark(#065f46, #80e5c9);
     font-size: 0.5rem;
     display: flex;
     align-items: center;
@@ -381,7 +382,7 @@
   .trip-route {
     font-weight: 500;
     font-size: 0.9rem;
-    color: #1f2937;
+    color: light-dark(#1f2937, var(--bs-emphasis-color));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -472,8 +473,8 @@
     .mode-table .mode-unit-trips { display: none; }
     .mode-table .mode-name { white-space: normal; }
   }
-  .change-up   { color: #059669; font-size: 0.75rem; margin-left: 0.3rem; }
-  .change-down { color: #dc2626; font-size: 0.75rem; margin-left: 0.3rem; }
+  .change-up   { color: light-dark(#059669, #7de8c7); font-size: 0.75rem; margin-left: 0.3rem; }
+  .change-down { color: light-dark(#dc2626, #dc8989); font-size: 0.75rem; margin-left: 0.3rem; }
 
   /* ── Year big numbers ── */
   .year-grid {
@@ -575,7 +576,7 @@
     color: var(--primary-color);
     line-height: 1;
   }
-  .rank-number.top3 { color: #d97706; }
+  .rank-number.top3 { color: light-dark(#d97706, #e9b67c); }
   .rank-context { font-size: 0.85rem; color: var(--text-muted); }
   .rank-bar-track {
     background: light-dark(#f1f5f9, var(--bs-tertiary-bg));
@@ -682,16 +683,16 @@
   }
   .completion-table tbody tr { border: none; transition: all 0.15s ease; }
   .completion-table tbody tr:not(:last-child) { border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color)); }
-  .completion-table tbody tr:hover > * { --bs-table-bg-state: #f8fafc; }
+  .completion-table tbody tr:hover > * { --bs-table-bg-state: light-dark(#f8fafc, var(--bs-tertiary-bg)); }
   .completion-table td { padding: 1rem 1.25rem; border: none; vertical-align: middle; }
-  .country-flag-name { font-weight: 500; color: #1f2937; font-size: 0.95rem; }
+  .country-flag-name { font-weight: 500; color: light-dark(#1f2937, var(--bs-emphasis-color)); font-size: 0.95rem; }
   .progress-container { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
   .progress-bar-container { flex: 1; background-color: light-dark(#f1f5f9, var(--bs-tertiary-bg)); border-radius: 8px; overflow: hidden; height: 18px; }
   .progress-bar-fill { height: 100%; border-radius: 8px; transition: width 0.3s ease; }
   .progress-bar-country { background: linear-gradient(90deg, var(--success-color) 0%, #10b981 100%); }
   .progress-bar-region  { background: linear-gradient(90deg, var(--info-color) 0%, #06b6d4 100%); height: 14px; }
   .progress-text { font-weight: 600; color: light-dark(#374151, var(--bs-emphasis-color)); font-size: 0.85rem; min-width: 40px; text-align: right; }
-  .region-row > * { --bs-table-bg: #fafbfc; }
+  .region-row > * { --bs-table-bg: light-dark(#fafbfc, var(--bs-tertiary-bg)); }
   .region-row td { padding: 0.75rem 1.25rem 0.75rem 3rem; }
   .region-flag-name { color: var(--text-muted); font-size: 0.85rem; }
   .region-progress-container { background-color: light-dark(#e5e7eb, var(--bs-secondary-bg)); height: 14px; }
@@ -705,13 +706,13 @@
     border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color));
   }
   .news-item:last-child { border-bottom: none; }
-  .news-title { font-weight: 500; font-size: 0.9rem; color: #1f2937; margin-bottom: 0.2rem; }
+  .news-title { font-weight: 500; font-size: 0.9rem; color: light-dark(#1f2937, var(--bs-emphasis-color)); margin-bottom: 0.2rem; }
   .news-preview { font-size: 0.82rem; color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
   .news-preview p { margin: 0; }
   .news-date { font-size: 0.75rem; color: light-dark(#9ca3af, var(--bs-secondary-color)); margin-top: 0.2rem; }
 
   /* ── Skeleton loader ── */
-  .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
+  .skeleton { background: linear-gradient(90deg, light-dark(#f0f0f0, var(--bs-tertiary-bg)) 25%, light-dark(#e0e0e0, var(--bs-secondary-bg)) 50%, light-dark(#f0f0f0, var(--bs-tertiary-bg)) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
   @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .skeleton-line { height: 14px; margin-bottom: 8px; }
   .skeleton-line.short { width: 60%; }
@@ -1485,10 +1486,10 @@ fetch(`/u/${username}/dashboard_trips`)
         const ongoing = startMs != null && endMs != null && startMs <= now && now <= endMs;
         let badge;
         if (ongoing) {
-          badge = `<span class="countdown-badge" style="background:light-dark(#ecfdf5, rgba(55, 234, 150, 0.16));color:#059669;">`
+          badge = `<span class="countdown-badge" style="background:light-dark(#ecfdf5, rgba(55, 234, 150, 0.16));color:light-dark(#059669, #7de8c7);">`
                 + `<span class="live-dot" style="width:6px;height:6px;margin-right:0.25rem;"></span>{{ onTrip }}</span>`;
         } else if (isToday(ref)) {
-          badge = `<span class="countdown-badge" style="background:light-dark(#f0fdf4, rgba(55, 228, 108, 0.16));color:#059669;">{{ today }}</span>`;
+          badge = `<span class="countdown-badge" style="background:light-dark(#f0fdf4, rgba(55, 228, 108, 0.16));color:light-dark(#059669, #7de8c7);">{{ today }}</span>`;
         } else {
           badge = `<div class="trip-date">${fmtDate(t.start)}</div>`;
         }
@@ -1639,7 +1640,7 @@ function renderHighlights(d, scope) {
   const countries = scope === "alltime" ? d.top_countries_alltime : d.top_countries_ytd;
   const rows = [];
   const opVal = op => op.logo
-    ? `<img src="/static/${esc(op.logo)}" style="height:1.4rem;max-width:5rem;object-fit:contain;vertical-align:middle;" title="${esc(op.name)}" onerror="this.replaceWith(document.createTextNode(this.title))">`
+    ? `<img src="/static/${esc(op.logo)}" class="tl-logo" style="height:1.4rem;max-width:5rem;object-fit:contain;vertical-align:middle;" title="${esc(op.name)}" onerror="this.replaceWith(document.createTextNode(this.title))">`
     : esc(op.name);
   const subRow = (label, value, sub) =>
     `<div class="stat-row" style="padding-left:1.1rem;">
@@ -1965,6 +1966,10 @@ function usernameColor(name) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   const hue = Math.abs(hash) % 360;
+  // Dark theme: the same hue as a deep fill under light text, not a pastel patch
+  if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
+    return { bg: `hsl(${hue},35%,26%)`, color: `hsl(${hue},70%,82%)` };
+  }
   return { bg: `hsl(${hue},70%,90%)`, color: `hsl(${hue},55%,32%)` };
 }
 
