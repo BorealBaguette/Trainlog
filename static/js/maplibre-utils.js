@@ -880,9 +880,6 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
     const { onLayerClick = null } = options;
     const time = ['get', 'time'];
     const isAir = ['==', ['get', 'type'], 'air'];
-    const typeColor = ['match', ['get', 'type']];
-    transportTypes.forEach(type => typeColor.push(type.id, type.color));
-    typeColor.push('#888888');
 
     if (!map.getSource(sourceId)) {
         map.addSource(sourceId, {
@@ -907,11 +904,7 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
             id: `${sourceId}-line`,
             clickable: true,
             paint: {
-                'line-color': ['case',
-                    ['==', time, 'current'], '#ff0000',
-                    ['==', time, 'future'], '#ffffff',
-                    typeColor
-                ],
+                'line-color': tripLineColor(transportTypes),
                 'line-width': ['case', ['==', time, 'current'], 4, isAir, 1, 3],
                 'line-opacity': ['case',
                     ['==', time, 'current'],
@@ -945,6 +938,22 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
             map.on('mouseleave', layer.id, () => { map.getCanvas().style.cursor = ''; });
         }
     });
+}
+
+// Line colour of the slice layers: by transport type, or by year when given a
+// { year: colour } map. Current and future trips keep their own colours.
+function tripLineColor(transportTypes, yearColors = null) {
+    const pairs = yearColors
+        ? Object.entries(yearColors).flat()
+        : transportTypes.flatMap(type => [type.id, type.color]);
+    const color = pairs.length
+        ? ['match', ['get', yearColors ? 'year' : 'type'], ...pairs, '#888888']
+        : '#888888';
+    return ['case',
+        ['==', ['get', 'time'], 'current'], '#ff0000',
+        ['==', ['get', 'time'], 'future'], '#ffffff',
+        color
+    ];
 }
 
 // Update layer visibility based on filters
@@ -1450,6 +1459,7 @@ window.MapLibreUtils = {
     tripToFeature,
     buildTripLayers,
     addTripSliceLayers,
+    tripLineColor,
     updateLayerVisibility,
     fitBoundsToVisibleFeatures,
     modifyVectorStyle

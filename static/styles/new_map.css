@@ -638,3 +638,20 @@
 .mapUser {
     height: calc(100% - 58px);
 }
+.year-ramp {
+    display: flex;
+    height: 10px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.year-ramp > div {
+    flex: 1;
+}
+
+.year-ramp-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin: 4px 0 8px;
+}

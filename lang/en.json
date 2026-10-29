@@ -138,6 +138,8 @@
     "hu": "🇭🇺 Hungarian",
     "cs": "🇨🇿 Czech",
     "year": "Year",
+    "mapColorBy": "Colour by",
+    "mapColorByType": "Transport type",
     "month": "Month",
     "exit": "Exit",
     "km": "Kilometers",
