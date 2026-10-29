@@ -762,17 +762,20 @@ function gaugeGlyph(mm) {
 // picker takes and gives its values comma-separated, stays open while they are ticked,
 // and its '' item (none) clears them.
 function buildRouterPickerHtml(icon, label, items, value, onPick, multi) {
+  // A string among the items heads the group of those after it
+  var choices = items.filter(function (i) { return typeof i !== 'string'; });
   var picked = multi ? (value ? value.split(',') : []) : [value];
-  if (!multi && !items.some(function (i) { return i[0] === value; })) picked = [items[0][0]];
+  if (!multi && !choices.some(function (i) { return i[0] === value; })) picked = [choices[0][0]];
   var isOn = function (i) { return multi && i[0] === '' ? picked.length === 0 : picked.includes(i[0]); };
   var options = items.map(function (i) {
+    if (typeof i === 'string') return `<div class="router-picker-group" role="presentation">${i}</div>`;
     var on = isOn(i);
     return `<button type="button" role="option" class="router-picker-opt${on ? ' active' : ''}" aria-selected="${on}"
               data-value="${i[0]}" data-short="${i[4] || i[1]}" onclick="pickRouterOption(this)">
               <span class="router-picker-glyph">${i[2]}</span><span class="router-picker-name">${i[1]}</span>
               <span class="router-picker-side">${i[3]}</span><i class="fa-solid fa-check router-picker-check"></i></button>`;
   }).join('');
-  var current = items.filter(isOn);
+  var current = choices.filter(isOn);
   return `
     <div class="router-picker" data-on-pick="${onPick}"${multi ? ' data-multi="1"' : ''}>
       <button type="button" class="router-row router-picker-toggle" aria-expanded="false" onclick="toggleRouterPicker(this)">
@@ -798,7 +801,7 @@ function toggleRouterPicker(toggle, open) {
   list.hidden = !open;
   toggle.classList.toggle('open', open);
   toggle.setAttribute('aria-expanded', String(open));
-  if (open) (list.querySelector('.active') || list.firstElementChild).focus();
+  if (open) (list.querySelector('.active') || list.querySelector('.router-picker-opt')).focus();
 }
 
 function pickRouterOption(opt) {
@@ -830,7 +833,7 @@ function pickRouterOption(opt) {
 }
 
 function routerPickerKey(e, list) {
-  var opts = Array.prototype.slice.call(list.children), i = opts.indexOf(document.activeElement);
+  var opts = Array.prototype.slice.call(list.querySelectorAll('.router-picker-opt')), i = opts.indexOf(document.activeElement);
   if (e.key === 'Escape') {
     e.preventDefault();
     toggleRouterPicker(list.previousElementSibling, false);
@@ -841,26 +844,37 @@ function routerPickerKey(e, list) {
   }
 }
 
-// OpenRailwayMap over the routing map, to see which lines a filter keeps.
-// openrailwaymap.org's raster tiles: ours are vector ones, which Leaflet can't draw. The choice is remembered on this browser only.
+// OpenRailwayMap over the routing map, to see which lines a filter keeps: our vector tiles, drawn
+// by a MapLibre layer inside Leaflet and loaded only once picked, or openrailwaymap.org's raster
+// ones, which may block us again. The choice is remembered on this browser only.
+// [our preset, openrailwaymap.org's name, text, icon]
 var ORM_OVERLAYS = [
-  ['standard', 'ormLayerStandard', 'fa-train'], ['maxspeed', 'ormLayerMaxspeed', 'fa-gauge-high'],
-  ['electrification', 'ormLayerElectrified', 'fa-bolt'], ['gauge', 'ormLayerGauge', 'fa-ruler-horizontal'],
-  ['signals', 'ormLayerSignals', 'fa-traffic-light']
+  ['standard', 'standard', 'ormLayerStandard', 'fa-train'], ['speed', 'maxspeed', 'ormLayerMaxspeed', 'fa-gauge-high'],
+  ['electrification', 'electrification', 'ormLayerElectrified', 'fa-bolt'],
+  ['track', 'gauge', 'ormLayerGauge', 'fa-ruler-horizontal'], ['signals', 'signals', 'ormLayerSignals', 'fa-traffic-light']
 ];
+var ORM_ATTRIBUTION = '&copy; <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>';
 var ormOverlayLayer = null;
 var ormOverlayType = '';
 try { ormOverlayType = localStorage.getItem('routeOrmOverlay') || ''; } catch (e) {}
+// Values from before our own tiles ('maxspeed', 'gauge') now name nothing
+if (!ORM_OVERLAYS.some(function (o) { return [o[0], 'org-' + o[1]].includes(ormOverlayType); })) ormOverlayType = '';
+
+function ormOverlayItems() {
+  var icon = function (o) { return `<i class="fa-solid ${o[3]}"></i>`; };
+  return [['', texts.routeOverlayNone, '<i class="fa-solid fa-ban"></i>', ''], 'Trainlog']
+    .concat(ORM_OVERLAYS.map(function (o) { return [o[0], texts[o[2]], icon(o), '']; }))
+    .concat(['openrailwaymap.org'], ORM_OVERLAYS.map(function (o) {
+      return ['org-' + o[1], texts[o[2]], icon(o), '', texts[o[2]] + ' (.org)'];
+    }));
+}
 
 function buildOrmOverlayHtml() {
-  return buildRouterPickerHtml('fa-layer-group', 'OpenRailwayMap',
-    [['', texts.routeOverlayNone, '<i class="fa-solid fa-ban"></i>', '']].concat(ORM_OVERLAYS.map(function (o) {
-      return [o[0], texts[o[1]], `<i class="fa-solid ${o[2]}"></i>`, ''];
-    })), ormOverlayType, 'setOrmOverlay');
+  return buildRouterPickerHtml('fa-layer-group', 'OpenRailwayMap', ormOverlayItems(), ormOverlayType, 'setOrmOverlay');
 }
 
 function setOrmOverlay(type) {
-  ormOverlayType = ORM_OVERLAYS.some(function (o) { return o[0] === type; }) ? type : '';
+  ormOverlayType = ormOverlayItems().some(function (i) { return i[0] === type; }) ? type : '';
   try {
     if (ormOverlayType) localStorage.setItem('routeOrmOverlay', ormOverlayType);
     else localStorage.removeItem('routeOrmOverlay');
@@ -868,15 +882,55 @@ function setOrmOverlay(type) {
   applyOrmOverlay();
 }
 
+function loadScript(src) {
+  return new Promise(function (resolve, reject) {
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+var maplibreLoading = null;
+function loadMaplibre() {
+  if (!maplibreLoading) {
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css';
+    document.head.appendChild(css);
+    maplibreLoading = loadScript('https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js').then(function () {
+      return loadScript('https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js');
+    });
+  }
+  return maplibreLoading;
+}
+
 function applyOrmOverlay() {
   if (typeof map === 'undefined' || !map) return;
   if (ormOverlayLayer) map.removeLayer(ormOverlayLayer);
   ormOverlayLayer = null;
-  if (!ormOverlayType) return;
-  ormOverlayLayer = L.tileLayer(`https://tiles.openrailwaymap.org/${ormOverlayType}/{z}/{x}/{y}.png`, {
-    maxZoom: 19, zIndex: 5,
-    attribution: '&copy; <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>'
-  }).addTo(map);
+  var type = ormOverlayType;
+  if (!type) return;
+  if (type.startsWith('org-')) {
+    ormOverlayLayer = L.tileLayer(`https://tiles.openrailwaymap.org/${type.slice(4)}/{z}/{x}/{y}.png`, {
+      maxZoom: 19, zIndex: 5, attribution: ORM_ATTRIBUTION
+    }).addTo(map);
+    return;
+  }
+  loadMaplibre().then(function () {
+    // Picked something else while loading
+    if (ormOverlayType !== type || ormOverlayLayer) return;
+    // Its own pane: in the tile pane its canvas, having no z-index, went under the base tiles
+    if (!map.getPane('ormOverlay')) {
+      var pane = map.createPane('ormOverlay');
+      pane.style.zIndex = 250;
+      pane.style.pointerEvents = 'none';
+    }
+    ormOverlayLayer = L.maplibreGL({
+      style: `/getORMStyle/${type}.json?render`, interactive: false, pane: 'ormOverlay', attribution: ORM_ATTRIBUTION
+    }).addTo(map);
+  });
 }
 
 // The tray's header, with the count of filters still applied while it is closed, and

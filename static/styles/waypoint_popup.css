@@ -348,6 +348,15 @@
   background: #e7eaee;
 }
 .router-picker-list[hidden] { display: none; }
+.router-picker-group {
+  margin: 6px 8px 2px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.router-picker-group:not(:first-child) { padding-top: 6px; border-top: 1px solid #d3d8de; }
 #sidebar .router-box button.router-picker-opt, .router-picker-opt {
   display: flex;
   align-items: center;
