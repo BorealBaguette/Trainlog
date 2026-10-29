@@ -44,7 +44,7 @@ $.get('{{url_for("getLeaderboardUsers", type="country_count")}}', function(count
         } else if (highlighted) {
             return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         } else {
-            return `<a class="leaderboardLink link-body-emphasis" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
+            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         }
     }
 

@@ -7,7 +7,7 @@
    accent colour only on hover or once open, where it means "active". */
 .publicTsToggle {
   cursor: pointer;
-  color: #a8adb3;
+  color: light-dark(#a8adb3, var(--bs-secondary-color));
   margin-left: 7px;
   text-decoration: none;
   vertical-align: baseline;
@@ -25,7 +25,7 @@
   left: calc(100% + 6px);
   min-width: 170px;
   padding: 4px;
-  background: #fff;
+  background: light-dark(#fff, var(--bs-body-bg));
   border-radius: 4px;
   box-shadow: 0 1px 6px rgba(0,0,0,.35);
 }
@@ -44,12 +44,12 @@
   cursor: pointer;
   font-size: 14px;
   text-align: left;
-  color: #222;
+  color: light-dark(#222, var(--bs-emphasis-color));
   text-decoration: none;
   white-space: nowrap;
 }
-.tripActionBtn:hover { background: #f2f4f7; color: #222; }
-.tripActionBtn i { width: 14px; text-align: center; color: #8a8a8a; }
+.tripActionBtn:hover { background: light-dark(#f2f4f7, var(--bs-tertiary-bg)); color: light-dark(#222, var(--bs-emphasis-color)); }
+.tripActionBtn i { width: 14px; text-align: center; color: light-dark(#8a8a8a, var(--bs-secondary-color)); }
 /* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
    each source's px-per-metre cancels out and relative proportions are gently preserved;
    the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
@@ -70,7 +70,7 @@
 /* The vehicle/trainset panel is its own group — set it slightly further apart. */
 .events .publicVehicle,
 .events .publicTrainset { margin-top: 9px; }
-.events .duration { color: #8a8a8a; }
+.events .duration { color: light-dark(#8a8a8a, var(--bs-secondary-color)); }
 
 /* ── Leg facts: operators + line, then a meta line of icon/value pairs ───────
    Every one of these rows is built from spans, which the blanket `.events span`
@@ -88,17 +88,17 @@
 .events .legOperators > * { margin-left: 0; }
 
 .events .legMetaItem { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
-.legMetaIcon { color: #b6b6b6; font-size: 0.9em; }
-.legMetaSep { color: #d5d5d5; }
+.legMetaIcon { color: light-dark(#b6b6b6, var(--bs-tertiary-color)); font-size: 0.9em; }
+.legMetaSep { color: light-dark(#d5d5d5, var(--bs-tertiary-color)); }
 /* The icons keep their identity colours, desaturated so they read as a family and
    sit below the station names in the hierarchy rather than above them. */
-.legIconLine   { color: #8c9bb0; }
-.legIconTicket { color: #6f9e6f; }
+.legIconLine   { color: light-dark(#8c9bb0, var(--bs-secondary-color)); }
+.legIconTicket { color: light-dark(#6f9e6f, var(--bs-secondary-color)); }
 .legIconPrice  { color: #bfa055; }
 /* Line name: same icon+value shape as the measurements, but a shade darker and a
    touch heavier — it names the service rather than measuring it. */
 .events .legLine {
-  color: #5f5f5f;
+  color: light-dark(#5f5f5f, var(--bs-body-color));
   font-weight: 500;
   white-space: normal;
   max-width: 100%;
@@ -117,12 +117,12 @@
 .events .legMeta .carbon-icon { font-size: 1em; filter: saturate(0.7); }
 .legValue { display: none; }
 .events .itinerary-trip.active .legValue { display: inline; }
-.events .itinerary-trip.active .legMeta { color: #7a7a7a; }
+.events .itinerary-trip.active .legMeta { color: light-dark(#7a7a7a, var(--bs-body-color)); }
 
 .publicVehicle {
   font-size: 0.82em;
   line-height: 1.3;
-  color: #666;
+  color: light-dark(#666, var(--bs-body-color));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -139,13 +139,13 @@
 /* Re-assert the separator AFTER the blanket ::before reset above, which would
    otherwise blank it out too (it is a span inside .publicVehicle). */
 .events .publicVehicle .publicVehicleType + .publicVehicleReg::before {
-  content: "·"; color: #bbb; margin-right: 3px;
+  content: "·"; color: light-dark(#bbb, var(--bs-tertiary-color)); margin-right: 3px;
 }
 .publicVehicleReg { display: inline-flex; align-items: baseline; gap: 4px; }
 .publicVehicleRegText {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.02em;
-  color: #555;
+  color: light-dark(#555, var(--bs-body-color));
 }
 /* The global .flag rule jumps to 26px above 1500px — sized for table rows, far too
    big for this panel. Pin it to the panel's own text size. */
@@ -165,7 +165,7 @@
 .publicVehicleMedia.is-clickable { cursor: pointer; }
 .publicVehicleMedia.is-clickable:hover { opacity: 0.85; }
 .publicVehicleMedia.is-loading { opacity: 0.5; }
-.publicVehiclePhotoBtn { color: #a8adb3; text-decoration: none; font-size: 0.95em; }
+.publicVehiclePhotoBtn { color: light-dark(#a8adb3, var(--bs-secondary-color)); text-decoration: none; font-size: 0.95em; }
 .publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: #0d6efd; }
 /* Third-party thumbnails vary wildly in size — cap and frame them so every leg
    looks the same regardless of what comes back. */
@@ -203,7 +203,7 @@
     right: -400px;
     width: 400px;
     height: 100%;
-    background: white;
+    background: light-dark(white, var(--bs-body-bg));
     box-shadow: -2px 0 5px rgba(0,0,0,0.1);
     transition: right 0.3s ease;
     z-index: 1000;
@@ -229,8 +229,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: white;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    background: light-dark(white, var(--bs-body-bg));
+    border: 1px solid light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.2));
     border-right: none;
     border-radius: 8px 0 0 8px;
     z-index: 1001;
@@ -250,7 +250,7 @@
 }
 
 .sidebar-tab i:hover {
-    background-color: #f0f0f0;
+    background-color: light-dark(#f0f0f0, var(--bs-tertiary-bg));
 }
 
 /* Map utility buttons: back + copy, top-left of map */
@@ -292,8 +292,8 @@
         right: 0;
         width: 44px;
         height: 44px;
-        background: white;
-        border: 1px solid rgba(0, 0, 0, 0.2);
+        background: light-dark(white, var(--bs-body-bg));
+        border: 1px solid light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.2));
         border-right: none;
         border-radius: 8px 0 0 8px;
         z-index: 999;
@@ -319,8 +319,8 @@
 
 
 .control-button {
-    background: white;
-    border: 2px solid rgba(0,0,0,0.1);
+    background: light-dark(white, var(--bs-body-bg));
+    border: 2px solid light-dark(rgba(0,0,0,0.1), rgba(255, 255, 255, 0.1));
     border-radius: 4px;
     padding: 8px;
     cursor: pointer;
@@ -335,13 +335,13 @@
 }
 
 .control-button:hover {
-    background-color: #f0f0f0;
+    background-color: light-dark(#f0f0f0, var(--bs-tertiary-bg));
 }
 
 /* Toggled-off state of a control button (markers hidden) */
 .control-button.off {
-    color: #9a9a9a;
-    background-color: #ececec;
+    color: light-dark(#9a9a9a, var(--bs-secondary-color));
+    background-color: light-dark(#ececec, var(--bs-secondary-bg));
 }
 
 /* The pins are DOM markers, so they hide with CSS rather than a layer */
@@ -433,8 +433,8 @@ body.markers-hidden .marker-numbered {
     padding: 12px 16px;
     font-size: 28px;
     font-weight: bold;
-    color: #666;
-    background: white;
+    color: light-dark(#666, var(--bs-body-color));
+    background: light-dark(white, var(--bs-body-bg));
     z-index: 10;
     cursor: pointer;
     text-align: right;
@@ -514,7 +514,7 @@ body.markers-hidden .marker-numbered {
   margin: 0;
   background: #3887be;
   color: #fff;
-  border: 1.5px solid #fff;
+  border: 1.5px solid light-dark(#fff, var(--bs-body-bg));
   border-radius: 50%;
   font-size: 9px;
   font-weight: bold;
@@ -585,7 +585,7 @@ body.markers-hidden .marker-numbered {
 #itinerary { position: relative; }
 #trip-card {
   position: absolute;
-  background: #fff;
+  background: light-dark(#fff, var(--bs-body-bg));
   border-radius: 12px;
   box-shadow: 0 9px 24px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(0, 0, 0, 0.06);
   z-index: 0;
@@ -654,10 +654,10 @@ body.markers-hidden .marker-numbered {
   </div>
 </div>
 <div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+  <div style="background:light-dark(#fff, var(--bs-body-bg));border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
     <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
+      <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid light-dark(#ccc, var(--bs-border-color));border-radius:4px;background:light-dark(#fff, var(--bs-body-bg));cursor:pointer;">{{ cancel }}</button>
       <button id="rideAlongConfirmBtn" onclick="bulkCopyTrips()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
     </div>
   </div>
@@ -722,19 +722,19 @@ body.markers-hidden .marker-numbered {
   #plan-controls {
     position: fixed; top: 10px; left: 60px; z-index: 1001;
     display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
-    background: #fff; padding: 6px 10px; border-radius: 10px;
+    background: light-dark(#fff, var(--bs-body-bg)); padding: 6px 10px; border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-size: 14px;
   }
   #plan-controls .plan-title { font-weight: 700; margin-right: 4px; }
   #plan-controls form { margin: 0; display: inline; }
   #plan-controls select,
   #plan-controls .plan-btn {
-    font: inherit; padding: 5px 10px; border: 1px solid #d0d0d0;
-    border-radius: 7px; background: #f6f6f6; cursor: pointer;
-    color: #222; text-decoration: none; line-height: 1.25; box-sizing: border-box;
+    font: inherit; padding: 5px 10px; border: 1px solid light-dark(#d0d0d0, var(--bs-border-color));
+    border-radius: 7px; background: light-dark(#f6f6f6, var(--bs-tertiary-bg)); cursor: pointer;
+    color: light-dark(#222, var(--bs-emphasis-color)); text-decoration: none; line-height: 1.25; box-sizing: border-box;
   }
   #plan-controls .plan-btn:hover,
-  #plan-controls select:hover { background: #ececec; }
+  #plan-controls select:hover { background: light-dark(#ececec, var(--bs-secondary-bg)); }
   #plan-controls .plan-btn--primary { background: #3887be; border-color: #3887be; color: #fff; }
   #plan-controls .plan-btn--primary:hover { background: #2f76a6; }
   @media (max-width: 600px) { #plan-controls { left: 10px; right: 10px; top: 56px; } }

@@ -325,13 +325,13 @@
 }
 .ui-menu .ui-menu-item .tag-create-option {
   background-color: rgba(13, 110, 253, 0.04);
-  color: var(--bs-secondary-color);
-  border-top: 1px solid var(--bs-border-color);
+  color: light-dark(#6c757d, var(--bs-secondary-color));
+  border-top: 1px solid light-dark(#e9ecef, var(--bs-border-color));
 }
 .ui-menu .ui-menu-item .tag-create-option.ui-state-active {
   background-color: rgba(13, 110, 253, 0.1);
-  color: var(--bs-body-color);
-  border-color: var(--bs-border-color);
+  color: light-dark(#495057, var(--bs-body-color));
+  border-color: light-dark(#e9ecef, var(--bs-border-color));
 }
 
 .airframe{
@@ -351,7 +351,7 @@
   right: 0;
   padding: .25em;
   color: white;
-  background-color: rgba(0,0,0,.2);
+  background-color: light-dark(rgba(0,0,0,.2), rgba(255, 255, 255, 0.2));
   font-size: 0.9em;
 }
 
@@ -363,7 +363,7 @@
 }
 
 .vehiclePhotoAttr:hover {
-  color:#c9c5c5
+  color:light-dark(#c9c5c5, var(--bs-tertiary-color))
 }
 
 /* Hidden, not removed: `display:none` would drop the arrow's box and its
@@ -388,7 +388,7 @@ td.noHidden{
 }
 
 .trips select {
-  color: black;
+  color: light-dark(black, var(--bs-emphasis-color));
 }
 
 th {
@@ -397,7 +397,7 @@ th {
 }
 
 tr.selected td img{
-  background-color: #ffffff;
+  background-color: light-dark(#ffffff, var(--bs-body-bg));
   padding: 5px;
   border-radius: 6px;
 }
@@ -468,7 +468,7 @@ td .operatorList .operatorListItem{
 }
 
 td .operatorList .operatorListItem + .operatorListItem{
-  border-top: 1px solid var(--bs-border-color);
+  border-top: 1px solid light-dark(rgba(0, 0, 0, 0.07), var(--bs-border-color));
 }
 
 td .operatorList .operatorListLogo{
@@ -545,10 +545,10 @@ button.multiDropdown{
 }
 .delay-badge.delay-late  { color: #c0392b; }
 .delay-badge.delay-early { color: #27ae60; }
-.delay-badge.delay-ontime{ color: #7f8c8d; }
+.delay-badge.delay-ontime{ color: light-dark(#7f8c8d, var(--bs-secondary-color)); }
 .delay-late  { color: #c0392b; }
 .delay-early { color: #27ae60; }
-.planned-value { color: var(--bs-secondary-color); font-size: .9em; }
+.planned-value { color: light-dark(#999, var(--bs-secondary-color)); font-size: .9em; }
 
 #tripRows td div.duration.est:before{
   content:"\A";
@@ -668,7 +668,7 @@ td.child table tr td{
   vertical-align: baseline;
 }
 td.child table tr:not(:last-child) td{
-  border-bottom: 1px solid var(--bs-border-color);
+  border-bottom: 1px solid light-dark(rgba(0, 0, 0, 0.07), var(--bs-border-color));
 }
 
 @media screen and (max-width: 600px) {
@@ -685,7 +685,7 @@ td.child table tr:not(:last-child) td{
     left: 0;
     bottom: 0;
     width: 100%;
-    background-color: var(--bs-body-bg);
+    background-color: light-dark(rgb(255, 255, 255), var(--bs-body-bg));
     padding-bottom: 5px;
   }
 
@@ -710,7 +710,7 @@ td.child table tr:not(:last-child) td{
 /* Admin */
 
 #admin th{
-  color:#000;
+  color:light-dark(#000, var(--bs-emphasis-color));
 }
 
  /* Forms */
@@ -779,7 +779,7 @@ body::before {
   text-overflow: ellipsis;
   font-size: 75%;
   font-style: italic;
-  color: #888;
+  color: light-dark(#888, var(--bs-secondary-color));
 }
 /* On the highlighted row, the row's own colour (white on blue), faded. */
 .ui-autocomplete .ui-state-active .station-place{
@@ -858,7 +858,7 @@ body::before {
   width: 100%;
   min-height: 32px;
   padding: 3px 8px;
-  background-color: var(--bs-tertiary-bg);
+  background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
   cursor: text;
 }
 
@@ -868,7 +868,7 @@ body::before {
   gap: 4px;
   height: 26px;
   padding: 0 4px 0 6px;
-  background-color: var(--bs-body-bg);
+  background-color: light-dark(#fff, var(--bs-body-bg));
   border-radius: 4px;
   max-width: 100%;
 }
@@ -892,13 +892,13 @@ body::before {
   border: 0;
   background: none;
   padding: 0 2px;
-  color: var(--bs-secondary-color);
+  color: light-dark(#999, var(--bs-secondary-color));
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
 }
-.operatorPillsField .op-pill-x:hover{ color: var(--bs-emphasis-color); }
+.operatorPillsField .op-pill-x:hover{ color: light-dark(#333, var(--bs-emphasis-color)); }
 
 /* The text input shares the field with the pills, so it has no chrome of its own
    and takes only the space left on the current row. The #form variant outranks the
@@ -940,13 +940,13 @@ body::before {
   background: none;
   padding: 0 2px;
   margin-left: auto;
-  color: var(--bs-secondary-color);
+  color: light-dark(#999, var(--bs-secondary-color));
   font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
 }
-.operatorPillsField .op-mode-toggle:hover{ color: var(--bs-emphasis-color); }
+.operatorPillsField .op-mode-toggle:hover{ color: light-dark(#333, var(--bs-emphasis-color)); }
 
 /* Trip form only: the field sits beside the trip-type icon and carries the spacing
    below it. Both are inline-level boxes, and vertical-align:middle centres their
@@ -966,8 +966,8 @@ body::before {
 /* In a modal the neighbours are Bootstrap .form-control inputs, so match those
    instead of the trip form's flat grey. */
 .modal .operatorPillsField{
-  background-color: var(--bs-body-bg);
-  border: 1px solid var(--bs-border-color);
+  background-color: light-dark(#fff, var(--bs-body-bg));
+  border: 1px solid light-dark(#ced4da, var(--bs-border-color));
   border-radius: 0.375rem;
   min-height: 38px;
 }
@@ -982,12 +982,12 @@ body::before {
 
 /* The entry that widens the search to a second pool, and where that pool starts. */
 .ui-autocomplete .op-suggestion-more{
-  border-top: 1px solid #ddd;
+  border-top: 1px solid light-dark(#ddd, var(--bs-border-color));
   color: #0d6efd;
   font-size: 0.9em;
 }
 .ui-autocomplete .op-suggestion-first-more{
-  border-top: 1px solid #ddd;
+  border-top: 1px solid light-dark(#ddd, var(--bs-border-color));
 }
 
 .op-suggestion-logo{
@@ -1003,7 +1003,7 @@ body::before {
 .op-suggestion-hint{
   margin-left: auto;
   padding-left: 12px;
-  color: var(--bs-secondary-color);
+  color: light-dark(#888, var(--bs-secondary-color));
   font-size: 0.8em;
   white-space: nowrap;
   overflow: hidden;
@@ -1051,7 +1051,7 @@ body::before {
   width: calc(100% - 37px);
   margin-left: 5px;
   height: 32px;
-  border: 1px solid var(--bs-border-color);
+  border: 1px solid light-dark(#ccc, var(--bs-border-color));
 }
 
 .logo img{
@@ -1066,9 +1066,9 @@ body::before {
   margin: 0 auto;
   margin-top: 50px;
   margin-bottom: 50px;
-  background-color: var(--bs-body-bg);
+  background-color: light-dark(#fcfcfc, var(--bs-body-bg));
   padding: 20px 50px 40px;
-  box-shadow: 1px 4px 10px 1px var(--tl-shadow);
+  box-shadow: 1px 4px 10px 1px light-dark(#aaa, var(--tl-shadow));
   font-family: sans-serif;
 }
 
@@ -1094,14 +1094,14 @@ body::before {
   height: 32px;
   padding: 6px 16px;
   border: 0;
-  background-color: var(--bs-tertiary-bg);
+  background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
   margin: 0 0 1rem;
   display: grid;
   justify-content: start;
   align-items: center;
   text-align: left;
   line-height: 1;
-  color: var(--bs-body-color);
+  color: light-dark(black, var(--bs-body-color));
   -webkit-appearance: none;
   appearance: none;
 }
@@ -1110,9 +1110,9 @@ body::before {
   width: 100%;
   padding: 6px 16px;
   border: 0;
-  background-color: #f3f3f3;
+  background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
   margin: 0 0 1rem;
-  color: black;
+  color: light-dark(black, var(--bs-body-color));
   font: inherit;
   resize: vertical;
 }
@@ -1122,15 +1122,15 @@ body::before {
   height: 32px;
   padding: 6px 16px;
   border: 0;
-  background-color: var(--bs-body-bg);
-  border: 1px solid var(--bs-border-color);
+  background-color: light-dark(#FFF, var(--bs-body-bg));
+  border: 1px solid light-dark(#c5c5c5, var(--bs-border-color));
   margin: 0 0 1rem;
   display: grid;
   justify-content: start;
   align-items: center;
   text-align: left;
   line-height: 1;
-  color: var(--bs-body-color);
+  color: light-dark(black, var(--bs-body-color));
   -webkit-appearance: none;
   appearance: none;
 }
@@ -1140,14 +1140,14 @@ body::before {
   height: 32px;
   padding: 6px 16px;
   border: 0;
-  background-color: var(--bs-tertiary-bg);
+  background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
   margin: 0 0 1rem;
   display: grid;
   justify-content: start;
   align-items: center;
   text-align: left;
   line-height: 1;
-  color: var(--bs-body-color);
+  color: light-dark(black, var(--bs-body-color));
 }
 
 #form select#visibility:has(> option[value=""]:checked) {
@@ -1163,7 +1163,7 @@ body::before {
   min-width: 5em;
   height: 32px;
   border: none;
-  background-color: var(--bs-tertiary-bg);
+  background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
   -webkit-appearance: none; /* Removes default styling for select elements on WebKit browsers */
   -moz-appearance: none; /* Removes default styling for select elements on Firefox */
   appearance: none; /* Standard way to remove default arrow */
@@ -1173,7 +1173,7 @@ body::before {
   padding-right: 6px;
   text-align:left;
   line-height: 1;
-  color: var(--bs-body-color);
+  color: light-dark(black, var(--bs-body-color));
 }
 
 input[type=number] {
@@ -1206,23 +1206,23 @@ input[type=number] {
 }
 
 #form label:not(.btn) {
-  color: var(--bs-secondary-color);
+  color: light-dark(#777, var(--bs-secondary-color));
   font-size: 0.9em;
   display: block;
 }
 
 #form label a{
-  color: var(--bs-secondary-color);
+  color: light-dark(#777, var(--bs-secondary-color));
 }
 
 #form .text {
-  color: var(--bs-secondary-color);
+  color: light-dark(#777, var(--bs-secondary-color));
   font-size: 0.9em;
   display: block;
 }
 
 #form .text a{
-  color: var(--bs-secondary-color);
+  color: light-dark(#777, var(--bs-secondary-color));
 }
 
 #form group {
@@ -1237,7 +1237,7 @@ input[type=number] {
   gap: 8px;
   margin-bottom: 12px;
   padding: 8px 12px 10px;
-  border: 1px dashed #c7cdd6;
+  border: 1px dashed light-dark(#c7cdd6, var(--bs-border-color));
   border-radius: 10px;
   background: rgba(37, 99, 235, 0.04);
   font-size: 0.9rem;
@@ -1248,7 +1248,7 @@ input[type=number] {
   align-items: baseline;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #6b7280;
+  color: light-dark(#6b7280, var(--bs-body-color));
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -1452,7 +1452,7 @@ input[type=number] {
 }
 
 #form hr {
-  border-bottom: 1px solid var(--bs-border-color);
+  border-bottom: 1px solid light-dark(#aaa, var(--bs-border-color));
 }
 
 #form .inline-inputs {
@@ -1482,7 +1482,7 @@ input[type=number] {
   border: none;
   color: #eee;
   font-weight: 700;
-  box-shadow: 1px 4px 10px 1px var(--tl-shadow);
+  box-shadow: 1px 4px 10px 1px light-dark(#aaa, var(--tl-shadow));
 }
 
 #form button[id=submit]{
@@ -1515,7 +1515,7 @@ input[type=number] {
   grid-column-start: 1;
   grid-column-end: -1;
   display: block;
-  color: var(--bs-secondary-color);
+  color: light-dark(#777, var(--bs-secondary-color));
   font-size: 0.9rem;
   margin: 0;
 }
@@ -1546,7 +1546,7 @@ html, body {
 }
 #overpass-api-controls {
   padding: 10px;
-  background-color: var(--bs-body-bg);
+  background-color: light-dark(rgb(255, 255, 255), var(--bs-body-bg));
 }
 #overpass-api-controls a {
   display: inline;
@@ -1670,8 +1670,8 @@ html, body {
   display: block;
   width: 30px;
   height: 30px;
-  background-color: var(--bs-body-bg);
-  color: var(--bs-body-color);
+  background-color: light-dark(#fff, var(--bs-body-bg));
+  color: light-dark(#333, var(--bs-body-color));
   text-align: center;
   line-height: 30px;
   font-size: 18px;
@@ -1681,12 +1681,12 @@ html, body {
 }
 
 .legend-toggle a:hover {
-  background-color: var(--bs-tertiary-bg);
-  color: var(--bs-emphasis-color);
+  background-color: light-dark(#f4f4f4, var(--bs-tertiary-bg));
+  color: light-dark(#000, var(--bs-emphasis-color));
 }
 
 .legend-content {
-  background-color: var(--bs-body-bg);
+  background-color: light-dark(#fff, var(--bs-body-bg));
   padding: 10px;
   border-radius: 4px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.65);
@@ -1704,14 +1704,14 @@ html, body {
 .legend-header h4 {
   margin: 0;
   font-size: 16px;
-  color: var(--bs-body-color);
+  color: light-dark(#333, var(--bs-body-color));
 }
 
 .legend-close {
   background: none;
   border: none;
   font-size: 18px;
-  color: var(--bs-emphasis-color);
+  color: light-dark(#000, var(--bs-emphasis-color));
   text-decoration: none;
   cursor: pointer;
 }
@@ -1727,7 +1727,7 @@ html, body {
   align-items: center;
   margin-bottom: 5px;
   font-size: 14px;
-  color: var(--bs-body-color);
+  color: light-dark(#333, var(--bs-body-color));
 }
 
 .legend-icon {
@@ -1735,7 +1735,7 @@ html, body {
   width: 20px;
   height: 10px;
   margin-right: 8px;
-  border: 1px solid var(--bs-border-color);
+  border: 1px solid light-dark(#333, var(--bs-border-color));
   border-radius: 2px;
 }
 
@@ -1912,14 +1912,14 @@ html, body {
 /* Future Toggle */
 
 .futureToggle {
-  background-color: var(--bs-body-bg);
+  background-color: light-dark(#ffffff, var(--bs-body-bg));
   padding: 2px;
 }
 
 /* Info Panel */
 #infoPanel {
   width: 320px;
-  background-color: var(--bs-body-bg);
+  background-color: light-dark(white, var(--bs-body-bg));
   padding-top: 4px;
   transition: all 0.2s ease;
   box-sizing: border-box;
@@ -2008,7 +2008,7 @@ html, body {
   left: -12px;
   display: inline-block;
   padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.15);
+  background: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.15));
   border-radius: 3px 0 0 3px;
 }
  
@@ -2082,7 +2082,7 @@ html, body {
 #leaderboard .child td, 
 #leaderboard .child th {
   padding: 5px;  /* adjust as needed */
-  border: 1px solid var(--bs-border-color);  /* adjust as needed */
+  border: 1px solid light-dark(#ddd, var(--bs-border-color));  /* adjust as needed */
 }
 
 
@@ -2095,7 +2095,7 @@ html, body {
 .tagLink{
   text-decoration: none;
   transition: filter 0.1s;
-  color:var(--bs-body-color);
+  color:light-dark(#000, var(--bs-body-color));
 }
 
 .leaderboardLink:hover {
@@ -2128,19 +2128,19 @@ html, body {
   font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.5;
-  color: var(--bs-body-color);
-  background-color: var(--bs-body-bg);
+  color: light-dark(#212529, var(--bs-body-color));
+  background-color: light-dark(#fff, var(--bs-body-bg));
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 0.5rem center;
   background-size: 16px 12px;
-  border: 1px solid var(--bs-border-color);
+  border: 1px solid light-dark(#aaa, var(--bs-border-color));
   border-radius: 0.25rem;
   cursor: pointer;
   white-space: nowrap;
 }
 .dt-sort-btn:hover {
-  background-color: var(--bs-tertiary-bg);
+  background-color: light-dark(#f8f9fa, var(--bs-tertiary-bg));
 }
 .dt-sort-btn.sort-asc {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 11 6-6 6 6'/%3e%3c/svg%3e");
@@ -2195,7 +2195,7 @@ html, body {
   height: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
   border-radius: 4px;
-  background: var(--bs-body-bg);
+  background: light-dark(#fff, var(--bs-body-bg));
   pointer-events: none;   /* never stands between the cursor and what is under it */
 }
 /* The fallback when the script has not run: fixed with no offsets lands the picture at
@@ -2213,8 +2213,8 @@ html, body {
 .currency-combo-btn {
   display: flex; align-items: center; gap: 6px; cursor: pointer; position: relative;
   width: 100%; height: 32px; padding: 0 20px 0 16px;
-  border: 0; background-color: #f3f3f3;
-  line-height: 1; text-align: left; color: black;
+  border: 0; background-color: light-dark(#f3f3f3, var(--bs-tertiary-bg));
+  line-height: 1; text-align: left; color: light-dark(black, var(--bs-emphasis-color));
 }
 .currency-combo-btn::after {
   content: "";
@@ -2231,12 +2231,12 @@ html, body {
 .currency-combo-panel {
   display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
   min-width: 100%; width: max-content; max-width: 340px;
-  background: #fff; border: 1px solid #dee2e6; border-radius: 10px;
+  background: light-dark(#fff, var(--bs-body-bg)); border: 1px solid light-dark(#dee2e6, var(--bs-border-color)); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden;
 }
 .currency-combo-panel.show { display: block; }
 .currency-combo-search {
-  width: 100%; border: none; border-bottom: 1px solid #e9ecef; border-radius: 0;
+  width: 100%; border: none; border-bottom: 1px solid light-dark(#e9ecef, var(--bs-border-color)); border-radius: 0;
   padding: 8px 10px; box-sizing: border-box;
 }
 .currency-combo-search:focus { outline: none; border-color: #0d6efd; }
@@ -2244,12 +2244,12 @@ html, body {
 .currency-combo-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 8px 10px; border: none; background: none; border-radius: 6px;
-  text-align: left; font-size: 0.9rem; color: #212529; white-space: nowrap;
+  text-align: left; font-size: 0.9rem; color: light-dark(#212529, var(--bs-emphasis-color)); white-space: nowrap;
 }
-.currency-combo-item:hover { background: #f1f3f5; }
-.currency-combo-item.active { background: #e7f0ff; color: #0d6efd; font-weight: 600; }
+.currency-combo-item:hover { background: light-dark(#f1f3f5, var(--bs-tertiary-bg)); }
+.currency-combo-item.active { background: light-dark(#e7f0ff, rgba(55, 130, 255, 0.16)); color: #0d6efd; font-weight: 600; }
 .currency-combo-flag { width: 1.6em; text-align: center; flex: none; font-size: 1.5em; } /* list rows only, doesn't affect collapsed row height */
-.currency-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }
+.currency-combo-empty { padding: 10px; color: light-dark(#6c757d, var(--bs-body-color)); font-size: 0.85rem; text-align: center; }
 .currency-combo-flag-inline { flex: none; line-height: 1; }
 .currency-combo-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -2259,32 +2259,32 @@ html, body {
 .track-dropdown[hidden] { display: none; }
 .track-toggle {
     height: 32px; max-width: 76px; padding: 0 10px; border: 0; background: transparent;
-    color: #888; font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden;
+    color: light-dark(#888, var(--bs-secondary-color)); font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden;
     display: flex; align-items: center; gap: 4px; cursor: pointer;
 }
 .track-toggle:hover, .track-toggle.exact { color: #4b78d6; }
 /* On its platform beside the track (approximate); a timetable's platform OSM lacks */
-.track-toggle.placed { color: #555; }
-.track-toggle.unmapped { color: #aaa; font-style: italic; }
+.track-toggle.placed { color: light-dark(#555, var(--bs-body-color)); }
+.track-toggle.unmapped { color: light-dark(#aaa, var(--bs-secondary-color)); font-style: italic; }
 .track-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 /* As wide as its grid: anchored to the small button, it would otherwise shrink to it. */
 .track-menu { padding: 8px; width: max-content; min-width: 0; max-width: calc(100vw - 32px); }
-.track-menu-title { font-size: .75rem; color: #888; margin: 0 2px 6px; }
+.track-menu-title { font-size: .75rem; color: light-dark(#888, var(--bs-secondary-color)); margin: 0 2px 6px; }
 /* A grid of equal cells, --track-cols to a row (stop_slots.js), as wide as its widest name. */
 .track-menu-chips { display: grid; grid-template-columns: repeat(var(--track-cols, 5), 1fr); gap: 4px; }
 /* Between groups of tracks ("1 Est" …, "1 Ovest" …): a thin rule across the grid, with the
    group's word, if any, on it. */
 .track-menu-break {
     grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin: 2px 0;
-    font-size: .7rem; color: #999;
+    font-size: .7rem; color: light-dark(#999, var(--bs-secondary-color));
 }
-.track-menu-break::before, .track-menu-break::after { content: ""; flex: 1; border-top: 1px solid #e3e6ea; }
+.track-menu-break::before, .track-menu-break::after { content: ""; flex: 1; border-top: 1px solid light-dark(#e3e6ea, var(--bs-border-color)); }
 .track-menu-break:empty { gap: 0; }
 .track-chip {
-    min-width: 36px; padding: 0 6px; border: 1px solid #d0d5db; border-radius: 4px; white-space: nowrap;
-    background: #fff; font-size: .8rem; font-weight: 600; line-height: 24px; color: #444; cursor: pointer;
+    min-width: 36px; padding: 0 6px; border: 1px solid light-dark(#d0d5db, var(--bs-border-color)); border-radius: 4px; white-space: nowrap;
+    background: light-dark(#fff, var(--bs-body-bg)); font-size: .8rem; font-weight: 600; line-height: 24px; color: light-dark(#444, var(--bs-emphasis-color)); cursor: pointer;
 }
-.track-chip:hover { background: #f1f3f6; }
+.track-chip:hover { background: light-dark(#f1f3f6, var(--bs-tertiary-bg)); }
 .track-chip.active { background: #4b78d6; border-color: #4b78d6; color: #fff; }
 /* The word of a group's track ("Est" of "1 Est"), lighter than its number. */
 .track-chip-word { font-weight: 400; opacity: .6; }
@@ -2307,7 +2307,7 @@ html, body {
 .end-station-field .track-dropdown { right: 32px; }
 .end-mode-toggle {
   position: absolute; top: 0; right: 0; width: 32px; height: 32px; padding: 0;
-  border: 0; background: transparent; color: #999; cursor: pointer;
+  border: 0; background: transparent; color: light-dark(#999, var(--bs-secondary-color)); cursor: pointer;
 }
 .end-mode-toggle[hidden] { display: none; }
 .end-mode-toggle:hover { color: #4b78d6; }
@@ -2317,7 +2317,7 @@ html, body {
 #form .swap-ends { position: relative; height: 0; }
 #form .swap-ends button {
   position: absolute; right: 0; top: -14px; width: 28px; height: 28px; padding: 0;
-  border: 1px solid #d0d5db; border-radius: 50%; background: #fff; color: #888; cursor: pointer;
+  border: 1px solid light-dark(#d0d5db, var(--bs-border-color)); border-radius: 50%; background: light-dark(#fff, var(--bs-body-bg)); color: light-dark(#888, var(--bs-secondary-color)); cursor: pointer;
   display: flex; align-items: center; justify-content: center; z-index: 1;
 }
 #form .swap-ends button:hover { color: #4b78d6; border-color: #4b78d6; }

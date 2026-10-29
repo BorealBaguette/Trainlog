@@ -143,6 +143,7 @@
 [data-bs-theme="dark"] #operatorGroup .operatorLogo,
 [data-bs-theme="dark"] .leg-icon img,
 [data-bs-theme="dark"] .trip-type-icon,
+[data-bs-theme="dark"] img[src*="/icons/trip_logos/"],
 [data-bs-theme="dark"] .tl-logo-square {
   filter: invert(1) brightness(0.82);
   /* Type icons share .operatorLogo with the real logos, so they have to hand back the
@@ -160,7 +161,13 @@
 [data-bs-theme="dark"] .operatorGridLogo,
 [data-bs-theme="dark"] .operatorListLogo,
 [data-bs-theme="dark"] .op-pill img,
-[data-bs-theme="dark"] .op-suggestion-logo {
+[data-bs-theme="dark"] .op-suggestion-logo,
+[data-bs-theme="dark"] .ticket-logo img,
+[data-bs-theme="dark"] .ticket-table-logo img,
+[data-bs-theme="dark"] .ticket-row-logo,
+[data-bs-theme="dark"] .ticket-operator img,
+[data-bs-theme="dark"] .ticket-pill-logo,
+[data-bs-theme="dark"] .ticket-picker-logo img {
   background-color: #fff;
   padding: 3px;
   border-radius: 4px;
@@ -269,6 +276,9 @@
 [data-bs-theme="dark"] #form {
   background-color: var(--card-bg);
   border: 1px solid var(--card-border);
+  /* The fields are tertiary-filled, which in the dark theme is the card's own colour;
+     inside the form they sink below it instead, as they stand off the white light one. */
+  --bs-tertiary-bg: var(--card-sunken);
 }
 
 /* ── Plans ─────────────────────────────────────────────────────────────────
@@ -316,4 +326,240 @@
   --plan-danger-border: #7d3a42;
   --plan-danger: #ea868f;
   --plan-warn: #e0a44a;
+}
+
+/* ── Bootstrap's "light" utilities ─────────────────────────────────────────
+   bg-light, border-light and btn-light are fixed light colours in both of Bootstrap's
+   themes, so on a dark page they are bright patches. text-dark is left alone: on the
+   yellow and cyan badges it sits on it is right in both themes; only on bg-light does
+   it have to follow the page. */
+[data-bs-theme="dark"] .bg-light {
+  background-color: var(--bs-tertiary-bg) !important;
+}
+[data-bs-theme="dark"] .bg-light.text-dark {
+  color: var(--bs-body-color) !important;
+}
+[data-bs-theme="dark"] .border-light {
+  border-color: var(--bs-border-color) !important;
+}
+[data-bs-theme="dark"] .btn-light {
+  --bs-btn-color: var(--bs-body-color);
+  --bs-btn-bg: var(--bs-secondary-bg);
+  --bs-btn-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--bs-emphasis-color);
+  --bs-btn-hover-bg: var(--bs-tertiary-bg);
+  --bs-btn-hover-border-color: var(--bs-border-color);
+  --bs-btn-active-color: var(--bs-emphasis-color);
+  --bs-btn-active-bg: var(--bs-tertiary-bg);
+  --bs-btn-active-border-color: var(--bs-border-color);
+}
+
+/* Native buttons get the browser's own text colour, pure white under a dark
+   colour-scheme, so an unstyled one (the trip form's Via and trainset buttons)
+   outshines everything around it. Zero specificity: any rule that sets a colour wins. */
+:where([data-bs-theme="dark"]) :where(button) {
+  color: inherit;
+}
+
+/* The trip form's fields show the browser's placeholder grey, but Bootstrap's
+   .form-control ones (the tag search) take its lighter secondary text: one dim grey
+   for every placeholder in the form, so none reads as a filled value. */
+[data-bs-theme="dark"] #form ::placeholder {
+  color: var(--bs-tertiary-color);
+  opacity: 1;
+}
+
+/* The submit and sign-up buttons are a saturated brand gradient that, on a dark
+   page, is the brightest thing on screen. Same gradient, taken down a step. */
+[data-bs-theme="dark"] #form button[id=submit],
+[data-bs-theme="dark"] #form button[id=signup] {
+  filter: brightness(0.8) saturate(0.85);
+}
+
+/* Native radios and checkboxes (Bootstrap's .form-check-input theme themselves)
+   draw a bright ring and the browser's vivid blue when checked: the plans' muted
+   accent instead, and the ring dimmed to the page. */
+[data-bs-theme="dark"] input[type=checkbox]:not(.form-check-input),
+[data-bs-theme="dark"] input[type=radio]:not(.form-check-input) {
+  accent-color: var(--plan-accent-solid);
+  filter: brightness(0.8);
+}
+
+/* ── Bootstrap's colours, toned down ─────────────────────────────────────────
+   Bootstrap keeps its saturated light-theme fills in dark mode, so every button and
+   coloured badge glares. Each variant gets a muted base here; hover and press lift it
+   towards white, outline buttons take it as their border with a lighter tint as text.
+   text-* utilities keep Bootstrap's colours, which are the ones legible on a dark page. */
+:root[data-bs-theme="dark"] {
+  --tl-primary: #3567b0;
+  --tl-secondary: #545b64;
+  --tl-success: #2e7a52;
+  --tl-danger: #a8404b;
+  --tl-warning: #c4932f;
+  --tl-info: #2b8a9e;
+}
+
+[data-bs-theme="dark"] .btn-primary {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-primary); --bs-btn-border-color: var(--tl-primary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-primary) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-primary) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-primary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-primary) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-primary); --bs-btn-disabled-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .btn-outline-primary {
+  --bs-btn-color: color-mix(in srgb, var(--tl-primary) 60%, #fff); --bs-btn-border-color: var(--tl-primary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-primary); --bs-btn-hover-border-color: var(--tl-primary);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-primary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-primary) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-primary) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .bg-primary,
+[data-bs-theme="dark"] .text-bg-primary {
+  background-color: var(--tl-primary) !important;
+}
+
+[data-bs-theme="dark"] .btn-secondary {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-secondary); --bs-btn-border-color: var(--tl-secondary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-secondary) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-secondary) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-secondary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-secondary) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-secondary); --bs-btn-disabled-border-color: var(--tl-secondary);
+}
+[data-bs-theme="dark"] .btn-outline-secondary {
+  --bs-btn-color: color-mix(in srgb, var(--tl-secondary) 60%, #fff); --bs-btn-border-color: var(--tl-secondary);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-secondary); --bs-btn-hover-border-color: var(--tl-secondary);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-secondary) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-secondary) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-secondary) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-secondary);
+}
+[data-bs-theme="dark"] .bg-secondary,
+[data-bs-theme="dark"] .text-bg-secondary {
+  background-color: var(--tl-secondary) !important;
+}
+
+[data-bs-theme="dark"] .btn-success {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-success); --bs-btn-border-color: var(--tl-success);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-success) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-success) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-success) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-success) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-success); --bs-btn-disabled-border-color: var(--tl-success);
+}
+[data-bs-theme="dark"] .btn-outline-success {
+  --bs-btn-color: color-mix(in srgb, var(--tl-success) 60%, #fff); --bs-btn-border-color: var(--tl-success);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-success); --bs-btn-hover-border-color: var(--tl-success);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-success) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-success) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-success) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-success);
+}
+[data-bs-theme="dark"] .bg-success,
+[data-bs-theme="dark"] .text-bg-success {
+  background-color: var(--tl-success) !important;
+}
+
+[data-bs-theme="dark"] .btn-danger {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-danger); --bs-btn-border-color: var(--tl-danger);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-danger) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-danger) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-danger) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-danger) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-danger); --bs-btn-disabled-border-color: var(--tl-danger);
+}
+[data-bs-theme="dark"] .btn-outline-danger {
+  --bs-btn-color: color-mix(in srgb, var(--tl-danger) 60%, #fff); --bs-btn-border-color: var(--tl-danger);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-danger); --bs-btn-hover-border-color: var(--tl-danger);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-danger) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-danger) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-danger) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-danger);
+}
+[data-bs-theme="dark"] .bg-danger,
+[data-bs-theme="dark"] .text-bg-danger {
+  background-color: var(--tl-danger) !important;
+}
+
+[data-bs-theme="dark"] .btn-warning {
+  --bs-btn-color: #1f2226; --bs-btn-bg: var(--tl-warning); --bs-btn-border-color: var(--tl-warning);
+  --bs-btn-hover-color: #1f2226; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-warning) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-warning) 85%, #fff);
+  --bs-btn-active-color: #1f2226; --bs-btn-active-bg: color-mix(in srgb, var(--tl-warning) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-warning) 75%, #fff);
+  --bs-btn-disabled-color: #1f2226; --bs-btn-disabled-bg: var(--tl-warning); --bs-btn-disabled-border-color: var(--tl-warning);
+}
+[data-bs-theme="dark"] .btn-outline-warning {
+  --bs-btn-color: color-mix(in srgb, var(--tl-warning) 60%, #fff); --bs-btn-border-color: var(--tl-warning);
+  --bs-btn-hover-color: #1f2226; --bs-btn-hover-bg: var(--tl-warning); --bs-btn-hover-border-color: var(--tl-warning);
+  --bs-btn-active-color: #1f2226; --bs-btn-active-bg: color-mix(in srgb, var(--tl-warning) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-warning) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-warning) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-warning);
+}
+[data-bs-theme="dark"] .bg-warning,
+[data-bs-theme="dark"] .text-bg-warning {
+  background-color: var(--tl-warning) !important;
+}
+
+[data-bs-theme="dark"] .btn-info {
+  --bs-btn-color: #e6e9ec; --bs-btn-bg: var(--tl-info); --bs-btn-border-color: var(--tl-info);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: color-mix(in srgb, var(--tl-info) 85%, #fff); --bs-btn-hover-border-color: color-mix(in srgb, var(--tl-info) 85%, #fff);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-info) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-info) 75%, #fff);
+  --bs-btn-disabled-color: #e6e9ec; --bs-btn-disabled-bg: var(--tl-info); --bs-btn-disabled-border-color: var(--tl-info);
+}
+[data-bs-theme="dark"] .btn-outline-info {
+  --bs-btn-color: color-mix(in srgb, var(--tl-info) 60%, #fff); --bs-btn-border-color: var(--tl-info);
+  --bs-btn-hover-color: #e6e9ec; --bs-btn-hover-bg: var(--tl-info); --bs-btn-hover-border-color: var(--tl-info);
+  --bs-btn-active-color: #e6e9ec; --bs-btn-active-bg: color-mix(in srgb, var(--tl-info) 75%, #fff); --bs-btn-active-border-color: color-mix(in srgb, var(--tl-info) 75%, #fff);
+  --bs-btn-disabled-color: color-mix(in srgb, var(--tl-info) 60%, #fff); --bs-btn-disabled-border-color: var(--tl-info);
+}
+[data-bs-theme="dark"] .bg-info,
+[data-bs-theme="dark"] .text-bg-info {
+  background-color: var(--tl-info) !important;
+}
+
+/* The other components that hard-code Bootstrap's blue rather than read a variable */
+[data-bs-theme="dark"] .form-check-input:checked {
+  background-color: var(--tl-primary);
+  border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .nav-pills { --bs-nav-pills-link-active-bg: var(--tl-primary); }
+[data-bs-theme="dark"] .dropdown-menu { --bs-dropdown-link-active-bg: var(--tl-primary); }
+[data-bs-theme="dark"] .pagination {
+  --bs-pagination-active-bg: var(--tl-primary);
+  --bs-pagination-active-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .list-group {
+  --bs-list-group-active-bg: var(--tl-primary);
+  --bs-list-group-active-border-color: var(--tl-primary);
+}
+[data-bs-theme="dark"] .progress,
+[data-bs-theme="dark"] .progress-stacked { --bs-progress-bar-bg: var(--tl-primary); }
+
+/* ── MapLibre ──────────────────────────────────────────────────────────────
+   Same as Leaflet above: the popups and controls, not the tiles. The control
+   icons are dark SVG backgrounds, so they are inverted like the pictograms. */
+[data-bs-theme="dark"] .maplibregl-popup-content,
+[data-bs-theme="dark"] .maplibregl-ctrl-group,
+[data-bs-theme="dark"] .maplibregl-ctrl-attrib {
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+[data-bs-theme="dark"] .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] .maplibregl-ctrl-group button + button {
+  border-top-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon,
+[data-bs-theme="dark"] .maplibregl-ctrl-attrib-button {
+  filter: invert(1) brightness(0.85);
+}
+[data-bs-theme="dark"] .maplibregl-ctrl-attrib a {
+  color: var(--bs-link-color);
+}
+
+/* Names in the leaderboards, friends and trips lists are .link-dark: Bootstrap's
+   near-black in both themes, so on a dark page they are the emphasis colour instead. */
+[data-bs-theme="dark"] .link-dark,
+[data-bs-theme="dark"] .link-dark:hover,
+[data-bs-theme="dark"] .link-dark:focus {
+  color: rgba(var(--bs-emphasis-color-rgb), var(--bs-link-opacity, 1)) !important;
+  text-decoration-color: rgba(var(--bs-emphasis-color-rgb), var(--bs-link-underline-opacity, 1)) !important;
 }

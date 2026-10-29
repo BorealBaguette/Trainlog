@@ -8,7 +8,7 @@
 <script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
 <!-- Loading screen -->
-<div id="loadingScreen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background: rgba(255, 255, 255, 0.8); z-index: 9999; display: flex; justify-content: center; align-items: center;">
+<div id="loadingScreen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background: light-dark(rgba(255, 255, 255, 0.8), rgba(38, 41, 46, 0.8)); z-index: 9999; display: flex; justify-content: center; align-items: center;">
     <div class="spinner-border text-primary" role="status">
         <span class="sr-only">Loading...</span>
     </div>
@@ -82,11 +82,11 @@
     </div>
 </div>
 
-<div id="fullscreenContainer" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 10000; overscroll-behavior: contain; touch-action: none;">
+<div id="fullscreenContainer" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: light-dark(#fff, var(--bs-body-bg)); z-index: 10000; overscroll-behavior: contain; touch-action: none;">
     <button id="closeFullscreenButton" class="btn btn-danger position-absolute top-0 end-0 m-2" style="z-index: 10001;">
         <i class="fa-solid fa-xmark"></i>
     </button>
-    <div id="fullscreenChart" style="width: 100%; height: 100%; background: #fff;"></div>
+    <div id="fullscreenChart" style="width: 100%; height: 100%; background: light-dark(#fff, var(--bs-body-bg));"></div>
 </div>
 
 <div style="height: 100px;"></div>
@@ -112,7 +112,7 @@
     width: 248px;
     height: 140px;
     margin: -2px -2px 8px -2px;   /* bleed to the tooltip's rounded edge */
-    background: #f2f4f6;
+    background: #f2f4f6;  /* light in both themes: logos and silhouettes are drawn for it */
     border-radius: 6px 6px 0 0;
     overflow: hidden;
 }
@@ -210,7 +210,7 @@
     font-size: 12px;
     font-weight: 400;
     line-height: 1;
-    color: #6b7680;
+    color: light-dark(#6b7680, var(--bs-body-color));
     white-space: nowrap;
 }
 
@@ -241,7 +241,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: #f7f8f9;
+    background: light-dark(#f7f8f9, var(--bs-tertiary-bg));
 }
 
 .statsTip .statsTipMedia.strip .statsTipStripRow {
@@ -458,6 +458,159 @@
         return logo ? encodeURI('/static/' + logo) : null;
     }
 
+    var DARK_THEME = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+    // Operator logos are drawn for a white page, and many are dark wordmarks that
+    // vanish on a dark one. In the dark theme each logo is redrawn on a canvas,
+    // through the same axisArtwork path the consist strips take, with its dark
+    // parts turned to the page's light text grey and its coloured ones kept: the
+    // navy of a wordmark lightens, the yellow harp beside it stays. White plates,
+    // as the tables use, made the axis a column of glaring tags.
+    var darkLogoCache = {};
+    var darkLogoPending = {};
+
+    function darkLogoReady(url) {
+        return url ? darkLogoCache[url] : null;
+    }
+
+    function buildDarkLogo(url) {
+        if (!url || url in darkLogoCache) return Promise.resolve();
+        if (darkLogoPending[url]) return darkLogoPending[url];
+        darkLogoPending[url] = loadImage(url).then(img => {
+            delete darkLogoPending[url];
+            if (!img) { darkLogoCache[url] = null; return; }
+            const box = axisImageBox(LOGO_ASPECT);
+            const scale = 2;
+            const canvas = document.createElement('canvas');
+            canvas.width = box.width * scale;
+            canvas.height = box.height * scale;
+            // The logo files carry transparent margins: fitted by the drawn part,
+            // right-aligned against the axis like the pictures in the light theme
+            const ink = opaqueBounds(img);
+            const fit = Math.min(canvas.width / ink.w, canvas.height / ink.h);
+            const w = ink.w * fit, h = ink.h * fit;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, ink.x, ink.y, ink.w, ink.h, canvas.width - w, (canvas.height - h) / 2, w, h);
+            lightenDarkInk(ctx, canvas.width, canvas.height);
+            darkLogoCache[url] = { canvas, width: box.width, height: box.height };
+        });
+        return darkLogoPending[url];
+    }
+
+    // Dark ink is lifted in lightness only, hue and saturation kept, so a brand's
+    // colours stay its own: black and greys become the page's light text grey,
+    // navy becomes a readable blue of the same hue. Anything already at mid
+    // lightness (Norwegian's red, KLM's blue) is untouched, and the lift fades in
+    // so anti-aliased edges follow smoothly.
+    function lightenDarkInk(ctx, width, height) {
+        let image;
+        try {
+            image = ctx.getImageData(0, 0, width, height);
+        } catch (e) {
+            return;
+        }
+        const d = image.data;
+        for (let i = 0; i < d.length; i += 4) {
+            if (!d[i + 3]) continue;
+            const [h, sat, l] = rgbToHsl(d[i], d[i + 1], d[i + 2]);
+            const t = Math.min(1, Math.max(0, (0.42 - l) / 0.15));
+            if (!t) continue;
+            // Greys go furthest, to the text grey; strong colours stop short of pastel
+            const target = 0.84 - 0.22 * sat;
+            const rgb = hslToRgb(h, sat, l + (target - l) * t);
+            d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2];
+        }
+        ctx.putImageData(image, 0, 0);
+    }
+
+    function rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+        if (max === min) return [0, 0, l];
+        const d = max - min;
+        const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        const h = max === r ? (g - b) / d + (g < b ? 6 : 0)
+            : max === g ? (b - r) / d + 2
+            : (r - g) / d + 4;
+        return [h / 6, s, l];
+    }
+
+    function hslToRgb(h, s, l) {
+        if (!s) return [l * 255, l * 255, l * 255];
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+        const channel = t => {
+            t = (t + 1) % 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        };
+        return [channel(h + 1 / 3) * 255, channel(h) * 255, channel(h - 1 / 3) * 255];
+    }
+
+    // The part of an image that isn't transparent, as a source rectangle
+    function opaqueBounds(img) {
+        const full = { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+        const canvas = document.createElement('canvas');
+        canvas.width = full.w;
+        canvas.height = full.h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        let data;
+        try {
+            data = ctx.getImageData(0, 0, full.w, full.h).data;
+        } catch (e) {
+            return full;
+        }
+        let x0 = full.w, y0 = full.h, x1 = -1, y1 = -1;
+        for (let y = 0; y < full.h; y++) {
+            for (let x = 0; x < full.w; x++) {
+                if (data[(y * full.w + x) * 4 + 3] > 8) {
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+            }
+        }
+        return x1 < 0 ? full : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+    }
+
+    // `markOf` names the full-size logo the tooltip shows, warmed alongside the
+    // axis one so it is ready by the first hover
+    function darkLogoArtwork(urlOf, markOf) {
+        if (!DARK_THEME) return {};
+        return {
+            axisArtwork: item => darkLogoReady(urlOf(item)),
+            loadAxisArtwork: item => {
+                const mark = markOf && markOf(item);
+                if (mark) darkMark(mark);
+                return buildDarkLogo(urlOf(item));
+            }
+        };
+    }
+
+    // The tooltip's logo, lightened the same way, as a data URL; the original
+    // until it is built
+    var darkMarkCache = {};
+
+    function darkMark(url) {
+        if (url in darkMarkCache) return darkMarkCache[url] || url;
+        darkMarkCache[url] = null;
+        loadImage(url).then(img => {
+            if (!img || !img.naturalWidth) return;
+            const ink = opaqueBounds(img);
+            const canvas = document.createElement('canvas');
+            canvas.width = ink.w;
+            canvas.height = ink.h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, ink.x, ink.y, ink.w, ink.h, 0, 0, ink.w, ink.h);
+            lightenDarkInk(ctx, ink.w, ink.h);
+            darkMarkCache[url] = canvas.toDataURL();
+        });
+        return url;
+    }
+
     // Airframe artwork, keyed by ICAO type code. A miss is normal — roughly a
     // hundred types are drawn and the rest are hand-typed — so callers must
     // cope with null.
@@ -585,7 +738,8 @@
             image: item => operatorLogoUrl(item.operator),
             tooltipImage: item => operatorLogoFullUrl(item.operator),
             axisImage: true,
-            imageAspect: LOGO_ASPECT
+            imageAspect: LOGO_ASPECT,
+            ...darkLogoArtwork(item => operatorLogoUrl(item.operator))
         },
         {
             key: 'timeseries',
@@ -671,6 +825,8 @@
             tooltipImage: () => null,
             axisImage: true,
             imageAspect: LOGO_ASPECT,
+            ...darkLogoArtwork(item => operatorLogoUrl(item.operator),
+                               item => operatorLogoFullUrl(item.operator)),
             inlineLabel: value => value,
             // The bare line name, not the category: the operator is already in
             // the header as its logo, and repeating it in the headline made the
@@ -1578,7 +1734,22 @@
             'rail': 'rgb(126, 200, 255)',
             'ski': 'rgb(184, 230, 240)'
         };
-        return colorMap[type] || '#000000';
+        const color = colorMap[type] || '#000000';
+        return DARK_THEME ? toneForDark(color) : color;
+    }
+
+    // The type colours are picked for a white page: on a dark one ferry's navy
+    // sinks and train's sky blue glares. Lightness is pulled into one band
+    // (0.36–0.61, keeping each type's place in it, so tram stays lighter than
+    // metro) and saturation trimmed by a quarter; the hue, which is what names the
+    // type, is kept.
+    function toneForDark(color) {
+        const m = color.match(/\d+/g);
+        const rgb = m.length >= 3 ? m.slice(0, 3).map(Number)
+            : [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+        const [h, sat, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+        const out = hslToRgb(h, sat * 0.75, 0.36 + l * 0.25);
+        return `rgb(${out.map(Math.round).join(', ')})`;
     }
 
     // Category charts carry their name as a bar label instead of an axis label.
@@ -1608,7 +1779,7 @@
     // (possibly dark) bar color ends up underneath it — the visible color at
     // that spot varies per row in combined mode.
     var INSIDE_LABEL_PILL = {
-        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        backgroundColor: DARK_THEME ? 'rgba(38, 41, 46, 0.85)' : 'rgba(255, 255, 255, 0.85)',
         padding: [2, 5],
         borderRadius: 3
     };
@@ -1619,7 +1790,7 @@
             show: true,
             position: position,
             formatter: labelFormatter,
-            color: '#1a1a1a',
+            color: DARK_THEME ? '#ced4da' : '#1a1a1a',
             fontSize: 12,
             padding: [2, 5]
         };
@@ -2295,7 +2466,7 @@
         // mark floated right and a wide one didn't, and no two rows lined up.
         const logo = operator && operatorLogoFullUrl(operator);
         if (!logo) return '';
-        return `<img class="statsTipLineLogo" src="${escapeHtml(logo)}"`
+        return `<img class="statsTipLineLogo" src="${escapeHtml(DARK_THEME ? darkMark(logo) : logo)}"`
             + ` alt="${escapeHtml(operator)}" title="${escapeHtml(operator)}"`
             + ` onerror="this.style.display='none'">`;
     }
@@ -2438,7 +2609,9 @@
 
         if (axisBreak) {
             config.breaks = [{ start: axisBreak.start, end: axisBreak.end, gap: '3%' }];
-            config.breakArea = { expandOnClick: true };
+            config.breakArea = DARK_THEME
+                ? { expandOnClick: true, itemStyle: { color: '#41474f', borderColor: '#6c747d' } }
+                : { expandOnClick: true };
         }
         return config;
     }
@@ -2840,11 +3013,50 @@
         return spec.axisLabel ? spec.axisLabel() : { hideOverlap: true };
     }
 
+    // ECharts' own dark theme draws its axes and grid too faint to read against the
+    // page, so the dark theme is the site's greys: the grid one step off the page,
+    // axis lines and labels a clear step above it
+    if (DARK_THEME) {
+        const axis = {
+            axisLine: { lineStyle: { color: '#6c747d' } },
+            axisTick: { lineStyle: { color: '#6c747d' } },
+            axisLabel: { color: '#aab2bb' },
+            splitLine: { lineStyle: { color: '#41474f' } },
+            splitArea: { areaStyle: { color: ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0)'] } }
+        };
+        echarts.registerTheme('trainlog-dark', {
+            backgroundColor: 'transparent',
+            textStyle: { color: '#b9c0c8' },
+            title: { textStyle: { color: '#ced4da' }, subtextStyle: { color: '#aab2bb' } },
+            legend: { textStyle: { color: '#b9c0c8' } },
+            tooltip: {
+                backgroundColor: '#2e3238',
+                borderColor: '#454b53',
+                textStyle: { color: '#ced4da' }
+            },
+            categoryAxis: axis,
+            valueAxis: axis,
+            logAxis: axis,
+            timeAxis: axis,
+            dataZoom: {
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                dataBackgroundColor: '#41474f',
+                fillerColor: 'rgba(110,168,254,0.15)',
+                handleColor: '#6c747d',
+                textStyle: { color: '#aab2bb' }
+            }
+        });
+    }
+
+    function initChart(element) {
+        return echarts.init(element, DARK_THEME ? 'trainlog-dark' : null);
+    }
+
     function renderChart(spec, rows) {
         const element = document.getElementById('chart-' + spec.key);
         if (!element) return;
 
-        const chart = echarts.init(element);
+        const chart = initChart(element);
         chartsInstances[spec.key] = chart;
 
         const color = getColor(tripType);
@@ -3046,7 +3258,7 @@
         fullscreenContainer.style.display = 'block';
         fullscreenChart.innerHTML = '';
 
-        const chartInstance = echarts.init(fullscreenChart);
+        const chartInstance = initChart(fullscreenChart);
         const rows = currentDisplayData()[spec.dataset] || [];
         const color = getColor(tripType);
         const categories = rows.map(item => categoryOf(spec, item));

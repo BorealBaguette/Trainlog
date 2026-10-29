@@ -8,15 +8,15 @@
     --success-color: #059669;
     --info-color: #0891b2;
     --warning-color: #d97706;
-    --background-light: #f8fafc;
-    --border-color: #e2e8f0;
-    --text-muted: #64748b;
+    --background-light: light-dark(#f8fafc, var(--bs-tertiary-bg));
+    --border-color: light-dark(#e2e8f0, var(--bs-border-color));
+    --text-muted: light-dark(#64748b, var(--bs-secondary-color));
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 
   .dashboard-container {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    background: linear-gradient(135deg, light-dark(#f8fafc, var(--bs-body-bg)) 0%, light-dark(#f1f5f9, var(--bs-body-bg)) 100%);
     min-height: 100vh;
     padding: 2rem 0;
   }
@@ -73,7 +73,7 @@
 
   /* ── Cards ── */
   .dash-card {
-    background: white;
+    background: light-dark(white, var(--bs-body-bg));
     border: 1px solid var(--border-color);
     border-radius: 12px;
     box-shadow: var(--shadow-md);
@@ -86,13 +86,13 @@
   }
   .dash-card-header {
     padding: 1rem 1.25rem 0.75rem;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color));
     display: flex;
     align-items: center;
     gap: 0.6rem;
     font-weight: 600;
     font-size: 0.9rem;
-    color: #374151;
+    color: light-dark(#374151, var(--bs-emphasis-color));
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
@@ -229,7 +229,7 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: white;
+    background: light-dark(white, var(--bs-body-bg));
     color: #065f46;
     font-size: 0.8rem;
     display: flex;
@@ -296,14 +296,14 @@
   .ct-timeline li.terminus > span { opacity: 1 !important; }
   .ct-timeline .ct-stop-name { min-width: 0; }
   .ct-timeline li.current { font-weight: 700; }
-  .ct-dot.current { background: white; border-color: white; box-shadow: 0 0 0 4px rgba(52,211,153,0.35); }
+  .ct-dot.current { background: light-dark(white, var(--bs-body-bg)); border-color: light-dark(white, var(--bs-body-bg)); box-shadow: 0 0 0 4px rgba(52,211,153,0.35); }
   .ct-timeline .ct-here { left: 6px; }
   .ct-here {
     position: absolute;
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: white;
+    background: light-dark(white, var(--bs-body-bg));
     color: #065f46;
     font-size: 0.5rem;
     display: flex;
@@ -335,14 +335,14 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.6rem 0;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color));
   }
   .trip-item:last-child { border-bottom: none; }
   .trip-icon {
     width: 32px;
     height: 32px;
     border-radius: 8px;
-    background: #eff6ff;
+    background: light-dark(#eff6ff, rgba(55, 142, 255, 0.16));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -405,7 +405,7 @@
   }
   .trip-km {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: light-dark(#9ca3af, var(--bs-secondary-color));
   }
   .empty-state {
     color: var(--text-muted);
@@ -417,7 +417,7 @@
   /* ── Countdown badge ── */
   .countdown-badge {
     font-size: 0.7rem;
-    background: #eff6ff;
+    background: light-dark(#eff6ff, rgba(55, 142, 255, 0.16));
     color: var(--primary-color);
     border-radius: 6px;
     padding: 0.15rem 0.5rem;
@@ -431,11 +431,11 @@
     align-items: baseline;
     justify-content: space-between;
     padding: 0.5rem 0;
-    border-bottom: 1px solid #f8fafc;
+    border-bottom: 1px solid light-dark(#f8fafc, var(--bs-border-color));
   }
   .stat-row:last-child { border-bottom: none; }
-  .stat-label { font-size: 0.85rem; color: #374151; }
-  .stat-value { font-weight: 600; font-size: 0.95rem; color: #111827; }
+  .stat-label { font-size: 0.85rem; color: light-dark(#374151, var(--bs-emphasis-color)); }
+  .stat-value { font-weight: 600; font-size: 0.95rem; color: light-dark(#111827, var(--bs-emphasis-color)); }
   .stat-sub  { font-size: 0.75rem; color: var(--text-muted); }
   .stat-row-flags { align-items: flex-start; }
   .country-flags {
@@ -447,20 +447,20 @@
     font-size: 1rem;
   }
   .country-flag { display: inline-block; }
-  .bar-row { padding: 0.4rem 0; border-bottom: 1px solid #f8fafc; }
+  .bar-row { padding: 0.4rem 0; border-bottom: 1px solid light-dark(#f8fafc, var(--bs-border-color)); }
   .bar-row:last-child { border-bottom: none; }
   .bar-row-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.2rem; }
-  .bar-row-label { font-size: 0.82rem; color: #374151; display: flex; align-items: center; gap: 0.35rem; }
-  .bar-row-value { font-weight: 600; font-size: 0.88rem; color: #111827; white-space: nowrap; }
-  .bar-row-track { height: 5px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
+  .bar-row-label { font-size: 0.82rem; color: light-dark(#374151, var(--bs-emphasis-color)); display: flex; align-items: center; gap: 0.35rem; }
+  .bar-row-value { font-weight: 600; font-size: 0.88rem; color: light-dark(#111827, var(--bs-emphasis-color)); white-space: nowrap; }
+  .bar-row-track { height: 5px; background: light-dark(#f1f5f9, var(--bs-tertiary-bg)); border-radius: 3px; overflow: hidden; }
   .bar-row-fill  { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
   .mode-table { width: 100%; border-collapse: collapse; }
-  .mode-table tr { border-bottom: 1px solid #f1f5f9; }
+  .mode-table tr { border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color)); }
   .mode-table tr:last-child { border-bottom: none; }
   .mode-table td { padding: 0.6rem 1.25rem; vertical-align: middle; }
-  .mode-table .mode-name { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 500; color: #374151; white-space: nowrap; }
+  .mode-table .mode-name { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 500; color: light-dark(#374151, var(--bs-emphasis-color)); white-space: nowrap; }
   .mode-table .mode-name i { color: var(--primary-color); width: 14px; text-align: center; }
-  .mode-table .mode-num { text-align: right; font-size: 0.82rem; font-weight: 600; color: #111827; white-space: nowrap; }
+  .mode-table .mode-num { text-align: right; font-size: 0.82rem; font-weight: 600; color: light-dark(#111827, var(--bs-emphasis-color)); white-space: nowrap; }
   .mode-table .mode-unit { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); margin-left: 1px; }
   .mode-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   @media (max-width: 575px) {
@@ -483,7 +483,7 @@
     margin-bottom: 0.75rem;
   }
   .year-stat {
-    background: #f8fafc;
+    background: light-dark(#f8fafc, var(--bs-tertiary-bg));
     border-radius: 8px;
     padding: 0.75rem;
     text-align: center;
@@ -491,7 +491,7 @@
   .year-stat-value {
     font-size: 1.5rem;
     font-weight: 700;
-    color: #111827;
+    color: light-dark(#111827, var(--bs-emphasis-color));
     line-height: 1.1;
   }
   .year-stat-label {
@@ -509,8 +509,8 @@
     gap: 0.25rem;
     flex-wrap: wrap;
     padding: 0.5rem 1.25rem 0;
-    border-bottom: 1px solid #f1f5f9;
-    background: white;
+    border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color));
+    background: light-dark(white, var(--bs-body-bg));
   }
   .rank-tab {
     padding: 0.2rem 0.6rem;
@@ -523,11 +523,11 @@
     transition: all 0.15s ease;
     margin-bottom: 0.4rem;
   }
-  .rank-tab:hover { background: #f8fafc; color: #374151; }
+  .rank-tab:hover { background: light-dark(#f8fafc, var(--bs-tertiary-bg)); color: light-dark(#374151, var(--bs-emphasis-color)); }
   .rank-tab.active {
-    background: #eff6ff;
+    background: light-dark(#eff6ff, rgba(55, 142, 255, 0.16));
     color: var(--primary-color);
-    border-color: #bfdbfe;
+    border-color: light-dark(#bfdbfe, var(--bs-primary-border-subtle));
     font-weight: 600;
   }
   .rank-metric-toggle {
@@ -544,8 +544,8 @@
     border-radius: 5px;
     cursor: pointer;
     color: var(--text-muted);
-    border: 1px solid #e2e8f0;
-    background: white;
+    border: 1px solid light-dark(#e2e8f0, var(--bs-border-color));
+    background: light-dark(white, var(--bs-body-bg));
     transition: all 0.15s ease;
   }
   .rank-metric-btn.active {
@@ -578,7 +578,7 @@
   .rank-number.top3 { color: #d97706; }
   .rank-context { font-size: 0.85rem; color: var(--text-muted); }
   .rank-bar-track {
-    background: #f1f5f9;
+    background: light-dark(#f1f5f9, var(--bs-tertiary-bg));
     border-radius: 8px;
     height: 8px;
     overflow: hidden;
@@ -596,7 +596,7 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.6rem 0;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color));
   }
   .friend-item:last-child { border-bottom: none; }
   .friend-username {
@@ -638,7 +638,7 @@
 
   /* ── Country completion ── */
   .completion-card {
-    background: white;
+    background: light-dark(white, var(--bs-body-bg));
     border: 1px solid var(--border-color);
     border-radius: 12px;
     box-shadow: var(--shadow-md);
@@ -646,13 +646,13 @@
   }
   .card-header-custom {
     padding: 1rem 1.25rem 0.75rem;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color));
     display: flex;
     align-items: center;
     gap: 0.6rem;
     font-weight: 600;
     font-size: 0.9rem;
-    color: #374151;
+    color: light-dark(#374151, var(--bs-emphasis-color));
     text-transform: uppercase;
     letter-spacing: 0.4px;
     cursor: pointer;
@@ -675,40 +675,40 @@
     border: none !important;
     padding: 0.75rem 1.25rem;
     font-weight: 600;
-    color: #374151;
+    color: light-dark(#374151, var(--bs-emphasis-color));
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
   .completion-table tbody tr { border: none; transition: all 0.15s ease; }
-  .completion-table tbody tr:not(:last-child) { border-bottom: 1px solid #f1f5f9; }
+  .completion-table tbody tr:not(:last-child) { border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color)); }
   .completion-table tbody tr:hover > * { --bs-table-bg-state: #f8fafc; }
   .completion-table td { padding: 1rem 1.25rem; border: none; vertical-align: middle; }
   .country-flag-name { font-weight: 500; color: #1f2937; font-size: 0.95rem; }
   .progress-container { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-  .progress-bar-container { flex: 1; background-color: #f1f5f9; border-radius: 8px; overflow: hidden; height: 18px; }
+  .progress-bar-container { flex: 1; background-color: light-dark(#f1f5f9, var(--bs-tertiary-bg)); border-radius: 8px; overflow: hidden; height: 18px; }
   .progress-bar-fill { height: 100%; border-radius: 8px; transition: width 0.3s ease; }
   .progress-bar-country { background: linear-gradient(90deg, var(--success-color) 0%, #10b981 100%); }
   .progress-bar-region  { background: linear-gradient(90deg, var(--info-color) 0%, #06b6d4 100%); height: 14px; }
-  .progress-text { font-weight: 600; color: #374151; font-size: 0.85rem; min-width: 40px; text-align: right; }
+  .progress-text { font-weight: 600; color: light-dark(#374151, var(--bs-emphasis-color)); font-size: 0.85rem; min-width: 40px; text-align: right; }
   .region-row > * { --bs-table-bg: #fafbfc; }
   .region-row td { padding: 0.75rem 1.25rem 0.75rem 3rem; }
   .region-flag-name { color: var(--text-muted); font-size: 0.85rem; }
-  .region-progress-container { background-color: #e5e7eb; height: 14px; }
+  .region-progress-container { background-color: light-dark(#e5e7eb, var(--bs-secondary-bg)); height: 14px; }
   .region-progress-text { font-size: 0.8rem; color: var(--text-muted); }
-  .chevron { font-size: 0.6rem; display: inline-block; transition: transform 0.2s ease; margin-right: 4px; color: #9ca3af; }
+  .chevron { font-size: 0.6rem; display: inline-block; transition: transform 0.2s ease; margin-right: 4px; color: light-dark(#9ca3af, var(--bs-secondary-color)); }
   .chevron.down { transform: rotate(90deg); }
 
   /* ── News ── */
   .news-item {
     padding: 0.75rem 0;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid light-dark(#f1f5f9, var(--bs-border-color));
   }
   .news-item:last-child { border-bottom: none; }
   .news-title { font-weight: 500; font-size: 0.9rem; color: #1f2937; margin-bottom: 0.2rem; }
   .news-preview { font-size: 0.82rem; color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
   .news-preview p { margin: 0; }
-  .news-date { font-size: 0.75rem; color: #9ca3af; margin-top: 0.2rem; }
+  .news-date { font-size: 0.75rem; color: light-dark(#9ca3af, var(--bs-secondary-color)); margin-top: 0.2rem; }
 
   /* ── Skeleton loader ── */
   .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
@@ -833,10 +833,10 @@
          per row: showCopyModal() parks the trip id in pendingCopyTripId. Mirrors the
          ride-along modal on the shared trip page, and reuses its strings. -->
     <div id="copyTripModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
-      <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+      <div style="background:light-dark(#fff, var(--bs-body-bg));border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
         <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button onclick="hideCopyModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
+          <button onclick="hideCopyModal()" style="padding:6px 14px;border:1px solid light-dark(#ccc, var(--bs-border-color));border-radius:4px;background:light-dark(#fff, var(--bs-body-bg));cursor:pointer;">{{ cancel }}</button>
           <button id="copyTripConfirmBtn" onclick="confirmCopyTrip()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
         </div>
       </div>
@@ -1485,10 +1485,10 @@ fetch(`/u/${username}/dashboard_trips`)
         const ongoing = startMs != null && endMs != null && startMs <= now && now <= endMs;
         let badge;
         if (ongoing) {
-          badge = `<span class="countdown-badge" style="background:#ecfdf5;color:#059669;">`
+          badge = `<span class="countdown-badge" style="background:light-dark(#ecfdf5, rgba(55, 234, 150, 0.16));color:#059669;">`
                 + `<span class="live-dot" style="width:6px;height:6px;margin-right:0.25rem;"></span>{{ onTrip }}</span>`;
         } else if (isToday(ref)) {
-          badge = `<span class="countdown-badge" style="background:#f0fdf4;color:#059669;">{{ today }}</span>`;
+          badge = `<span class="countdown-badge" style="background:light-dark(#f0fdf4, rgba(55, 228, 108, 0.16));color:#059669;">{{ today }}</span>`;
         } else {
           badge = `<div class="trip-date">${fmtDate(t.start)}</div>`;
         }
@@ -1842,7 +1842,7 @@ function renderRank(data, type) {
     <div class="rank-display">
       <div class="rank-number${isTop3 ? " top3" : ""}">#${rank}</div>
       <div>
-        <div style="font-size:0.9rem; font-weight:500; color:#111827;">{{ outOf }} ${fmt(d.total)}</div>
+        <div style="font-size:0.9rem; font-weight:500; color:light-dark(#111827, var(--bs-emphasis-color));">{{ outOf }} ${fmt(d.total)}</div>
         <div class="rank-context">${value} · ${other}</div>
       </div>
     </div>
