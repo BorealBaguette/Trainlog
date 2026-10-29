@@ -269,6 +269,13 @@
           <div class="settings2-card">
             <h3 class="settings2-card-title"><i class="fa-solid fa-map"></i> {{ settingsSectionAppearance }}</h3>
 
+            <label class="settings2-label mt-0" for="theme">{{ theme_setting }}</label>
+            <select class="form-select mb-3" name="theme" id="theme" form="settingsForm">
+              <option value="auto" {% if user_theme == 'auto' %}selected{% endif %}>{{ theme_auto }}</option>
+              <option value="light" {% if user_theme == 'light' %}selected{% endif %}>{{ theme_light }}</option>
+              <option value="dark" {% if user_theme == 'dark' %}selected{% endif %}>{{ theme_dark }}</option>
+            </select>
+
             <div class="settings2-toggle-row">
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="colorblind" name="colorblind" form="settingsForm"
@@ -326,7 +333,7 @@
               </label>
             </div>
 
-            <div id="orm-options" class="mt-2 p-3 bg-light rounded" style="display: none;">
+            <div id="orm-options" class="mt-2 p-3 bg-body-tertiary rounded" style="display: none;">
               <label class="settings2-label mt-0" for="orm-type">{{ ormLayerType }}</label>
               <select class="form-select" name="orm_type" id="orm-type" form="settingsForm">
                 <optgroup label="Trainlog">

@@ -64,10 +64,10 @@
     /* Trainset picker in edit/new forms */
     .ts-pick-wrap { position: relative; display: inline-block; width: 100%; }
     .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
-                    background: #fff; border: 1px solid #aaa; border-radius: 4px;
+                    background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 4px;
                     max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
     .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
-    .ts-pick-item:hover { background: #f0f0f0; }
+    .ts-pick-item:hover { background: var(--bs-tertiary-bg); }
 
     th[data-sort-field] {
         position: relative;
@@ -79,7 +79,7 @@
     }
 
     th[data-sort-field]:hover {
-        background: rgba(0,0,0,0.05);
+        background: rgba(var(--bs-emphasis-color-rgb), 0.07);
     }
 
     #selectPageCheckbox {
@@ -143,7 +143,7 @@
        In card layout the cards carry their own borders and this rule is overridden
        (see the `> td { border: 0 }` card rule below); the line is drawn in the gap
        above the card instead. */
-    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed #aab4c0; }
+    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed var(--card-seam); }
 
     /* Expand arrow for the details row. Responsive draws this itself only for
        `details.type: 'inline'`, where the control is whichever column happens to be
@@ -231,10 +231,10 @@
             /* A hairline lighter than the old #dee2e6 plus a whisper of shadow: the
                border alone read as a wireframe, the shadow alone smudged on low-DPI
                screens; together each card sits just proud of the page. */
-            border: 1px solid #e3e7eb;
+            border: 1px solid var(--card-border);
             border-radius: 10px;
-            background: #fff;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+            background: var(--card-bg);
+            box-shadow: 0 1px 2px var(--card-shadow);
         }
 
         /* The now-boundary as a card: the cards are already separated, so the seam is
@@ -247,7 +247,7 @@
             left: 0;
             right: 0;
             top: -12px;
-            border-top: 1px dashed #aab4c0;
+            border-top: 1px dashed var(--card-seam);
         }
 
         /* An open detail row is part of the card above it, not a card of its own. */
@@ -267,7 +267,7 @@
             border-top-left-radius: 0;
             border-top-right-radius: 0;
             /* The open pair casts one shadow, from its true bottom edge. */
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+            box-shadow: 0 1px 2px var(--card-shadow);
         }
 
         .trip-card-host > #dataTable > tbody > tr > td {
@@ -287,9 +287,9 @@
            colour instead and the text keeps its own; the white plate behind logos is
            dropped too, since it exists for the solid-blue selection this replaces. */
         .trip-card-host > #dataTable > tbody > tr.selected {
-            background-color: #e7f0fb;
-            border-color: #0d6efd;
-            box-shadow: inset 0 0 0 1px #0d6efd;
+            background-color: var(--card-sel-bg);
+            border-color: var(--card-sel-border);
+            box-shadow: inset 0 0 0 1px var(--card-sel-border);
         }
         .trip-card-host > #dataTable > tbody > tr.selected > * { color: inherit; }
         .trip-card-host > #dataTable > tbody > tr.selected td img {
@@ -348,7 +348,7 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-dest {
             font-weight: 700;
             font-size: 0.95rem;
-            color: #4b5563;
+            color: var(--card-title);
             line-height: 1.35;
             padding: 1px 0;
         }
@@ -388,7 +388,7 @@
             flex: 0 0 auto;
             min-width: 0;
             margin-top: 3px;
-            color: #6c757d;
+            color: var(--card-meta);
             font-size: 0.8rem;
             box-sizing: border-box;
             /* The one gap between slots. All the other spacing on the line is fixed, so
@@ -424,7 +424,7 @@
                font's. A pixel back up. */
             position: relative;
             top: -1px;
-            color: #adb5bd;
+            color: var(--card-icon);
             font-family: "Font Awesome 6 Free";
             font-weight: 900;
             font-size: 0.78em;
@@ -574,14 +574,14 @@
                above a reserved band, and the arrow sits in the band (see the ::before
                rule below), level with the actions pill across the card. */
             padding-bottom: 35px;
-            background: #f8f9fa;
-            border-right: 1px solid #eef1f4;
+            background: var(--card-sunken);
+            border-right: 1px solid var(--card-gutter-border);
             border-radius: 9px 0 0 9px;
         }
         .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-type { border-bottom-left-radius: 0; }
         .trip-card-host > #dataTable > tbody > tr.selected > td.col-type {
-            background: #dbe7fa;
-            border-right-color: #c3d8f5;
+            background: var(--card-sel-gutter);
+            border-right-color: var(--card-accent-border);
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-type .operatorLogo {
             max-height: 24px;
@@ -620,18 +620,18 @@
             /* .btn-link underlines its content, and a FontAwesome glyph is text as far as
                that is concerned. */
             text-decoration: none;
-            color: #8a93a2;
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            color: var(--card-control-fg);
+            background: var(--card-sunken);
+            border: 1px solid var(--card-sunken-border);
             border-radius: 999px;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-actions .modalButton:active {
-            background: #e9edf1;
-            color: #495057;
+            background: var(--card-pressed-bg);
+            color: var(--card-pressed-fg);
         }
         .trip-card-host > #dataTable > tbody > tr.selected > td.col-actions .modalButton {
-            background: #eff5fd;
-            border-color: #c3d8f5;
+            background: var(--card-accent-bg);
+            border-color: var(--card-accent-border);
         }
         /* Horizontal dots. A column of three under a wordmark echoed the tall left gutter;
            lying down they fill the pill. Rotated rather than swapped for fa-ellipsis,
@@ -656,9 +656,9 @@
             height: 32px;
             padding: 0 12px;
             margin: 0;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--card-input-border);
             border-radius: 8px;
-            background: #fff;
+            background: var(--card-bg);
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
@@ -676,11 +676,11 @@
             font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", FontAwesome;
             font-weight: 900;
             font-size: 0.7rem;
-            color: #ced4da;
+            color: var(--card-check-empty);
         }
         .mobile-select-page.checked {
-            background: #207cca;
-            border-color: #207cca;
+            background: var(--card-accent-solid);
+            border-color: var(--card-accent-solid);
             color: #fff;
         }
         .mobile-select-page.checked::before { color: #fff; }
@@ -719,13 +719,13 @@
             padding: 0 14px;
             /* 16px is the threshold below which iOS zooms the page on focus. */
             font-size: 16px;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--card-input-border);
             border-radius: 10px;
-            background: #fff;
+            background: var(--card-bg);
         }
         .trips-cards .dt-controls .dt-search input:focus {
             outline: none;
-            border-color: #86b7fe;
+            border-color: var(--card-focus-border);
             box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
         }
         /* The help icon rides inside the search row; padding makes it a tappable
@@ -733,7 +733,7 @@
         .trips-cards .dt-controls .search-help-icon {
             padding: 10px 8px;
             font-size: 1.1rem;
-            color: #6c757d;
+            color: var(--card-meta);
         }
         /* The second row's controls — length menu, sort, switches, select-page — are
            secondary to the search above them, so they share one quiet size. */
@@ -741,15 +741,15 @@
         .trips-cards .dt-controls .form-check-label,
         .trips-cards .dt-controls label {
             font-size: 0.85rem;
-            color: #495057;
+            color: var(--card-label);
         }
         .trips-cards .dt-controls .dt-length select,
         .trips-cards .dt-controls .dt-sort-btn {
             height: 32px;
             font-size: 0.85rem;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--card-input-border);
             border-radius: 8px;
-            background-color: #fff;
+            background-color: var(--card-bg);
         }
         .trips-cards .dt-controls .form-check { margin-bottom: 0; min-height: 0; }
 
@@ -786,8 +786,8 @@
             gap: 12px;
             margin-top: 2px;
             padding: 14px;
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background: var(--card-sunken);
+            border: 1px solid var(--card-sunken-border);
             border-radius: 12px;
         }
         .trips-cards .dt-controls-secondary.show { display: flex; }
@@ -842,16 +842,16 @@
             flex: 0 0 auto;
             width: 40px;
             height: 40px;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--card-input-border);
             border-radius: 10px;
-            background: #fff;
-            color: #495057;
+            background: var(--card-bg);
+            color: var(--card-label);
             font-size: 1rem;
         }
         .trips-cards .dt-options-toggle.open {
-            background: #eff5fd;
-            border-color: #c3d8f5;
-            color: #207cca;
+            background: var(--card-accent-bg);
+            border-color: var(--card-accent-border);
+            color: var(--card-accent-fg);
         }
 
         /* --- Pagination ---
@@ -878,12 +878,12 @@
             border: 1px solid transparent;
             border-radius: 10px;
             font-size: 0.9rem;
-            color: #374151 !important;
+            color: var(--card-page-fg) !important;
         }
         .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current,
         .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current:hover {
-            background: #207cca !important;
-            border-color: #207cca;
+            background: var(--card-accent-solid) !important;
+            border-color: var(--card-accent-solid);
             color: #fff !important;
         }
         .trips-cards .dt-controls-bottom .dt-paging .page-jump-input {
@@ -897,7 +897,7 @@
         .trips-cards .dt-controls-bottom .dt-info {
             padding: 0;
             font-size: 0.8rem;
-            color: #6c757d;
+            color: var(--card-meta);
             text-align: center;
         }
 
@@ -910,7 +910,7 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.03em;
-            color: #8a93a2;
+            color: var(--card-control-fg);
         }
         .trip-card-host > #dataTable td.child table tr td { font-size: 0.9rem; }
 
@@ -925,14 +925,14 @@
         .trip-card-host > #dataTable > tbody > tr > td.dt-empty {
             padding: 28px 16px;
             text-align: center;
-            color: #6c757d;
+            color: var(--card-meta);
         }
 
         /* --- Touch feedback ---
            The expand gutter acknowledges the finger (the actions pill has its own
            :active above); rows already flash their selection colour through the
            select handler. */
-        .trip-card-host > #dataTable > tbody > tr > td.col-type:active { background: #e9edf1; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-type:active { background: var(--card-pressed-bg); }
     }
 
     /* The gear and its collapsible group are a phone affordance only, but the two
@@ -953,8 +953,8 @@
        safe-area inset keeps it off iPhone home indicators. */
     @media screen and (max-width: 600px) {
         .multiLink {
-            border-top: 1px solid #e9ecef;
-            box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
+            border-top: 1px solid var(--card-sunken-border);
+            box-shadow: 0 -4px 16px var(--card-shadow);
             padding-top: 8px;
             padding-bottom: calc(5px + env(safe-area-inset-bottom));
         }
@@ -1377,7 +1377,7 @@
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" style="background-color: #f8f9fa;">
+            <div class="modal-body" style="background-color: var(--bs-tertiary-bg);">
                 <!-- Content injected via JS -->
             </div>
             <div class="modal-footer">
@@ -1457,7 +1457,7 @@
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openMassEditTsb()">
               <i class="fas fa-train"></i> {{tsbPickTrainset}}
             </button>
-            <span id="massEditTsbLabel" style="font-size:.875rem; color:#666;"></span>
+            <span id="massEditTsbLabel" style="font-size:.875rem; color:var(--bs-secondary-color);"></span>
           </div>
         </div>
         <div class="mb-3">
@@ -1945,7 +1945,7 @@ function processHiddenData(rowIdx, columns){
                     formatted = '';
                 } else {
                     // No images — show full text fallback
-                    formatted = rawAdv && rawMat ? rawMat + ' <span style="color:#888;font-size:.9em">' + _formatTrainsetStr(rawAdv) + '</span>'
+                    formatted = rawAdv && rawMat ? rawMat + ' <span style="color:var(--bs-secondary-color);font-size:.9em">' + _formatTrainsetStr(rawAdv) + '</span>'
                                                  : _formatTrainsetStr(primary);
                 }
                 if (isValid) {
@@ -2269,7 +2269,7 @@ function renderLength(data, type, row) {
 
         if (row.type === 'air' || row.type === 'helicopter') {
             if (row.is_geodesic === false) {
-                kmText += ` <span style="font-size: 0.6rem; vertical-align: super; color: #888;" title="Flight path included">•</span>`;
+                kmText += ` <span style="font-size: 0.6rem; vertical-align: super; color: var(--bs-secondary-color);" title="Flight path included">•</span>`;
             }
         }
 
@@ -2391,7 +2391,7 @@ function refreshDiscordButtons(tripId, state){
 
 function renderButton(data, type, row){
   var modalId = `actionModal${data.uid}`;
-  var button = $('<button>').attr('class', "btn btn-link link-dark modalButton")
+  var button = $('<button>').attr('class', "btn btn-link link-body-emphasis modalButton")
     .attr('data-tripId', data.uid)
     .attr('data-bs-toggle', 'modal')
     .attr('data-bs-target', '#' + modalId)
@@ -2511,7 +2511,7 @@ function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
         var mat = row.material_type || '';
-        if (adv && mat) return sanitize(mat) + ' <span style="color:#888;font-size:.9em">' + sanitize(_formatTrainsetStr(adv)) + '</span>';
+        if (adv && mat) return sanitize(mat) + ' <span style="color:var(--bs-secondary-color);font-size:.9em">' + sanitize(_formatTrainsetStr(adv)) + '</span>';
         if (adv) return sanitize(_formatTrainsetStr(adv));
         return sanitize(mat);
     }
