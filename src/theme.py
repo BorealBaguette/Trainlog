@@ -1,4 +1,4 @@
-"""Site-wide light/dark theme, for alpha users only while it is being finished.
+"""Site-wide light/dark theme (beta).
 
 The choice lives on the user row and is copied into session["userinfo"] with the
 other settings, but no route passes it: a context processor injects `theme` into
@@ -13,7 +13,7 @@ from src.users import authDb
 
 THEMES = ("auto", "light", "dark")
 
-DEFAULT_THEME = "auto"
+DEFAULT_THEME = "light"
 
 
 def ensure_theme_column():
@@ -39,8 +39,4 @@ def init_app(app):
 
     @app.context_processor
     def inject_theme():
-        # Everyone else, anonymous visitors included, stays on the light theme
-        userinfo = session.get("userinfo", {})
-        if not userinfo.get("is_alpha"):
-            return {"theme": "light"}
-        return {"theme": userinfo.get("theme", DEFAULT_THEME)}
+        return {"theme": session.get("userinfo", {}).get("theme", DEFAULT_THEME)}

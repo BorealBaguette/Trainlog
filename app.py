@@ -9988,7 +9988,7 @@ def user_settings(username):
         params["friend_search"] = "friend_search" in request.form
         params["appear_on_global"] = "appear_on_global" in request.form
         params["colorblind"] = "colorblind" in request.form
-        if user.alpha and request.form.get("theme") in theme_module.THEMES:
+        if request.form.get("theme") in theme_module.THEMES:
             params["theme"] = request.form["theme"]
         params["lang"] = request.form["lang"]
         params["user_currency"] = request.form["user_currency"]

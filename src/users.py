@@ -28,7 +28,7 @@ class User(authDb.Model):
     friend_search = authDb.Column(authDb.Boolean, nullable=False, default=True)
     colorblind = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # "auto" (follow the OS), "light" or "dark" — see src/theme.py.
-    theme = authDb.Column(authDb.String(10), nullable=False, default="auto")
+    theme = authDb.Column(authDb.String(10), nullable=False, default="light")
     reset_token = authDb.Column(authDb.String(100), default="")
     # Per-user secret token for the GPSLogger GPX ingest endpoint
     # (/api/gps/<token>/upload). Scoped to GPS ingest only; regenerable.

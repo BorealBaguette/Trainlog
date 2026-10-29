@@ -112,7 +112,6 @@
     font-size: 0.6rem; font-weight: 600; line-height: 1.2; text-transform: uppercase;
     /* Room above for accented capitals (BÊTA). */
   }
-  .settings2-alpha { background: #9B59B6; }
 
   .settings2-danger-card { border-color: #f5c2c7; min-height: 0; }
 
@@ -270,15 +269,13 @@
           <div class="settings2-card">
             <h3 class="settings2-card-title"><i class="fa-solid fa-map"></i> {{ settingsSectionAppearance }}</h3>
 
-            {% if is_alpha %}
             <label class="settings2-label mt-0 d-flex align-items-center" for="theme">{{ theme_setting }}
-              <span class="settings2-beta settings2-alpha">{{ roleAlpha }}</span></label>
+              <span class="settings2-beta">{{ beta }}</span></label>
             <select class="form-select mb-3" name="theme" id="theme" form="settingsForm">
               <option value="auto" {% if user_theme == 'auto' %}selected{% endif %}>{{ theme_auto }}</option>
               <option value="light" {% if user_theme == 'light' %}selected{% endif %}>{{ theme_light }}</option>
               <option value="dark" {% if user_theme == 'dark' %}selected{% endif %}>{{ theme_dark }}</option>
             </select>
-            {% endif %}
 
             <div class="settings2-toggle-row">
               <div class="form-check form-switch">
