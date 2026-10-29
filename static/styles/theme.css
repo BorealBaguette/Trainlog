@@ -364,8 +364,10 @@
    Bootstrap keeps its saturated light-theme fills in dark mode, so every button and
    coloured badge glares. Each variant gets a muted base here; hover and press lift it
    towards white, outline buttons take it as their border with a lighter tint as text.
-   text-* utilities keep Bootstrap's colours, which are the ones legible on a dark page. */
-:root[data-bs-theme="dark"] {
+   text-* utilities keep Bootstrap's colours, which are the ones legible on a dark page.
+   Defined on every page, not just dark ones: a light-dark() naming one of them in its
+   dark branch is thrown away whole when the variable is missing, light branch included. */
+:root {
   --tl-primary: #3567b0;
   --tl-secondary: #545b64;
   --tl-success: #2e7a52;
