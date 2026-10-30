@@ -13761,10 +13761,9 @@ def visited_squares(username):
 @public_required
 def visited_squares_data(username):
     """Fetch the GeoJSON data for the visited squares."""
-    geojson_data, grid_geojson, land_percentage, air_percentage = generate_visited_squares_geojson(username)
+    geojson_data, land_percentage, air_percentage = generate_visited_squares_geojson(username)
     response = {
         "geojson": geojson_data,
-        "grid_geojson": grid_geojson,
         "land_percentage": land_percentage,
         "air_percentage": air_percentage,
     }

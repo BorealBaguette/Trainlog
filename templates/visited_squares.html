@@ -50,6 +50,23 @@
         });
     }
 
+    // One line per parallel and meridian, with a vertex every degree so they still bend on the globe
+    function gridGeoJSON() {
+        const steps = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+        const lines = [
+            ...steps(-90, 90).map(lat => steps(-180, 180).map(lon => [lon, lat])),
+            ...steps(-180, 180).map(lon => steps(-90, 90).map(lat => [lon, lat])),
+        ];
+        return {
+            type: "FeatureCollection",
+            features: lines.map(coordinates => ({
+                type: "Feature",
+                geometry: { type: "LineString", coordinates },
+                properties: {}
+            }))
+        };
+    }
+
     function fetchVisitedSquaresGeoJSON() {
     fetch(`/u/{{username}}/visited_squares_data`)
         .then(r => r.json())
@@ -64,10 +81,10 @@
             (data.land_percentage + data.air_percentage).toFixed(2) + '%';
 
         // --- GRID LAYER (underneath) ---
-        if (data.grid_geojson) {
+        {
             map.addSource("grid", {
             type: "geojson",
-            data: data.grid_geojson
+            data: gridGeoJSON()
             });
 
             map.addLayer({
@@ -126,11 +143,21 @@
 
         applySquareColorMode();
 
-        // auto zoom
+        // auto zoom. A globe shows one side only, so squares spread wider than that fit
+        // the busiest 60° window instead of a box centred on wherever lies between them
+        let shown = data.geojson.features.map(f => f.geometry.coordinates[0][0]);
+        const lons = shown.map(([lon]) => lon), lats = shown.map(([, lat]) => lat);
+        const projection = map.getProjection && map.getProjection();
+        if (projection && projection.type === 'globe'
+            && (Math.max(...lons) - Math.min(...lons) > 90 || Math.max(...lats) - Math.min(...lats) > 60)) {
+            const bin = ([lon, lat]) => [Math.floor(lon / 20), Math.floor(lat / 20)];
+            const counts = {};
+            shown.forEach(corner => { const key = bin(corner).join(); counts[key] = (counts[key] || 0) + 1; });
+            const [bx, by] = Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b).split(',').map(Number);
+            shown = shown.filter(corner => { const [x, y] = bin(corner); return Math.abs(x - bx) <= 1 && Math.abs(y - by) <= 1; });
+        }
         const bounds = new maplibregl.LngLatBounds();
-        data.geojson.features.forEach(f => {
-            f.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
-        });
+        shown.forEach(([lon, lat]) => bounds.extend([lon, lat]).extend([lon + 1, lat + 1]));
         if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 40 });
         document.getElementById("map").style.visibility = "visible";
         $('.loading-screen').hide();
@@ -188,6 +215,8 @@
         }
         document.getElementById('squareTypeLegend').style.display = byYear ? 'none' : '';
         document.getElementById('squareYearLegend').innerHTML = byYear ? MapLibreUtils.yearLegendHtml(squareYearColors) : '';
+        document.getElementById('squareYearSpreadToggle').style.display = byYear ? '' : 'none';
+        document.getElementById('squareYearSpread').style.display = byYear ? '' : 'none';
     }
 
     class PercentageControl {
@@ -195,24 +224,37 @@
         this._div = document.createElement("div");
         this._div.className = "percentage-control";
         this._div.innerHTML = `
-        <h4 class="squares-title"><i class="fa-solid fa-border-all"></i> {{ about_explore_squares_h }}</h4>
+        <h4 class="squares-title" role="button" onclick="this.parentElement.classList.toggle('collapsed')">
+            <i class="fa-solid fa-border-all"></i> {{ about_explore_squares_h }} <i class="fa-solid fa-chevron-up squares-chevron"></i>
+        </h4>
         <div><i class="fas fa-globe"></i> <span id="percentageLand">...</span></div>
         <div id="squareAirToggle" class="square-air-toggle" role="button" title="{{air}}" onclick="toggleSquareAir()"><i class="fas fa-plane"></i> <span id="percentageAir">...</span></div>
         <div><i class="fas fa-chart-pie"></i> <span id="percentageTotal">...</span></div>
 
-        <label class="square-color-mode mt-2">{{ mapColorBy }}
+        <div class="squares-body">
+        <div class="square-color-mode mt-2">
+            <label for="squareColorMode">{{ mapColorBy }}</label>
             <select id="squareColorMode" onchange="applySquareColorMode()">
                 <option value="type">{{ squareColorByVisit }}</option>
                 <option value="year">{{ year }}</option>
             </select>
-        </label>
+            <button type="button" id="squareYearSpreadToggle" class="year-spread-toggle" title="{{ yearColorSpread }}" style="display: none;"
+                    onclick="document.getElementById('squareYearSpread').classList.toggle('open')"><i class="fa-solid fa-sliders"></i></button>
+        </div>
+        <div id="squareYearSpread" class="year-spread">
+            <input type="range" min="0" max="1" step="0.05" value="${MapLibreUtils.yearSpread()}" oninput="MapLibreUtils.setYearSpread(this.value); applySquareColorMode()">
+            <div class="year-spread-ends"><span>{{ yearSpreadEven }}</span><span>{{ yearSpreadTravel }}</span></div>
+        </div>
         <div id="squareYearLegend" class="mt-2"></div>
         <div id="squareTypeLegend" class="legend mt-2">
             <div><span class="legend-color" style="background-color: ${STATUS_COLORS.stopped}; opacity: ${STATUS_OPACITY.stopped};"></span> {{stopped}}</div>
             <div><span class="legend-color" style="background-color: ${STATUS_COLORS.passed}; opacity: ${STATUS_OPACITY.passed};"></span> {{passed}}</div>
             <div><span class="legend-color" style="background-color: ${STATUS_COLORS.air}; opacity: ${STATUS_OPACITY.air};"></span> {{air}}</div>
         </div>
+        </div>
         `;
+        // Folded on phones, where the open panel would hide most of the map
+        if (window.matchMedia('(max-width: 640px)').matches) this._div.classList.add('collapsed');
         return this._div;
     }
     }
@@ -241,6 +283,37 @@
         border-radius: 5px;
     }
 
+    .percentage-control {
+        max-height: calc(100% - 20px);
+        overflow-y: auto;
+    }
+
+    .percentage-control.collapsed .squares-body {
+        display: none;
+    }
+
+    .squares-chevron {
+        font-size: 10px;
+        margin-left: 4px;
+        transition: transform 0.2s;
+    }
+
+    .percentage-control.collapsed .squares-chevron {
+        transform: rotate(180deg);
+    }
+
+    /* Map colours showing through make the legend unreadable on a small screen */
+    @media (max-width: 640px) {
+        .percentage-control,
+        [data-bs-theme="dark"] .percentage-control {
+            background: rgb(var(--bs-body-bg-rgb));
+        }
+
+        .percentage-control .year-legend .year-list {
+            max-height: 35vh;
+        }
+    }
+
     .legend {
         margin-top: 10px;
     }
@@ -252,6 +325,7 @@
     }
 
     .squares-title {
+        cursor: pointer;
         margin: 0 0 8px;
         font-size: 14px;
         font-weight: 700;

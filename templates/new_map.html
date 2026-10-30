@@ -35,12 +35,20 @@
     </div>
 
     <div class="control-group">
-        <label class="control-label">{{ mapColorBy }}</label>
+        <div class="control-label year-label-row">
+            <label for="colorMode">{{ mapColorBy }}</label>
+            <button type="button" id="yearSpreadToggle" class="year-spread-toggle" title="{{ yearColorSpread }}" style="display: none;"
+                    onclick="document.getElementById('yearSpread').classList.toggle('open')"><i class="fa-solid fa-sliders"></i></button>
+        </div>
         <div class="select-wrapper">
             <select id="colorMode" onchange="updateColorMode()">
                 <option value="type">{{ mapColorByType }}</option>
                 <option value="year">{{ year }}</option>
             </select>
+        </div>
+        <div id="yearSpread" class="year-spread">
+            <input type="range" min="0" max="1" step="0.05" oninput="MapLibreUtils.setYearSpread(this.value); updateColorMode()">
+            <div class="year-spread-ends"><span>{{ yearSpreadEven }}</span><span>{{ yearSpreadTravel }}</span></div>
         </div>
     </div>
 
@@ -398,6 +406,8 @@ function applyColorMode() {
     document.getElementById('typeLegend').style.display = byYear ? 'none' : '';
     yearLegend.style.display = byYear ? '' : 'none';
     yearLegend.innerHTML = byYear ? MapLibreUtils.yearLegendHtml(colors) : '';
+    document.getElementById('yearSpreadToggle').style.display = byYear ? '' : 'none';
+    document.getElementById('yearSpread').style.display = byYear ? '' : 'none';
 }
 
 function updateColorMode() {
@@ -844,6 +854,7 @@ function loadPreferences() {
     
     const savedColorMode = Cookies.get('colorMode');
     if (savedColorMode) document.getElementById('colorMode').value = savedColorMode;
+    document.querySelector('#yearSpread input').value = MapLibreUtils.yearSpread();
 
     // Load selected years
     const savedYears = Cookies.get('yearSelect');

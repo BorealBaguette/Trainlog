@@ -656,6 +656,41 @@
     margin: 4px 0 8px;
 }
 
+.year-spread {
+    display: none;
+    margin-top: 8px;
+}
+
+.year-spread.open {
+    display: block;
+}
+
+.year-spread input {
+    width: 100%;
+    accent-color: var(--train);
+}
+
+.year-spread-ends {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+.year-spread-toggle {
+    padding: 0 2px;
+    border: 0;
+    background: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.year-spread-toggle:hover {
+    opacity: 1;
+}
+
 /* Year legend: rows or bar, the toggle showing the icon of the other */
 .year-legend { position: relative; }
 .year-legend.as-list .year-bar,
@@ -670,6 +705,20 @@
     max-height: 240px;
     overflow-y: auto;
 }
+
+/* On wide screens the years list grows to the map's edge, the panel scrolling only past it */
+@media (min-width: 641px) {
+    .year-legend .year-list {
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .legend-control {
+        max-height: calc(100% - 40px);
+        overflow-y: auto;
+    }
+}
+
 .year-legend-toggle {
     position: absolute;
     top: -4px;
