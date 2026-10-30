@@ -137,9 +137,9 @@
         display: grid; grid-template-columns: 30px auto minmax(0, 1fr) auto; align-items: center; gap: 2px 10px;
         width: 100%; padding: 7px 12px 7px 10px; border: 0; border-top: 1px solid light-dark(#f0f1f3, var(--bs-border-color)); text-align: left;
         border-left: 4px solid var(--line-color, transparent);
-        background: color-mix(in srgb, var(--line-color, transparent) 6%, #fff); font-size: .85rem; cursor: pointer;
+        background: color-mix(in srgb, var(--line-color, transparent) 6%, light-dark(#fff, var(--bs-body-bg))); font-size: .85rem; cursor: pointer;
     }
-    #stopsModal .stops-run:hover { background: color-mix(in srgb, var(--line-color, #999) 14%, #fff); }
+    #stopsModal .stops-run:hover { background: color-mix(in srgb, var(--line-color, #999) 14%, light-dark(#fff, var(--bs-body-bg))); }
     #stopsModal .stops-more { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 6px; border: 0; background: light-dark(#f9fafb, var(--bs-tertiary-bg)); color: light-dark(#6b7280, var(--bs-body-color)); font-size: .8rem; position: sticky; z-index: 1; }
     #stopsModal .stops-more[data-direction=earlier] { top: 0; }
     #stopsModal .stops-more[data-direction=later] { bottom: 0; }
@@ -150,7 +150,7 @@
     #stopsModal .stops-run .run-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
     #stopsModal .stops-run .run-line {
         flex: none; padding: 0 6px; border-radius: 4px; font-size: .78rem; font-weight: 600;
-        border: 1px solid var(--line-color, #ccc); background: color-mix(in srgb, var(--line-color, #ddd) 18%, #fff);
+        border: 1px solid var(--line-color, #ccc); background: color-mix(in srgb, var(--line-color, #ddd) 18%, light-dark(#fff, var(--bs-body-bg)));
     }
     #stopsModal .stops-run .run-headsign { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: light-dark(#444, var(--bs-emphasis-color)); }
     #stopsModal .stops-run .run-meta { grid-column: 2 / 4; font-size: .75rem; color: light-dark(#777, var(--bs-body-color)); }
