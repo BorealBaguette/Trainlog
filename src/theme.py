@@ -9,6 +9,7 @@ untouched, unlike `colorblind`, which is threaded through each route by hand.
 from flask import session
 from sqlalchemy import text
 
+from src.operators import OperatorsRepository
 from src.users import authDb
 
 THEMES = ("auto", "light", "dark")
@@ -39,4 +40,8 @@ def init_app(app):
 
     @app.context_processor
     def inject_theme():
-        return {"theme": session.get("userinfo", {}).get("theme", DEFAULT_THEME)}
+        theme = session.get("userinfo", {}).get("theme", DEFAULT_THEME)
+        # The admin-made dark logos, for "auto" too since it may turn out dark. Called
+        # from theme_head only, so other renders (partials, emails) skip the query.
+        dark_logos = OperatorsRepository.get_dark_logos if theme != "light" else dict
+        return {"theme": theme, "dark_logos": dark_logos}

@@ -6,6 +6,7 @@
 {% set page_theme = 'light' if light_only else theme %}
 <script>
   window.trainlogTheme = "{{ page_theme }}";
+  window.trainlogDarkLogos = {{ (dark_logos() if page_theme != 'light' else {})|tojson }};
   (function () {
     var pref = window.trainlogTheme;
     var dark = pref === "dark" ||

@@ -12808,19 +12808,19 @@ def editManual(id):
                 new_data,
             )
             return redirect(url_for("adminManual"))
-        else:
-            station = pg.execute(
-                "SELECT * FROM manual_stations WHERE uid = :uid", {"uid": id}
-            ).fetchone()
-            return render_template(
-                "admin/edit_manual.html",
-                station=station,
-                username=session.get("logged_in"),
-                nav="bootstrap/navigation.html",
-                isCurrent=has_current_trip(get_user_id()),
-                **lang[session["userinfo"]["lang"]],
-                **session["userinfo"],
-            )
+        station = pg.execute(
+            "SELECT * FROM manual_stations WHERE uid = :uid", {"uid": id}
+        ).fetchone()
+    # Rendered outside the session: the layout queries the database itself
+    return render_template(
+        "admin/edit_manual.html",
+        station=station,
+        username=session.get("logged_in"),
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id()),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
 
 
 @app.errorhandler(405)

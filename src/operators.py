@@ -263,7 +263,7 @@ class OperatorsRepository:
             # CFF into SBB there is no CFF row left, and nothing tells you where it
             # went. Only kind='alias' — short/long already have their own columns.
             result = pg.execute("""
-                SELECT o.operator_id, o.short_name, o.long_name, o.operator_type, ol.logo_url,
+                SELECT o.operator_id, o.short_name, o.long_name, o.operator_type, ol.logo_url, ol.dark_logo_url,
                        COALESCE((
                            SELECT string_agg(a.alias, ', ' ORDER BY a.alias)
                            FROM operator_aliases a
@@ -302,6 +302,7 @@ class OperatorsRepository:
                 "long_name",
                 "operator_type",
                 "logo_url",
+                "dark_logo_url",
                 "aliases",
                 "group_id",
                 "group_with",
@@ -938,11 +939,34 @@ class OperatorsRepository:
     def get_operator_logos(cls, operator_id: int):
         with pg_session() as pg:
             result = pg.execute(
-                "SELECT uid, operator_id, logo_url, effective_date FROM operator_logos WHERE operator_id = :operator_id",
+                "SELECT uid, operator_id, logo_url, effective_date, dark_logo_url FROM operator_logos WHERE operator_id = :operator_id",
                 {"operator_id": operator_id},
             )
-            columns = ["uid", "operator_id", "logo_url", "effective_date"]
+            columns = ["uid", "operator_id", "logo_url", "effective_date", "dark_logo_url"]
             return [dict(zip(columns, row)) for row in result.fetchall()]
+
+    @classmethod
+    def set_dark_logo(cls, logo_id: int, dark_logo_url: str | None):
+        """Set (or clear, with None) the dark version on every row using this logo's
+        file, so rows sharing a file cannot disagree."""
+        with pg_session() as pg:
+            result = pg.execute(
+                """
+                UPDATE operator_logos SET dark_logo_url = :dark_logo_url
+                WHERE logo_url = (SELECT logo_url FROM operator_logos WHERE uid = :logo_id)
+                """,
+                {"logo_id": logo_id, "dark_logo_url": dark_logo_url},
+            )
+            return result.rowcount > 0
+
+    @classmethod
+    def get_dark_logos(cls):
+        """{logo_url: dark_logo_url} for the logos that have a dark version."""
+        with pg_session() as pg:
+            result = pg.execute(
+                "SELECT DISTINCT logo_url, dark_logo_url FROM operator_logos WHERE dark_logo_url IS NOT NULL"
+            )
+            return dict(result.fetchall())
 
     @classmethod
     def add_operator_logo(

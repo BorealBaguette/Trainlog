@@ -474,7 +474,8 @@
     function buildDarkLogo(url) {
         if (!url || url in darkLogoCache) return Promise.resolve();
         if (darkLogoPending[url]) return darkLogoPending[url];
-        darkLogoPending[url] = loadImage(url).then(img => {
+        const dark = darkVersion(url);
+        darkLogoPending[url] = loadImage(dark || url).then(img => {
             delete darkLogoPending[url];
             if (!img) { darkLogoCache[url] = null; return; }
             const box = axisImageBox(LOGO_ASPECT);
@@ -489,14 +490,14 @@
             const w = ink.w * fit, h = ink.h * fit;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, ink.x, ink.y, ink.w, ink.h, canvas.width - w, (canvas.height - h) / 2, w, h);
-            lightenDarkInk(ctx, canvas.width, canvas.height);
+            if (!dark) lightenDarkInk(ctx, canvas.width, canvas.height);
             darkLogoCache[url] = { canvas, width: box.width, height: box.height };
         });
         return darkLogoPending[url];
     }
 
     // The lightening the trips list and ticket pages use too (static/js/dark_logos.js)
-    var { rgbToHsl, hslToRgb, lightenDarkInk } = window.TrainlogDarkInk;
+    var { rgbToHsl, hslToRgb, lightenDarkInk, darkVersion } = window.TrainlogDarkInk;
 
     // The part of an image that isn't transparent, as a source rectangle
     function opaqueBounds(img) {
@@ -546,8 +547,9 @@
 
     function darkMark(url) {
         if (url in darkMarkCache) return darkMarkCache[url] || url;
+        const dark = darkVersion(url);
         darkMarkCache[url] = null;
-        loadImage(url).then(img => {
+        loadImage(dark || url).then(img => {
             if (!img || !img.naturalWidth) return;
             const ink = opaqueBounds(img);
             const canvas = document.createElement('canvas');
@@ -555,7 +557,7 @@
             canvas.height = ink.h;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, ink.x, ink.y, ink.w, ink.h, 0, 0, ink.w, ink.h);
-            lightenDarkInk(ctx, ink.w, ink.h);
+            if (!dark) lightenDarkInk(ctx, ink.w, ink.h);
             darkMarkCache[url] = canvas.toDataURL();
         });
         return url;

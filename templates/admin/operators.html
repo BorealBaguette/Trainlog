@@ -4,30 +4,42 @@
 {% include nav %}
 
 <style>
-    /* Add margins around the carousel images */
-    .carousel-inner .carousel-item img {
-        margin: 20px auto; /* Adds 20px margin on top and bottom of the image */
-        display: block;
-        max-height: 400px;  /* Optional: Limits the image height */
-        object-fit: contain; /* Ensures the image fits inside the container */
+    /* Each logo as users see it: on the light theme's white and the dark theme's
+       page colour, whatever the admin's own theme */
+    .logo-item {
+        padding: .75rem 0;
+        border-bottom: 1px solid var(--bs-border-color);
     }
-
-    .carousel-control-prev,
-    .carousel-control-next {
-        margin-top: 10px; /* Optional: Adjust the position of the control arrows */
+    .logo-item:last-child { border-bottom: none; }
+    .logo-panel {
+        height: 110px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--bs-border-color);
+        border-radius: .375rem;
+        padding: .75rem;
     }
-
-    .carousel { overflow: hidden; padding-bottom: 4rem; }
-    .carousel-caption { top: 100%; }
-    .carousel-inner { overflow: visible; }
-    .carousel-control-next, .carousel-control-prev, .carousel-indicators { bottom: 4rem; }
+    .logo-panel-light { background: #fff; }
+    .logo-panel-dark { background: #26292e; }
+    .logo-panel img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    .logo-panel-caption {
+        min-height: 2.25rem;
+        margin-top: .25rem;
+        font-size: .875rem;
+        color: var(--bs-secondary-color);
+    }
 
     .missing-operator-badge {
         display: inline-block;
         margin: 5px;
         padding: 5px 10px;
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
+        background-color: light-dark(#f8f9fa, #2f3338);
+        border: 1px solid light-dark(#dee2e6, #41464d);
         border-radius: 4px;
     }
 
@@ -39,7 +51,7 @@
     }
 
     .missing-operator-count {
-        color: #6c757d;
+        color: light-dark(#6c757d, #9aa1a8);
         font-size: 0.875rem;
         margin-left: 5px;
     }
@@ -47,15 +59,15 @@
     .type-header {
         cursor: pointer;
         padding: 10px;
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
+        background-color: light-dark(#f8f9fa, #2f3338);
+        border: 1px solid light-dark(#dee2e6, #41464d);
         border-radius: 4px;
         margin-bottom: 10px;
         transition: background-color 0.2s;
     }
 
     .type-header:hover {
-        background-color: #e9ecef;
+        background-color: light-dark(#e9ecef, #383d43);
     }
 
     .type-header .badge {
@@ -63,8 +75,8 @@
     }
 
     .top-operators-card {
-        background-color: #fff3cd;
-        border: 1px solid #ffc107;
+        background-color: light-dark(#fff3cd, #3a3424);
+        border: 1px solid light-dark(#ffc107, #6e5c2c);
         border-radius: 4px;
         padding: 15px;
         margin-bottom: 20px;
@@ -72,7 +84,7 @@
 
     .operator-list-item {
         padding: 8px 12px;
-        border-bottom: 1px solid #e9ecef;
+        border-bottom: 1px solid light-dark(#e9ecef, #3a3f45);
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -83,7 +95,7 @@
     }
 
     .operator-list-item:hover {
-        background-color: #f8f9fa;
+        background-color: light-dark(#f8f9fa, #2f3338);
     }
 
     /* Keep the two action buttons on one line — the column is narrow enough
@@ -123,9 +135,9 @@
     .trip-count {
         font-variant-numeric: tabular-nums;
         font-weight: 600;
-        color: #343a40;
+        color: light-dark(#343a40, #dee2e6);
     }
-    .trip-count-zero { color: #adb5bd; font-weight: 500; }
+    .trip-count-zero { color: light-dark(#adb5bd, #6c757d); font-weight: 500; }
 
     .trip-count-group {
         display: inline-flex;
@@ -137,8 +149,8 @@
         font-size: .75rem;
         font-weight: 600;
         font-variant-numeric: tabular-nums;
-        color: #0c5460;
-        background: #d1ecf1;
+        color: light-dark(#0c5460, #9fd3de);
+        background: light-dark(#d1ecf1, #1d3a41);
     }
     .trip-count-group i { font-size: .85em; opacity: .8; }
 
@@ -264,32 +276,19 @@
     </div>
 </div>
 
-<!-- Modal for showing logo carousel -->
+<!-- An operator's logos, each with its light and dark version side by side -->
 <div class="modal fade" id="logoCarouselModal" tabindex="-1" aria-labelledby="logoCarouselModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="logoCarouselModalLabel">Operator Logos</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <!-- Carousel -->
-                <div id="operatorLogoCarousel" class="carousel carousel-dark slide">
-                    <div class="carousel-inner" id="carousel-images">
-                        <!-- Dynamic content goes here -->
-                    </div>
-                    <button class="carousel-control-prev" type="button" data-bs-target="#operatorLogoCarousel" data-bs-slide="prev">
-                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                        <span class="visually-hidden">Previous</span>
-                    </button>
-                    <button class="carousel-control-next" type="button" data-bs-target="#operatorLogoCarousel" data-bs-slide="next">
-                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                        <span class="visually-hidden">Next</span>
-                    </button>
-                </div>
+                <div id="logoList"></div>
                 <!-- Form to upload a new logo -->
                 <hr class="my-4">
-                <h5>Upload New Logo</h5>
+                <h6>Upload a new logo</h6>
                 <form id="uploadLogoForm">
                     <div class="form-group mb-3">
                         <label for="logoFile">Select Logo</label>
@@ -338,7 +337,7 @@
                         </select>
                     </div>
                     <!-- Optional here; existing operators manage their logos through the
-                         carousel (click the logo cell in the table). -->
+                         logos modal (click the logo cell in the table). -->
                     <div class="form-group" id="operatorLogoGroup">
                         <label for="logo">Logo Image (optional)</label>
                         <input type="file" class="form-control-file" id="logo" name="logo">
@@ -535,15 +534,18 @@
               orderable: false,
               render(data, type, row) {
                 if (type !== 'display') return data || '';
-                // The cell is the only way into the logo carousel, so an operator
+                // The cell is the only way into the logos modal, so an operator
                 // without a logo gets a button there instead of a broken image.
                 if (!data)
                     return `<button class="btn btn-outline-secondary btn-sm" title="Upload a logo"
                                     onclick="showLogoCarousel(${row.operator_id})">
                               <i class="fa-solid fa-upload"></i> Add logo
                             </button>`;
+                // The moon marks an uploaded dark version; without it the dark theme
+                // shows the automatic one
                 return `<img src="/static/${data}" class="tl-logo" width="100px" loading="lazy" id="logo-img-${row.operator_id}"` +
-                    `alt="logo for ${row.short_name}" onclick="showLogoCarousel(${row.operator_id})" style="cursor: pointer;"">`
+                    `alt="logo for ${row.short_name}" onclick="showLogoCarousel(${row.operator_id})" style="cursor: pointer;">` +
+                    (row.dark_logo_url ? '<i class="fa-solid fa-moon ms-1 text-muted" title="Has an uploaded dark version"></i>' : '')
               }
             },
             {
@@ -581,7 +583,7 @@
             }
         ],
         order: [
-            [1, 'asc']
+            [4, 'desc']
         ],
         language: {
             info: "{{dtInfo}}",
@@ -787,7 +789,7 @@
         $('#operator_type').val(op.operator_type);
         $('#note').val(op.note || '');
         $('#operatorModalLabel').text('Edit Operator: ' + op.short_name);
-        // Logos are managed through the carousel, not this modal.
+        // Logos are managed through the logos modal, not this one.
         $('#operatorLogoGroup').hide();
         $('#operatorFormError').empty();
         $('#operatorModal').modal('show');
@@ -964,43 +966,80 @@
         })
     }
 
+    // The automatic dark version a logo gets without an uploaded one, drawn here
+    // whatever the admin's own theme
+    function drawAutoDark(img, src) {
+        TrainlogDarkInk.lighten(src).then(url => { img.src = url || src; });
+    }
+
+    function logoPeriod(logo, next) {
+        const fmt = d => new Date(d).toLocaleDateString();
+        if (!logo.effective_date)
+            return next ? `Until ${fmt(next.effective_date)}` : 'Always';
+        return next ? `${fmt(logo.effective_date)} – ${fmt(next.effective_date)}` : `Since ${fmt(logo.effective_date)}`;
+    }
+
     function showLogoCarousel(operator_id) {
-        // Fetch all logos for the given operator
         currentUid = operator_id;
+        const row = table.rows().data().toArray().find(r => r.operator_id === operator_id);
+        $('#logoCarouselModalLabel').text(row ? `Logos: ${row.short_name}` : 'Logos');
         fetch(`/api/admin/operators/${operator_id}/logos`)
-            .catch(err => { alert(`Error: ${err}`)})
             .then(res => res.json())
             .then(response => {
-                const carouselInner = $('#carousel-images');
-                carouselInner.empty();  // Clear the previous images
-
+                const list = $('#logoList').empty();
                 if (!response.logos.length)
-                    carouselInner.append(`
-                        <div class="carousel-item active">
-                            <p class="text-muted text-center my-4">No logo yet.</p>
-                        </div>
-                    `);
+                    list.append('<p class="text-muted text-center my-4">No logo yet.</p>');
 
-                // Loop through the logos and add them to the carousel
-                response.logos.forEach((logo, index) => {
-                    const isActive = index === 0 ? 'active' : '';
-                    const effectiveDate = logo.effective_date ? new Date(logo.effective_date).toLocaleDateString() : 'None';
-                    carouselInner.append(`
-                        <div class="carousel-item ${isActive}" data-logo-id="${logo.operator_id}">
-                            <img src="/static/${logo.logo_url}" class="tl-logo d-block w-75" alt="Logo ${index}">
-                            <div class="carousel-caption d-none d-md-block">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0">Effective Date: ${effectiveDate}</h5>
-                                    <button class="btn btn-danger btn-sm" onclick="deleteLogo(${logo.uid})">Delete</button>
+                // Newest first, the undated one (used before the first dated one) last.
+                // Dates come as HTTP date strings, so they are compared as dates.
+                const time = l => l.effective_date ? new Date(l.effective_date).getTime() : -Infinity;
+                const logos = response.logos.sort((a, b) => time(b) - time(a));
+                logos.forEach((logo, i) => {
+                    const item = $(`
+                        <div class="logo-item">
+                            <div class="d-flex align-items-center mb-2">
+                                <strong class="me-auto">${logoPeriod(logo, logos.slice(0, i).reverse().find(l => l.effective_date))}</strong>
+                                <button class="btn btn-outline-danger btn-sm" onclick="deleteLogo(${logo.uid})"
+                                        title="Delete this logo and its dark version">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-sm-6">
+                                    <div class="logo-panel logo-panel-light">
+                                        <img class="logo-as-drawn" src="/static/${logo.logo_url}" alt="Light version">
+                                    </div>
+                                    <div class="logo-panel-caption">Light</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="logo-panel logo-panel-dark">
+                                        <img class="logo-as-drawn" alt="Dark version">
+                                    </div>
+                                    <div class="logo-panel-caption d-flex align-items-center gap-2">
+                                        <span class="me-auto">Dark: ${logo.dark_logo_url ? 'uploaded' : 'automatic'}</span>
+                                        <label class="btn btn-outline-secondary btn-sm mb-0">
+                                            <i class="fa-solid fa-upload me-1"></i>${logo.dark_logo_url ? 'Replace' : 'Upload'}
+                                            <input type="file" accept="image/png" hidden
+                                                   onchange="uploadDarkLogo(${logo.uid}, this.files[0])">
+                                        </label>
+                                        ${logo.dark_logo_url
+                                            ? `<button class="btn btn-outline-danger btn-sm" onclick="deleteDarkLogo(${logo.uid})"
+                                                       title="Back to the automatic version">Remove</button>`
+                                            : ''}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     `);
+                    const dark = item.find('.logo-panel-dark img')[0];
+                    if (logo.dark_logo_url) dark.src = `/static/${logo.dark_logo_url}`;
+                    else drawAutoDark(dark, `/static/${logo.logo_url}`);
+                    list.append(item);
                 });
 
-                // Show the modal with the carousel
                 $('#logoCarouselModal').modal('show');
             })
+            .catch(err => alert(`Error: ${err}`));
     }
 
     const uploadLogoForm = document.getElementById('uploadLogoForm')
@@ -1021,13 +1060,36 @@
             if (!res.ok)
                 throw new Error(body.message || `could not upload logo (HTTP ${res.status})`);
 
-            table.ajax.reload();
-            $('#logoCarouselModal').modal('hide')
+            table.ajax.reload(null, false);
+            $('#logoFile').val('');
+            $('#effectiveDate').val('');
+            showLogoCarousel(currentUid);
             bootstrapToast('Logo added successfully.')
         } catch (err) {
             $('#uploadLogoError').html(conflictAlertHtml(err.message));
         }
     });
+
+    // A dark version belongs to the logo file it was uploaded on, so each dated
+    // logo has its own; one without falls back to dark_logos.js
+    async function uploadDarkLogo(logoId, file) {
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('logo', file);
+        const res = await fetch(`/api/admin/operators/logos/${logoId}/dark`, { method: 'POST', body: formData });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) return bootstrapToast(body.message || `Could not upload (HTTP ${res.status})`, 'danger');
+        bootstrapToast('Dark version added.');
+        showLogoCarousel(currentUid);
+    }
+
+    async function deleteDarkLogo(logoId) {
+        if (!confirm('Remove this dark version?')) return;
+        const res = await fetch(`/api/admin/operators/logos/${logoId}/dark`, { method: 'DELETE' });
+        if (!res.ok) return bootstrapToast(`Could not remove (HTTP ${res.status})`, 'danger');
+        bootstrapToast('Dark version removed.');
+        showLogoCarousel(currentUid);
+    }
 
     function deleteOperator(operator_id) {
         if (!confirm('Are you sure you want to delete this operator?')) return;
@@ -1053,8 +1115,8 @@
                     res.text().then(err => {throw new Error(err)});
                     return;
                 }
-                table.ajax.reload();
-                $('#logoCarouselModal').modal('hide')
+                table.ajax.reload(null, false);
+                showLogoCarousel(currentUid);
                 bootstrapToast('Logo deleted successfully.')
             })
             .catch(err => alert(`Error: ${err}`))
