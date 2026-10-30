@@ -412,3 +412,72 @@
   font: inherit;
 }
 .router-picker-custom input:focus { border-color: #3b63b8; outline: none; }
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+[data-bs-theme="dark"] .wp-leaflet-popup .leaflet-popup-content-wrapper { box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }
+[data-bs-theme="dark"] .wp-leaflet-popup a.leaflet-popup-close-button { color: var(--bs-tertiary-color); }
+[data-bs-theme="dark"] .wp-popup,
+[data-bs-theme="dark"] .router-box,
+[data-bs-theme="dark"] .wp-action { color: var(--bs-body-color); }
+[data-bs-theme="dark"] .wp-popup-index { background: #2c3a55; color: #8fb0f5; }
+[data-bs-theme="dark"] .wp-popup-index.wp-popup-start { background: #1f3a27; color: #72c486; }
+[data-bs-theme="dark"] .wp-popup-index.wp-popup-end { background: #46241f; color: #ec8a7e; }
+[data-bs-theme="dark"] .wp-popup-index.wp-popup-start.colorblind { background: #352848; color: #bb8fe6; }
+[data-bs-theme="dark"] .wp-popup-index.wp-popup-end.colorblind { background: #43301b; color: #eba45a; }
+[data-bs-theme="dark"] .wp-popup-stop,
+[data-bs-theme="dark"] .wp-popup-hint,
+[data-bs-theme="dark"] .wp-mode-btn,
+[data-bs-theme="dark"] #sidebar .router-box button.router-seg-btn,
+[data-bs-theme="dark"] .router-seg-btn,
+[data-bs-theme="dark"] .router-picker-side,
+[data-bs-theme="dark"] .router-picker-group { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] .wp-popup-stop i,
+[data-bs-theme="dark"] .wp-action i,
+[data-bs-theme="dark"] .router-row-icon,
+[data-bs-theme="dark"] .router-tray-chevron,
+[data-bs-theme="dark"] .router-picker-glyph { color: var(--bs-tertiary-color); }
+
+/* Segmented tracks sink below the surface, their active button rises above it */
+[data-bs-theme="dark"] .wp-mode,
+[data-bs-theme="dark"] .router-seg,
+[data-bs-theme="dark"] .router-picker-list { background: rgba(0, 0, 0, .25); }
+[data-bs-theme="dark"] .wp-mode-btn:hover,
+[data-bs-theme="dark"] #sidebar .router-box button.router-seg-btn:hover,
+[data-bs-theme="dark"] .router-seg-btn:hover { color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] .wp-mode-btn.active,
+[data-bs-theme="dark"] #sidebar .router-box button.router-seg-btn.active,
+[data-bs-theme="dark"] .router-seg-btn.active,
+[data-bs-theme="dark"] #sidebar .router-box button.router-picker-opt.active,
+[data-bs-theme="dark"] .router-picker-opt.active {
+  background: #3f454d; color: #8fb0f5; box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+}
+[data-bs-theme="dark"] .router-picker-opt.active .router-picker-glyph { color: #8fb0f5; }
+[data-bs-theme="dark"] #sidebar .router-box button.router-picker-opt,
+[data-bs-theme="dark"] .router-picker-opt { color: var(--bs-body-color); }
+[data-bs-theme="dark"] .router-picker-opt:focus-visible { background: rgba(255, 255, 255, .08); }
+
+[data-bs-theme="dark"] .wp-popup-actions { border-top-color: var(--bs-border-color); }
+[data-bs-theme="dark"] .wp-action:hover { background: var(--bs-secondary-bg); }
+[data-bs-theme="dark"] .wp-action.active { color: #e8a54b; }
+[data-bs-theme="dark"] .wp-action.active i,
+[data-bs-theme="dark"] .wp-action .wp-action-state { color: #e8a54b; }
+[data-bs-theme="dark"] .wp-action-danger,
+[data-bs-theme="dark"] .wp-action-danger i { color: #ec8a7e; }
+[data-bs-theme="dark"] .wp-action-danger:hover { background: #3d2522; }
+
+[data-bs-theme="dark"] .router-box { background: var(--bs-tertiary-bg); }
+[data-bs-theme="dark"] .router-switch { background: #555c65; }
+[data-bs-theme="dark"] .router-switch::after { background: #d6dbe0; }
+[data-bs-theme="dark"] .router-switch:checked { background: #4f78cc; }
+[data-bs-theme="dark"] .route-filters,
+[data-bs-theme="dark"] .router-picker-group:not(:first-child),
+[data-bs-theme="dark"] .router-picker-custom { border-color: var(--bs-border-color); }
+[data-bs-theme="dark"] .router-select,
+[data-bs-theme="dark"] .router-picker-current,
+[data-bs-theme="dark"] #sidebar .router-box .router-picker-custom input,
+[data-bs-theme="dark"] .router-picker-custom input {
+  background: var(--bs-body-bg); color: var(--bs-body-color); border-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .router-picker-custom input:focus { border-color: #7d9fe0; }
+[data-bs-theme="dark"] .route-filters-error { background: #3d2522; color: #ec8a7e; }
+[data-bs-theme="dark"] .router-filter-count { background: #4f78cc; }

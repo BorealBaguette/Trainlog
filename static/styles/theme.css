@@ -165,7 +165,7 @@
 [data-bs-theme="dark"] .leaflet-popup-tip,
 [data-bs-theme="dark"] .leaflet-control-layers,
 [data-bs-theme="dark"] .leaflet-bar a,
-[data-bs-theme="dark"] .leaflet-control-attribution {
+[data-bs-theme="dark"] .leaflet-container .leaflet-control-attribution {
   background-color: var(--bs-body-bg);
   color: var(--bs-body-color);
 }
@@ -175,9 +175,44 @@
   color: var(--bs-emphasis-color);
 }
 
-[data-bs-theme="dark"] .leaflet-control-attribution a {
+[data-bs-theme="dark"] .leaflet-container .leaflet-control-attribution a {
   color: var(--bs-link-color);
 }
+
+/* Raster tiles have no dark variant, so the base layer (always added first) is
+   inverted with hues turned back; overlays like OpenRailwayMap come after it and
+   keep their colours. */
+[data-bs-theme="dark"] .leaflet-tile-pane > .leaflet-layer:first-child:not(.tiles-dark) {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.85) saturate(0.6);
+}
+/* The coverage and world squares maps' percentage box */
+[data-bs-theme="dark"] .percentage-control {
+  background: rgba(var(--bs-body-bg-rgb), 0.9);
+  color: var(--bs-body-color);
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+}
+
+/* What shows where tiles have not loaded yet */
+[data-bs-theme="dark"] .leaflet-container { background: #1f2124; }
+
+/* The sidebar plugin's panel and close button, and freehand.js's toggle, which
+   injects its own light styles */
+[data-bs-theme="dark"] .leaflet-sidebar > .leaflet-control,
+[data-bs-theme="dark"] .leaflet-sidebar .close {
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+}
+[data-bs-theme="dark"] .freehand-toggle-btn {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  border-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .freehand-toggle-btn:hover {
+  background: var(--bs-secondary-bg);
+  color: var(--bs-emphasis-color);
+  border-color: #5c636b;
+}
+[data-bs-theme="dark"] .freehand-toggle-btn:active { background: #3f454d; }
 
 /* The trips table draws Responsive's expand arrow itself, on the type column rather
    than a control column, so DataTables' own dark rule for it never applies. Same

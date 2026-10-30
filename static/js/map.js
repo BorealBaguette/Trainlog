@@ -48,7 +48,10 @@ function createMap(translations=null, center = [50, 10]) {
     }
 
     if (tileserverUrl) {
-        L.tileLayer(tileserverUrl, { maxZoom: 19, attribution }).addTo(map);
+        L.tileLayer(tileserverUrl, {
+            maxZoom: 19, attribution,
+            className: serverType === 'jawg-dark' ? 'tiles-dark' : ''
+        }).addTo(map);
     }
 
     if (serverType === 'orm') {

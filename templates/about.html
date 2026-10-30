@@ -85,6 +85,16 @@
   .about-cta:hover { background: var(--ac); color: #fff; }
 
   .about-badge { height: 42px; display: inline-block; margin-top: .5rem; }
+  [data-bs-theme="dark"] .about-page {
+    --ac: #5aa2e6; --ac-deep: #8cc0f0; --ac-soft: rgba(90,162,230,.15);
+    --ink: var(--bs-emphasis-color); --muted: var(--bs-secondary-color);
+    --hair: var(--bs-border-color); --paper: var(--bs-body-bg);
+  }
+  [data-bs-theme="dark"] .about-tabs-wrap::after { background: linear-gradient(to left, var(--bs-body-bg), transparent); }
+  [data-bs-theme="dark"] .about-tabs .nav-link:not(.active),
+  [data-bs-theme="dark"] .about-panel { background: var(--bs-tertiary-bg); }
+  [data-bs-theme="dark"] .about-tabs .nav-link.active { background: #2f6aa3; border-color: #2f6aa3; }
+  [data-bs-theme="dark"] .about-badge { filter: brightness(0.75) saturate(0.85); }
 </style>
 
 <div class="about-page">

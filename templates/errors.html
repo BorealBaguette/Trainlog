@@ -104,12 +104,22 @@
         margin: 22px auto 0;
         text-wrap: pretty;
     }
+    [data-bs-theme="dark"] .error-card {
+        background: var(--bs-tertiary-bg);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    [data-bs-theme="dark"] .error-page .error-body { color: var(--bs-body-color); }
+    [data-bs-theme="dark"] .error-page .error-credit { color: var(--bs-tertiary-color); }
+    [data-bs-theme="dark"] .error-page .error-credit a { border-bottom-color: var(--bs-border-color); }
+    [data-bs-theme="dark"] .error-page .error-credit a:hover,
+    [data-bs-theme="dark"] .error-page .error-support { color: var(--bs-secondary-color); }
 </style>
 
 <div class="error-page">
     <div class="error-card">
         <a href="{{ url_for('landing') }}">
-            <img class="error-logo" src="{{ url_for('static', filename='images/logo.png') }}" alt="Trainlog">
+            <img class="error-logo tl-logo-light" src="{{ url_for('static', filename='images/logo.png') }}" alt="Trainlog">
+            <img class="error-logo tl-logo-dark" src="{{ url_for('static', filename='images/logo_white.png') }}" alt="Trainlog">
         </a>
 
         <p class="error-code">{{ errorCode }}</p>

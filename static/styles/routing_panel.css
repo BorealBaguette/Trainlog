@@ -225,3 +225,64 @@
   #sidebar .rt-name { min-width: 0; overflow-wrap: anywhere; }
   #sidebar .rt-time { color: #8a93a2; font-weight: 400; white-space: nowrap; margin-left: auto; }
 }
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+[data-bs-theme="dark"] .leaflet-sidebar > .leaflet-control#sidebar {
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+}
+[data-bs-theme="dark"] #sidebar h4,
+[data-bs-theme="dark"] #sidebar .rt-end { color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] #sidebar small,
+[data-bs-theme="dark"] #sidebar .rt-item,
+[data-bs-theme="dark"] #sidebar .rt-time { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] #sidebar .route-elec.elec-loading,
+[data-bs-theme="dark"] #sidebar .rt-unnamed,
+[data-bs-theme="dark"] #sidebar .elec-country-km { color: var(--bs-tertiary-color); }
+
+[data-bs-theme="dark"] #sidebar p > i,
+[data-bs-theme="dark"] #sidebar .route-dist { background: var(--bs-secondary-bg); color: var(--bs-emphasis-color); }
+
+[data-bs-theme="dark"] #sidebar .route-hint summary {
+  background: #454b53; color: var(--bs-body-color); border-color: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] #sidebar .route-hint summary:hover { background: #555c65; color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] #sidebar .route-bubble,
+[data-bs-theme="dark"] #sidebar .route-bubble::before {
+  background: var(--bs-tertiary-bg); border-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] #sidebar .route-bubble { color: var(--bs-body-color); box-shadow: 0 4px 14px rgba(0, 0, 0, .45); }
+[data-bs-theme="dark"] #sidebar .elec-country-list,
+[data-bs-theme="dark"] #sidebar .elec-override { border-top-color: var(--bs-border-color); }
+[data-bs-theme="dark"] #sidebar .elec-country-row span:last-child { color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] #sidebar .elec-override-select {
+  background: var(--bs-body-bg); color: var(--bs-body-color); border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] #sidebar .route-hint-warn summary { background: #a87622; color: #241703; }
+[data-bs-theme="dark"] #sidebar .route-hint-warn summary:hover { background: #bd8628; }
+[data-bs-theme="dark"] #sidebar .route-hint-warn .route-bubble { color: #e8b96a; border-color: #6b5022; }
+[data-bs-theme="dark"] #sidebar .route-hint-warn .route-bubble::before { border-color: #6b5022; }
+
+[data-bs-theme="dark"] #sidebar > div[style] {
+  background: var(--bs-tertiary-bg) !important; border-color: var(--bs-border-color) !important;
+}
+[data-bs-theme="dark"] #sidebar > div[style] span { color: var(--bs-body-color); }
+
+[data-bs-theme="dark"] #sidebar #saveTrip, [data-bs-theme="dark"] #sidebar #downloadGeoJSON,
+[data-bs-theme="dark"] #sidebar #uploadGpxBtn,
+[data-bs-theme="dark"] #sidebar .submit-main { background: #2a7a4d; color: #e6f2ea; }
+[data-bs-theme="dark"] #sidebar button.btn-outline-primary {
+  background: transparent; color: #8fb0f5; border-color: #3d5585;
+}
+[data-bs-theme="dark"] #sidebar button.btn-outline-primary:hover { background: rgba(143, 176, 245, .1); border-color: #8fb0f5; }
+[data-bs-theme="dark"] #sidebar .submit-continue { background: #1f3529; color: #8fd0a8; border-color: #2f5a41; }
+[data-bs-theme="dark"] #sidebar .submit-continue:hover { background: #24402f; border-color: #3d9a66; }
+
+[data-bs-theme="dark"] .leaflet-sidebar .close { color: var(--bs-tertiary-color); }
+[data-bs-theme="dark"] .leaflet-sidebar .close:hover { color: var(--bs-emphasis-color); }
+
+[data-bs-theme="dark"] #sidebar .rt-item::before { background: var(--bs-border-color); }
+[data-bs-theme="dark"] #sidebar .rt-item::after { background: #6b737d; }
+[data-bs-theme="dark"] #sidebar .rt-end::after { background: var(--bs-body-bg); border-color: #7d9fe0; }

@@ -13744,11 +13744,14 @@ def visited_squares(username):
     else:
         nav = "bootstrap/public_nav.html"
 
+    viewer = User.query.filter_by(username=getUser()).first()
     return render_template(
         "visited_squares.html",
         title="Visited Squares Map",
         username=username,
         nav=nav,
+        tileserver=viewer.tileserver if viewer else "osm",
+        globe=viewer.globe if viewer else False,
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],
     )
