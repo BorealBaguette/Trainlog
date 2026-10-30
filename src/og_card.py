@@ -357,12 +357,16 @@ def _card(name, key, fetch, title, subtitle, countries):
     return png
 
 
-def render_og_card(name, trip_ids, title, subtitle="", countries=()):
-    """PNG bytes for these trips, from cache when it has been drawn before."""
+def render_og_card(name, trip_ids, title, subtitle="", countries=(), version=""):
+    """PNG bytes for these trips, from cache when it has been drawn before.
+
+    `version` is what the trips currently are, so a rerouted trip is redrawn
+    even when its caption reads the same.
+    """
     ids = sorted(set(trip_ids))
     return _card(
         name,
-        f"{ids}|{title}|{subtitle}|{list(countries)}",
+        f"{ids}|{version}|{title}|{subtitle}|{list(countries)}",
         lambda: _fetch(ids),
         title,
         subtitle,

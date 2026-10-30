@@ -177,7 +177,7 @@ from src.api.feature_requests import feature_requests_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
-from src.api.og import og_blueprint, og_image_url
+from src.api.og import og_blueprint, og_image_url, plan_og_image_url
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
@@ -5827,7 +5827,7 @@ def _render_plan_view(plan, username, controls):
         og={
             "title": plan["name"],
             "description": plan["description"] or "Trainlog plan",
-            "image": external_url("og.plan_image", uuid=plan["uuid"], ext="jpg"),
+            "image": plan_og_image_url(plan["uuid"]),
         },
         num_hidden_trips=hidden_legs,
         colorblind=getattr(user, "colorblind", False) if user else False,

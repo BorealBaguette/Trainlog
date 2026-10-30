@@ -5,6 +5,7 @@ here is derived from public trips only — both the picture (src.og_card screens
 the ids in SQL) and the caption built beside it.
 """
 
+import hashlib
 import logging
 
 from flask import Blueprint, Response, abort, redirect, url_for
@@ -33,6 +34,30 @@ CACHE_CONTROL = "public, max-age=86400"
 INLINE_IDS = 5
 
 
+def _trips_version(trip_ids):
+    """A short hash that changes whenever these trips, or their routes, do.
+
+    paths.geom_updated rather than trips.last_modified alone: not every route
+    writer touches the trip row.
+    """
+    ids = sorted(set(trip_ids))
+    with pg_session() as pg:
+        row = pg.execute(
+            """
+            SELECT MAX(t.last_modified) AS edited,
+                   MAX(p.geom_updated) AS routed,
+                   COALESCE(SUM(t.trip_length), 0) AS distance
+            FROM trips t
+            LEFT JOIN paths p ON p.trip_id = t.trip_id
+            WHERE t.trip_id = ANY(:ids)
+            """,
+            {"ids": ids},
+        ).fetchone()
+    return hashlib.sha1(
+        f"{ids}|{row['edited']}|{row['routed']}|{row['distance']}".encode()
+    ).hexdigest()[:10]
+
+
 def og_image_url(period=None, tag_uuid=None, trip_ids_param=None, trip_ids=()):
     """The og:image URL for a public trip page, or None when it has no trips.
 
@@ -40,23 +65,28 @@ def og_image_url(period=None, tag_uuid=None, trip_ids_param=None, trip_ids=()):
     captioned with their name. A longer selection is addressed by its share key:
     og:image is fetched with GET, never posted to, so a page of two hundred
     trips would otherwise spell every id out in the tag.
+
+    Discord and the rest cache a preview image by its URL, so it carries a
+    version of the trips behind it: a tag that gains a trip, or a trip that is
+    rerouted, gets a fresh picture rather than the one first shared.
     """
-    if period is not None:
-        return external_url("og.period_image", ext="jpg", **period)
-    if tag_uuid is not None:
-        return external_url("og.tag_image", ext="jpg", uuid=tag_uuid)
-    if is_selection_key(trip_ids_param or ""):
-        return external_url("og.trip_image", ext="jpg", trip_ids=trip_ids_param)
     if not trip_ids:
         return None
+    v = _trips_version(trip_ids)
+    if period is not None:
+        return external_url("og.period_image", ext="jpg", v=v, **period)
+    if tag_uuid is not None:
+        return external_url("og.tag_image", ext="jpg", uuid=tag_uuid, v=v)
+    if is_selection_key(trip_ids_param or ""):
+        return external_url("og.trip_image", ext="jpg", trip_ids=trip_ids_param, v=v)
     if len(trip_ids) <= INLINE_IDS:
         ids = ",".join(str(trip_id) for trip_id in trip_ids)
-        return external_url("og.trip_image", ext="jpg", trip_ids=ids)
+        return external_url("og.trip_image", ext="jpg", trip_ids=ids, v=v)
     try:
         key = store_trip_ids(trip_ids)
     except ValueError:
         return None
-    return external_url("og.trip_image", ext="jpg", trip_ids=key)
+    return external_url("og.trip_image", ext="jpg", trip_ids=key, v=v)
 
 
 def _public_ids(trip_ids):
@@ -165,7 +195,9 @@ def _serve(name, trip_ids, title=None):
     if not ids:
         return _logo()
     auto_title, subtitle, countries = _caption(ids)
-    png = render_og_card(name, ids, title or auto_title, subtitle, countries)
+    png = render_og_card(
+        name, ids, title or auto_title, subtitle, countries, version=_trips_version(ids)
+    )
     if png is None:
         return _logo()
     return Response(
@@ -256,6 +288,46 @@ def period_image(username, kind, period, ext):
     )
 
 
+def _plan_summary(pg, uuid):
+    """The plan row with what its card shows, or None.
+
+    `version` is its latest edit, which alone misses a deleted leg — hence the
+    count and distance beside it in plan_og_image_url.
+    """
+    return pg.execute(
+        """
+        SELECT p.uid, p.name, p.user_id,
+               GREATEST(
+                   COALESCE(p.last_modified, p.created),
+                   COALESCE(MAX(pt.last_modified), MAX(pt.created))
+               ) AS version,
+               COUNT(pt.uid) AS trips,
+               COALESCE(SUM(pt.trip_length), 0) AS distance
+        FROM plans p
+        LEFT JOIN plan_trips pt ON pt.plan_id = p.uid
+        WHERE p.uuid = :uuid
+        GROUP BY p.uid
+        """,
+        {"uuid": uuid},
+    ).fetchone()
+
+
+def plan_og_image_url(uuid):
+    """The og:image URL for a plan, changing whenever the plan does.
+
+    Discord and the rest cache a preview image by its URL, so a fixed one keeps
+    showing the plan as it was first shared however often the card is redrawn.
+    """
+    with pg_session() as pg:
+        plan = _plan_summary(pg, uuid)
+    if plan is None:
+        return external_url("og.plan_image", uuid=uuid, ext="jpg")
+    version = hashlib.sha1(
+        f"{plan['version']}|{plan['trips']}|{plan['distance']}|{plan['name']}".encode()
+    ).hexdigest()[:10]
+    return external_url("og.plan_image", uuid=uuid, ext="jpg", v=version)
+
+
 @og_blueprint.route("/og/plan/<uuid>.<any(png, jpg):ext>")
 def plan_image(uuid, ext):
     """A plan's own picture: its legs, captioned with the plan's name.
@@ -266,22 +338,7 @@ def plan_image(uuid, ext):
     crawler fetching this has no session either way.
     """
     with pg_session() as pg:
-        plan = pg.execute(
-            """
-            SELECT p.uid, p.name, p.user_id,
-                   GREATEST(
-                       COALESCE(p.last_modified, p.created),
-                       COALESCE(MAX(pt.last_modified), MAX(pt.created))
-                   ) AS version,
-                   COUNT(pt.uid) AS trips,
-                   COALESCE(SUM(pt.trip_length), 0) AS distance
-            FROM plans p
-            LEFT JOIN plan_trips pt ON pt.plan_id = p.uid
-            WHERE p.uuid = :uuid
-            GROUP BY p.uid
-            """,
-            {"uuid": uuid},
-        ).fetchone()
+        plan = _plan_summary(pg, uuid)
         if plan is None:
             return _logo()
         countries = pg.execute(
