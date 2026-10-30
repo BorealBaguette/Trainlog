@@ -655,3 +655,31 @@
     font-size: 12px;
     margin: 4px 0 8px;
 }
+
+/* Year legend: rows or bar, the toggle showing the icon of the other */
+.year-legend { position: relative; }
+.year-legend.as-list .year-bar,
+.year-legend:not(.as-list) .year-list,
+.year-legend.as-list .year-legend-toggle .fa-list-ul,
+.year-legend:not(.as-list) .year-legend-toggle .fa-grip-lines { display: none; }
+.year-legend .year-bar { padding-right: 26px; }
+.year-legend .year-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.year-legend-toggle {
+    position: absolute;
+    top: -4px;
+    right: 0;
+    padding: 2px 5px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    opacity: .6;
+    cursor: pointer;
+}
+.year-legend-toggle:hover { opacity: 1; }

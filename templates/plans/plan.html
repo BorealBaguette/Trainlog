@@ -73,7 +73,7 @@
   .ovn-moon { color: var(--plan-moon); margin: 0 .05rem; }
   /* Already logged as a real trip (partial validation): the leg is done with, so it
      greys out, loses its tick box and links to the trip it became. */
-  .plan-leg.leg-logged { opacity: .62; background: #fbfcfd; }
+  .plan-leg.leg-logged { opacity: .62; background: light-dark(#fbfcfd, var(--plan-sunken)); }
   .logged-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #4b5563;
                  background: rgba(107,114,128,.14); border-radius: 999px; padding: .05rem .5rem;
                  margin-left: .35rem; white-space: nowrap; text-decoration: none; }
@@ -192,7 +192,7 @@
 
     <!-- Sharing: who the plan's read-only views open for, and the link to hand out.
          Same three levels as a trip's own visibility (see _plan_public_or_403). -->
-    <div class="p-3 rounded mt-2" style="background:#f7f8fa; border:1px solid #e5e7eb;">
+    <div class="p-3 rounded mt-2" style="background:light-dark(#f7f8fa, var(--plan-sunken)); border:1px solid light-dark(#e5e7eb, var(--plan-border));">
       <label class="small text-muted mb-1 d-block">{{ visibility }}</label>
       <div class="plan-share-levels btn-group btn-group-sm" role="group">
         {% for level, icon, label in [('private', 'bi-lock', visibility_private), ('friends', 'bi-people', visibility_friends), ('public', 'bi-globe2', visibility_public)] %}
@@ -216,7 +216,7 @@
     {% if plan_unlogged_count %}
     <!-- Log only part of the plan: turns the per-leg tick boxes on. Off by default,
          so "log as trips" logs the whole plan as it always did. -->
-    <div class="p-3 rounded mt-2" style="background:#f7f8fa; border:1px solid #e5e7eb;">
+    <div class="p-3 rounded mt-2" style="background:light-dark(#f7f8fa, var(--plan-sunken)); border:1px solid light-dark(#e5e7eb, var(--plan-border));">
       <label class="small text-muted mb-1 d-block">{{ logAsTrips|default('Log as trips') }}</label>
       <button class="btn btn-sm btn-outline-primary" type="button" id="planPickToggle" onclick="planTogglePicking()">
         <i class="bi bi-check2-square"></i> {{ planSelectLegs }}

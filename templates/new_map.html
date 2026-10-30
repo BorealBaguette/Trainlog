@@ -377,42 +377,18 @@ function buildSliceLayers() {
     });
 }
 
-// Oldest to newest. Changes hue all along, so neighbouring years stay apart,
-// and ends in magenta rather than the red of current trips.
-const YEAR_RAMP = ['#3b3eac', '#2f7fd8', '#17becf', '#2ca02c', '#c2b000', '#f28e2b', '#d6339b'];
-
-// Each year sits on the ramp at the middle of its share of the trips, so the
-// busy years spread over most of it instead of a few sparse early ones
-function yearColors() {
+function tripYearColors() {
     const counts = {};
     trips.forEach(t => {
         const start = t.trip.start_datetime;
         if (start !== -1 && start !== 1) counts[start.substring(0, 4)] = (counts[start.substring(0, 4)] || 0) + 1;
     });
-    const years = Object.keys(counts).sort();
-    const total = years.reduce((n, year) => n + counts[year], 0);
-    let before = 0;
-    const positions = years.map(year => {
-        const position = (before + counts[year] / 2) / total;
-        before += counts[year];
-        return position;
-    });
-    const first = positions[0], span = positions[positions.length - 1] - first;
-
-    const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
-    const colors = {};
-    years.forEach((year, i) => {
-        const x = (span ? (positions[i] - first) / span : 0.5) * (YEAR_RAMP.length - 1);
-        const j = Math.min(Math.floor(x), YEAR_RAMP.length - 2);
-        const a = rgb(YEAR_RAMP[j]), b = rgb(YEAR_RAMP[j + 1]);
-        colors[year] = `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * (x - j))).join(',')})`;
-    });
-    return colors;
+    return MapLibreUtils.yearColors(counts);
 }
 
 function applyColorMode() {
     const byYear = document.getElementById('colorMode').value === 'year';
-    const colors = byYear ? yearColors() : null;
+    const colors = byYear ? tripYearColors() : null;
     const lineColor = MapLibreUtils.tripLineColor(MapLibreUtils.MapConfig.transportTypes, colors);
     SLICE_SOURCES.forEach(sourceId => {
         if (map.getLayer(`${sourceId}-line`)) map.setPaintProperty(`${sourceId}-line`, 'line-color', lineColor);
@@ -421,23 +397,7 @@ function applyColorMode() {
     const yearLegend = document.getElementById('yearLegend');
     document.getElementById('typeLegend').style.display = byYear ? 'none' : '';
     yearLegend.style.display = byYear ? '' : 'none';
-    const entries = byYear ? Object.entries(colors) : [];
-    if (!byYear) {
-        yearLegend.innerHTML = '';
-    } else if (entries.length <= 10) {
-        yearLegend.innerHTML = entries.reverse().map(([year, color]) => `
-            <div class="legend-item">
-                <div class="legend-line" style="background-color: ${color};"></div>
-                <span>${year}</span>
-            </div>`).join('');
-    } else {
-        // Too many years for a row each: one bar, a segment per year
-        const labels = [entries[0], entries[Math.floor(entries.length / 2)], entries[entries.length - 1]];
-        yearLegend.innerHTML = `
-            <div class="year-ramp">${entries.map(([year, color]) =>
-                `<div title="${year}" style="background-color: ${color};"></div>`).join('')}</div>
-            <div class="year-ramp-labels">${labels.map(([year]) => `<span>${year}</span>`).join('')}</div>`;
-    }
+    yearLegend.innerHTML = byYear ? MapLibreUtils.yearLegendHtml(colors) : '';
 }
 
 function updateColorMode() {

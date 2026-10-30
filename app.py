@@ -99,6 +99,7 @@ from src.g_search import (
     search_commons_images,
 )
 from src.wikidata import search_ships as wikidata_search_ships
+from src.visited_squares import generate_visited_squares_geojson
 from py.image_generator import generate_image
 from src.sql.leaderboards import get_leaderboard_countries_query
 from src.sql.percents import upsert_percent_query
@@ -156,7 +157,6 @@ from py.utils import (
     getIpDetails,
     getRequestData,
     hex_to_rgb,
-    interpolate_great_circle,
     interpolate_points_if_gaps,
     interpolate_track_if_gaps,
     load_config,
@@ -281,7 +281,7 @@ from src.trips import (
     change_trips_visibility,
     get_current_trip_id,
 )
-from src.paths import Path, coords_to_ewkt, fetch_path, fetch_raw_path, geom_geojson_to_coords
+from src.paths import Path, coords_to_ewkt, fetch_raw_path, geom_geojson_to_coords
 from src.trips.freehand_transform import (
     apply_to_trip,
     purge_expired_backups,
@@ -13747,7 +13747,7 @@ def visited_squares(username):
     viewer = User.query.filter_by(username=getUser()).first()
     return render_template(
         "visited_squares.html",
-        title="Visited Squares Map",
+        title=lang[session["userinfo"]["lang"]]["about_explore_squares_h"],
         username=username,
         nav=nav,
         tileserver=viewer.tileserver if viewer else "osm",
@@ -13816,147 +13816,6 @@ def active_users():
         **session["userinfo"],
     )
 
-
-def generate_visited_squares_geojson(username):
-    land_squares = set()
-    air_squares = set()
-    visited_squares = {}
-
-    with pg_session() as pg:
-        trips = pg.execute(
-            """
-                SELECT trip_id AS uid, trip_type AS type
-                FROM trips
-                WHERE user_id = :user_id
-                  AND NOT is_project
-                  AND (
-                        COALESCE(utc_start_datetime, start_datetime) IS NULL
-                        OR NOW() > COALESCE(utc_start_datetime, start_datetime)
-                      )
-            """,
-            {"user_id": get_user_id(username)},
-        ).fetchall()
-
-        for trip in trips:
-            trip_id = trip["uid"]
-            trip_type = trip["type"]
-
-            paths = [fetch_path(pg, trip_id)]
-
-            for coordinates in paths:
-                for i in range(len(coordinates)):
-                    lat, lon = coordinates[i]
-                    square = (math.floor(lat), math.floor(lon))
-
-                    if trip_type in ("air", "helicopter"):
-                        if (
-                            visited_squares.get(square) not in ("stopped", "passed")
-                            and square not in land_squares
-                        ):
-                            visited_squares[square] = "air"
-                            air_squares.add(square)
-                    else:
-                        if visited_squares.get(square) != "stopped":
-                            visited_squares[square] = "passed"
-                        land_squares.add(square)
-                        air_squares.discard(square)
-
-                    # Override with "stopped" on first/last point
-                    if i == 0 or i == len(coordinates) - 1:
-                        visited_squares[square] = "stopped"
-                        land_squares.add(square)
-                        air_squares.discard(square)
-
-                    # Interpolate between points (only for air trips)
-                    if (
-                        trip_type in ("air", "helicopter")
-                        and len(coordinates) > 2
-                        and i < len(coordinates) - 1
-                    ):
-                        next_lat, next_lon = coordinates[i + 1]
-                        intermediates = interpolate_great_circle(
-                            (lat, lon), (next_lat, next_lon), max_distance_km=50
-                        )
-
-                        for inter_lat, inter_lon in intermediates:
-                            inter_square = (
-                                math.floor(inter_lat),
-                                math.floor(inter_lon),
-                            )
-
-                            if (
-                                visited_squares.get(inter_square)
-                                not in ("stopped", "passed")
-                                and inter_square not in land_squares
-                            ):
-                                visited_squares[inter_square] = "air"
-                                air_squares.add(inter_square)
-
-    total_squares = 180 * 360  # entire world grid
-    land_percentage = (len(land_squares) / total_squares) * 100
-    air_percentage = (len(air_squares) / total_squares) * 100
-
-    with pg_session() as pg:
-        pg.execute(
-            upsert_percent_query(),
-            {
-                "username": username,
-                "cc": "world_squares",
-                "percent": round(land_percentage, 2),
-            },
-        )
-
-    # --- VISITED FEATURES ---
-    visited_features = []
-    for square, status in visited_squares.items():
-        lat, lon = square
-        feature = {
-            "type": "Feature",
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [[
-                    [lon, lat],
-                    [lon + 1, lat],
-                    [lon + 1, lat + 1],
-                    [lon, lat + 1],
-                    [lon, lat],
-                ]],
-            },
-            "properties": {"status": status},
-        }
-        visited_features.append(feature)
-
-    visited_geojson = {
-        "type": "FeatureCollection",
-        "features": visited_features
-    }
-
-    # --- FULL GRID FEATURES (ALL WORLD SQUARES) ---
-    grid_features = []
-
-    for lat in range(-90, 90):
-        for lon in range(-180, 180):
-            grid_features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [lon, lat],
-                        [lon + 1, lat],
-                        [lon + 1, lat + 1],
-                        [lon, lat + 1],
-                        [lon, lat],
-                    ]],
-                },
-                "properties": {}
-            })
-
-    grid_geojson = {
-        "type": "FeatureCollection",
-        "features": grid_features
-    }
-
-    return visited_geojson, grid_geojson, land_percentage, air_percentage
 
 @app.route("/tile/<style>/<x>/<y>/<z>/")
 @app.route("/tile/<style>/<x>/<y>/<z>/<r>")

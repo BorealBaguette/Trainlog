@@ -956,6 +956,60 @@ function tripLineColor(transportTypes, yearColors = null) {
     ];
 }
 
+// Oldest to newest. Changes hue all along, so neighbouring years stay apart,
+// and ends in magenta rather than the red of current trips.
+const YEAR_RAMP = ['#3b3eac', '#2f7fd8', '#17becf', '#2ca02c', '#c2b000', '#f28e2b', '#d6339b'];
+
+// { year: colour } from { year: count }. Each year sits on the ramp at the middle
+// of its share of the count, so the busy years spread over most of it instead of
+// a few sparse early ones
+function yearColors(counts) {
+    const years = Object.keys(counts).sort();
+    const total = years.reduce((n, year) => n + counts[year], 0);
+    let before = 0;
+    const positions = years.map(year => {
+        const position = (before + counts[year] / 2) / total;
+        before += counts[year];
+        return position;
+    });
+    const first = positions[0], span = positions[positions.length - 1] - first;
+
+    const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+    const colors = {};
+    years.forEach((year, i) => {
+        const x = (span ? (positions[i] - first) / span : 0.5) * (YEAR_RAMP.length - 1);
+        const j = Math.min(Math.floor(x), YEAR_RAMP.length - 2);
+        const a = rgb(YEAR_RAMP[j]), b = rgb(YEAR_RAMP[j + 1]);
+        colors[year] = `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * (x - j))).join(',')})`;
+    });
+    return colors;
+}
+
+// Legend of yearColors(): a row per year, newest first, or one bar, which a
+// button switches between; the bar by default when the rows would be too many
+function yearLegendHtml(colors) {
+    const entries = Object.entries(colors);
+    if (!entries.length) return '';
+    const labels = [entries[0], entries[Math.floor(entries.length / 2)], entries[entries.length - 1]];
+    return `
+        <div class="year-legend${entries.length > 10 ? '' : ' as-list'}">
+            <button type="button" class="year-legend-toggle"
+                    onclick="this.parentElement.classList.toggle('as-list')">
+                <i class="fa-solid fa-list-ul"></i><i class="fa-solid fa-grip-lines"></i>
+            </button>
+            <div class="year-list">${entries.slice().reverse().map(([year, color]) => `
+                <div class="legend-item">
+                    <div class="legend-line" style="background-color: ${color};"></div>
+                    <span>${year}</span>
+                </div>`).join('')}</div>
+            <div class="year-bar">
+                <div class="year-ramp">${entries.map(([year, color]) =>
+                    `<div title="${year}" style="background-color: ${color};"></div>`).join('')}</div>
+                <div class="year-ramp-labels">${labels.map(([year]) => `<span>${year}</span>`).join('')}</div>
+            </div>
+        </div>`;
+}
+
 // Update layer visibility based on filters
 function updateLayerVisibility(map, transportTypes, filters) {
     transportTypes.forEach(type => {
@@ -1460,6 +1514,8 @@ window.MapLibreUtils = {
     buildTripLayers,
     addTripSliceLayers,
     tripLineColor,
+    yearColors,
+    yearLegendHtml,
     updateLayerVisibility,
     fitBoundsToVisibleFeatures,
     modifyVectorStyle

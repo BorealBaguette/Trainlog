@@ -95,24 +95,20 @@
             data: data.geojson
         });
 
+        squareFeatures = data.geojson.features;
+
         map.addLayer({
             id: "visited-fill",
             type: "fill",
             source: "visited",
             paint: {
-            "fill-color": [
-                "match",
-                ["get", "status"],
-                "air", "#00aa00",
-                "stopped", "#0000ff",
-                "#3388ff"
-            ],
+            "fill-color": squareColor(),
             "fill-opacity": [
                 "match",
                 ["get", "status"],
-                "stopped", 0.7,
-                "air", 0.5,
-                0.5
+                "stopped", STATUS_OPACITY.stopped,
+                "air", STATUS_OPACITY.air,
+                STATUS_OPACITY.passed
             ]
             }
         });
@@ -122,16 +118,13 @@
             type: "line",
             source: "visited",
             paint: {
-            "line-color": [
-                "match",
-                ["get", "status"],
-                "air", "#00aa00",
-                "stopped", "#0000ff",
-                "#3388ff"
-            ],
-            "line-width": 1
+            "line-color": squareColor(),
+            "line-width": 1,
+            "line-opacity": DARK ? 0.6 : 1
             }
         });
+
+        applySquareColorMode();
 
         // auto zoom
         const bounds = new maplibregl.LngLatBounds();
@@ -148,20 +141,76 @@
         });
     }
 
+    // Full-strength blues and greens glare over a dark map: softer, and less opaque
+    const DARK = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+    const STATUS_COLORS = DARK
+        ? { stopped: "#4f63d6", passed: "#4f8fd6", air: "#3d9a50" }
+        : { stopped: "#0000ff", passed: "#3388ff", air: "#00aa00" };
+    const STATUS_OPACITY = DARK
+        ? { stopped: 0.55, passed: 0.35, air: 0.35 }
+        : { stopped: 0.7, passed: 0.5, air: 0.5 };
+
+    let squareFeatures = [];
+    let showAir = true;
+
+    function toggleSquareAir() {
+        showAir = !showAir;
+        document.getElementById('squareAirToggle').classList.toggle('off', !showAir);
+        applySquareColorMode();
+    }
+    let squareYearColors = {};
+
+    function squareColor() {
+        if (document.getElementById('squareColorMode').value === 'year') {
+            const pairs = Object.entries(squareYearColors).flat();
+            return pairs.length ? ["match", ["to-string", ["get", "year"]], ...pairs, "#888888"] : "#888888";
+        }
+        return ["match", ["get", "status"], "air", STATUS_COLORS.air, "stopped", STATUS_COLORS.stopped, STATUS_COLORS.passed];
+    }
+
+    function applySquareColorMode() {
+        const byYear = document.getElementById('squareColorMode').value === 'year';
+
+        // Weighted by the squares shown that each year first reached
+        const counts = {};
+        squareFeatures.forEach(f => {
+            const year = f.properties.year;
+            if (year && (showAir || f.properties.status !== "air")) counts[year] = (counts[year] || 0) + 1;
+        });
+        squareYearColors = MapLibreUtils.yearColors(counts);
+
+        if (map.getLayer("visited-fill")) {
+            const filter = showAir ? null : ["!=", ["get", "status"], "air"];
+            map.setFilter("visited-fill", filter);
+            map.setFilter("visited-outline", filter);
+            map.setPaintProperty("visited-fill", "fill-color", squareColor());
+            map.setPaintProperty("visited-outline", "line-color", squareColor());
+        }
+        document.getElementById('squareTypeLegend').style.display = byYear ? 'none' : '';
+        document.getElementById('squareYearLegend').innerHTML = byYear ? MapLibreUtils.yearLegendHtml(squareYearColors) : '';
+    }
+
     class PercentageControl {
     onAdd() {
         this._div = document.createElement("div");
         this._div.className = "percentage-control";
         this._div.innerHTML = `
-        <h4><i class="fas fa-percent"></i></h4><br/>
+        <h4 class="squares-title"><i class="fa-solid fa-border-all"></i> {{ about_explore_squares_h }}</h4>
         <div><i class="fas fa-globe"></i> <span id="percentageLand">...</span></div>
-        <div><i class="fas fa-plane"></i> <span id="percentageAir">...</span></div>
+        <div id="squareAirToggle" class="square-air-toggle" role="button" title="{{air}}" onclick="toggleSquareAir()"><i class="fas fa-plane"></i> <span id="percentageAir">...</span></div>
         <div><i class="fas fa-chart-pie"></i> <span id="percentageTotal">...</span></div>
 
-        <div class="legend mt-2">
-            <div><span class="legend-color" style="background-color: blue; opacity:0.7;"></span> {{stopped}}</div>
-            <div><span class="legend-color" style="background-color: #3388ff; opacity:0.5;"></span> {{passed}}</div>
-            <div><span class="legend-color" style="background-color: green; opacity:0.5;"></span> {{air}}</div>
+        <label class="square-color-mode mt-2">{{ mapColorBy }}
+            <select id="squareColorMode" onchange="applySquareColorMode()">
+                <option value="type">{{ squareColorByVisit }}</option>
+                <option value="year">{{ year }}</option>
+            </select>
+        </label>
+        <div id="squareYearLegend" class="mt-2"></div>
+        <div id="squareTypeLegend" class="legend mt-2">
+            <div><span class="legend-color" style="background-color: ${STATUS_COLORS.stopped}; opacity: ${STATUS_OPACITY.stopped};"></span> {{stopped}}</div>
+            <div><span class="legend-color" style="background-color: ${STATUS_COLORS.passed}; opacity: ${STATUS_OPACITY.passed};"></span> {{passed}}</div>
+            <div><span class="legend-color" style="background-color: ${STATUS_COLORS.air}; opacity: ${STATUS_OPACITY.air};"></span> {{air}}</div>
         </div>
         `;
         return this._div;
@@ -200,6 +249,28 @@
         display: flex;
         align-items: center;
         margin-bottom: 5px;
+    }
+
+    .squares-title {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 700;
+    }
+
+    .square-air-toggle {
+        cursor: pointer;
+        width: fit-content;
+    }
+
+    .square-air-toggle.off {
+        opacity: 0.4;
+        text-decoration: line-through;
+    }
+
+    .square-color-mode {
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
 
     .legend-color {

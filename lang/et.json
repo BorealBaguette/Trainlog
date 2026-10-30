@@ -140,6 +140,7 @@
     "year": "Aasta",
     "mapColorBy": "Värv",
     "mapColorByType": "Transpordiliik",
+    "squareColorByVisit": "Külastus",
     "month": "Kuu",
     "exit": "Välju",
     "km": "Kilomeetrid",
