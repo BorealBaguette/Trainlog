@@ -189,6 +189,10 @@
         const label = new Uint8Array(n), backdropL = new Float64Array(n), queue = [];
         for (let p = 0; p < n; p++) {
             if (isDark(p)) continue;
+            // An opaque light grey is no backdrop of its own: it takes what lies
+            // beyond it. It is the solid anti-aliased rim of black ink (Skyss's
+            // letters) or the shading on a white (P&O's flag)
+            if (d[p * 4 + 3] >= 200 && isGrey(p) && lch[p][0] < 0.9 && !invertWhite[p]) continue;
             label[p] = d[p * 4 + 3] >= 200 && !invertWhite[p] ? KEEP : LIFT;
             backdropL[p] = lch[p][0];
             // The backdrop's lightness is the lightest solid colour within two
