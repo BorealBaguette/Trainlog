@@ -877,6 +877,7 @@
     "exactTracks": "Umístit zastávky z jízdního řádu přesně na jejich kolej",
     "routeFiltersAdvanced": "Pokročilé možnosti",
     "routeFilterSpeedAny": "Bez omezení",
+    "routeFilterSpeedCustom": "Jiná rychlost",
     "routeFilterPowerAny": "Všechny",
     "routeFilterGaugeAny": "Všechny",
     "routeFilterAvoidHighspeed": "Vyhnout se vysokorychlostním tratím",

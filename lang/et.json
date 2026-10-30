@@ -869,6 +869,7 @@
     "exactTracks": "Paiguta sõiduplaani peatused täpselt nende rööbasteele",
     "routeFiltersAdvanced": "Täpsemad valikud",
     "routeFilterSpeedAny": "Piiranguteta",
+    "routeFilterSpeedCustom": "Muu kiirus",
     "routeFilterPowerAny": "Kõik",
     "routeFilterGaugeAny": "Kõik",
     "routeFilterAvoidHighspeed": "Väldi kiirraudteid",

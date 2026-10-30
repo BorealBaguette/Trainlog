@@ -869,6 +869,7 @@
     "exactTracks": "将时刻表中的停靠站精确放在其股道上",
     "routeFiltersAdvanced": "高级选项",
     "routeFilterSpeedAny": "不限",
+    "routeFilterSpeedCustom": "其他速度",
     "routeFilterPowerAny": "全部",
     "routeFilterGaugeAny": "全部",
     "routeFilterAvoidHighspeed": "避开高速铁路",

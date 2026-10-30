@@ -872,6 +872,7 @@
     "exactTracks": "Plasser rutetabellens stopp nøyaktig på sporet",
     "routeFiltersAdvanced": "Avanserte alternativer",
     "routeFilterSpeedAny": "Ubegrenset",
+    "routeFilterSpeedCustom": "Annen hastighet",
     "routeFilterPowerAny": "Alle",
     "routeFilterGaugeAny": "Alle",
     "routeFilterAvoidHighspeed": "Unngå høyhastighetsbaner",

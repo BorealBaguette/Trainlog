@@ -875,6 +875,7 @@
     "exactTracks": "Ставити зупинки з розкладу точно на їхню колію",
     "routeFiltersAdvanced": "Додаткові параметри",
     "routeFilterSpeedAny": "Без обмежень",
+    "routeFilterSpeedCustom": "Інша швидкість",
     "routeFilterPowerAny": "Усі",
     "routeFilterGaugeAny": "Усі",
     "routeFilterAvoidHighspeed": "Уникати швидкісних ліній",

@@ -900,6 +900,7 @@
     "exactTracks": "Put timetable stops exactly on their track",
     "routeFiltersAdvanced": "Advanced options",
     "routeFilterSpeedAny": "No limit",
+    "routeFilterSpeedCustom": "Other speed",
     "routeFilterPowerAny": "Any",
     "routeFilterGaugeAny": "Any",
     "routeFilterAvoidHighspeed": "Avoid high-speed lines",

@@ -872,6 +872,7 @@
     "exactTracks": "Placer køreplanens stop præcist på deres spor",
     "routeFiltersAdvanced": "Avancerede indstillinger",
     "routeFilterSpeedAny": "Ubegrænset",
+    "routeFilterSpeedCustom": "Anden hastighed",
     "routeFilterPowerAny": "Alle",
     "routeFilterGaugeAny": "Alle",
     "routeFilterAvoidHighspeed": "Undgå højhastighedsbaner",

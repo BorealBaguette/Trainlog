@@ -872,6 +872,7 @@
     "exactTracks": "Colocar as paragens do horário exatamente na sua via",
     "routeFiltersAdvanced": "Opções avançadas",
     "routeFilterSpeedAny": "Sem limite",
+    "routeFilterSpeedCustom": "Outra velocidade",
     "routeFilterPowerAny": "Todos",
     "routeFilterGaugeAny": "Todas",
     "routeFilterAvoidHighspeed": "Evitar linhas de alta velocidade",

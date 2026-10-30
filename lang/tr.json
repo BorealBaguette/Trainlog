@@ -869,6 +869,7 @@
     "exactTracks": "Tarifedeki durakları tam olarak kendi hatlarına yerleştir",
     "routeFiltersAdvanced": "Gelişmiş seçenekler",
     "routeFilterSpeedAny": "Sınırsız",
+    "routeFilterSpeedCustom": "Başka hız",
     "routeFilterPowerAny": "Tümü",
     "routeFilterGaugeAny": "Tümü",
     "routeFilterAvoidHighspeed": "Yüksek hızlı hatlardan kaçın",

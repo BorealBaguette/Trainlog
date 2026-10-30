@@ -872,6 +872,7 @@
     "exactTracks": "Placera tidtabellens stopp exakt på sitt spår",
     "routeFiltersAdvanced": "Avancerade alternativ",
     "routeFilterSpeedAny": "Obegränsad",
+    "routeFilterSpeedCustom": "Annan hastighet",
     "routeFilterPowerAny": "Alla",
     "routeFilterGaugeAny": "Alla",
     "routeFilterAvoidHighspeed": "Undvik höghastighetsbanor",

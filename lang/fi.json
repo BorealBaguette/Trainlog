@@ -870,6 +870,7 @@
     "exactTracks": "Sijoita aikataulun pysähdykset tarkasti raiteelleen",
     "routeFiltersAdvanced": "Lisäasetukset",
     "routeFilterSpeedAny": "Rajoittamaton",
+    "routeFilterSpeedCustom": "Muu nopeus",
     "routeFilterPowerAny": "Kaikki",
     "routeFilterGaugeAny": "Kaikki",
     "routeFilterAvoidHighspeed": "Vältä suurnopeusratoja",

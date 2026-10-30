@@ -723,9 +723,7 @@ function buildRouteFiltersHtml() {
         ${row('fa-gauge-high', texts.routeFilterAvoidHighspeed,
               `<input type="checkbox" class="router-switch" onchange="setRouteFilter('avoid_highspeed', this.checked ? '1' : '')"
                       ${routeFilters.avoid_highspeed ? 'checked' : ''}>`)}
-        ${buildRouterPickerHtml('fa-gauge', texts.routeFilterMaxSpeed,
-              [anyItem(texts.routeFilterSpeedAny)].concat([120, 160, 200].map(function (v) { return [String(v), v + ' km/h', '', '']; })),
-              routeFilters.max_speed || '', 'setRouteMaxSpeed')}
+        ${buildMaxSpeedPickerHtml()}
         ${row('fa-bolt', texts.routeFilterElectrifiedOnly,
               `<input type="checkbox" class="router-switch" onchange="setRouteFilter('electrified', this.checked ? 'yes' : '')"
                       ${routeFilters.electrified ? 'checked' : ''}>`)}
@@ -740,6 +738,41 @@ function buildRouteFiltersHtml() {
       </div>
     </div>
   `;
+}
+
+// The presets, then any other cap typed in the list's last row, listed among them once set.
+// The router stores speeds up to 510 km/h.
+var ROUTE_SPEED_PRESETS = [120, 160, 200];
+var ROUTE_SPEED_MIN = 10, ROUTE_SPEED_MAX = 500;
+
+function buildMaxSpeedPickerHtml() {
+  var own = Number(routeFilters.max_speed);
+  var speeds = ROUTE_SPEED_PRESETS.concat(own && !ROUTE_SPEED_PRESETS.includes(own) ? [own] : [])
+    .sort(function (a, b) { return a - b; });
+  var custom = `
+    <div class="router-picker-custom">
+      <span class="router-picker-glyph"><i class="fa-solid fa-pen"></i></span>
+      <input type="number" inputmode="numeric" min="${ROUTE_SPEED_MIN}" max="${ROUTE_SPEED_MAX}" step="1"
+             placeholder="${texts.routeFilterSpeedCustom}" aria-label="${texts.routeFilterSpeedCustom}"
+             onkeydown="if (event.key === 'Enter') { event.preventDefault(); setRouteCustomMaxSpeed(this); }"
+             onchange="setRouteCustomMaxSpeed(this)">
+      <span class="router-picker-side">km/h</span>
+    </div>`;
+  return buildRouterPickerHtml('fa-gauge', texts.routeFilterMaxSpeed,
+    [['', texts.routeFilterSpeedAny, '', '']].concat(speeds.map(function (v) { return [String(v), v + ' km/h', '', '']; })),
+    routeFilters.max_speed || '', 'setRouteMaxSpeed', false, custom);
+}
+
+// A typed cap: the picker is rebuilt with it listed and picked, and closed
+function setRouteCustomMaxSpeed(input) {
+  var speed = Math.round(Number(input.value));
+  if (!(speed >= ROUTE_SPEED_MIN && speed <= ROUTE_SPEED_MAX) || String(speed) === routeFilters.max_speed) return;
+  setRouteMaxSpeed(String(speed));
+  var template = document.createElement('template');
+  template.innerHTML = buildMaxSpeedPickerHtml().trim();
+  var picker = template.content.firstElementChild;
+  input.closest('.router-picker').replaceWith(picker);
+  picker.querySelector('.router-picker-toggle').focus();
 }
 
 function setRouteGauge(value) { setRouteFilter('gauge', value); }
@@ -760,8 +793,8 @@ function gaugeGlyph(mm) {
 // The list opens in place under its row, as a floating one would be cut off by
 // compose's scrolling bubble. onPick names a global function given the value. A multi
 // picker takes and gives its values comma-separated, stays open while they are ticked,
-// and its '' item (none) clears them.
-function buildRouterPickerHtml(icon, label, items, value, onPick, multi) {
+// and its '' item (none) clears them. extraHtml goes at the end of the list.
+function buildRouterPickerHtml(icon, label, items, value, onPick, multi, extraHtml) {
   // A string among the items heads the group of those after it
   var choices = items.filter(function (i) { return typeof i !== 'string'; });
   var picked = multi ? (value ? value.split(',') : []) : [value];
@@ -785,7 +818,7 @@ function buildRouterPickerHtml(icon, label, items, value, onPick, multi) {
         <i class="fa-solid fa-chevron-down router-tray-chevron"></i>
       </button>
       <div class="router-picker-list" role="listbox" aria-label="${label}"${multi ? ' aria-multiselectable="true"' : ''}
-           hidden onkeydown="routerPickerKey(event, this)">${options}</div>
+           hidden onkeydown="routerPickerKey(event, this)">${options}${extraHtml || ''}</div>
     </div>`;
 }
 
@@ -838,7 +871,7 @@ function routerPickerKey(e, list) {
     e.preventDefault();
     toggleRouterPicker(list.previousElementSibling, false);
     list.previousElementSibling.focus();
-  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+  } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target.tagName !== 'INPUT') {
     e.preventDefault();
     opts[(i + (e.key === 'ArrowDown' ? 1 : opts.length - 1)) % opts.length].focus();
   }

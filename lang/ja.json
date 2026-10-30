@@ -869,6 +869,7 @@
     "exactTracks": "時刻表の停車駅を番線上に正確に配置",
     "routeFiltersAdvanced": "詳細オプション",
     "routeFilterSpeedAny": "制限なし",
+    "routeFilterSpeedCustom": "その他の速度",
     "routeFilterPowerAny": "すべて",
     "routeFilterGaugeAny": "すべて",
     "routeFilterAvoidHighspeed": "高速鉄道路線を避ける",

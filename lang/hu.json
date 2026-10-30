@@ -869,6 +869,7 @@
     "exactTracks": "A menetrend megállóinak pontos elhelyezése a vágányukon",
     "routeFiltersAdvanced": "Speciális beállítások",
     "routeFilterSpeedAny": "Korlátlan",
+    "routeFilterSpeedCustom": "Egyéb sebesség",
     "routeFilterPowerAny": "Mind",
     "routeFilterGaugeAny": "Mind",
     "routeFilterAvoidHighspeed": "Nagysebességű vonalak elkerülése",

@@ -875,6 +875,7 @@
     "exactTracks": "Umieszczaj przystanki z rozkładu dokładnie na ich torze",
     "routeFiltersAdvanced": "Opcje zaawansowane",
     "routeFilterSpeedAny": "Bez ograniczeń",
+    "routeFilterSpeedCustom": "Inna prędkość",
     "routeFilterPowerAny": "Wszystkie",
     "routeFilterGaugeAny": "Wszystkie",
     "routeFilterAvoidHighspeed": "Unikaj linii dużych prędkości",

@@ -389,3 +389,26 @@
 .router-picker-side:empty { display: none; }
 .router-picker-check { flex: none; width: 12px; font-size: 11px; visibility: hidden; }
 .router-picker-opt.active .router-picker-check { visibility: visible; }
+.router-picker-custom {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  margin-top: 2px;
+  padding: 6px 8px 4px;
+  border-top: 1px solid #d3d8de;
+}
+#sidebar .router-box .router-picker-custom input, .router-picker-custom input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 26px;
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid #c8ced6;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2733;
+  font: inherit;
+}
+.router-picker-custom input:focus { border-color: #3b63b8; outline: none; }

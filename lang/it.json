@@ -872,6 +872,7 @@
     "exactTracks": "Posiziona le fermate dell'orario esattamente sul loro binario",
     "routeFiltersAdvanced": "Opzioni avanzate",
     "routeFilterSpeedAny": "Nessun limite",
+    "routeFilterSpeedCustom": "Altra velocità",
     "routeFilterPowerAny": "Tutti",
     "routeFilterGaugeAny": "Tutti",
     "routeFilterAvoidHighspeed": "Evita linee ad alta velocità",

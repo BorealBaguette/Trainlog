@@ -875,6 +875,7 @@
     "exactTracks": "Ставить остановки из расписания точно на их путь",
     "routeFiltersAdvanced": "Дополнительные параметры",
     "routeFilterSpeedAny": "Без ограничений",
+    "routeFilterSpeedCustom": "Другая скорость",
     "routeFilterPowerAny": "Все",
     "routeFilterGaugeAny": "Все",
     "routeFilterAvoidHighspeed": "Избегать высокоскоростных линий",

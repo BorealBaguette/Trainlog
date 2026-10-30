@@ -872,6 +872,7 @@
     "exactTracks": "Fahrplanhalte genau auf ihr Gleis setzen",
     "routeFiltersAdvanced": "Erweiterte Optionen",
     "routeFilterSpeedAny": "Unbegrenzt",
+    "routeFilterSpeedCustom": "Andere Geschwindigkeit",
     "routeFilterPowerAny": "Alle",
     "routeFilterGaugeAny": "Alle",
     "routeFilterAvoidHighspeed": "Schnellfahrstrecken meiden",

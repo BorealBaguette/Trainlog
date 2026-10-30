@@ -869,6 +869,7 @@
     "exactTracks": "시간표 정차역을 해당 선로에 정확히 배치",
     "routeFiltersAdvanced": "고급 옵션",
     "routeFilterSpeedAny": "제한 없음",
+    "routeFilterSpeedCustom": "다른 속도",
     "routeFilterPowerAny": "전체",
     "routeFilterGaugeAny": "전체",
     "routeFilterAvoidHighspeed": "고속선 피하기",

@@ -872,6 +872,7 @@
     "exactTracks": "Dienstregelingshaltes precies op hun spoor plaatsen",
     "routeFiltersAdvanced": "Geavanceerde opties",
     "routeFilterSpeedAny": "Onbeperkt",
+    "routeFilterSpeedCustom": "Andere snelheid",
     "routeFilterPowerAny": "Alle",
     "routeFilterGaugeAny": "Alle",
     "routeFilterAvoidHighspeed": "Hogesnelheidslijnen vermijden",

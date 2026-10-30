@@ -870,6 +870,7 @@
     "exactTracks": "Fahrplanhalt gnau uf ihres Gleis setze",
     "routeFiltersAdvanced": "Erwiterti Optione",
     "routeFilterSpeedAny": "Unbegränzt",
+    "routeFilterSpeedCustom": "Anderi Gschwindigkeit",
     "routeFilterPowerAny": "Alli",
     "routeFilterGaugeAny": "Alli",
     "routeFilterAvoidHighspeed": "Schnällfahrstrecke vermeide",

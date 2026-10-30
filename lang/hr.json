@@ -875,6 +875,7 @@
     "exactTracks": "Postavi stanice iz voznog reda točno na njihov kolosijek",
     "routeFiltersAdvanced": "Napredne opcije",
     "routeFilterSpeedAny": "Bez ograničenja",
+    "routeFilterSpeedCustom": "Druga brzina",
     "routeFilterPowerAny": "Svi",
     "routeFilterGaugeAny": "Sve",
     "routeFilterAvoidHighspeed": "Izbjegavaj pruge velikih brzina",

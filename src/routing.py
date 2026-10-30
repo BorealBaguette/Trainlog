@@ -34,10 +34,9 @@ def filter_conditions(query):
     top speed (0 when uncapped)."""
     get = lambda key: query.get(key, [""])[0]
     conditions = []
-    # A capped train is a classic one: off high-speed lines too, or a capped LGV would
-    # still be its shortest way.
+    # max_speed only caps the train's speed; high-speed lines have their own toggle.
     max_speed = int(get("max_speed")) if get("max_speed").isdigit() else 0
-    if get("avoid_highspeed") == "1" or max_speed:
+    if get("avoid_highspeed") == "1":
         conditions.append("highspeed")
     power = [POWER_SYSTEMS[p] for p in get("power").split(",") if p in POWER_SYSTEMS]
     if get("electrified") == "yes" or power:
@@ -230,7 +229,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
 
     if routingType == "train" and use_new_router:
         try:
-            if filters:
+            if filters or max_speed:
                 # A filter forcing a long detour takes seconds on the worldwide graph
                 gh_json = requests.post(f"{base}/route", json=build_gh_body(), timeout=(3, 25)).json()
             else:
