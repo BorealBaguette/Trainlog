@@ -245,9 +245,9 @@
 [data-bs-theme="dark"] #sidebar .route-dist { background: var(--bs-secondary-bg); color: var(--bs-emphasis-color); }
 
 [data-bs-theme="dark"] #sidebar .route-hint summary {
-  background: #454b53; color: var(--bs-body-color); border-color: var(--bs-body-bg);
+  background: #2a3a4d; color: var(--bs-body-color); border-color: var(--bs-body-bg);
 }
-[data-bs-theme="dark"] #sidebar .route-hint summary:hover { background: #555c65; color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] #sidebar .route-hint summary:hover { background: #3a4d63; color: var(--bs-emphasis-color); }
 [data-bs-theme="dark"] #sidebar .route-bubble,
 [data-bs-theme="dark"] #sidebar .route-bubble::before {
   background: var(--bs-tertiary-bg); border-color: var(--bs-border-color);
@@ -284,5 +284,5 @@
 [data-bs-theme="dark"] .leaflet-sidebar .close:hover { color: var(--bs-emphasis-color); }
 
 [data-bs-theme="dark"] #sidebar .rt-item::before { background: var(--bs-border-color); }
-[data-bs-theme="dark"] #sidebar .rt-item::after { background: #6b737d; }
+[data-bs-theme="dark"] #sidebar .rt-item::after { background: #5b7189; }
 [data-bs-theme="dark"] #sidebar .rt-end::after { background: var(--bs-body-bg); border-color: #7d9fe0; }

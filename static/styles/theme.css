@@ -14,19 +14,19 @@
    large screen, and its near-white body text glares against it. Everything else in
    the stylesheets derives from these, so the whole site moves with them. */
 :root[data-bs-theme="dark"] {
-  --bs-body-bg: #26292e;
-  --bs-body-bg-rgb: 38, 41, 46;
-  --bs-body-color: #b9c0c8;
-  --bs-body-color-rgb: 185, 192, 200;
-  --bs-emphasis-color: #ced4da;
-  --bs-emphasis-color-rgb: 206, 212, 218;
-  --bs-secondary-color: rgba(185, 192, 200, 0.72);
-  --bs-secondary-bg: #34383e;
-  --bs-secondary-bg-rgb: 52, 56, 62;
-  --bs-tertiary-color: rgba(185, 192, 200, 0.5);
-  --bs-tertiary-bg: #2e3238;
-  --bs-tertiary-bg-rgb: 46, 50, 56;
-  --bs-border-color: #454b53;
+  --bs-body-bg: #0d1b2a;
+  --bs-body-bg-rgb: 13, 27, 42;
+  --bs-body-color: #c3cfdb;
+  --bs-body-color-rgb: 195, 207, 219;
+  --bs-emphasis-color: #e8edf3;
+  --bs-emphasis-color-rgb: 232, 237, 243;
+  --bs-secondary-color: rgba(195, 207, 219, 0.72);
+  --bs-secondary-bg: #1a2d42;
+  --bs-secondary-bg-rgb: 26, 45, 66;
+  --bs-tertiary-color: rgba(195, 207, 219, 0.5);
+  --bs-tertiary-bg: #13263a;
+  --bs-tertiary-bg-rgb: 19, 38, 58;
+  --bs-border-color: #2a3a4d;
 
   /* style2.css uses a flat mid-grey, which reads as a smudge on a dark page. */
   --tl-shadow: rgba(0, 0, 0, 0.6);
@@ -192,8 +192,29 @@
   box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
 }
 
+/* The owner's theme switch in the navbar leads to the theme not in use */
+/* An icon with no text beside it has no baseline to sit on: centred instead */
+.theme-flip { display: flex; }
+.theme-flip .nav-link { display: flex; align-items: center; }
+:root:not([data-bs-theme="dark"]) .theme-flip-light,
+[data-bs-theme="dark"] .theme-flip-dark { display: none; }
+
+/* Native select lists otherwise open in the browser's own grey */
+[data-bs-theme="dark"] select option,
+[data-bs-theme="dark"] select optgroup {
+  background-color: var(--bs-secondary-bg);
+  color: var(--bs-body-color);
+}
+[data-bs-theme="dark"] select option:checked {
+  background-color: #2a4a70;
+  color: var(--bs-emphasis-color);
+}
+
+/* The waiting spinner's bars are black */
+[data-bs-theme="dark"] .lds-spinner div:after { background: var(--bs-body-color); }
+
 /* What shows where tiles have not loaded yet */
-[data-bs-theme="dark"] .leaflet-container { background: #1f2124; }
+[data-bs-theme="dark"] .leaflet-container { background: #0b1622; }
 
 /* The sidebar plugin's panel and close button, and freehand.js's toggle, which
    injects its own light styles */
@@ -210,9 +231,9 @@
 [data-bs-theme="dark"] .freehand-toggle-btn:hover {
   background: var(--bs-secondary-bg);
   color: var(--bs-emphasis-color);
-  border-color: #5c636b;
+  border-color: #41556b;
 }
-[data-bs-theme="dark"] .freehand-toggle-btn:active { background: #3f454d; }
+[data-bs-theme="dark"] .freehand-toggle-btn:active { background: #23384f; }
 
 /* The trips table draws Responsive's expand arrow itself, on the type column rather
    than a control column, so DataTables' own dark rule for it never applies. Same
@@ -253,21 +274,21 @@
 :root[data-bs-theme="dark"] {
   /* Raised off the page rather than sunk into it, so a card still reads as an
      object; the gutter and the toolbar panel then recess below the card. */
-  --card-bg: #2e3238;
+  --card-bg: #13263a;
   --card-border: #3d434a;
   --card-shadow: rgba(0, 0, 0, 0.35);
   --card-seam: #4a5058;
   --card-title: #d3d9df;
   --card-meta: #99a2ac;
   --card-icon: #6f7883;
-  --card-sunken: #24272c;
+  --card-sunken: #102033;
   --card-sunken-border: #3d434a;
   --card-gutter-border: #383e45;
   --card-control-fg: #98a1ab;
   --card-pressed-bg: #383e45;
   --card-pressed-fg: #ced4da;
-  --card-label: #b9c0c8;
-  --card-input-border: #454b53;
+  --card-label: #c3cfdb;
+  --card-input-border: #2a3a4d;
   --card-focus-border: #5b87c9;
   --card-accent-bg: #313d4d;
   --card-accent-border: #46586f;
@@ -296,13 +317,13 @@
    surface relationship as the trips cards: the card sits above the page, the
    toolbar and table headers recess below it. */
 :root[data-bs-theme="dark"] {
-  --plan-surface: #2e3238;
-  --plan-sunken: #24272c;
+  --plan-surface: #13263a;
+  --plan-sunken: #102033;
   --plan-border: #3d434a;
-  --plan-border-input: #454b53;
+  --plan-border-input: #2a3a4d;
   --plan-border-hover: #5a626c;
   --plan-hairline: #383e45;
-  --plan-row-hover: #34383e;
+  --plan-row-hover: #1a2d42;
   --plan-title: #dfe4e9;
   --plan-body: #c2c9d1;
   --plan-muted: #99a2ac;
@@ -326,8 +347,8 @@
   --plan-shadow: rgba(0, 0, 0, .4);
   --plan-focus: #5b87c9;
   --plan-focus-ring: rgba(91, 135, 201, .25);
-  --plan-search-icon: #7d858f;
-  --plan-toggle-border: #454b53;
+  --plan-search-icon: #6f8499;
+  --plan-toggle-border: #2a3a4d;
   --plan-toggle-hover-fg: #ced4da;
   --plan-sep-label: #98a1ab;
   --plan-wd-fg: #b49ae0;

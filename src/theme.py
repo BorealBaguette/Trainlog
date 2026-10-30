@@ -41,7 +41,7 @@ def init_app(app):
     @app.context_processor
     def inject_theme():
         theme = session.get("userinfo", {}).get("theme", DEFAULT_THEME)
-        # The admin-made dark logos, for "auto" too since it may turn out dark. Called
-        # from theme_head only, so other renders (partials, emails) skip the query.
-        dark_logos = OperatorsRepository.get_dark_logos if theme != "light" else dict
-        return {"theme": theme, "dark_logos": dark_logos}
+        # The admin-made dark logos. Called from theme_head only, and only when the
+        # page may turn out dark (?theme= can override the setting), so other renders
+        # (partials, emails) and light pages skip the query.
+        return {"theme": theme, "dark_logos": OperatorsRepository.get_dark_logos}

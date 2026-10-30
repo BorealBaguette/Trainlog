@@ -449,7 +449,7 @@
 [data-bs-theme="dark"] .router-seg-btn.active,
 [data-bs-theme="dark"] #sidebar .router-box button.router-picker-opt.active,
 [data-bs-theme="dark"] .router-picker-opt.active {
-  background: #3f454d; color: #8fb0f5; box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  background: #23384f; color: #8fb0f5; box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
 }
 [data-bs-theme="dark"] .router-picker-opt.active .router-picker-glyph { color: #8fb0f5; }
 [data-bs-theme="dark"] #sidebar .router-box button.router-picker-opt,
@@ -466,7 +466,7 @@
 [data-bs-theme="dark"] .wp-action-danger:hover { background: #3d2522; }
 
 [data-bs-theme="dark"] .router-box { background: var(--bs-tertiary-bg); }
-[data-bs-theme="dark"] .router-switch { background: #555c65; }
+[data-bs-theme="dark"] .router-switch { background: #3a4d63; }
 [data-bs-theme="dark"] .router-switch::after { background: #d6dbe0; }
 [data-bs-theme="dark"] .router-switch:checked { background: #4f78cc; }
 [data-bs-theme="dark"] .route-filters,

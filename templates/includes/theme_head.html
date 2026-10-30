@@ -3,7 +3,7 @@
    the wrong theme. The server can only guess light for "auto"; this corrects it in
    the same frame. A page that must stay light (the poster, an exported image) sets
    light_only before extending its layout. #}
-{% set page_theme = 'light' if light_only else theme %}
+{% set page_theme = 'light' if light_only else request.args.get('theme') if request.args.get('theme') in ('light', 'dark') else theme %}
 <script>
   window.trainlogTheme = "{{ page_theme }}";
   window.trainlogDarkLogos = {{ (dark_logos() if page_theme != 'light' else {})|tojson }};

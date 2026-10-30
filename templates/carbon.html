@@ -56,7 +56,7 @@
   /* Loading overlay over the map */
   .loading-overlay {
     position: absolute; inset: 0;
-    background: rgba(255,255,255,0.85);
+    background: light-dark(rgba(255,255,255,0.85), rgba(var(--bs-body-bg-rgb), 0.85));
     display: none; align-items: center; justify-content: center;
     z-index: 1100; pointer-events: none;
   }

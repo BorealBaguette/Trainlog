@@ -4,6 +4,8 @@
 <style>
   .sch-over td { background-color: #fff5f5 !important; }
   .sch-over .tl-abroad-bar-fill { background: linear-gradient(90deg, #dc3545, #f1aeb5); }
+  [data-bs-theme="dark"] .sch-over td { background-color: #3d2522 !important; }
+  [data-bs-theme="dark"] .sch-over .tl-abroad-bar-fill { background: linear-gradient(90deg, #b02a37, #d9737d); }
 </style>
 
 <div class="container py-4">
@@ -102,11 +104,11 @@
         <table class="table tl-table table-hover mb-0">
           <thead>
             <tr>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_entry }}</th>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_exit }}</th>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_days }}</th>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ sch_countries }}</th>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important; width:25%">{{ sch_peak_ever }}</th>
+              <th scope="col">{{ sch_entry }}</th>
+              <th scope="col">{{ sch_exit }}</th>
+              <th scope="col">{{ sch_days }}</th>
+              <th scope="col">{{ sch_countries }}</th>
+              <th scope="col" style="width:25%">{{ sch_peak_ever }}</th>
             </tr>
           </thead>
           <tbody>
@@ -123,7 +125,7 @@
               <td class="sch-flags fs-5">{{ stay.flags | join(' ') }}</td>
               <td>
                 {% if stay.resident %}
-                <span class="badge bg-light text-secondary border"><i class="bi bi-house-fill me-1"></i>{{ tl_residence }}</span>
+                <span class="badge bg-body-tertiary text-secondary border"><i class="bi bi-house-fill me-1"></i>{{ tl_residence }}</span>
                 {% else %}
                 <div class="d-flex align-items-center gap-2">
                   <div class="tl-abroad-bar flex-grow-1">

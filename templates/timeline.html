@@ -13,6 +13,8 @@
     box-shadow: 0 2px 12px rgba(0,0,0,0.07);
   }
   #timeline-container:active { cursor: grabbing; }
+  [data-bs-theme="dark"] #timeline-container { background: var(--bs-tertiary-bg); box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+  [data-bs-theme="dark"] #tl-hint { background: var(--bs-tertiary-bg); border-top-color: var(--bs-border-color); color: var(--bs-tertiary-color); }
   #tl-hint {
     text-align: center;
     color: #adb5bd;
@@ -89,10 +91,10 @@
         <table class="table tl-table table-hover mb-0">
           <thead>
             <tr>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ year }}</th>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ tl_residence }}</th>
-              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ tl_days_abroad_col }}</th>
-              <th scope="col" style="background-color:#f0f4ff !important; width:35%"></th>
+              <th scope="col">{{ year }}</th>
+              <th scope="col">{{ tl_residence }}</th>
+              <th scope="col">{{ tl_days_abroad_col }}</th>
+              <th scope="col" style="width:35%"></th>
             </tr>
           </thead>
           <tbody>
@@ -185,6 +187,12 @@ document.addEventListener("DOMContentLoaded", function () {
     endMs:   new Date(b.end).getTime(),
   }));
 
+  // Canvas colours, which no stylesheet reaches
+  const DARK = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+  const C = DARK
+    ? { track: '#1a2d42', pill: '#203550', axis: '#2a3a4d', tick: '#5b7189', label: '#c3cfdb', minor: '#6f8499', icon: '#8fa6bd' }
+    : { track: '#e9ecef', pill: '#fff', axis: '#dee2e6', tick: '#adb5bd', label: '#495057', minor: '#adb5bd', icon: '#6c757d' };
+
   // Layout constants
   const dpr         = window.devicePixelRatio || 1;
   const LABEL_H     = 70;   // floating label zone above ribbon
@@ -222,7 +230,7 @@ document.addEventListener("DOMContentLoaded", function () {
     'left:4px',
     'transform:translateY(-50%)',
     'font-size:10px',
-    'color:#6c757d',
+    `color:${C.icon}`,
     'pointer-events:none',
     'line-height:0',
     'display:block',
@@ -308,7 +316,7 @@ document.addEventListener("DOMContentLoaded", function () {
     ctx.clip(roundRectPath(PAD, RY, W - PAD * 2, RIBBON_H, 7));
 
     // Fill entire ribbon grey as fallback
-    ctx.fillStyle = '#e9ecef';
+    ctx.fillStyle = C.track;
     ctx.fillRect(PAD, RY, W - PAD * 2, RIBBON_H);
 
     const nowX = msToX(nowMs);
@@ -384,7 +392,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ctx.shadowColor   = 'rgba(0,0,0,0.28)';
       ctx.shadowBlur    = 7;
       ctx.shadowOffsetY = 2;
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = C.pill;
       ctx.fill(roundRectPath(cx - pW / 2, cy - pH / 2, pW, pH, pR));
       ctx.restore();
       ctx.font      = `20px ${FLAG_FONT}`;
@@ -436,7 +444,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ctx.fill();
 
       // White circle with coloured border
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = C.pill;
       ctx.beginPath();
       ctx.arc(lb.labelX, LY, LABEL_R, 0, Math.PI * 2);
       ctx.fill();
@@ -457,7 +465,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     ctx.save();
     ctx.clip(roundRectPath(PAD, resY, W - PAD * 2, RES_H, resR));
-    ctx.fillStyle = '#e9ecef';
+    ctx.fillStyle = C.track;
     ctx.fillRect(PAD, resY, W - PAD * 2, RES_H);
 
     for (const rb of resBlocks) {
@@ -536,7 +544,7 @@ document.addEventListener("DOMContentLoaded", function () {
                    : 25;
 
     // Baseline
-    ctx.strokeStyle = '#dee2e6';
+    ctx.strokeStyle = C.axis;
     ctx.lineWidth   = 1;
     ctx.beginPath();
     ctx.moveTo(PAD, y);
@@ -550,7 +558,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const x = msToX(new Date(yr, 0, 1).getTime());
       if (x < PAD || x > W - PAD) continue;
 
-      ctx.strokeStyle = '#adb5bd';
+      ctx.strokeStyle = C.tick;
       ctx.lineWidth   = 1;
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -559,7 +567,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // Clamp label so it never spills outside the padded area
       const lx = Math.max(x, PAD + LABEL_HALF);
-      ctx.fillStyle    = '#495057';
+      ctx.fillStyle    = C.label;
       ctx.font         = 'bold 11px sans-serif';
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'top';
@@ -573,7 +581,7 @@ document.addEventListener("DOMContentLoaded", function () {
         for (let mo = 1; mo < 12; mo++) {
           const x = msToX(new Date(yr, mo, 1).getTime());
           if (x < PAD || x > W - PAD) continue;
-          ctx.strokeStyle = '#dee2e6';
+          ctx.strokeStyle = C.axis;
           ctx.lineWidth   = 0.5;
           ctx.beginPath();
           ctx.moveTo(x, y);
@@ -581,7 +589,7 @@ document.addEventListener("DOMContentLoaded", function () {
           ctx.stroke();
           if (showNames) {
             const name = new Date(yr, mo, 1).toLocaleString('default', { month: 'short' });
-            ctx.fillStyle    = '#adb5bd';
+            ctx.fillStyle    = C.minor;
             ctx.font         = '9px sans-serif';
             ctx.textAlign    = 'center';
             ctx.textBaseline = 'top';

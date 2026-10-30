@@ -265,6 +265,16 @@
       </li> -->
       </ul>
       <ul class="navbar-nav ms-auto">
+        {% if is_owner %}
+        {# This page only, in the other theme: ?theme= overrides the user's setting for one
+           load. Both links are there, CSS shows the one away from the theme in use. #}
+        <li class="nav-item theme-flip">
+          {% for target in ('light', 'dark') %}
+          <a class="nav-link theme-flip-{{ target }}" href="{{ request.path }}?{{ dict(request.args, theme=target)|urlencode }}"
+             title="{{ target|capitalize }} theme, this page only"><i class="bi bi-circle-half"></i></a>
+          {% endfor %}
+        </li>
+        {% endif %}
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('user_settings', username=username) }}"><i class="bi bi-gear"></i> {{user_settings}}</a>
         </li>

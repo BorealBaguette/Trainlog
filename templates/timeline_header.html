@@ -86,6 +86,8 @@
     min-width: 36px;
   }
 
+  .tl-table thead th { background-color: #f0f4ff !important; color: #0a58ca !important; }
+
   .tl-alert { border-radius: 10px; border: none; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
 
   /* ── Tabs ── */
@@ -93,6 +95,26 @@
   .tl-tabs .nav-link.active { color: #0d6efd; }
   /* Twemoji has a single weight: faux-bolding the colour glyph smears it */
   .tl-flag-icon { font-weight: normal; font-synthesis: none; font-size: 1.3em; line-height: 1; vertical-align: -0.1em; }
+
+  [data-bs-theme="dark"] .tl-page-title,
+  [data-bs-theme="dark"] .tl-days-num { color: var(--bs-emphasis-color); }
+  [data-bs-theme="dark"] .tl-page-title span.username,
+  [data-bs-theme="dark"] .tl-tabs .nav-link.active { color: #6ea8fe; }
+  [data-bs-theme="dark"] .tl-stat-card { background: var(--bs-tertiary-bg); box-shadow: 0 1px 8px rgba(0,0,0,0.3); }
+  /* Their colours are inline, set per card */
+  [data-bs-theme="dark"] .tl-stat-card .tl-stat-value { filter: brightness(1.45); }
+  [data-bs-theme="dark"] .tl-stat-card .tl-stat-label,
+  [data-bs-theme="dark"] .tl-pct-label,
+  [data-bs-theme="dark"] .tl-tabs .nav-link { color: var(--bs-secondary-color); }
+  [data-bs-theme="dark"] .tl-table-card,
+  [data-bs-theme="dark"] .tl-alert { box-shadow: 0 1px 8px rgba(0,0,0,0.3); }
+  [data-bs-theme="dark"] .tl-table-card .card-header { background: linear-gradient(135deg, #2a5aa8 0%, #234a8a 100%); }
+  [data-bs-theme="dark"] .tl-table thead th {
+    background-color: var(--bs-tertiary-bg) !important; color: #8fb0f5 !important; border-bottom-color: var(--bs-border-color);
+  }
+  [data-bs-theme="dark"] .tl-table td { border-color: var(--bs-border-color); }
+  [data-bs-theme="dark"] .tl-abroad-bar { background: var(--bs-secondary-bg); }
+  [data-bs-theme="dark"] .tl-abroad-bar-fill { background: linear-gradient(90deg, #2f6aca, #5b8fd9); }
 </style>
 
 <div class="text-center mb-3">
