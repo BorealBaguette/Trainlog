@@ -182,7 +182,7 @@
 /* Raster tiles have no dark variant, so the base layer (always added first) is
    inverted with hues turned back; overlays like OpenRailwayMap come after it and
    keep their colours. */
-[data-bs-theme="dark"] .leaflet-tile-pane > .leaflet-layer:first-child:not(.tiles-dark) {
+[data-bs-theme="dark"]:not([data-light-leaflet]) .leaflet-tile-pane > .leaflet-layer:first-child:not(.tiles-dark) {
   filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.85) saturate(0.6);
 }
 /* The coverage and world squares maps' percentage box */
@@ -214,7 +214,7 @@
 [data-bs-theme="dark"] .lds-spinner div:after { background: var(--bs-body-color); }
 
 /* What shows where tiles have not loaded yet */
-[data-bs-theme="dark"] .leaflet-container { background: #0b1622; }
+[data-bs-theme="dark"]:not([data-light-leaflet]) .leaflet-container { background: #0b1622; }
 
 /* The sidebar plugin's panel and close button, and freehand.js's toggle, which
    injects its own light styles */

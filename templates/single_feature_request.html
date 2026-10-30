@@ -49,9 +49,9 @@
 
               {% if logged_in_user and not is_owner and username and username != "public" %}
                 <button type="button"
-                        class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-2"
+                        class="btn btn-lg w-100 {{ 'btn-success' if feature_request.user_vote == 1 else 'btn-outline-success' }} mb-2"
                         data-vote-button
-                        data-request-id="{{ request.id }}"
+                        data-feature_request-id="{{ feature_request.id }}"
                         data-vote-type="upvote"
                         data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
                   <i class="fa-solid fa-chevron-up"></i>
@@ -62,17 +62,17 @@
                 </div>
               {% endif %}
 
-              <div class="fs-2 fw-bold text-{{ 'success' if request.score > 0 else 'danger' if request.score < 0 else 'muted' }} my-3"
+              <div class="fs-2 fw-bold text-{{ 'success' if feature_request.score > 0 else 'danger' if feature_request.score < 0 else 'muted' }} my-3"
                    data-vote-score
-                   data-request-id="{{ request.id }}">
-                {{ request.score }}
+                   data-feature_request-id="{{ feature_request.id }}">
+                {{ feature_request.score }}
               </div>
 
               {% if logged_in_user and not is_owner and username and username != "public" %}
                 <button type="button"
-                        class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}"
+                        class="btn btn-lg w-100 {{ 'btn-danger' if feature_request.user_vote == -1 else 'btn-outline-danger' }}"
                         data-vote-button
-                        data-request-id="{{ request.id }}"
+                        data-feature_request-id="{{ feature_request.id }}"
                         data-vote-type="downvote"
                         data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
                   <i class="fa-solid fa-chevron-down"></i>
@@ -88,8 +88,8 @@
                 <div class="d-flex justify-content-between mb-2">
                   <span class="text-success">
                     <i class="fa-solid fa-chevron-up"></i>
-                    <span onclick="showVoters({{ request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      <span data-vote-up data-request-id="{{ request.id }}">{{ request.upvotes }}</span>
+                    <span onclick="showVoters({{ feature_request.id }})" style="cursor: pointer; text-decoration: underline;">
+                      <span data-vote-up data-feature_request-id="{{ feature_request.id }}">{{ feature_request.upvotes }}</span>
                       {{ feature_requests_votes_positive if feature_requests_votes_positive is defined else 'upvotes' }}
                     </span>
                   </span>
@@ -97,8 +97,8 @@
                 <div class="d-flex justify-content-between">
                   <span class="text-danger">
                     <i class="fa-solid fa-chevron-down"></i>
-                    <span onclick="showVoters({{ request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      <span data-vote-down data-request-id="{{ request.id }}">{{ request.downvotes }}</span>
+                    <span onclick="showVoters({{ feature_request.id }})" style="cursor: pointer; text-decoration: underline;">
+                      <span data-vote-down data-feature_request-id="{{ feature_request.id }}">{{ feature_request.downvotes }}</span>
                       {{ feature_requests_votes_negative if feature_requests_votes_negative is defined else 'downvotes' }}
                     </span>
                   </span>
@@ -119,23 +119,23 @@
                 <div class="col-12">
                   <div class="d-flex justify-content-between align-items-start flex-wrap">
                     <div class="flex-grow-1 me-3">
-                      <h1 class="h2 mb-3">{{ request.title }}</h1>
+                      <h1 class="h2 mb-3">{{ feature_request.title }}</h1>
 
                       <div class="mb-2">
-                        <span class="badge bg-{{ STATUS_BADGE.get(request.status, 'secondary') }} fs-6 px-3 py-2">
-                          {{ STATUS_LABEL.get(request.status, request.status) }}
+                        <span class="badge bg-{{ STATUS_BADGE.get(feature_request.status, 'secondary') }} fs-6 px-3 py-2">
+                          {{ STATUS_LABEL.get(feature_request.status, feature_request.status) }}
                         </span>
                       </div>
                     </div>
 
-                    {% if logged_in_user and username and username != "public" and (is_owner or is_feature_admin or request.author_display == logged_in_user) %}
+                    {% if logged_in_user and username and username != "public" and (is_owner or is_feature_admin or feature_request.author_display == logged_in_user) %}
                       <div class="btn-group">
                         <button type="button" class="btn btn-outline-secondary"
-                                onclick="editRequest({{ request.id }}, `{{ request.title|e }}`, `{{ request.description|e }}`)">
+                                onclick="editRequest({{ feature_request.id }}, `{{ feature_request.title|e }}`, `{{ feature_request.description|e }}`)">
                           <i class="fa-solid fa-edit"></i>
                         </button>
                         <button type="button" class="btn btn-outline-danger"
-                                onclick="deleteRequest({{ request.id }}, `{{ request.title|e }}`)">
+                                onclick="deleteRequest({{ feature_request.id }}, `{{ feature_request.title|e }}`)">
                           <i class="fa-solid fa-trash"></i>
                         </button>
                       </div>
@@ -145,20 +145,20 @@
               </div>
 
               <!-- Closure Reason Alert -->
-              {% if request.status in ['completed','not_doing', 'merged'] and (request.closure_reason or request.closed_by) %}
+              {% if feature_request.status in ['completed','not_doing', 'merged'] and (feature_request.closure_reason or feature_request.closed_by) %}
                 <div class="alert alert-info mb-4">
                   <h6 class="alert-heading">
                     <i class="fa-solid fa-circle-info me-2"></i>{{ feature_requests_closure_reason_title }}
                   </h6>
-                  {% if request.closure_reason %}
-                    <div style="white-space: pre-wrap;">{{ request.closure_reason }}</div>
+                  {% if feature_request.closure_reason %}
+                    <div style="white-space: pre-wrap;">{{ feature_request.closure_reason }}</div>
                   {% endif %}
-                  {% if request.closed_by and request.closed_at %}
+                  {% if feature_request.closed_by and feature_request.closed_at %}
                     <hr class="my-2">
                     <small class="text-muted">
                       {{ (feature_requests_closed_by_on if feature_requests_closed_by_on is defined else 'Closed by {user} on {date}')
-                         .replace('{user}', '<strong>' ~ request.closed_by ~ '</strong>')
-                         .replace('{date}', '<time class="js-fr-datetime" datetime="' ~ request.closed_at.isoformat() ~ '">' ~ request.closed_at.strftime('%Y-%m-%d %H:%M') ~ '</time>') | safe }}
+                         .replace('{user}', '<strong>' ~ feature_request.closed_by ~ '</strong>')
+                         .replace('{date}', '<time class="js-fr-datetime" datetime="' ~ feature_request.closed_at.isoformat() ~ '">' ~ feature_request.closed_at.strftime('%Y-%m-%d %H:%M') ~ '</time>') | safe }}
                     </small>
                   {% endif %}
                 </div>
@@ -167,7 +167,7 @@
               <!-- Description -->
               <div class="mb-2">
                 <h5 class="border-bottom pb-2 mb-3">{{ feature_requests_description if feature_requests_description is defined else 'Description' }}</h5>
-                <div class="fs-6 lh-lg" style="white-space: pre-wrap;">{{ request.description }}</div>
+                <div class="fs-6 lh-lg" style="white-space: pre-wrap;">{{ feature_request.description }}</div>
               </div>
 
             </div>
@@ -255,34 +255,34 @@
             <div class="card-body">
               <div class="mb-2">
                 <small class="text-muted d-block">{{ feature_requests_by }}</small>
-                {% if request.author_display == "admin" %}
+                {% if feature_request.author_display == "admin" %}
                   <span class="badge bg-warning text-dark"><i class="fa-solid fa-crown"></i> admin</span>
-                {% elif request.author_is_feature_admin %}
-                  <span class="badge text-white" style="background-color: #2ECC71;"><i class="fa-solid fa-shield-halved"></i> {{ request.author_display }}</span>
+                {% elif feature_request.author_is_feature_admin %}
+                  <span class="badge text-white" style="background-color: #2ECC71;"><i class="fa-solid fa-shield-halved"></i> {{ feature_request.author_display }}</span>
                 {% else %}
-                  <span class="badge bg-primary">{{ request.author_display }}</span>
+                  <span class="badge bg-primary">{{ feature_request.author_display }}</span>
                 {% endif %}
               </div>
               <div class="mb-2">
                 <small class="text-muted d-block">{{ feature_requests_created if feature_requests_created is defined else 'Created' }}</small>
                 <span>
-                  {% if request.created %}
-                    {{ request.created.strftime('%Y-%m-%d %H:%M') }}
+                  {% if feature_request.created %}
+                    {{ feature_request.created.strftime('%Y-%m-%d %H:%M') }}
                   {% else %}
                     {{ feature_requests_unknown }}
                   {% endif %}
                 </span>
               </div>
-              {% if request.updated %}
+              {% if feature_request.updated %}
               <div class="mb-2">
                 <small class="text-muted d-block">{{ feature_requests_updated if feature_requests_updated is defined else 'Updated' }}</small>
-                <span>{{ request.updated.strftime('%Y-%m-%d %H:%M') }}</span>
+                <span>{{ feature_request.updated.strftime('%Y-%m-%d %H:%M') }}</span>
               </div>
               {% endif %}
               <div class="mb-2">
                 <small class="text-muted d-block">{{ feature_requests_status if feature_requests_status is defined else 'Status' }}</small>
-                <span class="badge bg-{{ STATUS_BADGE.get(request.status, 'secondary') }}">
-                  {{ STATUS_LABEL.get(request.status, request.status) }}
+                <span class="badge bg-{{ STATUS_BADGE.get(feature_request.status, 'secondary') }}">
+                  {{ STATUS_LABEL.get(feature_request.status, feature_request.status) }}
                 </span>
               </div>
             </div>
@@ -300,13 +300,13 @@
 
               <div class="mb-4">
                 <form method="POST" action="{{ url_for('feature_requests.update_feature_request_status', username=username) }}">
-                  <input type="hidden" name="request_id" value="{{ request.id }}">
+                  <input type="hidden" name="request_id" value="{{ feature_request.id }}">
 
                   <div class="mb-3">
                     <label for="status" class="form-label fw-semibold">{{ feature_requests_update_status if feature_requests_update_status is defined else 'Update status:' }}</label>
                     <select class="form-select" name="status" id="status">
                       {% for value in ALL_STATUSES %}
-                        <option value="{{ value }}" {{ 'selected' if request.status == value else '' }}>
+                        <option value="{{ value }}" {{ 'selected' if feature_request.status == value else '' }}>
                           {{ STATUS_LABEL[value] }}
                         </option>
                       {% endfor %}
@@ -316,7 +316,7 @@
                   <div class="mb-3">
                     <label for="closure_reason" class="form-label fw-semibold">{{ feature_requests_closure_reason_label if feature_requests_closure_reason_label is defined else 'Closure reason (optional)' }}</label>
                     <textarea class="form-control" name="closure_reason" id="closure_reason" rows="3"
-                              placeholder="{{ feature_requests_closure_reason_placeholder if feature_requests_closure_reason_placeholder is defined else 'Why is this closed?' }}">{{ request.closure_reason or '' }}</textarea>
+                              placeholder="{{ feature_requests_closure_reason_placeholder if feature_requests_closure_reason_placeholder is defined else 'Why is this closed?' }}">{{ feature_request.closure_reason or '' }}</textarea>
                     <div class="form-text">
                       {{ feature_requests_closure_reason_hint if feature_requests_closure_reason_hint is defined else 'Used only when moving to Completed or Not doing.' }}
                     </div>
@@ -333,7 +333,7 @@
                   <i class="fa-solid fa-object-group me-2"></i>{{ feature_requests_merge_title if feature_requests_merge_title is defined else 'Merge requests' }}
                 </h6>
                 <form method="POST" action="{{ url_for('feature_requests.merge_feature_requests', username=username) }}">
-                  <input type="hidden" name="target_id" value="{{ request.id }}">
+                  <input type="hidden" name="target_id" value="{{ feature_request.id }}">
 
                   <div class="mb-3">
                     <label class="form-label">{{ feature_requests_merge_label }}</label>
@@ -470,7 +470,7 @@ document.getElementById('editModal').addEventListener('hidden.bs.modal', functio
   document.getElementById('editForm').reset();
 });
 
-const REQUEST_ID = {{ request.id }};
+const REQUEST_ID = {{ feature_request.id }};
 const CURRENT_USER = '{{ logged_in_user|default("", true) }}';
 const IS_OWNER = {{ 'true' if is_owner else 'false' }};
 const IS_FEATURE_ADMIN = {{ 'true' if is_feature_admin else 'false' }};

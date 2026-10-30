@@ -1199,6 +1199,7 @@
     "theme_auto": "Automaticky",
     "theme_light": "Světlý",
     "theme_dark": "Tmavý",
+    "darkLeafletLabel": "Ztmavit podklady map Leaflet v tmavém režimu",
     "hoursOnTrains": "Hodiny cestování",
     "upcomingTrips": "Nadcházející cesty",
     "recentTrips": "Nedávné cesty",

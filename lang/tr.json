@@ -1191,6 +1191,7 @@
     "theme_auto": "Otomatik",
     "theme_light": "Açık",
     "theme_dark": "Koyu",
+    "darkLeafletLabel": "Karanlık modda Leaflet harita karolarını koyulaştır",
     "hoursOnTrains": "Seyahat edilen saatler",
     "upcomingTrips": "Yaklaşan seyahatler",
     "recentTrips": "Son seyahatler",

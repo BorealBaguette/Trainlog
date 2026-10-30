@@ -12,6 +12,7 @@
     var dark = pref === "dark" ||
       (pref === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.setAttribute("data-bs-theme", dark ? "dark" : "light");
+    {% if not dark_leaflet %}document.documentElement.setAttribute("data-light-leaflet", "");{% endif %}
   })();
 </script>
 <link rel="stylesheet" href="{{ static_autoversion(filename='styles/theme.css') }}">

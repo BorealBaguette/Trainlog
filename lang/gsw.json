@@ -1192,6 +1192,7 @@
     "theme_auto": "Automatisch",
     "theme_light": "Hell",
     "theme_dark": "Dunkel",
+    "darkLeafletLabel": "Leaflet-Chartechachle im dunkle Modus abdunkle",
     "hoursOnTrains": "Gfahrni Stund",
     "upcomingTrips": "Kommendi Reise",
     "recentTrips": "Letschti Reise",

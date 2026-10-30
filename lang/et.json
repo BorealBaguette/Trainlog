@@ -1191,6 +1191,7 @@
     "theme_auto": "Automaatne",
     "theme_light": "Hele",
     "theme_dark": "Tume",
+    "darkLeafletLabel": "Tumenda Leafleti kaardipaanid tumedas režiimis",
     "hoursOnTrains": "Reisitud tunnid",
     "upcomingTrips": "Eelseisvad reisid",
     "recentTrips": "Hiljutised reisid",

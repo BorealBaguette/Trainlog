@@ -1191,6 +1191,7 @@
     "theme_auto": "自动",
     "theme_light": "浅色",
     "theme_dark": "深色",
+    "darkLeafletLabel": "深色模式下调暗 Leaflet 地图图块",
     "hoursOnTrains": "旅行时间",
     "upcomingTrips": "即将到来的旅行",
     "recentTrips": "最近的旅行",

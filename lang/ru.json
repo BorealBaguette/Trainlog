@@ -1197,6 +1197,7 @@
     "theme_auto": "Авто",
     "theme_light": "Светлая",
     "theme_dark": "Тёмная",
+    "darkLeafletLabel": "Затемнять карты Leaflet в тёмном режиме",
     "hoursOnTrains": "Часы путешествия",
     "upcomingTrips": "Предстоящие поездки",
     "recentTrips": "Недавние поездки",

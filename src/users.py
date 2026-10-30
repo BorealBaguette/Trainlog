@@ -29,6 +29,8 @@ class User(authDb.Model):
     colorblind = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # "auto" (follow the OS), "light" or "dark" — see src/theme.py.
     theme = authDb.Column(authDb.String(10), nullable=False, default="light")
+    # Leaflet's raster tiles inverted in the dark theme
+    dark_leaflet = authDb.Column(authDb.Boolean, nullable=False, default=False)
     reset_token = authDb.Column(authDb.String(100), default="")
     # Per-user secret token for the GPSLogger GPX ingest endpoint
     # (/api/gps/<token>/upload). Scoped to GPS ingest only; regenerable.
@@ -123,6 +125,7 @@ class User(authDb.Model):
             "user_currency": self.user_currency,
             "colorblind": self.colorblind,
             "theme": self.theme,
+            "dark_leaflet": self.dark_leaflet,
             "tileserver": self.tileserver,
             "globe": self.globe,
             "premium": self.premium,

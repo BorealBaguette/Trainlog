@@ -1191,6 +1191,7 @@
     "theme_auto": "자동",
     "theme_light": "라이트",
     "theme_dark": "다크",
+    "darkLeafletLabel": "다크 모드에서 Leaflet 지도 타일 어둡게 하기",
     "hoursOnTrains": "여행한 시간",
     "upcomingTrips": "다가오는 여행",
     "recentTrips": "최근 여행",

@@ -1223,6 +1223,7 @@
     "theme_auto": "Auto",
     "theme_light": "Light",
     "theme_dark": "Dark",
+    "darkLeafletLabel": "Darken Leaflet map tiles in dark mode",
     "hoursOnTrains": "Hours traveled",
     "upcomingTrips": "Upcoming Trips",
     "recentTrips": "Recent Trips",

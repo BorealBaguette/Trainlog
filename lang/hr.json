@@ -1197,6 +1197,7 @@
     "theme_auto": "Automatski",
     "theme_light": "Svijetla",
     "theme_dark": "Tamna",
+    "darkLeafletLabel": "Zatamni Leaflet karte u tamnom načinu",
     "hoursOnTrains": "Prijeđeni sati",
     "upcomingTrips": "Nadolazeća putovanja",
     "recentTrips": "Nedavna putovanja",

@@ -1194,6 +1194,7 @@
     "theme_auto": "Automático",
     "theme_light": "Claro",
     "theme_dark": "Escuro",
+    "darkLeafletLabel": "Escurecer os mapas Leaflet no modo escuro",
     "hoursOnTrains": "Horas viajadas",
     "upcomingTrips": "Próximas viagens",
     "recentTrips": "Viagens recentes",

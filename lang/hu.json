@@ -1191,6 +1191,7 @@
     "theme_auto": "Automatikus",
     "theme_light": "Világos",
     "theme_dark": "Sötét",
+    "darkLeafletLabel": "Leaflet térképcsempék sötétítése sötét módban",
     "hoursOnTrains": "Utak ideje",
     "upcomingTrips": "Közelgő utak",
     "recentTrips": "Legutóbbi utak",

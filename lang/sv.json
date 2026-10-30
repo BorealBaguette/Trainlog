@@ -1194,6 +1194,7 @@
     "theme_auto": "Automatiskt",
     "theme_light": "Ljust",
     "theme_dark": "Mörkt",
+    "darkLeafletLabel": "Gör Leaflet-kartrutor mörka i mörkt läge",
     "hoursOnTrains": "Restimmar",
     "upcomingTrips": "Kommande resor",
     "recentTrips": "Senaste resor",

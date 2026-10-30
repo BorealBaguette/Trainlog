@@ -1192,6 +1192,7 @@
     "theme_auto": "Automaattinen",
     "theme_light": "Vaalea",
     "theme_dark": "Tumma",
+    "darkLeafletLabel": "Tummenna Leaflet-karttapohjat tummassa tilassa",
     "hoursOnTrains": "Matkustetut tunnit",
     "upcomingTrips": "Tulevat matkat",
     "recentTrips": "Viimeaikaiset matkat",

@@ -1194,6 +1194,7 @@
     "theme_auto": "Automatisk",
     "theme_light": "Lyst",
     "theme_dark": "Mørkt",
+    "darkLeafletLabel": "Gør Leaflet-kortfliser mørke i mørk tilstand",
     "hoursOnTrains": "Timer rejst",
     "upcomingTrips": "Kommende rejser",
     "recentTrips": "Seneste rejser",

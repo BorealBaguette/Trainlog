@@ -710,7 +710,7 @@ def changeLang(langToSet, session=False):
     session["userinfo"]["is_admin"] = True if user and user.admin else False
     session["userinfo"]["is_translator"] = True if user and user.translator else False
     session["userinfo"]["is_feature_admin"] = True if user and user.feature_admin else False
-    session["userinfo"]["theme"] = user.theme if user else theme_module.DEFAULT_THEME
+    theme_module.fill_session(session["userinfo"], user)
     session["userinfo"]["available_languages"] = available_languages
     session["userinfo"]["lang"] = langToSet
 
@@ -9988,8 +9988,6 @@ def user_settings(username):
         params["friend_search"] = "friend_search" in request.form
         params["appear_on_global"] = "appear_on_global" in request.form
         params["colorblind"] = "colorblind" in request.form
-        if request.form.get("theme") in theme_module.THEMES:
-            params["theme"] = request.form["theme"]
         params["lang"] = request.form["lang"]
         params["user_currency"] = request.form["user_currency"]
         params["default_landing"] = request.form["default_landing"]
@@ -10015,9 +10013,8 @@ def user_settings(username):
                 setattr(user, param, params[param])
                 if param == "lang":
                     changeLang(params[param], session)
-                elif param == "theme":
-                    session["userinfo"]["theme"] = params[param]
-                    session.modified = True
+        theme_module.save_settings(user, request.form, session["userinfo"])
+        session.modified = True
 
         authDb.session.commit()
 

@@ -1194,6 +1194,7 @@
     "theme_auto": "Automatisch",
     "theme_light": "Licht",
     "theme_dark": "Donker",
+    "darkLeafletLabel": "Leaflet-kaarttegels donker maken in donkere modus",
     "hoursOnTrains": "Reisuren",
     "upcomingTrips": "Aankomende reizen",
     "recentTrips": "Recente reizen",

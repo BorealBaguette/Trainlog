@@ -1194,6 +1194,7 @@
     "theme_auto": "Automatisch",
     "theme_light": "Hell",
     "theme_dark": "Dunkel",
+    "darkLeafletLabel": "Leaflet-Kartenkacheln im dunklen Modus abdunkeln",
     "hoursOnTrains": "Gereiste Stunden",
     "upcomingTrips": "Bevorstehende Reisen",
     "recentTrips": "Letzte Reisen",

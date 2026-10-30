@@ -166,7 +166,7 @@ def single_feature_request(request_id):
     return render_template(
         "single_feature_request.html",
         username=current_user,
-        request=request_dict,
+        feature_request=request_dict,
         **lang.get(userinfo.get("lang", "en"), {}),
         **userinfo,
         nav="bootstrap/navigation.html"
