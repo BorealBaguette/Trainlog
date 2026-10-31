@@ -10705,12 +10705,67 @@ def proxy_airlines():
     return jsonify([]), 200
 
 
-def _parse_mfr24_row(line, api_key):
+def _ninjas_session():
+    """HTTP session for API Ninjas that retries its transient gateway errors."""
+    s = requests.Session()
+    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])))
+    return s
+
+
+def _lookup_mfr24_airline(icao, api_key, session, cache):
+    """API Ninjas' entry for an airline ICAO code, or None when it has none.
+
+    The outcome is kept in `cache`, a failed lookup included, so an import asks
+    once per airline instead of once per row: a flight diary repeats the same few
+    airlines, each lookup is a slow round trip, and one that the session's retries
+    could not save is not worth waiting for again.
+    """
+    if icao not in cache:
+        try:
+            response = session.get(
+                "https://api.api-ninjas.com/v1/airlines?icao={}".format(icao),
+                headers={"X-Api-Key": api_key},
+                timeout=10,
+            )
+            matches = response.json() if response.status_code == requests.codes.ok else []
+            cache[icao] = matches[0] if matches else None
+        except Exception as e:
+            cache[icao] = e
+    if isinstance(cache[icao], Exception):
+        raise cache[icao]
+    return cache[icao]
+
+
+def _mfr24_arrival(date_str, dep_time, arr_time, duration, origin, destination):
+    """Local arrival datetime of an MFR24 flight.
+
+    MFR24 only gives the departure date, with each time local to its own airport,
+    so the arrival can fall on the day before (eastbound over the date line) or up
+    to two days later (westbound over it). Each candidate day, from the one before
+    to three after, is converted to UTC with the airports' time zones, the same way
+    processDates will, and the one whose flight time matches the export's duration
+    wins; without a duration, the first arrival after departure does.
+    """
+    departure = datetime.strptime(f"{date_str} {dep_time}", "%Y-%m-%d %H:%M:%S")
+    utc_departure = getUtcDatetime(dateTime=departure, **origin)
+    arrival = datetime.strptime(f"{date_str} {arr_time}", "%Y-%m-%d %H:%M:%S")
+    candidates = []
+    for days in range(-1, 4):
+        candidate = arrival + timedelta(days=days)
+        flown = (getUtcDatetime(dateTime=candidate, **destination) - utc_departure).total_seconds()
+        candidates.append((candidate, flown))
+    if duration > 0:
+        return min(candidates, key=lambda c: abs(c[1] - duration))[0]
+    return min((c for c in candidates if c[1] >= 0), key=lambda c: c[1])[0]
+
+
+def _parse_mfr24_row(line, api_key, ninjas_session=None, airline_cache=None):
     """Parse one MFR24 CSV data line.
 
     Returns (newTrip, newPath, display) on success, raises ValueError on failure.
     All external calls (airport DB lookup, airline API) happen here so that the
-    subsequent save step is guaranteed to succeed.
+    subsequent save step is guaranteed to succeed. Pass the same ninjas_session and
+    airline_cache for every row of a file so each airline is looked up only once.
     """
     data = line.split(",")
     newTrip = {}
@@ -10751,18 +10806,8 @@ def _parse_mfr24_row(line, api_key):
             except (ValueError, AttributeError):
                 newTrip["onlyDateDuration"] = 0
         else:
+            # newTripEnd waits for the airports: its date depends on their time zones.
             newTrip["newTripStart"] = (date_str + "T" + dep_time)[:16]
-            end_dt_str = (date_str + "T" + arr_time)[:16]
-            if (
-                datetime.strptime(arr_time, "%H:%M:%S")
-                - datetime.strptime(dep_time, "%H:%M:%S")
-                < timedelta(0)
-            ):
-                end_dt_str = datetime.strftime(
-                    datetime.strptime(end_dt_str, "%Y-%m-%dT%H:%M") + timedelta(days=1),
-                    "%Y-%m-%dT%H:%M",
-                )
-            newTrip["newTripEnd"] = end_dt_str
             newTrip["precision"] = "preciseDates"
 
     newTrip["lineName"] = data[1].strip()
@@ -10791,17 +10836,32 @@ def _parse_mfr24_row(line, api_key):
         ]
         newPath.append({"lat": airport["latitude"], "lng": airport["longitude"]})
 
+    if newTrip["precision"] == "preciseDates":
+        newTrip["newTripEnd"] = datetime.strftime(
+            _mfr24_arrival(
+                date_str,
+                dep_time,
+                arr_time,
+                newTrip["estimated_trip_duration"],
+                newPath[0],
+                newPath[1],
+            ),
+            "%Y-%m-%dT%H:%M",
+        )
+
     raw_airline = data[7].strip('"')
     airline_name = raw_airline.rsplit(" ", 1)[0]
     icao = raw_airline.rsplit("/", 1)[1].replace(")", "") if "/" in raw_airline else ""
 
-    s = requests.Session()
-    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])))
-    api_url = "https://api.api-ninjas.com/v1/airlines?icao={}".format(icao)
-    response = s.get(api_url, headers={"X-Api-Key": api_key}, timeout=10)
-
-    if response.status_code == requests.codes.ok and response.json():
-        operatorAPI = response.json()[0]
+    operatorAPI = None
+    if icao:
+        operatorAPI = _lookup_mfr24_airline(
+            icao,
+            api_key,
+            ninjas_session or _ninjas_session(),
+            {} if airline_cache is None else airline_cache,
+        )
+    if operatorAPI is not None:
         newTrip["operator"] = operatorAPI["name"]
         if "logo_url" in operatorAPI:
             newTrip["operatorLogoURL"] = operatorAPI["logo_url"]
@@ -10949,6 +11009,9 @@ def parse_mfr24(username):
     content = file.read().decode("utf-8", errors="replace")
     data_lines = [l for l in content.splitlines()[2:] if l.strip()]  # skip 2 header rows
     api_key = load_config().get("api_ninjas", {}).get("api_key", "")
+    # Shared by every row, so the file's airlines are each looked up only once.
+    ninjas_session = _ninjas_session()
+    airline_cache = {}
 
     def generate():
         total = len(data_lines)
@@ -10957,7 +11020,7 @@ def parse_mfr24(username):
         for i, line in enumerate(data_lines):
             yield f"data: {json.dumps({'type': 'progress', 'current': i + 1, 'total': total})}\n\n"
             try:
-                newTrip, newPath, display = _parse_mfr24_row(line, api_key)
+                newTrip, newPath, display = _parse_mfr24_row(line, api_key, ninjas_session, airline_cache)
                 result = {
                     "ok": True,
                     "display": display,
