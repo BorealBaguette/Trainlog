@@ -66,6 +66,9 @@ class User(authDb.Model):
     # instead of a geodesic. Off by default even for premium, because broadcasting a
     # real-time position is a materially different disclosure from a historical log.
     live_tracking = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # Premium-only: record the aircraft FR24 sees (type and registration) over
+    # what was logged. Opt-in, since it rewrites the user's own logging.
+    live_tracking_details = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Routing: start with "pass exactly through every point" on.
     exact_waypoints = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Language of the map background's labels: "" follows the site language, "native" is
@@ -140,6 +143,7 @@ class User(authDb.Model):
             "feature_admin": self.feature_admin,
             "flight_3d": self.flight_3d,
             "live_tracking": self.live_tracking,
+            "live_tracking_details": self.live_tracking_details,
             "exact_waypoints": self.exact_waypoints,
             "map_lang": self.map_lang,
             "station_names": self.station_names,

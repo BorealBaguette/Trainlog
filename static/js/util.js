@@ -1121,8 +1121,11 @@ function computeTimeStatus(data) {
     data.time = 'past';
 } else {
     // Parse the datetimes into moment objects
-    let start = typeof trip.utc_filtered_start_datetime === 'string' ? moment.utc(trip.utc_filtered_start_datetime) : null;
-    let end = typeof trip.utc_filtered_end_datetime === 'string' ? moment.utc(trip.utc_filtered_end_datetime) : null;
+    // The utc_filtered_* times are the timetable; a delayed trip runs to its actual times.
+    let start = typeof trip.utc_filtered_start_datetime === 'string'
+        ? moment.utc(trip.utc_filtered_start_datetime).add(trip.departure_delay || 0, 'seconds') : null;
+    let end = typeof trip.utc_filtered_end_datetime === 'string'
+        ? moment.utc(trip.utc_filtered_end_datetime).add(trip.arrival_delay || 0, 'seconds') : null;
     let now = moment.utc();  // Current UTC time
 
     if (start && end && now.isBetween(start, end, undefined, '[]')) {

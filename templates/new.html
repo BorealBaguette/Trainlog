@@ -2181,7 +2181,9 @@
 
     updateProgressBar(65);
 
-    if (flight.datetime_takeoff_local && flight.datetime_landed_local) {
+    // Runway times only stand in for times not given: logged ones are kept, and the
+    // runway ones become take-off and landing stops when the trip is saved.
+    if (flight.datetime_takeoff_local && flight.datetime_landed_local && !$('#newTripStartTime').val()) {
       const startLocal = new Date(flight.datetime_takeoff_local);
       const endLocal = new Date(flight.datetime_landed_local);
 
@@ -2250,7 +2252,7 @@
 
     updateProgressBar(65);
 
-    if (processedData.departureLocal && processedData.arrivalLocal) {
+    if (processedData.departureLocal && processedData.arrivalLocal && !$('#newTripStartTime').val()) {
       $('#newTripStartDate').val(processedData.departureLocal.toTimezonedISOString().split('T')[0]);
       $('#newTripStartTime').val(processedData.departureLocal.toTimeString().slice(0, 5));
       $('#newTripEndDate').val(processedData.arrivalLocal.toTimezonedISOString().split('T')[0]);

@@ -23,6 +23,11 @@
         display: grid; grid-template-columns: 22px minmax(0, 1fr) 104px 104px 64px 76px;
         column-gap: 8px; align-items: start;
     }
+    /* A flight: every row has one time of its own (departure, transponder, take-off,
+       landing, arrival), so one time column and the gate. */
+    #stopsModal.flight-stops .stops-head, #stopsModal.flight-stops .stop-row {
+        grid-template-columns: 22px minmax(0, 1fr) 104px 64px 76px;
+    }
     #stopsModal .stops-head { font-size: .72rem; color: light-dark(#9aa3af, var(--bs-secondary-color)); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
     /* Every row as tall, hint or not, so the columns stay in line */
     #stopsModal .stop-row { min-height: 52px; }
@@ -102,6 +107,10 @@
     #stopsModal .stop-ran { font-size: .8rem; font-variant-numeric: tabular-nums; }
     #stopsModal .stop-ran.late, #stopsModal .stop-actual.late { color: #c0392b; }
     #stopsModal .stop-actual:not(.late):not(.early) { color: inherit; font-weight: normal; }
+    /* A runway row: its scheduled cell holds the time alone, which must keep its width,
+       and its delay is read off its two times, in the delay column with room around it */
+    #stopsModal .stop-when.stop-when-time { min-width: 104px; }
+    #stopsModal .stop-delay-read { padding-left: 8px; }
     #stopsModal .stop-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; }
     #stopsModal .stop-grip, #stopsModal .stop-remove, #stopsModal .stop-edit, #stopsModal .stop-close {
         border: 0; background: transparent; color: light-dark(#9aa3af, var(--bs-secondary-color)); padding: 0 4px; line-height: 1; cursor: pointer;
@@ -196,6 +205,15 @@
         #stopsModal .stop-day { height: 30px; font-size: 16px; }
         #stopsModal .stop-day-break .stop-track { grid-row: auto; margin-bottom: 0; }
         #stopsModal .stop-open .stop-dot, #stopsModal .stop-end.stop-open .stop-dot { top: 27px; }
+        #stopsModal.flight-stops .stops-head, #stopsModal.flight-stops .stop-row {
+            grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 52px 72px;
+        }
+        #stopsModal.flight-stops .stops-head > :nth-child(3) { grid-column: 2 / 4; }
+        #stopsModal.flight-stops .stops-head > :nth-child(4) { grid-column: 4 / -1; }
+        #stopsModal.flight-stops .stops-head > :nth-child(5) { display: none; }
+        #stopsModal.flight-stops .stop-row > .stop-cell:nth-child(3) { grid-column: 2 / 4; }
+        #stopsModal.flight-stops .stop-row > .stop-cell:nth-child(4) { grid-column: 4 / -1; }
+        #stopsModal.flight-stops .stop-row > .stop-actions { grid-column: 5; }
         #stopsModal .stop-origin.stop-open .stop-track::before { top: 27px; }
         #stopsModal .stop-destination.stop-open .stop-track::before { height: 27px; }
         #stopsModal .stop-actions { height: 36px; }
@@ -904,7 +922,8 @@
                 id="mapModalButton">
                 <span class="btn-label"><i class="fa-solid fa-route"></i></span>{{editPath}}
             </span>
-            {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+            {# Flights: their take-off and landing (src/runway_stops.py), not stops of their own. #}
+            {% if tripType not in ('accommodation', 'poi', 'restaurant') and not (tripType in ('air', 'helicopter') and plan_uuid) %}
             <span class="btn btn-labeled btn-secondary" id="stopsModalButton" role="button">
                 <span class="btn-label"><i class="fa-solid fa-signs-post"></i></span><span class="btn-label-label">{{editStops}}</span>
                 <span class="badge rounded-pill bg-light text-dark ms-1" id="stopsCount"></span>
@@ -955,7 +974,7 @@
 {% if not plan_uuid %}{% include "ticket_picker.html" %}{% endif %}
 
 {# Stops along the route (initStopsEditor) #}
-<div class="modal fade" id="stopsModal" tabindex="-1" aria-labelledby="stopsModalTitle" aria-hidden="true">
+<div class="modal fade{% if tripType in ('air', 'helicopter') %} flight-stops{% endif %}" id="stopsModal" tabindex="-1" aria-labelledby="stopsModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-fullscreen-sm-down modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -965,7 +984,11 @@
             </div>
             <div class="modal-body">
                 <div class="stops-head" aria-hidden="true">
+                    {% if tripType in ('air', 'helicopter') %}
+                    <span></span><span></span><span>{{stopTime}}</span><span>{{ platform_text(tripType, 'word') }}</span><span></span>
+                    {% else %}
                     <span></span><span></span><span>{{stopArrival}}</span><span>{{stopDeparture}}</span><span>{{ platform_text(tripType, 'word') }}</span><span></span>
+                    {% endif %}
                 </div>
                 <div id="stopsRows"></div>
                 {# The runs to pick the trip's from, when its stops don't say which (pickRun) #}
@@ -1221,12 +1244,30 @@
             $('#stopsCount').text(n || '').toggle(n > 0);
         }
 
+        // A flight's take-off and landing (src/runway_stops.py): two fixed rows, each with the
+        // one time it happened at, nothing scheduled about it. Not on the route: the track is
+        // FR24's own and they lie on it.
+        var runwayAirports = {{ runway_airports|default(None)|tojson }};
+        var runwayNames = { takeoff: {{ runwayTakeoff|tojson }}, landing: {{ runwayLanding|tojson }} };
+        function runwayKind(row) { return row && row.stop && runwayNames[row.stop.kind] ? row.stop.kind : null; }
+        // A flight's dialog has one time column (see .flight-stops)
+        var flightLayout = $('#stopsModal').hasClass('flight-stops');
+        // The runway time's own field; the other one is when the transponder was first (last)
+        // heard, about at the gate.
+        function runwayField(kind) { return kind === 'takeoff' ? 'dep' : 'arr'; }
+        function seenLabel(kind) { return kind === 'takeoff' ? {{ runwayTransponderOn|tojson }} : {{ runwayTransponderOff|tojson }}; }
+        function runwayRow(kind) {
+            var at = runwayAirports[kind];
+            return { source: null, label: runwayNames[kind], lat: at.lat, lng: at.lng, moved: false,
+                     stop: { kind: kind, name: runwayNames[kind], lat: at.lat, lng: at.lng, tz: at.tz } };
+        }
+
         // ---- the dialog: a working copy, applied on Update
         function rowFor(wp) {
             var stop = wp && wp.stop ? $.extend({}, wp.stop) : null;
             return {
                 source: wp || null,           // the stored waypoint, or null for one added here
-                label: (wp && wp.name) || (stop && stop.name) || '',
+                label: (stop && runwayNames[stop.kind]) || (wp && wp.name) || (stop && stop.name) || '',
                 lat: wp ? wp.lat : null, lng: wp ? wp.lng : null,
                 hard: wp ? wp.hard : undefined,
                 stop: stop,
@@ -1249,6 +1290,7 @@
             return (ends && ends.origin.date) || $('#newTripStartDate').val() || new Date().toISOString().slice(0, 10);
         }
         function structural() {
+            if (runwayAirports) return false;
             if (rows.length !== stored.length) return true;
             return rows.some(function (r, i) { return r.source !== stored[i] || r.moved; });
         }
@@ -1256,7 +1298,7 @@
         // The rows' order is the route's, and a timed stop's place is its time's: it isn't
         // moved (a time typed wrong would reroute the trip), but a time before the one above
         // it shows in red, as it is typed.
-        function timed(row) { return !!(row.stop && (row.stop.arr || row.stop.dep)); }
+        function timed(row) { return !!(runwayKind(row) || row.stop && (row.stop.arr || row.stop.dep)); }
         function checkOrder() {
             if (!ends) return;
             var wrong = [], precise = $('#radioPreciseDates').is(':checked');
@@ -1280,7 +1322,11 @@
                     var st = r.stop;
                     if (!st) return;
                     ['arr', 'dep'].forEach(function (f) {
-                        if (st[f]) see(ran && st[f + '_rt'] || st[f], r);
+                        // Not a flight's first or last seen: a transponder on early at the
+                        // gate is no wrong time.
+                        if (runwayKind(r) && f !== runwayField(runwayKind(r))) return;
+                        var when = ran ? st[f + '_rt'] || st[f] : st[f];
+                        if (when) see(when, r);
                     });
                 });
                 if (precise && d.date && d.time) see(end(d, tzNear(rows.length - 1)), 'destination');
@@ -1417,6 +1463,50 @@
             $g.append($actual);
             show();
         }
+        // A runway row's time (src/runway_stops.py): what happened, typed as actual (with its
+        // day), and what was planned, if anyone knows, typed as scheduled. The delay is read
+        // off the two, not typed: the actual time is the one FR24 gave.
+        function runwayTimeLine($g, label, st, field, fallbackDate) {
+            var rt = field + '_rt';
+            var at = st[rt] && toLocal(st[rt], st.tz), plan = st[field] && toLocal(st[field], st.tz);
+            var $sched = $('<input type="time">').val(plan ? plan.time : '')
+                .attr('aria-label', label + ' · ' + {{ stopScheduled|tojson }});
+            var $time = $('<input type="time">').val(at ? at.time : '')
+                .attr('aria-label', label + ' · ' + {{ delayActual|tojson }});
+            var date0 = at ? at.date : plan ? plan.date : fallbackDate || baseDate(0);
+            var $day = $('<select class="stop-day">').attr('aria-label', label + ' · ' + {{ delayActual|tojson }});
+            [-1, 0, 1].forEach(function (k) {
+                var date = addDays(date0, k);
+                $('<option>').val(date).text(dayText(date)).appendTo($day);
+            });
+            $day.val(date0);
+            var $delay = $('<span class="stop-actual stop-delay-read">');
+            function show() {
+                var d = st[field] && st[rt] ? minutes(st[rt], st[field]) : null;
+                $delay.text(d == null ? '' : (d > 0 ? '+' : '') + d + ' min')
+                    .toggleClass('late', d > 0).toggleClass('early', d < 0);
+            }
+            $time.add($day).on('change', function () {
+                if ($time.val()) st[rt] = toUtc($day.val(), $time.val(), st.tz); else delete st[rt];
+                show(); checkOrder();
+            });
+            $sched.on('change', function () {
+                var t = $sched.val();
+                if (!t) { delete st[field]; show(); checkOrder(); return; }
+                // On the day that puts it nearest the actual time (a schedule past midnight)
+                var ref = st[rt] ? Date.parse(st[rt]) : Date.parse(toUtc($day.val(), t, st.tz)), best = null;
+                [-1, 0, 1].forEach(function (k) {
+                    var iso = toUtc(addDays($day.val(), k), t, st.tz), gap = Math.abs(Date.parse(iso) - ref);
+                    if (!best || gap < best.gap) best = { gap: gap, iso: iso };
+                });
+                st[field] = best.iso;
+                show(); checkOrder();
+            });
+            $g.append($('<span class="stop-label">').text(label), $('<span class="stop-when stop-when-time">').append($sched));
+            if (!noDelays) $g.append($delay);
+            $g.append($('<span class="stop-when">').append($time, $day));
+            show();
+        }
         function platformLine($g, $sched, $actual) {
             $g.append($('<span class="stop-label">').text({{ platform_text(tripType, 'word')|tojson }}), $sched);
             if (!noDelays) $g.append('<span>');
@@ -1507,6 +1597,29 @@
                     .attr('title', {{ remove|tojson }})
                     .on('click', function () { rows.splice(i, 1); if (open === row) open = null; render(); });
 
+                if (open !== row && runwayKind(row)) {
+                    // Its runway time, and the transponder's on a row of its own (before the
+                    // take-off, after the landing), both in the column of its own side.
+                    var own = runwayField(runwayKind(row)), seenField = own === 'dep' ? 'arr' : 'dep';
+                    var runwayLine = function ($r, label, field) {
+                        var $cell = timeCell(row.stop, field);   // actual, under what was planned if given
+                        $('<span class="stop-name">').text(label).attr('title', label).appendTo($r);
+                        return $r.append(flightLayout ? [$cell]
+                            : [own === 'arr' ? $cell : textCell(''), own === 'dep' ? $cell : textCell('')], textCell(''));
+                    };
+                    runwayLine($row, row.label, own);
+                    $actions.append($move, editButton(row), $remove).appendTo($row);
+                    var $seen = null;
+                    if (row.stop[seenField + '_rt'] || row.stop[seenField]) {
+                        $seen = $('<div class="stop-row">').data('row', row)
+                            .append('<span class="stop-track"><span class="stop-dot"></span></span>');
+                        runwayLine($seen, seenLabel(runwayKind(row)), seenField).append('<span class="stop-actions">');
+                        opens($seen, row);
+                    }
+                    if (own === 'dep') $rows.append($seen, opens($row, row));
+                    else $rows.append(opens($row, row), $seen);
+                    return;
+                }
                 if (open !== row) {
                     $('<span class="stop-name">').text(row.label).attr('title', row.label).appendTo($row);
                     $row.append(timeCell(row.stop, 'arr'), timeCell(row.stop, 'dep'), platformCell(row.stop));
@@ -1518,12 +1631,13 @@
                 $row.addClass('stop-open');
                 var $editor = $('<div class="stop-editor">').appendTo($row);
                 // Typing renames it; picking a station from the list puts it there instead.
-                var $station = $('<input type="text" class="stop-station">').val(row.label)
-                    .attr('placeholder', {{ via|tojson }});
+                var kind = runwayKind(row);
+                var $station = kind ? $('<span class="stop-end-name">').text(row.label)
+                    : $('<input type="text" class="stop-station">').val(row.label).attr('placeholder', {{ via|tojson }});
                 $('<div class="stop-editor-top">').append($station,
                     $actions.append($move, $remove, closeButton())).appendTo($editor);
-                stationSearchAutocomplete($station, {}, stationUrl, {{ manual|default('Manual')|tojson }});
-                $station.on('autocompleteselect', function (e, ui) {
+                if (!kind) stationSearchAutocomplete($station, {}, stationUrl, {{ manual|default('Manual')|tojson }});
+                if (!kind) $station.on('autocompleteselect', function (e, ui) {
                     var input = this;
                     setTimeout(function () {   // the value is written after the event
                         var entry = globalStationDict[input.value];
@@ -1553,6 +1667,11 @@
                 var $g = fieldsGrid().appendTo($editor);
                 ['arr', 'dep'].forEach(function (field) {
                     var rt = field + '_rt', st = row.stop;
+                    if (kind) {
+                        runwayTimeLine($g, field === runwayField(kind) ? row.label : seenLabel(kind), st, field,
+                            kind === 'takeoff' ? ends.origin.date : ends.destination.date);
+                        return;
+                    }
                     var local = st && st[field] && toLocal(st[field], st.tz);
                     // A stop's first time goes on the day nearest its other one or the stop
                     // before (past midnight on a night train, the next); after that, on the day picked.
@@ -1602,7 +1721,7 @@
                     if (p) s.platform = p; else delete s.platform;
                     if (a) s.platform_rt = a; else delete s.platform_rt;   // the same as planned: confirmed
                 });
-                platformLine($g, $pSched, $pActual);
+                if (!kind) platformLine($g, $pSched, $pActual);
                 $rows.append($row);
             });
             if (ends.destination.date) dayBreak({ dep: ends.destination.date + 'T12:00:00Z', tz: 'UTC' });
@@ -1674,6 +1793,7 @@
                     // Only the departure at the origin, the arrival at the destination; the
                     // other slot shows the day, so a run past midnight reads at a glance.
                     if (f !== field) {
+                        if (flightLayout) return;
                         $row.append($('<span class="stop-cell">').append(
                             $('<span class="stop-end-date">').text(dayText(end.date) || '—')));
                         return;
@@ -1761,6 +1881,11 @@
 
         $('#stopsModalButton').on('click', function () {
             rows = stored.map(rowFor);
+            if (runwayAirports) {
+                if (!rows.some(function (r) { return runwayKind(r) === 'takeoff'; })) rows.unshift(runwayRow('takeoff'));
+                if (!rows.some(function (r) { return runwayKind(r) === 'landing'; })) rows.push(runwayRow('landing'));
+            }
+            $('#stopsAdd').toggle(!runwayAirports);
             showPlain = false;
             open = null;
             ends = readEnds();
@@ -2123,7 +2248,11 @@
         $('#stopsSave').on('click', function () {
             var route = structural();
             // Rows without a place (an added one with no station picked) are dropped.
-            var next = rows.filter(function (r) { return r.lat != null && r.lng != null; }).map(function (r) {
+            var next = rows.filter(function (r) {
+                var kind = runwayKind(r);   // a take-off or landing left without its time is none
+                if (kind) return !!r.stop[kind === 'takeoff' ? 'dep_rt' : 'arr_rt'];
+                return r.lat != null && r.lng != null;
+            }).map(function (r) {
                 var wp = $.extend({}, r.source || {}, { lat: r.lat, lng: r.lng });
                 if (r.label) wp.name = r.label; else delete wp.name;
                 var st = r.stop;
@@ -2148,7 +2277,8 @@
                 return { name: wp.name || '', hard: typeof wp.hard === 'boolean' ? wp.hard : null, stop: wp.stop || null };
             });
             wplist = [wplist[0]].concat(stored.map(function (wp) { return [wp.lat, wp.lng]; }), [wplist[wplist.length - 1]]);
-            if (window.currentPlan) {
+            // Not a flight's: its take-off and landing are not points of its route.
+            if (window.currentPlan && !runwayAirports) {
                 var wps = window.currentPlan.getWaypoints();
                 if (route) {
                     freehandSegments.clear();
@@ -2165,6 +2295,59 @@
                 }
             }
             if (route) mapModal.show();   // reroute through the new points, to confirm
+        }
+
+        // An FR24 track just imported: its take-off and landing replace the trip's, shown
+        // here before the trip is saved, and sent with it (updateTrip).
+        window.setRunwayStops = function (stops) {
+            // Scheduled times typed on the old ones carry over: a track has none.
+            stored.forEach(function (wp) {
+                var kind = runwayKind({ stop: wp && wp.stop });
+                var fresh = kind && stops.find(function (s) { return s.stop.kind === kind; });
+                if (fresh) ['arr', 'dep'].forEach(function (f) { if (wp.stop[f]) fresh.stop[f] = wp.stop[f]; });
+            });
+            stored = stored.filter(function (wp) { return !runwayKind({ stop: wp && wp.stop }); });
+            stops.forEach(function (wp) { if (wp.stop.kind === 'takeoff') stored.unshift(wp); else stored.push(wp); });
+            editedStopsWaypoints = JSON.stringify(stored);
+            count();
+            runwayDelays(stops);
+        };
+        // The delays the runway stops correct, into the form as the import lands (the
+        // server's delay_fields, which then finds nothing to do): the arrival is when it was
+        // last heard at the gate, early or late; without that, and for the departure, only
+        // what the runway times prove (landed late, took off early).
+        function runwayDelays(stops) {
+            if (!$('#radioPreciseDates').is(':checked') || !runwayAirports || !$('#delayToggle').length) return;
+            var on = $('#delayToggle').is(':checked');
+            function current(sel) { var d = parseFloat($(sel).val()); return on && !isNaN(d) ? d : 0; }
+            var set = [];
+            stops.forEach(function (wp) {
+                var takeoff = wp.stop.kind === 'takeoff', when = Date.parse(takeoff ? wp.stop.dep_rt : wp.stop.arr_rt);
+                var date = $(takeoff ? '#newTripStartDate' : '#newTripEndDate').val();
+                var time = $(takeoff ? '#newTripStartTime' : '#newTripEndTime').val();
+                if (isNaN(when) || !date || !time) return;
+                var logged = Date.parse(toUtc(date, time, runwayAirports[takeoff ? 'takeoff' : 'landing'].tz));
+                var field = takeoff ? '#departureDelayMinutes' : '#arrivalDelayMinutes';
+                var minutes = (when - logged) / 60000;
+                var seen = !takeoff && Date.parse(wp.stop.dep_rt);
+                if (seen) {
+                    minutes = Math.round((seen - logged) / 60000);
+                    if (minutes !== current(field)) {
+                        $(field).val(minutes).trigger('input');
+                        set.push(field);
+                    }
+                } else if (takeoff ? minutes < current(field) : minutes > current(field)) {
+                    $(field).val(takeoff ? Math.floor(minutes) : Math.ceil(minutes)).trigger('input');
+                    set.push(field);
+                }
+            });
+            if (set.length && !on) {
+                // Delays were off: the side not corrected has none, whatever its hidden field held
+                ['#departureDelayMinutes', '#arrivalDelayMinutes'].forEach(function (sel) {
+                    if (set.indexOf(sel) < 0) $(sel).val('').trigger('input');
+                });
+                $('#delayToggle').prop('checked', true).trigger('change');
+            }
         }
 
         // The map dialog's route confirmed: its waypoints are the trip's now.
@@ -3270,6 +3453,7 @@
             }));
             updatedAltitude = pathData.altitude || null;
             updatedTimestamps = pathData.timestamps || null;
+            if (window.setRunwayStops) window.setRunwayStops(pathData.runway_stops || []);
 
             if (updatedPath.length < 2) {
                 showFr24PathError('{{insufficientPathData}}');
@@ -3416,8 +3600,10 @@
                 }
             }
 
-            // Fill in dates and times using local times from API
-            if (flight.datetime_takeoff_local && flight.datetime_landed_local) {
+            // Runway times only stand in for times not given: logged ones are kept, and
+            // the runway ones become take-off and landing stops when the trip is saved.
+            if (flight.datetime_takeoff_local && flight.datetime_landed_local
+                && !document.getElementById('newTripStartTime').value) {
                 const takeoffDate = new Date(flight.datetime_takeoff_local);
                 const landedDate = new Date(flight.datetime_landed_local);
 
@@ -3622,6 +3808,10 @@
                 ...formData,
                 ...newTrip
             };
+            // An FR24 import's take-off and landing, as the stops dialog shows them
+            if (typeof lastImportType !== 'undefined' && lastImportType === 'fr24' && editedStopsWaypoints != null) {
+                formData["waypoints"] = editedStopsWaypoints;
+            }
         }
         // Stops edited after the route was last confirmed (or with it untouched): newTrip's
         // waypoints were taken at that confirm, without these edits.

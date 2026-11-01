@@ -49,10 +49,13 @@
       try { list = JSON.parse(trip.waypoints); } catch (e) { list = null; }
     }
     if (!Array.isArray(list)) return [];
-    return list.filter(function (w) {
-      var s = w && w.stop;
-      return s && (s.arr || s.dep || s.arr_rt || s.dep_rt);
-    });
+    // `wp`: the stop's place among the trip's waypoints, what the page's lists and maps
+    // know it by
+    return list.map(function (w, i) { return w && w.stop ? Object.assign({ wp: i }, w) : null; })
+      .filter(function (w) {
+        var s = w && w.stop;
+        return s && (s.arr || s.dep || s.arr_rt || s.dep_rt);
+      });
   }
 
   // Cumulative distance along the route, in metres, one entry per vertex.
@@ -122,7 +125,7 @@
       if (!s.name || !times || outside(times, w) || lat == null || lng == null) return;
       var shown = stopTimes(s, n, stops.length, 0, 0);
       out.push({
-        name: s.name, lat: lat, lng: lng, arr: times.arr, dep: times.dep, tz: s.tz || null,
+        name: s.name, kind: s.kind || null, wp: wp.wp, lat: lat, lng: lng, arr: times.arr, dep: times.dep, tz: s.tz || null,
         arrShown: shown.arr, depShown: shown.dep,
         // as timetabled, and the platform and country, for showing what changed
         arrSched: toMs(s.arr), depSched: toMs(s.dep),

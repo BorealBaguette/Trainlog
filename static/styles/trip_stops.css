@@ -1,0 +1,142 @@
+/* A trip's stops (static/js/trip_stops.js), in the trips list's detail row and the
+   public trip page's itinerary: folded, then a timeline like the edit
+   page's stops dialog — a line down the left, a dot per stop, the ends ringed. Plain
+   rows, nothing of the page's table chrome (no header bar, no borders, no stripes). */
+/* The fold: its own ▸/▾ just before the count, so a caption put in front of it
+   (cards, processHiddenData) reads "STOPS: ▸ 1 stop" */
+:is(#dataTable td.child, #itinerary) details.trip-stops > summary { cursor: pointer; list-style: none; user-select: none; }
+:is(#dataTable td.child, #itinerary) details.trip-stops > summary::-webkit-details-marker { display: none; }
+:is(#dataTable td.child, #itinerary) details.trip-stops .ts-toggle { color: #3b63b8; }
+:is(#dataTable td.child, #itinerary) details.trip-stops .ts-toggle::before { content: "\25B8\00a0"; }
+:is(#dataTable td.child, #itinerary) details.trip-stops[open] .ts-toggle::before { content: "\25BE\00a0"; }
+:is(#dataTable td.child, #itinerary) tr.trip-stops-row details.trip-stops > summary > strong { margin-right: 10px; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table {
+    border-collapse: collapse; margin: 4px 0 2px; width: auto; background: none;
+}
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr { background: none !important; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td {
+    padding: 2px 14px 2px 0; vertical-align: middle; border: 0 !important; background: none !important;
+    white-space: nowrap; font-size: 0.875rem; line-height: 1.5;
+}
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-time { font-variant-numeric: tabular-nums; color: #374151; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-platform { color: #8a93a2; font-size: 0.8rem; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-stop td.ts-name { color: #4b5563; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-name { font-weight: 600; color: #1f2733; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark { position: relative; width: 14px; padding: 0 10px 0 0; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark::before {
+    content: ""; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: #e2e6eb;
+}
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tbody tr:first-child td.ts-mark::before { top: 50%; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tbody tr:last-child td.ts-mark::before { bottom: 50%; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark > span {
+    position: relative; display: block; width: 6px; height: 6px; margin-left: 4px;
+    border-radius: 50%; background: #b3bac4;
+}
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-mark > span {
+    width: 10px; height: 10px; margin-left: 2px; background: #fff; border: 2px solid #3b63b8;
+}
+/* Station names wrap; times and platforms don't */
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-name { white-space: normal; }
+/* A flight's take-off and landing: a plane for a mark, and when it was first (last)
+   heard at the gate beside the name, so the time column keeps one time per row. */
+:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-runway-icon { color: #8a93a2; font-size: 0.75rem; margin-right: 5px; }
+/* Transponder off: the broadcast tower struck through (Font Awesome Free has no
+   slashed one), the slash laid over it. */
+:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-icon-off { position: relative; display: inline-block; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-icon-off .fa-slash { position: absolute; left: -1px; top: 50%; transform: translateY(-50%); }
+/* A flight still in the air: where it is going, not yet reached. */
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-pending td:not(.ts-mark),
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-pending td.ts-mark > span { opacity: 0.4; }
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-airborne td.ts-mark::before,
+:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-pending td.ts-mark::before {
+    -webkit-mask: repeating-linear-gradient(to bottom, #000 0 3px, transparent 3px 6px);
+    mask: repeating-linear-gradient(to bottom, #000 0 3px, transparent 3px 6px);
+}
+:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-seen { color: #8a93a2; font-size: 0.8rem; margin-left: 4px; white-space: nowrap; }
+/* Times and platforms stay on one line whatever the card's cell rules say */
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-time,
+:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-platform { white-space: nowrap !important; }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) details.trip-stops .ts-toggle { color: #8fb0f5; }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-time,
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-stop td.ts-name { color: var(--bs-body-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-platform,
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-runway-icon,
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-seen { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-name { color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark::before { background: var(--bs-border-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark > span { background: #5b7189; }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-mark > span {
+    background: var(--bs-body-bg); border-color: #8fb0f5;
+}
+
+/* In the trip page's itinerary, whose ".events span" rules pad every span and hang its
+   own timeline marks off them: none of that inside this one. */
+#itinerary details.trip-stops span { padding: 0; }
+#itinerary details.trip-stops span:not(.ts-toggle)::before { content: none; }
+#itinerary details.trip-stops .ts-toggle::before { position: static; transform: none; }
+/* The sidebar is narrow: the names take what the times leave, and wrap */
+#itinerary details.trip-stops { margin-top: 6px; }
+#itinerary details.trip-stops table.trip-stops-table { width: 100%; }
+#itinerary details.trip-stops table.trip-stops-table td { font-size: 0.8rem; padding-right: 8px; }
+#itinerary details.trip-stops table.trip-stops-table td.ts-name { width: 100%; }
+#itinerary details.trip-stops table.trip-stops-table .ts-seen { white-space: normal; }
+
+/* A flight's runway times as a meta line of its leg (runwayMetaLine): the struck tower */
+#itinerary .legRunway .ts-icon-off { position: relative; display: inline-block; }
+#itinerary .legRunway .ts-icon-off .fa-slash { position: absolute; left: -1px; top: 50%; transform: translateY(-50%); }
+#itinerary .legRunway .ts-icon-off::before { content: none; }
+
+/* The trip page's stops (tripStopsHtml compact): the routing page's timeline, a line and
+   a round per stop, the name with its time and track small at the end of its row. */
+#itinerary details.trip-stops ol.ts-list {
+    list-style: none; margin: 4px 0 0; padding: 0; position: relative; font-size: 0.82rem;
+    /* Where a row's first line sits: its round and the line from it to the next are there */
+    --c: calc(3px + 0.675em);
+}
+#itinerary details.trip-stops .ts-list li {
+    position: relative; display: flex; align-items: baseline; gap: 8px;
+    padding: 3px 0 3px 18px; font-size: inherit; line-height: 1.35; cursor: pointer;
+}
+#itinerary details.trip-stops .ts-list li::before {
+    content: ""; position: absolute; left: 4px; top: var(--c); bottom: calc(-1 * var(--c)); width: 2px;
+    background: linear-gradient(#3b63b8 var(--f, 0%), #e2e6eb var(--f, 0%));
+}
+#itinerary details.trip-stops .ts-list li:last-child::before { display: none; }
+#itinerary details.trip-stops .ts-list li::after {
+    content: ""; position: absolute; left: 2px; top: var(--c); width: 6px; height: 6px; margin-top: -3px;
+    border-radius: 50%; background: #b3bac4;
+}
+#itinerary details.trip-stops .ts-list .ts-name { min-width: 0; overflow-wrap: anywhere; }
+#itinerary details.trip-stops .ts-list .ts-time {
+    margin-left: auto; white-space: nowrap; color: #8a93a2; font-variant-numeric: tabular-nums;
+}
+#itinerary details.trip-stops .ts-list li:hover .ts-name,
+#itinerary details.trip-stops .ts-list li.ts-selected .ts-name { color: #3b63b8; }
+#itinerary details.trip-stops .ts-list li.ts-selected .ts-name { font-weight: 600; }
+/* Under way: the line runs on from the start above and to the end below, filled as far as
+   the trip has come, the stops passed filled, a marker where it is. */
+#itinerary details.trip-stops ol.ts-progress { padding: 10px 0; }
+#itinerary details.trip-stops ol.ts-progress::before {
+    content: ""; position: absolute; left: 4px; top: 0; height: calc(10px + var(--c)); width: 2px;
+    background: linear-gradient(#3b63b8 var(--f0, 0%), #e2e6eb var(--f0, 0%));
+}
+#itinerary details.trip-stops ol.ts-progress li:last-child::before { display: block; bottom: -10px; }
+#itinerary details.trip-stops .ts-list li.ts-past::after { background: #3b63b8; }
+#itinerary details.trip-stops .ts-list li.ts-past > span, #itinerary details.trip-stops .ts-list li.ts-past > small { opacity: 0.6; }
+#itinerary details.trip-stops .ts-list li.ts-current .ts-name { font-weight: 600; }
+#itinerary details.trip-stops .ts-here {
+    position: absolute; left: 5px; width: 12px; height: 12px; margin: -6px 0 0 -6px; z-index: 1;
+    border-radius: 50%; background: #fff; border: 3px solid #3b63b8; box-sizing: border-box;
+    animation: ts-here-ring 1.5s infinite;
+}
+@keyframes ts-here-ring {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(59, 99, 184, 0.45); }
+    50%      { box-shadow: 0 0 0 6px rgba(59, 99, 184, 0.08); }
+}
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list li::before,
+[data-bs-theme="dark"] #itinerary details.trip-stops ol.ts-progress::before { background: linear-gradient(#8fb0f5 var(--f, 0%), var(--bs-border-color) var(--f, 0%)); }
+[data-bs-theme="dark"] #itinerary details.trip-stops ol.ts-progress::before { background: linear-gradient(#8fb0f5 var(--f0, 0%), var(--bs-border-color) var(--f0, 0%)); }
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list li.ts-past::after { background: #8fb0f5; }
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-here { background: var(--bs-body-bg); border-color: #8fb0f5; }
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list li::after { background: #5b7189; }
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list .ts-time { color: var(--bs-secondary-color); }
