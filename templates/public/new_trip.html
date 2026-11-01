@@ -810,6 +810,7 @@ function planValidate() {
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
+{% include "includes/trip_stops_text.html" %}
 <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
 
 <script>
@@ -1388,7 +1389,13 @@ function buildItinerary(trips, prices) {
                     trip.trip.utc_filtered_end_datetime,
                     trips[index + 1].trip.utc_filtered_start_datetime
                 );
-                actualChangeTime = changeTime + (trips[index + 1].trip.departure_delay || 0) - (trip.trip.arrival_delay || 0);
+                // Around a flight that has its runway times, from when it was last heard at
+                // the gate after landing (to when first heard before the next one leaves):
+                // what really happened, which its logged gate times only bound.
+                var arrived = runwayOffset(trip.trip, 'landing'), leaves = runwayOffset(trips[index + 1].trip, 'takeoff');
+                actualChangeTime = changeTime
+                    + (leaves != null ? leaves : trips[index + 1].trip.departure_delay || 0)
+                    - (arrived != null ? arrived : trip.trip.arrival_delay || 0);
             } else {
                 // Boundary between blocks (past / dated / future): render a plain gap.
                 changeTime = Infinity;
@@ -1629,6 +1636,8 @@ function buildItinerary(trips, prices) {
           metaParts.push('<span class="legMetaItem"><i class="fa-solid fa-arrows-left-right legMetaIcon"></i>' + mToKm(trip.trip.trip_length) + ' km</span>');
         }
         var durationDisplay = metaParts.join('<span class="legMetaSep">·</span>');
+        // A flight's take-off and landing, under its duration; other stops fold below
+        var runwayLine = runwayMetaLine(trip.trip);
 
         // Badge numbers matching the map's numbered markers (hidden in collection mode)
         var originBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].originNumber != null)
@@ -1646,8 +1655,8 @@ function buildItinerary(trips, prices) {
                 ).append('<br>').append(operatorDisplay).append(lineDisplay).append(
                     $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append(
                         tsToggle ? $('<div>').addClass('legMeta').html(durationDisplay).append(tsToggle)
-                                 : $('<div>').addClass('legMeta').html(durationDisplay))
-                ).append(tsContainer).append('<br>').append(
+                                 : $('<div>').addClass('legMeta').html(durationDisplay)).append(runwayLine)
+                ).append(tsContainer).append(runwayLine ? null : tripStopsHtml(trip.trip.waypoints, trip.trip, true)).append('<br>').append(
                     {% if 'price' in request.args and 'carbon' in request.args %} // Modified conditional
                         $("<div>").append($('<div>').addClass('legMeta').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? '<span class="legValue legMetaSep">·</span>' : '') + (formattedCarbon || '')))
                     {% elif 'price' in request.args %} // Modified conditional
@@ -1720,6 +1729,55 @@ function buildItinerary(trips, prices) {
     });
 }
 
+// A flight's runway times (src/runway_stops.py) as one more meta line of its leg: each an
+// icon and its time, the words in its tooltip, as the leg's duration and distance are.
+// The ends need no repeating: the leg shows them. null without runway stops.
+function runwayMetaLine(trip) {
+    var r = runwayStops(trip.waypoints);
+    if (!r.takeoff && !r.landing) return null;
+    var items = [];
+    function item(icon, title, html) {
+        items.push('<span class="legMetaItem" title="' + escapeStopText(title) + '">' + icon + html + '</span>');
+    }
+    function at(st, field) {   // its time where it happened, with its delay when it was planned
+        var when = st[field + '_rt'];
+        return escapeStopText(stopClock(when, st.tz)) +
+            (st[field] && when ? renderDelayBadge((Date.parse(when) - Date.parse(st[field])) / 1000) : '');
+    }
+    function span(from, to) { return secondsToDhm((Date.parse(to) - Date.parse(from)) / 1000, STOPS_TEXT.lang); }
+    var on = '<i class="fa-solid fa-tower-broadcast legMetaIcon"></i>';
+    var off = '<span class="legMetaIcon ts-icon-off"><i class="fa-solid fa-tower-broadcast"></i><i class="fa-solid fa-slash"></i></span>';
+    var t = r.takeoff, l = r.landing;
+    if (t && t.arr_rt) item(on, STOPS_TEXT.transponderOn, at(t, 'arr'));
+    if (t) item('<i class="fa-solid fa-plane-departure legMetaIcon"></i>',
+        STOPS_TEXT.takeoff + (t.arr_rt ? ' · ' + STOPS_TEXT.taxi + ' ' + span(t.arr_rt, t.dep_rt) : ''), at(t, 'dep'));
+    if (t) {
+        var landed = l ? Date.parse(l.arr_rt) : null;
+        var airborne = (landed || Date.now()) - Date.parse(t.dep_rt);
+        // Still flying only within live tracking's window (scheduled time plus its grace)
+        if (landed || airborne / 1000 < (trip.trip_duration ? trip.trip_duration[1] : 0) + 6 * 3600) {
+            item('<i class="fa-solid fa-plane legMetaIcon"></i>', STOPS_TEXT.airborne, secondsToDhm(airborne / 1000, STOPS_TEXT.lang));
+        }
+    }
+    if (l) item('<i class="fa-solid fa-plane-arrival legMetaIcon"></i>', STOPS_TEXT.landing, at(l, 'arr'));
+    if (l && l.dep_rt) item(off,
+        STOPS_TEXT.transponderOff + ' · ' + STOPS_TEXT.taxi + ' ' + span(l.arr_rt, l.dep_rt), at(l, 'dep'));
+    return $('<div>').addClass('legMeta legRunway').html(items.join('<span class="legMetaSep">·</span>'));
+}
+
+// Seconds from a flight's logged departure (arrival) to when it was first (last) heard on
+// the ground, else to its take-off (landing): its runway stops (src/runway_stops.py).
+// null when it has none.
+function runwayOffset(trip, kind) {
+    var waypoints;
+    try { waypoints = JSON.parse(trip.waypoints || '[]'); } catch (e) { return null; }
+    var stop = ((waypoints || []).find(w => w && w.stop && w.stop.kind === kind) || {}).stop;
+    var when = stop && (kind === 'takeoff' ? stop.arr_rt || stop.dep_rt : stop.dep_rt || stop.arr_rt);
+    var logged = kind === 'takeoff' ? trip.utc_filtered_start_datetime : trip.utc_filtered_end_datetime;
+    if (!when || typeof logged !== 'string') return null;
+    return (Date.parse(when) - Date.parse(logged.replace(' ', 'T') + 'Z')) / 1000;
+}
+
 // Calculate position for current trips
 function calculatePosition(trip) {
     const currentTime = new Date().getTime(); // Get current time in ms
@@ -1754,25 +1812,27 @@ let currentPositionMarkers = {};
 // How long past its scheduled arrival a flight may still be in the air. Matches the
 // server's own grace period.
 const LIVE_GRACE_HOURS = 6;
+// How far ahead a flight is already watched: a page opened at the gate has to pick the
+// flight up once it is airborne, not only after a reload.
+const LIVE_LEAD_HOURS = 12;
 
-// Flights that might currently be airborne.
+// Flights that are, or may soon be, airborne.
 //
-// Deliberately not just `time === 'current'`: computeTimeStatus reads the timetable, and
-// a delayed flight is marked 'past' the instant its scheduled arrival passes even though
-// it is still flying — which is exactly when live tracking matters most. The server owns
-// the real decision and ignores anything outside its own window, so asking about a
-// recently-landed-on-paper flight costs nothing when it has genuinely landed.
+// Deliberately not just `time === 'current'`: computeTimeStatus reads the timetable at
+// load, so it misses a flight that departs while the page is open and calls a delayed
+// one 'past' the instant its scheduled arrival passes. The server owns the real decision
+// and costs nothing for a flight outside its own window, so this only has to be wide.
 function liveCandidates(trips) {
     const now = moment.utc();
     return trips.filter(t => {
-        if (!t.trip) return false;
-        const type = t.trip.type;
-        if (type !== 'air' && type !== 'helicopter') return false;
-        if (t.time === 'current') return true;
+        if (!t.trip || (t.trip.type !== 'air' && t.trip.type !== 'helicopter')) return false;
+        const start = t.trip.utc_filtered_start_datetime;
         const end = t.trip.utc_filtered_end_datetime;
-        if (typeof end !== 'string') return false;
-        const ended = moment.utc(end);
-        return now.isAfter(ended) && now.diff(ended, 'hours', true) <= LIVE_GRACE_HOURS;
+        if (typeof start !== 'string' || typeof end !== 'string') return false;
+        const dep = moment.utc(start).add(t.trip.departure_delay || 0, 'seconds');
+        const arr = moment.utc(end).add(t.trip.arrival_delay || 0, 'seconds');
+        return dep.diff(now, 'hours', true) <= LIVE_LEAD_HOURS
+            && now.diff(arr, 'hours', true) <= LIVE_GRACE_HOURS;
     });
 }
 
@@ -1800,54 +1860,149 @@ function animateFutureDashes(ts) {
 // The timetable stops of the trip in progress (only those with a name and a time), as small
 // round bumps on its line: discreet, a hint that something is there, clickable for the
 // name and the times (delays included).
-function addCurrentStops(trips) {
-    const features = [];
+// The nearest point to [lat, lng] on a path of [lat, lng] points, as [lng, lat]: a stop is
+// drawn on its line, wherever along the platform (or beside the track) it was recorded.
+function onPath(path, lat, lng) {
+    if (!path || path.length < 2) return [lng, lat];
+    const k = Math.cos(lat * Math.PI / 180);
+    let best = null;
+    for (let i = 1; i < path.length; i++) {
+        const ax = path[i - 1][1] * k, ay = path[i - 1][0], bx = path[i][1] * k, by = path[i][0];
+        const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
+        const f = len ? Math.max(0, Math.min(1, ((lng * k - ax) * dx + (lat - ay) * dy) / len)) : 0;
+        const px = ax + f * dx, py = ay + f * dy, d = (px - lng * k) ** 2 + (py - lat) ** 2;
+        if (!best || d < best.d) best = { d: d, point: [px / k, py] };
+    }
+    return best.point;
+}
+
+// The first trip's start pin and the last one's end pin, which a live flight's track moves
+// (startLiveTracking)
+let tripStartPin = null, tripEndPin = null;
+
+// Picks a stop on the map and in the itinerary, from either (set up by addTripStops)
+let selectTripStop = () => {};
+
+// A trip under way, in its itinerary stops: the line filled up to where it is and a marker
+// there, at a stop or between two, as on the dashboard. The list's stops carry their times
+// (tripStopsHtml); the trip's own start and end close it at both ends.
+function updateStopProgress(trips) {
+    const now = Date.now();
+    const utc = (v, delay) => Date.parse(String(v).replace(' ', 'T') + 'Z') + (delay || 0) * 1000;
     trips.forEach(t => {
-        if (t.time !== 'current') return;
-        const typeDef = MapLibreUtils.MapConfig.transportTypes.find(x => x.id === t.trip.type);
-        // The line is drawn at 80% over its dark edge; an opaque dot in that same blend
-        // (colour darkened to 80%) is indistinguishable from it where the two meet.
-        const base = (typeDef ? typeDef.color : '#444444').replace('#', '');
-        const color = '#' + [0, 2, 4].map(i =>
-            Math.round(parseInt(base.substr(i, 2), 16) * 0.82).toString(16).padStart(2, '0')).join('');
-        TripProgress.timedStops(t.trip).forEach(s => features.push({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
-            properties: Object.assign({}, s, { color: color, icon: typeDef ? typeDef.icon : 'fa-train',
-                                               tripType: t.trip.type })
-        }));
+        const ol = document.querySelector('#itinerary .itinerary-trip[data-trip-uid="' + t.trip.uid + '"] ol.ts-list');
+        if (!ol) return;
+        const start = utc(t.trip.utc_filtered_start_datetime, t.trip.departure_delay);
+        const end = utc(t.trip.utc_filtered_end_datetime, t.trip.arrival_delay);
+        const on = now >= start && now < end;
+        ol.classList.toggle('ts-progress', on);
+        ol.querySelectorAll('.ts-here').forEach(e => e.remove());
+        const items = Array.from(ol.querySelectorAll('li[data-wp]'));
+        if (!on) {
+            items.forEach(li => li.classList.remove('ts-past', 'ts-current'));
+            return;
+        }
+        const pts = [{ arr: start, dep: start }];
+        items.forEach(li => {
+            const a = parseFloat(li.dataset.arr), d = parseFloat(li.dataset.dep);
+            pts.push({ arr: isNaN(a) ? d : a, dep: isNaN(d) ? a : d });
+        });
+        pts.push({ arr: end, dep: end });
+        // A stop without a time is where the one before it left it
+        for (let k = 1; k < pts.length; k++) if (isNaN(pts[k].arr)) pts[k].arr = pts[k].dep = pts[k - 1].dep;
+        const last = pts.length - 1;
+        let i = 0;
+        while (i < last && pts[i + 1].arr <= now) i++;
+        const atStop = now < pts[i].dep;
+        const f = atStop ? 0 : Math.min(1, (now - pts[i].dep) / Math.max(1, pts[i + 1].arr - pts[i].dep));
+        // The stretch from point k to k + 1 is drawn by item k - 1; the first, from the
+        // start, by the list itself above its first item.
+        ol.style.setProperty('--f0', (i > 0 ? 100 : f * 100) + '%');
+        items.forEach((li, j) => {
+            const k = j + 1;
+            li.style.setProperty('--f', (k < i ? 100 : k === i ? f * 100 : 0) + '%');
+            li.classList.toggle('ts-past', k < i || (k === i && !atStop));
+            li.classList.toggle('ts-current', k === i);
+        });
+        const here = document.createElement('span');
+        here.className = 'ts-here';
+        if (i === 0) {
+            here.style.top = 'calc((10px + var(--c)) * ' + f + ')';
+            ol.appendChild(here);
+        } else {
+            here.style.top = i === last - 1
+                ? 'calc(var(--c) + ' + f + ' * (100% - var(--c) + 10px))'   // on to the end
+                : 'calc(var(--c) + ' + (f * 100) + '%)';
+            items[i - 1].appendChild(here);
+        }
     });
-    if (!features.length || map.getSource('current-stops')) return;
-    map.addSource('current-stops', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+}
+
+// Every trip's named, timed stops as small rounds on its line, clickable for name, times
+// and platform. Passed in the line's colour; still to come in white, as the moving
+// dashes over the part still to travel are, and above them.
+function addTripStops(trips) {
+    const build = () => {
+        const features = [], now = Date.now();
+        trips.forEach(t => {
+            const typeDef = MapLibreUtils.MapConfig.transportTypes.find(x => x.id === t.trip.type);
+            // The line is drawn at 80% over its dark edge; an opaque dot in that same blend
+            // (colour darkened to 80%) is indistinguishable from it where the two meet.
+            const base = (typeDef ? typeDef.color : '#444444').replace('#', '');
+            const color = '#' + [0, 2, 4].map(i =>
+                Math.round(parseInt(base.substr(i, 2), 16) * 0.82).toString(16).padStart(2, '0')).join('');
+            const path = t.livePath || t.path;
+            // Known by trip and place among its waypoints, as the itinerary's stops are
+            TripProgress.timedStops(t.trip).forEach(s => features.push({
+                type: 'Feature',
+                id: t.trip.uid * 1000 + s.wp,
+                geometry: { type: 'Point', coordinates: onPath(path, s.lat, s.lng) },
+                properties: Object.assign({}, s, { color: color, icon: typeDef ? typeDef.icon : 'fa-train',
+                                                   tripType: t.trip.type, passed: s.arr <= now, uid: t.trip.uid,
+                                                   name: STOPS_TEXT[s.kind] || s.name })
+            }));
+        });
+        return { type: 'FeatureCollection', features };
+    };
+    let data = build();
+    if (!data.features.length || map.getSource('current-stops')) return;
+    map.addSource('current-stops', { type: 'geojson', data });
+    // While a trip is under way its rounds turn as it passes them
+    if (trips.some(t => t.time === 'current' || t.liveTracked)) {
+        setInterval(() => map.getSource('current-stops').setData(data = build()), 30000);
+    }
     // The line has a dark edge (a black layer under the coloured one). The dot gets the same,
-    // 1 px wider all round, beneath the current lines so the two merge into one shape.
-    const firstCurrentLine = MapLibreUtils.MapConfig.transportTypes
-        .map(x => `current-${x.id}-past`).find(id => map.getLayer(id));
+    // 1 px wider all round, beneath the lines so the two merge into one shape.
+    const firstLine = (map.getStyle().layers.find(l =>
+        (l.source === 'trips' || l.source === 'current-trips') && !/shadow/.test(l.id)) || {}).id;
     map.addLayer({
         id: 'current-stops-shadow',
         type: 'circle',
         source: 'current-stops',
         paint: {
-            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3.4, 10, 4.3, 14, 5.5],
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 5.2, 14, 6.8],
             'circle-color': MapLibreUtils.tripShadowColor(map),
             'circle-opacity': 0.8,
             'circle-blur': 0.3
         }
-    }, firstCurrentLine);
-    // Below the moving white dashes, so they run over the dot as they do over the line.
-    const firstOverlay = MapLibreUtils.MapConfig.transportTypes
-        .map(x => `current-${x.id}-future-overlay`).find(id => map.getLayer(id));
+    }, firstLine);
+    // On top of everything, the moving dashes included: they run up to the round, not across it.
     map.addLayer({
         id: 'current-stops',
         type: 'circle',
         source: 'current-stops',
         paint: {
-            // Just the trip's own colour, a little wider than the 3 px line: a bump in it.
-            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.4, 10, 3.3, 14, 4.5],
-            'circle-color': ['coalesce', ['get', 'color'], '#444444'],
+            // The trip's own colour, a little wider than the 3 px line: a bump in it. Still to
+            // come: white, ringed in that colour.
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 4.2, 14, 5.6],
+            'circle-color': ['case', ['get', 'passed'], ['coalesce', ['get', 'color'], '#444444'], '#ffffff'],
+            'circle-stroke-color': ['coalesce', ['get', 'color'], '#444444'],
+            // Picked (here or in the itinerary): ringed wider
+            'circle-stroke-width': ['case', ['boolean', ['feature-state', 'selected'], false], 3,
+                                    ['get', 'passed'], 0, 1.5],
             'circle-opacity': 1
         }
-    }, firstOverlay);
+    });
 
     // A stop's platform is a track by train, a stand by bus, a pier by ferry.
     const labels = { arrival: {{ arrival|tojson }}, departure: {{ departure|tojson }},
@@ -1883,9 +2038,7 @@ function addCurrentStops(trips) {
         return (labels[type] || labels.track).replace('{track}', bare || v);
     };
 
-    map.on('click', 'current-stops', e => {
-        e.originalEvent.stopPropagation();
-        const p = e.features[0].properties;
+    const showStop = (p, coordinates) => {
         const box = el('div', 'min-width:170px;font-size:0.92em;line-height:1.5');
 
         const head = el('div', 'display:flex;align-items:center;gap:7px;font-weight:bold;font-size:1.05em;margin-bottom:5px');
@@ -1923,8 +2076,40 @@ function addCurrentStops(trips) {
             box.appendChild(r);
         }
 
-        showMapPopup(new maplibregl.Popup({ offset: 10, closeButton: false })
-            .setLngLat(e.features[0].geometry.coordinates).setDOMContent(box));
+        const popup = new maplibregl.Popup({ offset: 10, closeButton: false })
+            .setLngLat(coordinates).setDOMContent(box);
+        showMapPopup(popup);
+        return popup;
+    };
+
+    // The same stop picked on the map and in the itinerary, from whichever was clicked: from
+    // the list the map comes to it, from the map the list opens on it.
+    let selected = null;
+    const unselect = () => {
+        if (selected != null) map.setFeatureState({ source: 'current-stops', id: selected }, { selected: false });
+        selected = null;
+        $('#itinerary .ts-list li').removeClass('ts-selected');
+    };
+    selectTripStop = (uid, wp, fromList) => {
+        const f = data.features.find(x => x.properties.uid == uid && x.properties.wp == wp);
+        if (!f) return;
+        unselect();
+        selected = f.id;
+        map.setFeatureState({ source: 'current-stops', id: selected }, { selected: true });
+        // Its popup closed (a click beside it, or another stop picked): no longer picked
+        showStop(f.properties, f.geometry.coordinates).on('close', () => { if (selected === f.id) unselect(); });
+        if (fromList) map.easeTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), 10) });
+        const $li = $('#itinerary .itinerary-trip[data-trip-uid="' + uid + '"] .ts-list li[data-wp="' + wp + '"]')
+            .addClass('ts-selected');
+        if (!fromList && $li.length) {
+            $li.closest('details').prop('open', true);
+            $li[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    };
+    map.on('click', 'current-stops', e => {
+        e.originalEvent.stopPropagation();
+        const p = e.features[0].properties;
+        selectTripStop(p.uid, p.wp, false);
     });
     map.on('mouseenter', 'current-stops', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'current-stops', () => { map.getCanvas().style.cursor = ''; });
@@ -1955,11 +2140,13 @@ function setCurrentTripData(features) {
 
 function buildCurrentTripFeatures(trips) {
     const features = [];
+    const drawn = new Set();
     trips.forEach(trip => {
         // liveTracked overrides the timetable: if the server handed us a live track the
         // aircraft is provably still flying, whatever computeTimeStatus decided from the
         // scheduled arrival time.
         if (trip.time !== 'current' && !trip.liveTracked) return;
+        drawn.add(String(trip.trip.uid));
 
         const isTracked = !!(trip.liveTracked && trip.liveDestination && trip.livePath);
         // Convert to [lng, lat] and expand air routes to geodesic before splitting
@@ -2049,9 +2236,8 @@ function buildCurrentTripFeatures(trips) {
             existing.marker.setLngLat(pegPosition);
             if (isLive) {
                 setMarkerHeading(existing.marker, heading);
-                existing.marker.setPopup(
-                    new maplibregl.Popup({ offset: 25 }).setText(livePositionLabel(trip))
-                );
+                // The text only: a new popup every few seconds would close an open one.
+                existing.marker.getPopup().setText(livePositionLabel(trip));
             }
         } else {
             // A trip starts out estimated and becomes live once the first track arrives,
@@ -2068,6 +2254,12 @@ function buildCurrentTripFeatures(trips) {
             };
         }
     });
+    // A flight that has just landed is no longer drawn: its aircraft goes with it.
+    Object.keys(currentPositionMarkers).forEach(uid => {
+        if (drawn.has(uid)) return;
+        currentPositionMarkers[uid].marker.remove();
+        delete currentPositionMarkers[uid];
+    });
     return features;
 }
 
@@ -2081,17 +2273,28 @@ function bearingBetween(a, b) {
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
+// The 3D view draws the aircraft up at its altitude and hides its flat marker: a click on
+// it opens that marker's popup.
+function toggleLivePopup(uid) {
+    const entry = currentPositionMarkers[uid];
+    if (entry) entry.marker.togglePopup();
+}
+
 // "Live position · 09:42" — the clock time of the fix rather than "x minutes ago",
 // which would need plural rules in every language for no real gain. A stored fix can
 // be up to one refresh interval old, so showing when it was taken is the honest form.
 function livePositionLabel(trip) {
     // tojson, not a bare quoted substitution: an apostrophe in a translation would
     // otherwise terminate the string literal and break the page.
-    const label = {{ livePosition|tojson }};
-    if (!trip.liveUpdated) return label;
-    const when = new Date(trip.liveUpdated * 1000)
-        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return `${label} · ${when}`;
+    let label = {{ livePosition|tojson }};
+    if (trip.liveUpdated) {
+        label += ' · ' + new Date(trip.liveUpdated * 1000)
+            .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    // The fix's altitude, when the owner shows it (the 3D profile's gate, server-side)
+    const alt = Array.isArray(trip.altitude) ? trip.altitude[trip.altitude.length - 1] : null;
+    if (alt != null) label += ' · ' + Math.round(alt).toLocaleString() + ' m';
+    return label;
 }
 
 // While a flight is actually in the air, replace its straight geodesic with the real
@@ -2104,31 +2307,47 @@ function livePositionLabel(trip) {
 // Cost is bounded server-side, not here: the refresh floor is per trip and shared by
 // every viewer, so polling on a timer cannot run up the FR24 bill.
 function startLiveTracking(trips, features) {
-    const candidates = liveCandidates(trips);
-    if (!candidates.length) return;
-    const ids = candidates.map(t => t.trip.uid).join(',');
+    if (!liveCandidates(trips).length) return;
 
     const refresh = () => {
-        fetch(`/live_tracks/${ids}`)
-            .then(r => r.ok ? r.json() : null)
-            .then(liveTracks => {
-                if (!liveTracks || !Object.keys(liveTracks).length) return;
-                // Updates the main source (and its shadow) to follow the real track...
-                MapLibreUtils.applyLiveTracks(trips, liveTracks, features);
-                const tripsSource = map.getSource('trips');
-                if (tripsSource) tripsSource.setData({ type: 'FeatureCollection', features });
-                // ...and rebuilds the visible current-trip lines from the same data, so
-                // the two sources cannot disagree about where the aircraft is.
-                setCurrentTripData(buildCurrentTripFeatures(trips));
-                // The live feed is the first altitude this trip has ever had (a flight
-                // logged in advance is a flat 2-point line), so the 3D layer had nothing
-                // to draw at first render and has to be rebuilt now.
-                MapLibreUtils.build3DFlightLayer(map, trips, {
-                    toggleTitle: {{ flight3dToggle|tojson }}
-                }).catch(err => console.warn('3D flight layer failed:', err));
-            })
-            // A live overlay is decoration; never let it break the map it sits on.
-            .catch(err => console.warn('Live track refresh failed:', err));
+        // Re-read every time: flights come into the window and leave it while the page
+        // stays open. Trips that left it are still handed to applyLiveTracks, which ends
+        // any that were live.
+        const candidates = liveCandidates(trips);
+        const ask = candidates.length
+            ? fetch(`/live_tracks/${candidates.map(t => t.trip.uid).join(',')}`)
+                .then(r => r.ok ? r.json() : null)
+            : Promise.resolve({});
+        ask.then(liveTracks => {
+            if (!liveTracks) return;
+            if (!MapLibreUtils.applyLiveTracks(trips, liveTracks, features)) return;
+            // The start pin where the line drawn starts: a flight's track begins at its gate,
+            // not at the airport's logged point (unless it begins in the air, bridged to it).
+            if (tripStartPin) {
+                const first = trips[0], p0 = first.livePath && !first.liveOrigin ? first.livePath[0] : first.path[0];
+                tripStartPin.setLngLat([p0[1], p0[0]]);
+            }
+            // Landed, its route is its track, which ends at the gate
+            if (tripEndPin) {
+                const path = trips[trips.length - 1].path, end = path[path.length - 1];
+                tripEndPin.setLngLat([end[1], end[0]]);
+            }
+            // Updates the main source (and its shadow) to follow the real track...
+            const tripsSource = map.getSource('trips');
+            if (tripsSource) tripsSource.setData({ type: 'FeatureCollection', features });
+            // ...and rebuilds the visible current-trip lines from the same data, so
+            // the two sources cannot disagree about where the aircraft is.
+            setCurrentTripData(buildCurrentTripFeatures(trips));
+            // The live feed is the first altitude this trip has ever had (a flight
+            // logged in advance is a flat 2-point line), so the 3D layer had nothing
+            // to draw at first render and has to be rebuilt now.
+            MapLibreUtils.build3DFlightLayer(map, trips, {
+                toggleTitle: {{ flight3dToggle|tojson }},
+                onAircraftClick: toggleLivePopup
+            }).catch(err => console.warn('3D flight layer failed:', err));
+        })
+        // A live overlay is decoration; never let it break the map it sits on.
+        .catch(err => console.warn('Live track refresh failed:', err));
     };
 
     refresh();
@@ -2158,7 +2377,10 @@ function placePolylines(trips) {
 
     // Overlay a 3D altitude profile for any flights that carry altitude data
     // (invisible top-down, rises into view when the map is tilted).
-    MapLibreUtils.build3DFlightLayer(map, trips, { toggleTitle: {{ flight3dToggle|tojson }} }).catch(err =>
+    MapLibreUtils.build3DFlightLayer(map, trips, {
+        toggleTitle: {{ flight3dToggle|tojson }},
+        onAircraftClick: toggleLivePopup
+    }).catch(err =>
         console.warn('3D flight layer failed:', err)
     );
 
@@ -2167,8 +2389,13 @@ function placePolylines(trips) {
     // An in-progress trip moves with the clock: re-split its line and move its pin from
     // the timetable position (stops, dwell times, delays) instead of only on load. It
     // stops at the destination once the trip is over (the position is clamped there).
-    if (trips.some(t => t.time === 'current')) {
-        setInterval(() => setCurrentTripData(buildCurrentTripFeatures(trips)), 5000);
+    // A flight that takes off while the page is open needs them too.
+    if (trips.some(t => t.time === 'current') || liveCandidates(trips).length) {
+        setInterval(() => {
+            setCurrentTripData(buildCurrentTripFeatures(trips));
+            updateStopProgress(trips);
+        }, 5000);
+        updateStopProgress(trips);
         requestAnimationFrame(animateFutureDashes);
         // The viewer's location is for the owner's own /current page only: a shared trip
         // link can be opened by anyone.
@@ -2176,6 +2403,12 @@ function placePolylines(trips) {
     }
 
     // Click an itinerary leg to highlight (and zoom to) that trip on the map.
+    // Folding a leg's stops open is not picking the leg; picking a stop shows it on the map
+    $('#itinerary').off('click.stopitem').on('click.stopitem', '.ts-list li[data-wp]', function (e) {
+        e.stopPropagation();
+        selectTripStop($(this).closest('.itinerary-trip').data('trip-uid'), $(this).data('wp'), true);
+    });
+    $('#itinerary').off('click.stops').on('click.stops', 'details.trip-stops', function (e) { e.stopPropagation(); });
     $('#itinerary').off('click.highlight').on('click.highlight', '.itinerary-trip', function() {
         highlightTrip($(this).data('trip-uid'), { toggle: true, fit: true });
     });
@@ -2402,8 +2635,8 @@ if (numberedMarkers.length > 0) {
             const startCoords = [firstTrip.path[0][1], firstTrip.path[0][0]];
             const endCoords = [lastTrip.path[lastTrip.path.length - 1][1], lastTrip.path[lastTrip.path.length - 1][0]];
             
-            createCustomMarker(startCoords, 'green', firstTrip.trip.origin_station);
-            createCustomMarker(endCoords, 'red', lastTrip.trip.destination_station);
+            tripStartPin = createCustomMarker(startCoords, 'green', firstTrip.trip.origin_station);
+            tripEndPin = createCustomMarker(endCoords, 'red', lastTrip.trip.destination_station);
         }
     }
 {% endif %}
@@ -2540,8 +2773,8 @@ if (numberedMarkers.length > 0) {
                     });
                 }
             });
-            addCurrentStops(trips);
         }
+        addTripStops(trips);
 
     // Set view to show all trips
     const simpleFilters = {
@@ -2729,16 +2962,16 @@ function hideTripCard() {
     clearConnectorOffsets();
 }
 
-// Numbered pins and the start/end pins can bury a dense itinerary; hide them
-// without touching the routes. All the pins are DOM markers hidden through the
-// body class; only their selection glow is a map layer.
+// Numbered pins and the start/end pins can bury a dense itinerary; hide them, and the
+// stations' rounds with them, without touching the routes. The pins are DOM markers
+// hidden through the body class; their selection glow and the rounds are map layers.
 let markersHidden = false;
 function toggleMarkers() {
     markersHidden = !markersHidden;
-    if (map.getLayer('numbered-markers-highlight')) {
-        map.setLayoutProperty('numbered-markers-highlight', 'visibility',
-            markersHidden ? 'none' : 'visible');
-    }
+    // The stations' rounds go with the pins: map layers, so by visibility
+    ['numbered-markers-highlight', 'current-stops-shadow', 'current-stops'].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', markersHidden ? 'none' : 'visible');
+    });
     document.body.classList.toggle('markers-hidden', markersHidden);
     const btn = document.getElementById('markersToggle');
     btn.classList.toggle('off', markersHidden);
@@ -2884,7 +3117,12 @@ function createCustomMarker(coordinates, type, popupText, rotation) {
     if (popupText) {
         marker.setPopup(new maplibregl.Popup({ offset: 25 }).setText(popupText));
     }
-    
+    // The aircraft sits on its own line: a click left to reach the map also lands on the
+    // line's layer and closes the popup it opens. So it opens its popup itself.
+    if (isLive) {
+        el.addEventListener('click', e => { e.stopPropagation(); marker.togglePopup(); });
+    }
+
     return marker;
 }
 

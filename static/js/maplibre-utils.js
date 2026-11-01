@@ -631,16 +631,29 @@ function createGeodesicLine(start, end, numPoints = 100, splitSegments = false) 
 // Both map surfaces already split an in-progress trip into travelled and remaining
 // portions, so they render the estimated remainder with their own existing styling.
 //
+// A trip that was live and is no longer is ended (see endLiveTrack), so a landed flight
+// never stays on the map as a frozen aircraft.
+//
 // `features` is optional. When given (the array returned by buildTripLayers), the
 // matching feature's geometry is updated in place. In place matters: buildTripLayers
 // installs a pulse animation that addresses features by array index, so the array
 // must keep its identity, order and length across a refresh.
+//
+// Returns whether anything changed, so the caller only redraws when it has to.
 function applyLiveTracks(trips, liveTracks, features) {
-    if (!liveTracks) return;
+    let changed = false;
 
     trips.forEach(trip => {
         const live = liveTracks[trip.trip.uid];
-        if (!live || !live.path || live.path.length < 2) return;
+        const feature = features && features.find(f => f && f.properties.id === trip.trip.uid);
+        if (!live || live.status !== 'live' || !live.path || live.path.length < 2) {
+            if (trip.liveTracked) {
+                endLiveTrack(trip, live, feature);
+                changed = true;
+            }
+            return;
+        }
+        changed = true;
 
         const original = trip.path || [];
         // Where the flight is meant to end. Taken from the stored route rather than the
@@ -663,30 +676,54 @@ function applyLiveTracks(trips, liveTracks, features) {
         if (live.altitude) trip.altitude = live.altitude;
         if (live.timestamps) trip.timestamps = live.timestamps;
 
-        if (features) {
-            const feature = features.find(f => f && f.properties.id === trip.trip.uid);
-            if (feature) {
-                // The whole route, not just the flown part: this feature stands for the
-                // entire trip, and its layers include the drop shadow. Giving it only
-                // the flown portion would end the shadow at the aircraft and leave the
-                // remaining leg looking detached from the rest of the map. Bridged to
-                // both airports so the line still runs terminal to terminal.
-                let coords = live.path.map(c => [c[1], c[0]]);
-                if (trip.liveOrigin) {
-                    coords = createGeodesicLine(
-                        [trip.liveOrigin[1], trip.liveOrigin[0]], coords[0]
-                    ).concat(coords);
-                }
-                if (destination) {
-                    coords = coords.concat(
-                        createGeodesicLine(coords[coords.length - 1],
-                                           [destination[1], destination[0]])
-                    );
-                }
-                feature.geometry.coordinates = normalizePathCoords(coords);
+        if (feature) {
+            // The whole route, not just the flown part: this feature stands for the
+            // entire trip, and its layers include the drop shadow. Giving it only
+            // the flown portion would end the shadow at the aircraft and leave the
+            // remaining leg looking detached from the rest of the map. Bridged to
+            // both airports so the line still runs terminal to terminal.
+            let coords = live.path.map(c => [c[1], c[0]]);
+            if (trip.liveOrigin) {
+                coords = createGeodesicLine(
+                    [trip.liveOrigin[1], trip.liveOrigin[0]], coords[0]
+                ).concat(coords);
             }
+            if (destination) {
+                coords = coords.concat(
+                    createGeodesicLine(coords[coords.length - 1],
+                                       [destination[1], destination[0]])
+                );
+            }
+            feature.geometry.coordinates = normalizePathCoords(coords);
         }
     });
+    return changed;
+}
+
+// Back to an ordinary trip: it landed, with its final track in `live`, or the server
+// stopped tracking it and it keeps the route it was logged with.
+function endLiveTrack(trip, live, feature) {
+    ['livePath', 'liveTracked', 'liveOrigin', 'liveDestination', 'liveUpdated']
+        .forEach(key => delete trip[key]);
+    // Only flights without a recorded track are tracked, so any altitude came from the
+    // live feed and no longer matches the path.
+    delete trip.altitude;
+    delete trip.timestamps;
+
+    const landed = live && live.status === 'landed' && live.path && live.path.length >= 2;
+    if (landed) {
+        trip.path = live.path;
+        if (live.altitude) trip.altitude = live.altitude;
+        if (live.timestamps) trip.timestamps = live.timestamps;
+    }
+    const fresh = feature ? tripToFeature(trip) : null;
+    if (!feature) computeTimeStatus(trip);
+    // Early arrivals are common: landed is over, whatever the timetable says.
+    if (landed) trip.time = 'past';
+    if (fresh) {
+        feature.geometry.coordinates = fresh.geometry.coordinates;
+        feature.properties.time = trip.time;
+    }
 }
 
 // One trip -> its GeoJSON feature, or null when the path is unusable.
@@ -1431,7 +1468,7 @@ async function build3DFlightLayer(map, trips, options = {}) {
             // Measured over several points: consecutive samples can be metres apart and
             // a bearing across those jitters the aircraft on every refresh.
             const back = coords[Math.max(0, coords.length - 6)];
-            aircraft.push({ position: tip, angle: _bearingDeg(back, tip) });
+            aircraft.push({ position: tip, angle: _bearingDeg(back, tip), uid: trip.trip.uid });
         }
     });
 
@@ -1491,7 +1528,14 @@ async function build3DFlightLayer(map, trips, options = {}) {
             // without one the icon can silently fail to rasterise and nothing draws.
             getIcon: () => ({
                 id: 'live-plane', url: _PLANE_SVG, width: 24, height: 24, mask: true
-            })
+            }),
+            // It stands in for the flat marker it hides, so it answers clicks like it.
+            // deck picks through the map's own events: its canvas takes none itself.
+            pickable: !!options.onAircraftClick,
+            onClick: info => {
+                if (info.object) options.onAircraftClick(info.object.uid);
+                return true;
+            }
         });
         overlay = new deck.MapboxOverlay({
             interleaved: false,

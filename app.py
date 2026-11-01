@@ -208,7 +208,9 @@ from src.api.station_map import station_map_blueprint
 from src import visualisations as viz_module
 from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
-from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
+from src.api.live_tracks import ARRIVAL_GRACE, get_live_tracks, live_tracks_blueprint
+from src.runway_stops import apply_to_trip as apply_runway_stops, is_runway_stop, track_stops
+from src.utils import _timezone_finder as tz_finder
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.api.motis import motis_blueprint
 from src.consts import DbNames, TripTypes
@@ -677,7 +679,13 @@ def flight_tracks(username, fr24_id):
     timestamps = [p[3] for p in enriched]
 
     return jsonify(
-        {"coordinates": coordinates, "altitude": altitude, "timestamps": timestamps}
+        {
+            "coordinates": coordinates,
+            "altitude": altitude,
+            "timestamps": timestamps,
+            # For the edit page's stops dialog, which shows them as the import lands.
+            "runway_stops": track_stops(coordinates, altitude, timestamps),
+        }
     )
 
 
@@ -814,6 +822,8 @@ app.jinja_env.globals.update(get_country_codes_from_files=get_country_codes_from
 PLATFORM_TEXT_KEYS = {
     "bus": ("motisStand", "stopStand"),
     "ferry": ("motisPier", "stopPier"),
+    "air": ("motisGate", "stopGate"),
+    "helicopter": ("motisGate", "stopGate"),
 }
 
 
@@ -988,6 +998,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         route_source=newTrip.get("route_source") or "router",
         raw_path=raw_path,
     )
+    apply_runway_stops(trip)
 
     create_trip(trip)
     tag_ids = [int(t) for t in (newTrip.get("tag_ids") or []) if str(t).isdigit()]
@@ -7348,6 +7359,8 @@ def _shift_trip_stops(waypoints_json, old_start, new_start):
     if not isinstance(waypoints, list) or not any(isinstance(w, dict) and isinstance(w.get("stop"), dict) for w in waypoints):
         return waypoints_json
     delta = new_start - old_start
+    # A flight's take-off and landing were that day's alone.
+    waypoints = [wp for wp in waypoints if not is_runway_stop(wp)]
     for wp in waypoints:
         stop = wp.get("stop") if isinstance(wp, dict) else None
         if not isinstance(stop, dict):
@@ -7515,6 +7528,7 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
     # plain metadata edits, where update_trip's COALESCE preserves the stored one.
     trip.altitude = formData.get("altitude") or None
     trip.timestamps = formData.get("timestamps") or None
+    apply_runway_stops(trip)
 
     return trip
 
@@ -10007,6 +10021,9 @@ def user_settings(username):
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
         params["live_tracking"] = ("live_tracking" in request.form) and bool(user.premium)
+        params["live_tracking_details"] = (
+            "live_tracking_details" in request.form
+        ) and bool(user.premium)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -10027,6 +10044,7 @@ def user_settings(username):
     colorblind_checked = "checked" if user.colorblind else ""
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
+    live_tracking_details_checked = "checked" if user.live_tracking_details else ""
     exact_waypoints_checked = "checked" if user.exact_waypoints else ""
     discord_autopost_checked = "checked" if user.discord_autopost else ""
     discord_main_checked = "checked" if user.discord_main_enabled else ""
@@ -10045,6 +10063,7 @@ def user_settings(username):
         user_theme=user.theme,
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
+        live_tracking_details_checked=live_tracking_details_checked,
         exact_waypoints_checked=exact_waypoints_checked,
         discord_autopost_checked=discord_autopost_checked,
         discord_main_checked=discord_main_checked,
@@ -10450,6 +10469,9 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     stored = []
     if trip["waypoints"]:
         stored = json.loads(trip["waypoints"])
+        if edit_copy_type == "copy":
+            # A flight's take-off and landing were that day's alone.
+            stored = [wp for wp in stored if not is_runway_stop(wp)]
         waypoints_coords = [[point["lat"], point["lng"]] for point in stored]
         wplist = [path[0]] + waypoints_coords + [path[-1]]
         waypoint_meta = _waypoint_meta(stored)
@@ -10527,6 +10549,11 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "waypoint_meta": waypoint_meta,
         # As saved, for the stops editor: it writes them back with the stops edited.
         "stored_waypoints": stored,
+        # Where a flight's take-off and landing go when the stops dialog adds them.
+        "runway_airports": {
+            kind: {"lat": point[0], "lng": point[1], "tz": tz_finder.timezone_at(lat=point[0], lng=point[1])}
+            for kind, point in (("takeoff", path[0]), ("landing", path[-1]))
+        } if tripType in ("air", "helicopter") else None,
         "raw_path": raw_path,
         "route_source": trip.get("route_source") or "router",
         "tripNotes": tripNotes or "",
@@ -14250,9 +14277,16 @@ def get_current_trips_data(public_only=True):
                   AND r.uid = vessel_identity(vessel_resolve(trips.reg), NULL)
             ) v ON TRUE
             WHERE (utc_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') <= NOW()
-              AND (utc_end_datetime + COALESCE(arrival_delay, 0) * interval '1 second') >= NOW()
+              AND ((utc_end_datetime + COALESCE(arrival_delay, 0) * interval '1 second') >= NOW()
+                   -- A delayed flight still in the air past its scheduled arrival.
+                   OR (trip_type = 'air'
+                       AND trip_id IN (SELECT trip_id FROM live_flight_tracks WHERE status = 'live')
+                       AND (utc_end_datetime + COALESCE(arrival_delay, 0) * interval '1 second')
+                           + :grace >= NOW()))
+              -- A flight with its FR24 track has landed, whatever the timetable says.
+              AND NOT (trip_type = 'air' AND COALESCE(route_source, 'router') = 'fr24')
               AND (visibility = 'public' OR (visibility IS NULL AND trip_type NOT IN ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car')))
-        """).fetchall()
+        """, {"grace": ARRIVAL_GRACE}).fetchall()
 
     _uname_cache = {}
 
@@ -14313,7 +14347,7 @@ def get_current_trips_data(public_only=True):
             path = json.loads(paths.get(trip["uid"], "[]"))
             trip = dict(trip)
             live = live_tracks.get(trip["uid"])
-            if live and live.get("path"):
+            if live and live["status"] == "live":
                 # Keep the logged endpoints so the client can bridge the track back to
                 # the real airports: the not-yet-flown remainder at the end, and at the
                 # start the gap left because FR24's public track usually begins at the
@@ -14622,6 +14656,13 @@ def ensure_auth_db_columns():
         authDb.session.execute(
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN live_tracking BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        authDb.session.commit()
+    if "live_tracking_details" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN live_tracking_details BOOLEAN NOT NULL DEFAULT 0"
             )
         )
         authDb.session.commit()
