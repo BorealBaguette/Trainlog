@@ -217,6 +217,7 @@ def build_account_data_csvs(user: User) -> dict[str, str]:
                 "premium_tier": user.premium_tier,
                 "flight_3d": user.flight_3d,
                 "live_tracking": user.live_tracking,
+                "live_tracking_details": user.live_tracking_details,
                 "exact_waypoints": user.exact_waypoints,
                 "all_rail_stations": user.all_rail_stations,
                 "exact_tracks": user.exact_tracks,

@@ -1,0 +1,22 @@
+{# The stops timeline (static/js/trip_stops.js): its look and its texts #}
+<link rel="stylesheet" href="{{ static_autoversion(filename='styles/trip_stops.css') }}">
+<script>
+var STOPS_TEXT = {
+    lang: {{ langId|tojson }},
+    count: {{ motisStops|tojson }},
+    // A stop's platform: a track by train, a stand by bus, a pier by ferry, a gate by air.
+    track: {{ platform_text('train')|tojson }},
+    bus: {{ platform_text('bus')|tojson }},
+    ferry: {{ platform_text('ferry')|tojson }},
+    air: {{ platform_text('air')|tojson }},
+    // A flight's runway times (src/runway_stops.py), named by kind.
+    takeoff: {{ runwayTakeoff|tojson }},
+    landing: {{ runwayLanding|tojson }},
+    runway: {{ runwayTimes|tojson }},
+    transponderOn: {{ runwayTransponderOn|tojson }},
+    transponderOff: {{ runwayTransponderOff|tojson }},
+    taxi: {{ runwayTaxi|tojson }},
+    airborne: {{ runwayAirborne|tojson }}
+};
+</script>
+<script src="{{ static_autoversion(filename='js/trip_stops.js') }}"></script>
