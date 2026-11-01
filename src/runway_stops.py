@@ -15,7 +15,10 @@ import json
 import math
 from datetime import datetime, timezone
 
+from geopy.distance import geodesic
+
 from py.utils import getCountryFromCoordinates
+from src.pg import pg_session
 from src.utils import _timezone_finder
 
 # FR24 reports 0 ft for an aircraft on the ground.
@@ -23,21 +26,60 @@ GROUND_ALT_M = 50
 
 RUNWAY_KINDS = ("takeoff", "landing")
 
+# How far past where the altitude puts a landing its braking is looked for.
+RUNWAY_SEARCH_S = 120
+
 # Stored for surfaces that do not translate stops; the ones that do go by `kind`.
 _NAMES = {"takeoff": "Take-off", "landing": "Landing"}
 
 
-def runway_points(altitude, timestamps):
+def runway_points(coords, altitude, timestamps):
     """(takeoff_index, landing_index) along the track, each None when it was not seen:
     a trail that starts in the air never saw the take-off, one that ends in the air never
-    saw the landing."""
+    saw the landing.
+
+    Altitude is barometric, and on a low-pressure day reads 0 well short of the runway: it
+    only says whether they were seen. Lift-off is the first reading off 0 (FR24 gives 0
+    while the aircraft reports itself on the ground), touchdown where the braking starts:
+    the ground flag comes too late there, the reading already 0 on the approach."""
     airborne = [i for i, alt in enumerate(altitude) if alt > GROUND_ALT_M]
     if not airborne:
         return None, None
     first, last = airborne[0], airborne[-1]
     takeoff = first if first > 0 and timestamps[first] else None
     landing = last + 1 if last + 1 < len(altitude) and timestamps[last + 1] else None
+    while takeoff and altitude[takeoff - 1] > 0 and timestamps[takeoff - 1]:
+        takeoff -= 1
+    if landing is not None:
+        speed = _speeds(coords, timestamps)
+        approach = _approach_speed(speed, timestamps, landing)
+        i = landing
+        while (approach and i + 1 < len(speed) and speed[i] and speed[i] >= 0.85 * approach
+               and timestamps[i + 1] - timestamps[landing] <= RUNWAY_SEARCH_S):
+            i += 1
+        landing = i if approach and speed[i] and speed[i] < 0.85 * approach else landing
     return takeoff, landing
+
+
+def _speeds(coords, timestamps):
+    """m/s from each fix to the first one at least 5 s on (fixes a second apart are too
+    jittery to tell), None where there is none."""
+    out = []
+    for i, t in enumerate(timestamps):
+        j = next((j for j in range(i + 1, len(timestamps))
+                  if t and timestamps[j] and timestamps[j] - t >= 5), None)
+        out.append(geodesic(coords[i], coords[j]).meters / (timestamps[j] - t) if j else None)
+    return out
+
+
+def _approach_speed(speed, timestamps, index):
+    """The median speed over the minute before `index`."""
+    picked, i = [], index
+    while i >= 0 and timestamps[i] and timestamps[index] - timestamps[i] <= 60:
+        if speed[i]:
+            picked.append(speed[i])
+        i -= 1
+    return sorted(picked)[len(picked) // 2] if picked else None
 
 
 def ground_seen(timestamps, takeoff, landing):
@@ -94,10 +136,22 @@ def has_runway_stop(waypoints, kind):
     return any(is_runway_stop(w) and w["stop"]["kind"] == kind for w in _load(waypoints))
 
 
-def track_stops(coords, altitude, timestamps):
+def airport_position(icao):
+    """[lat, lng] of the airport `icao`, or None."""
+    if not icao:
+        return None
+    with pg_session() as pg:
+        airport = pg.execute(
+            "SELECT latitude, longitude FROM airports WHERE ident = :icao", {"icao": icao}
+        ).fetchone()
+    return list(airport) if airport else None
+
+
+def track_stops(coords, altitude, timestamps, landed_at=None, dest=None):
     """The take-off and landing the track shows, as waypoints: none, one or both. coords
-    are [lat, lng] pairs parallel to altitude/timestamps."""
-    takeoff, landing = runway_points(altitude, timestamps)
+    are [lat, lng] pairs parallel to altitude/timestamps. `landed_at` / `dest`: when and
+    where FR24's summary says it landed, for a track that stops short of the runway."""
+    takeoff, landing = runway_points(coords, altitude, timestamps)
     # Kept beside the runway times, as the take-off's arrival and the landing's departure:
     # the taxi at each end, which connections count from. Not bounds for the delays, as the
     # runway times are: a transponder can be on a while at the gate.
@@ -113,6 +167,8 @@ def track_stops(coords, altitude, timestamps):
         if last_seen:
             stop["stop"]["dep_rt"] = _iso(last_seen)
         stops.append(stop)
+    elif landed_at and dest:
+        stops.append(_waypoint("landing", *dest, landed_at))
     return stops
 
 

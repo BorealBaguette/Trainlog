@@ -1752,14 +1752,8 @@ function runwayMetaLine(trip) {
     if (t && t.arr_rt) item(on, STOPS_TEXT.transponderOn, at(t, 'arr'));
     if (t) item('<i class="fa-solid fa-plane-departure legMetaIcon"></i>',
         STOPS_TEXT.takeoff + (t.arr_rt ? ' · ' + STOPS_TEXT.taxi + ' ' + span(t.arr_rt, t.dep_rt) : ''), at(t, 'dep'));
-    if (t) {
-        var landed = l ? Date.parse(l.arr_rt) : null;
-        var airborne = (landed || Date.now()) - Date.parse(t.dep_rt);
-        // Still flying only within live tracking's window (scheduled time plus its grace)
-        if (landed || airborne / 1000 < (trip.trip_duration ? trip.trip_duration[1] : 0) + 6 * 3600) {
-            item('<i class="fa-solid fa-plane legMetaIcon"></i>', STOPS_TEXT.airborne, secondsToDhm(airborne / 1000, STOPS_TEXT.lang));
-        }
-    }
+    var airborne = l ? airborneSeconds(trip) : flyingSeconds(trip);
+    if (airborne) item('<i class="fa-solid fa-plane legMetaIcon"></i>', STOPS_TEXT.airborne, secondsToDhm(airborne, STOPS_TEXT.lang));
     if (l) item('<i class="fa-solid fa-plane-arrival legMetaIcon"></i>', STOPS_TEXT.landing, at(l, 'arr'));
     if (l && l.dep_rt) item(off,
         STOPS_TEXT.transponderOff + ' · ' + STOPS_TEXT.taxi + ' ' + span(l.arr_rt, l.dep_rt), at(l, 'dep'));
@@ -1968,6 +1962,10 @@ function addTripStops(trips) {
     let data = build();
     if (!data.features.length || map.getSource('current-stops')) return;
     map.addSource('current-stops', { type: 'geojson', data });
+    // A flight's take-off and landing: the 3D profile shows them already. Only when picked,
+    // though still there to be picked.
+    const shown = ['any', ['boolean', ['feature-state', 'selected'], false],
+                   ['!', ['in', ['get', 'kind'], ['literal', ['takeoff', 'landing']]]]];
     // While a trip is under way its rounds turn as it passes them
     if (trips.some(t => t.time === 'current' || t.liveTracked)) {
         setInterval(() => map.getSource('current-stops').setData(data = build()), 30000);
@@ -1983,7 +1981,7 @@ function addTripStops(trips) {
         paint: {
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 5.2, 14, 6.8],
             'circle-color': MapLibreUtils.tripShadowColor(map),
-            'circle-opacity': 0.8,
+            'circle-opacity': ['case', shown, 0.8, 0],
             'circle-blur': 0.3
         }
     }, firstLine);
@@ -2001,7 +1999,8 @@ function addTripStops(trips) {
             // Picked (here or in the itinerary): ringed wider
             'circle-stroke-width': ['case', ['boolean', ['feature-state', 'selected'], false], 3,
                                     ['get', 'passed'], 0, 1.5],
-            'circle-opacity': 1
+            'circle-opacity': ['case', shown, 1, 0],
+            'circle-stroke-opacity': ['case', shown, 1, 0]
         }
     });
 

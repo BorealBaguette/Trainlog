@@ -1427,7 +1427,9 @@ function _setGroundAircraftVisible(map, visible) {
 // by the one, blending into the other along the flight. Only from readings taken right at
 // the transition (within a minute of being on the ground): a sparse track would otherwise
 // sink the whole climb.
-function _aboveAirports(altitude, timestamps) {
+function _aboveAirports(altitude, timestamps, waypoints) {
+    const runway = timestamps && _runwayTimes(waypoints);
+    if (runway) return _aboveRunwayTimes(altitude, timestamps, runway[0], runway[1]);
     const air = [];
     altitude.forEach((a, i) => { if (a > 50) air.push(i); });
     if (!air.length) return altitude;
@@ -1441,6 +1443,60 @@ function _aboveAirports(altitude, timestamps) {
         if (!(a > 50)) return 0;
         const f = last > first ? (i - first) / (last - first) : 0;
         return Math.max(0, a - (a0 + (a1 - a0) * f));
+    });
+}
+
+// A flight's take-off and landing times (its runway stops, src/runway_stops.py), in epoch
+// seconds, each null when it has none; null without either.
+function _runwayTimes(waypoints) {
+    let list;
+    try { list = typeof waypoints === 'string' ? JSON.parse(waypoints) : waypoints; } catch (e) { return null; }
+    const at = (kind, field) => {
+        const st = ((list || []).find(w => w && w.stop && w.stop.kind === kind) || {}).stop;
+        const ms = st ? Date.parse(st[field]) : NaN;
+        return isNaN(ms) ? null : ms / 1000;
+    };
+    const t0 = at('takeoff', 'dep_rt'), t1 = at('landing', 'arr_rt');
+    return t0 == null && t1 == null ? null : [t0, t1];
+}
+
+// The same, airborne by FR24's runway times rather than by a reading above 50 m: on a
+// low-pressure day the barometric altitude reads 0 well short of the runway. What the
+// aircraft would have read on each runway is its climb (descent) carried on to the take-off
+// (landing) time; the readings stuck at 0 before touchdown follow that line too.
+function _aboveRunwayTimes(altitude, timestamps, t0, t1) {
+    const start = t0 ?? -Infinity, end = t1 ?? Infinity;
+    const clean = [];
+    altitude.forEach((a, i) => {
+        const t = timestamps[i];
+        if (t && t > start && t < end && a > 50) clean.push(i);
+    });
+    if (!clean.length) return altitude.map(() => 0);
+    // The line through four readings at one end, when they are close to its runway time
+    function line(idx, T) {
+        if (T == null || idx.length < 2 || Math.abs(timestamps[idx[0]] - T) > 180) return null;
+        const n = idx.length, ts = idx.map(i => timestamps[i]), as = idx.map(i => altitude[i]);
+        const mt = ts.reduce((s, v) => s + v, 0) / n, ma = as.reduce((s, v) => s + v, 0) / n;
+        let num = 0, den = 0;
+        ts.forEach((t, k) => { num += (t - mt) * (as[k] - ma); den += (t - mt) ** 2; });
+        const slope = den ? num / den : 0;
+        return t => ma + slope * (t - mt);
+    }
+    const climb = line(clean.slice(0, 4), t0);
+    const descent = line(clean.slice(-4).reverse(), t1);
+    const r0 = climb ? climb(t0) : null, r1 = descent ? descent(t1) : null;
+    const base0 = r0 ?? r1 ?? 0, base1 = r1 ?? r0 ?? 0;
+    const tFirst = timestamps[clean[0]], tLast = timestamps[clean[clean.length - 1]];
+    return altitude.map((a, i) => {
+        const t = timestamps[i];
+        if (!t || t <= start || t >= end) return 0;
+        let reading = a;
+        if (!(a > 50)) {
+            if (t < tFirst && climb) reading = climb(t);
+            else if (t > tLast && descent) reading = descent(t);
+        }
+        const f = isFinite(start) && isFinite(end) ? (t - start) / (end - start) : (isFinite(start) ? 0 : 1);
+        return Math.max(0, reading - (base0 + (base1 - base0) * f));
     });
 }
 
@@ -1472,7 +1528,7 @@ async function build3DFlightLayer(map, trips, options = {}) {
         const path = _coerceArray(trip.livePath || trip.path);   // [[lat, lng], ...]
         let altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
         if (!path || !altitude || altitude.length < 2) return;
-        altitude = _aboveAirports(altitude, _coerceArray(trip.timestamps));
+        altitude = _aboveAirports(altitude, _coerceArray(trip.timestamps), trip.trip.waypoints);
         const n = Math.min(path.length, altitude.length);
         const coords = [];
         for (let i = 0; i < n; i++) {
