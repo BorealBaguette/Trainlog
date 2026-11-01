@@ -28,6 +28,16 @@ function airborneSeconds(row) {
     var secs = r.takeoff && r.landing ? (Date.parse(r.landing.arr_rt) - Date.parse(r.takeoff.dep_rt)) / 1000 : NaN;
     return secs > 0 ? secs : null;
 }
+// Seconds since take-off of a flight still in the air, or null. Taken off, not landed,
+// and for no longer than its scheduled duration plus an hour: a flight whose tracking was
+// lost keeps its take-off without ever landing.
+function flyingSeconds(row) {
+    var r = runwayStops(row.waypoints);
+    if (!r.takeoff || r.landing) return null;
+    var since = (Date.now() - Date.parse(r.takeoff.dep_rt)) / 1000;
+    var scheduled = row.trip_duration ? row.trip_duration[1] : row.manual_trip_duration || row.estimated_trip_duration || 0;
+    return since > 0 && since < scheduled + 3600 ? since : null;
+}
 function escapeStopText(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -92,12 +102,8 @@ function tripStopsHtml(data, row, compact) {
     // the scheduled time struck beside the real one, rather than a delay to add up.
     var realTimes = stops.some(function (st) { return st.kind === 'takeoff' || st.kind === 'landing'; });
     // Taken off, not landed yet: the flight is in the air, its arrival still only planned.
-    // Within live tracking's window only (scheduled time plus its 6 h grace): a flight
-    // lost for good keeps its take-off without ever landing.
-    var takeoffStop = runwayStops(data).takeoff;
-    var since = takeoffStop ? (Date.now() - Date.parse(takeoffStop.dep_rt)) / 1000 : NaN;
-    var flying = since > 0 && !stops.some(function (st) { return st.kind === 'landing'; })
-        && since < (row.trip_duration ? row.trip_duration[1] : row.manual_trip_duration || row.estimated_trip_duration || 0) + 6 * 3600;
+    var since = flyingSeconds(Object.assign({}, row, { waypoints: waypoints }));
+    var flying = since !== null;
     function endTime(time, secs) {
         if (!realTimes || !secs || !time) return escapeStopText(time || '') + badge(secs);
         return '<s class="text-muted">' + escapeStopText(time) + '</s> <span class="' +

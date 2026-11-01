@@ -219,7 +219,7 @@ from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import ARRIVAL_GRACE, get_live_tracks, live_tracks_blueprint
 from src.api.live_map import live_map_blueprint, live_travellers_count
-from src.runway_stops import apply_to_trip as apply_runway_stops, is_runway_stop, track_stops
+from src.runway_stops import apply_to_trip as apply_runway_stops, airport_position, is_runway_stop, track_stops
 from src.utils import _timezone_finder as tz_finder
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.api.motis import motis_blueprint
@@ -698,7 +698,10 @@ def flight_tracks(username, fr24_id):
             "altitude": altitude,
             "timestamps": timestamps,
             # For the edit page's stops dialog, which shows them as the import lands.
-            "runway_stops": track_stops(coordinates, altitude, timestamps),
+            "runway_stops": track_stops(
+                coordinates, altitude, timestamps,
+                _fr24_epoch(request.args.get("landed")), airport_position(request.args.get("dest")),
+            ),
         }
     )
 

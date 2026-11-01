@@ -3434,7 +3434,8 @@
 
         try {
             // Fetch the detailed path data from FR24
-            const pathData = await $.get(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${flight.fr24_id}`);
+            const pathData = await $.get(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${flight.fr24_id}`,
+                { dest: flight.destination_icao_actual || flight.dest_icao || '', landed: flight.datetime_landed || '' });
             const coordinates = pathData.coordinates;
 
             updateFr24PathProgressBar(40);
