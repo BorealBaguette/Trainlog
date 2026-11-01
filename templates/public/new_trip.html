@@ -1747,7 +1747,8 @@ function runwayMetaLine(trip) {
     }
     function at(st, field) {   // its time where it happened, with its delay when it was planned
         var when = st[field + '_rt'];
-        return escapeStopText(stopClock(when, st.tz)) +
+        // `estimated`: a flight lost on its approach, its landing worked out
+        return (st.estimated && field === 'arr' ? '~' : '') + escapeStopText(stopClock(when, st.tz)) +
             (st[field] && when ? renderDelayBadge((Date.parse(when) - Date.parse(st[field])) / 1000) : '');
     }
     function span(from, to) { return secondsToDhm((Date.parse(to) - Date.parse(from)) / 1000, STOPS_TEXT.lang); }

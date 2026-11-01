@@ -1420,6 +1420,30 @@ function _setGroundAircraftVisible(map, visible) {
 // tilting the map reveals the altitude profile rising above the ground track.
 // Server only sends altitude for premium owners (the "clout" gate); here a free
 // per-viewer toggle decides whether to actually render it (the performance gate).
+// Altitudes as heights above the airports rather than above the sea. FR24 gives barometric
+// altitude, but 0 on the ground, so over the flat map an approach to an airport 200 m up
+// stayed 200 m above its runway and then dropped to the ground in one step. A field's
+// elevation is what the aircraft read just off (onto) its runway; the profile is lowered
+// by the one, blending into the other along the flight. Only from readings taken right at
+// the transition (within a minute of being on the ground): a sparse track would otherwise
+// sink the whole climb.
+function _aboveAirports(altitude, timestamps) {
+    const air = [];
+    altitude.forEach((a, i) => { if (a > 50) air.push(i); });
+    if (!air.length) return altitude;
+    const first = air[0], last = air[air.length - 1];
+    const near = (i, j) => timestamps && timestamps[i] && timestamps[j] && Math.abs(timestamps[i] - timestamps[j]) <= 60;
+    const e0 = first > 0 && near(first, first - 1) ? altitude[first] : null;
+    const e1 = last < altitude.length - 1 && near(last, last + 1) ? altitude[last] : null;
+    if (e0 == null && e1 == null) return altitude;
+    const a0 = e0 ?? e1, a1 = e1 ?? e0;
+    return altitude.map((a, i) => {
+        if (!(a > 50)) return 0;
+        const f = last > first ? (i - first) / (last - first) : 0;
+        return Math.max(0, a - (a0 + (a1 - a0) * f));
+    });
+}
+
 async function build3DFlightLayer(map, trips, options = {}) {
     // deck.gl's overlay can't follow MapLibre's globe projection (the track
     // detaches from the sphere), so skip 3D entirely in globe mode — the flat 2D
@@ -1446,8 +1470,9 @@ async function build3DFlightLayer(map, trips, options = {}) {
         // livePath when the flight is being tracked: the altitude array is parallel to
         // the live track, not to the stored two-point route.
         const path = _coerceArray(trip.livePath || trip.path);   // [[lat, lng], ...]
-        const altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
+        let altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
         if (!path || !altitude || altitude.length < 2) return;
+        altitude = _aboveAirports(altitude, _coerceArray(trip.timestamps));
         const n = Math.min(path.length, altitude.length);
         const coords = [];
         for (let i = 0; i < n; i++) {
