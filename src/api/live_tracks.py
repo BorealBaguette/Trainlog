@@ -60,6 +60,10 @@ SIGNAL_LOST = timedelta(minutes=15)
 APPROACH_KM = 30
 APPROACH_ALT_M = 2000
 
+# Silent this long near its destination, FR24's summary is asked whether the flight is over
+# (cheaper than the track, and it knows when it landed) rather than waiting out SIGNAL_LOST.
+SUMMARY_AFTER = timedelta(minutes=3)
+
 # Silent this long past its scheduled arrival, far from the destination: FR24 will not
 # hear from it again. Long enough to ride out an oceanic coverage gap.
 SIGNAL_GONE = timedelta(minutes=60)
@@ -238,6 +242,24 @@ def _resolve_fr24_id(trip):
     return min(matches, key=eta_distance)
 
 
+def _fetch_summary(fr24_id, username):
+    """FR24's summary of a flight instance (flight_ended, datetime_landed...), or None."""
+    if not check_and_increment_fr24_usage(username=username):
+        return None
+    try:
+        resp = requests.get(
+            f"{FR24_BASE}/api/flight-summary/light",
+            headers=_fr24_headers(),
+            params={"flight_ids": fr24_id},
+            timeout=FR24_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        logger.warning("FR24 summary failed for %s: %s", fr24_id, exc)
+        return None
+    return next((f for f in resp.json().get("data", []) if f.get("fr24_id") == fr24_id), None)
+
+
 def _fetch_track(fr24_id, username):
     """Fetch the whole trail so far. Returns (coords, altitude, timestamps) or None."""
     if not check_and_increment_fr24_usage(username=username):
@@ -388,19 +410,42 @@ def _fetch_update(trip):
 
     coords, altitude, timestamps = track
     status = _flight_state(trip, coords, altitude, timestamps)
+    landed_at = None
+    if (status == "live" and timestamps[-1]
+            and datetime.now(timezone.utc).timestamp() - timestamps[-1] >= SUMMARY_AFTER.total_seconds()
+            and _near_destination(trip, coords[-1], altitude[-1])):
+        summary = _fetch_summary(update["fr24_id"], trip["username"])
+        if summary and summary.get("flight_ended"):
+            status = "landed"
+            landed_at = _fr24_epoch(summary.get("datetime_landed"))
+    estimated = False
     if status == "landed" and altitude[-1] > GROUND_ALT_M:
-        # Lost on the approach: finish the line at the airport it was landing at. When
-        # is unknown, so no landing time is made up for it.
-        coords.append([trip["dest_lat"], trip["dest_lng"]])
+        # Lost on the approach: finish the line at the airport it was landing at, when FR24
+        # says it landed, else reached at the speed it was last flying (marked estimated).
+        dest = [trip["dest_lat"], trip["dest_lng"]]
+        coords.append(dest)
         altitude.append(0)
-        timestamps.append(None)
+        timestamps.append(landed_at or _estimated_arrival(coords[-3:-1], timestamps[-2:], dest))
+        estimated = not landed_at and timestamps[-1] is not None
     return {
+        "estimated_landing": estimated,
         **update,
         "status": status,
         "coords": coords,
         "altitude": altitude,
         "timestamps": timestamps,
     }
+
+
+def _estimated_arrival(last_fixes, last_times, dest):
+    """When an aircraft lost on its approach reached `dest`: the rest of the way at the
+    speed between its last two fixes (approach speed when those are missing)."""
+    (a, b), (ta, tb) = last_fixes, last_times
+    if not tb:
+        return None
+    moved = geodesic(a, b).meters
+    speed = moved / (tb - ta) if ta and tb > ta and moved > 0 else 70
+    return tb + geodesic(b, dest).meters / max(speed, 40)
 
 
 def _promote_to_paths(pg, trip, update):
@@ -430,8 +475,13 @@ def _promote_to_paths(pg, trip, update):
     )
     # Take-off and landing as stops; the delays only for owners who let FR24 fill in
     # their flight.
+    stops = track_stops(coords, update["altitude"], update["timestamps"])
+    if update.get("estimated_landing"):
+        for stop in stops:
+            if stop["stop"]["kind"] == "landing":
+                stop["stop"]["estimated"] = True
     fields = {"waypoints": with_stops(
-        trip["waypoints"], track_stops(coords, update["altitude"], update["timestamps"]),
+        trip["waypoints"], stops,
         trip["scheduled_dep"], trip["scheduled_arr"], trip["departure_delay"], trip["arrival_delay"],
     )}
     if trip["fill_details"]:

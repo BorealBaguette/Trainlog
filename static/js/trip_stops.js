@@ -140,10 +140,10 @@ function tripStopsHtml(data, row, compact) {
         var seen = takeoff ? st.arr_rt : st.dep_rt;
         function mins(from, to) { return secondsToDhm((Date.parse(to) - Date.parse(from)) / 1000, STOPS_TEXT.lang); }
         // `planned`: its scheduled time, when one was typed in the stops dialog
-        function stop(icon, label, when, note, planned) {
+        function stop(icon, label, when, note, planned, estimated) {
             return line('stop', icon + escapeStopText(label) +
                 (note ? '<span class="ts-seen">· ' + escapeStopText(note) + '</span>' : ''),
-                escapeStopText(stopClock(when, st.tz)) +
+                (estimated ? '~' : '') + escapeStopText(stopClock(when, st.tz)) +
                     (planned && when ? badge((Date.parse(when) - Date.parse(planned)) / 1000) : ''), '');
         }
         var other = runwayStops(data)[takeoff ? 'landing' : 'takeoff'];
@@ -151,7 +151,7 @@ function tripStopsHtml(data, row, compact) {
             STOPS_TEXT[st.kind], runway,
             takeoff ? (seen ? STOPS_TEXT.taxi + ' ' + mins(seen, runway) : '')
                     : (other && other.dep_rt ? STOPS_TEXT.airborne + ' ' + mins(other.dep_rt, runway) : ''),
-            takeoff ? st.dep : st.arr);
+            takeoff ? st.dep : st.arr, st.estimated);
         if (!seen) return [main];
         var transponder = stop(takeoff
                 ? '<i class="fa-solid ts-runway-icon fa-tower-broadcast"></i>'
