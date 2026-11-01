@@ -158,7 +158,8 @@ def delay_fields(waypoints, utc_start, utc_end, departure_delay, arrival_delay):
         if not is_runway_stop(w):
             continue
         kind, when = w["stop"]["kind"], _runway_time(w["stop"])
-        if when is None:
+        # An estimate (the landing of a flight lost on its approach) proves nothing
+        if when is None or w["stop"].get("estimated"):
             continue
         if kind == "takeoff" and start is not None and when < start + (departure_delay or 0):
             fields["departure_delay"] = math.floor((when - start) / 60) * 60
