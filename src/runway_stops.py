@@ -147,10 +147,18 @@ def airport_position(icao):
     return list(airport) if airport else None
 
 
-def track_stops(coords, altitude, timestamps, landed_at=None, dest=None):
+def land_short_track(coords, altitude, timestamps, dest, landed_at):
+    """A track that stops short of the runway, finished in place at `dest` ([lat, lng]) on
+    the ground at `landed_at`, when and where FR24's summary says it landed."""
+    if dest and landed_at and runway_points(coords, altitude, timestamps)[1] is None:
+        coords.append(dest)
+        altitude.append(0)
+        timestamps.append(landed_at)
+
+
+def track_stops(coords, altitude, timestamps):
     """The take-off and landing the track shows, as waypoints: none, one or both. coords
-    are [lat, lng] pairs parallel to altitude/timestamps. `landed_at` / `dest`: when and
-    where FR24's summary says it landed, for a track that stops short of the runway."""
+    are [lat, lng] pairs parallel to altitude/timestamps."""
     takeoff, landing = runway_points(coords, altitude, timestamps)
     # Kept beside the runway times, as the take-off's arrival and the landing's departure:
     # the taxi at each end, which connections count from. Not bounds for the delays, as the
@@ -167,8 +175,6 @@ def track_stops(coords, altitude, timestamps, landed_at=None, dest=None):
         if last_seen:
             stop["stop"]["dep_rt"] = _iso(last_seen)
         stops.append(stop)
-    elif landed_at and dest:
-        stops.append(_waypoint("landing", *dest, landed_at))
     return stops
 
 
