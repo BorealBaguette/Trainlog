@@ -6155,7 +6155,6 @@ def plan_view(username, plan_uuid):
     plan = get_owned_plan(plan_uuid, username)
     return render_template(
         "plans/plan.html",
-        title=plan["name"],
         username=username,
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id(username)),
@@ -6755,7 +6754,6 @@ def public_plan_itinerary(plan_uuid):
     )
     return render_template(
         "plans/plan.html",
-        title=plan["name"],
         username=viewer,
         nav=(
             "bootstrap/no_user_nav.html" if viewer == "public"
