@@ -9,7 +9,7 @@ carbon_blueprint = Blueprint('carbon', __name__)
 @carbon_blueprint.route('/carbon-calculator/u/<username>')
 def carbon_calculator(username=None):
     """Render the carbon calculator page"""
-    return render_template('carbon.html', username=username)
+    return render_template('carbon.html', title="Carbon Footprint Calculator", username=username)
 
 @carbon_blueprint.route('/api/calculate-carbon', methods=['POST'])
 def api_calculate_carbon():

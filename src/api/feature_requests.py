@@ -102,6 +102,7 @@ def feature_requests(username=None):
 
     return render_template(
         "feature_requests.html",
+        title=lang.get(userinfo.get("lang", "en"), lang["en"])["feature_requests_title"],
         username=current_user,
         requests=request_list,
         current_sort=sort_by,
@@ -165,6 +166,7 @@ def single_feature_request(request_id):
 
     return render_template(
         "single_feature_request.html",
+        title=request_dict["title"],
         username=current_user,
         feature_request=request_dict,
         **lang.get(userinfo.get("lang", "en"), {}),

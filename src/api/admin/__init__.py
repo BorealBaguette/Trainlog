@@ -31,6 +31,7 @@ def denied_logins():
 
     return render_template(
         "admin/denied_logins.html",
+        title="Denied logins",
         nav="bootstrap/navigation.html",
         username=getUser(),
         denied_logins=denied_logins,
@@ -63,6 +64,7 @@ def suspicious_activity():
 
     return render_template(
         "admin/suspicious_activity.html",
+        title="Suspicious activity",
         nav="bootstrap/navigation.html",
         username=getUser(),
         activities=suspicious_activities,
@@ -77,6 +79,7 @@ def suspicious_activity():
 def wagons_admin():
     return render_template(
         "admin/wagons.html",
+        title="Wagons",
         nav="bootstrap/navigation.html",
         username=getUser(),
         country_list=get_all_countries(),
@@ -91,6 +94,7 @@ def wagons_admin():
 def trainsets_admin():
     return render_template(
         "admin/trainsets.html",
+        title="Trainsets",
         nav="bootstrap/navigation.html",
         username=getUser(),
         isCurrent=has_current_trip(),
@@ -225,6 +229,7 @@ def station_explorer_override(mode, key):
 def vagonweb_admin():
     return render_template(
         "admin/vagonweb.html",
+        title="VagonWeb import",
         nav="bootstrap/navigation.html",
         username=getUser(),
         country_list=get_all_countries(),

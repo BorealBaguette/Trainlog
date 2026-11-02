@@ -1449,6 +1449,19 @@ def robots_txt():
     return send_from_directory(app.static_folder, "robots.txt")
 
 
+# Only these pages belong in search results; user pages, shared trips and the
+# rest of the app answer noindex. robots.txt must not block them, or Google
+# never sees the header and keeps the URLs indexed from links alone.
+INDEXABLE_ENDPOINTS = {"landing", "about"}
+
+
+@app.after_request
+def noindex_outside_landing(response):
+    if request.endpoint not in INDEXABLE_ENDPOINTS:
+        response.headers.setdefault("X-Robots-Tag", "noindex")
+    return response
+
+
 @app.route("/favicon.ico")
 def favicon():
     return send_from_directory(
@@ -1472,7 +1485,7 @@ def apple_touch_icon(icon_name):
 def new_auto(username):
     return render_template(
         "new_auto.html",
-        title="new_trip",
+        title=lang[session["userinfo"]["lang"]]["newTripCar"],
         vehicle_type="car",
         username=username,
         **lang[session["userinfo"]["lang"]],
@@ -3264,6 +3277,7 @@ def ship_routing(username):
     colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_template(
         "ship_routing.html",
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         username=username,
         colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
@@ -4150,6 +4164,7 @@ def edit_translations(langid):
     # Render the template with saved keys
     response = render_template(
         "admin/edit_translations.html",
+        title="Translations",
         translations=translations,
         langid=langid,
         en_translations=en_translations,
@@ -4799,7 +4814,9 @@ def render_public_trip_page(
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
         tripIdsParam=og_trip_ids,
         period_args=period,
-        title=lang[session["userinfo"]["lang"]]["sharedLink"],
+        # The tag's name, else the journey itself: what a tab or search result should say.
+        title=tag_name
+        or f"{trip_list_sorted[0]['origin_station']} → {trip_list_sorted[-1]['destination_station']}",
         collection_voyage=tag_type,
         tag_description=tag_name,
         tag_uuid=tagId,
@@ -5421,6 +5438,7 @@ def admin_stats(tripType=None, year=None, metric=None):
 
     return render_template(
         "stats.html",
+        title=lang[session["userinfo"]["lang"]]["stats"],
         nav="bootstrap/navigation.html",
         username=getUser(),
         statYear=year,
@@ -6096,6 +6114,7 @@ def plan_view(username, plan_uuid):
     plan = get_owned_plan(plan_uuid, username)
     return render_template(
         "plans/plan.html",
+        title=plan["name"],
         username=username,
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id(username)),
@@ -6695,6 +6714,7 @@ def public_plan_itinerary(plan_uuid):
     )
     return render_template(
         "plans/plan.html",
+        title=plan["name"],
         username=viewer,
         nav=(
             "bootstrap/no_user_nav.html" if viewer == "public"
@@ -7583,6 +7603,7 @@ def here_route_display(
 
     return render_template(
         "here_routing.html",  # see below
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         trips_json=trips_json,
         username=username,
         colorblind=colorblind,
@@ -7661,6 +7682,7 @@ def google_route_display(
     # You can reuse "here_routing.html" or create a new template "google_routing.html"
     return render_template(
         "here_routing.html",
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         trips_json=trips_json,
         username=username,
         **lang[session["userinfo"]["lang"]],
@@ -11203,6 +11225,7 @@ def adminManual():
         ]
     return render_template(
         "admin/manual.html",
+        title="Manual trips",
         stationsList=stationsList,
         username=getUser(),
         nav="bootstrap/navigation.html",
@@ -11484,6 +11507,7 @@ def ships():
 
     return render_template(
         "admin/ships.html",
+        title="Ships",
         shipList=shipList,
         # The one-click cleanup below acts on exactly these, and the button says how many.
         unusedCount=sum(1 for s in shipList if not s["unregistered"] and not s["trips"]),
@@ -11522,6 +11546,7 @@ def backfill_ships():
     if request.method == "GET":
         return render_template(
             "admin/ships_backfill.html",
+            title="Ships backfill",
             username=getUser(),
             nav="bootstrap/navigation.html",
             **lang[session["userinfo"]["lang"]],
@@ -12739,6 +12764,7 @@ def airliners():
 
     return render_template(
         "admin/airliners.html",
+        title="Airliners",
         airlinerList=airlinerList,
         username=getUser(),
         nav="bootstrap/navigation.html",
@@ -12811,6 +12837,7 @@ def editManual(id):
     # Rendered outside the session: the layout queries the database itself
     return render_template(
         "admin/edit_manual.html",
+        title="Edit manual trip",
         station=station,
         username=session.get("logged_in"),
         nav="bootstrap/navigation.html",
@@ -12971,11 +12998,23 @@ def leaderboard(type):
     else:
         template = "leaderboard.html"
 
+    texts = lang[session["userinfo"]["lang"]]
+    title_key = {
+        "all": "leaderboardTotal",
+        "countries": "leaderboardCountries",
+        "train_countries": "leaderboardTrainCountries",
+        "wagons": "leaderboardWagonsTitle",
+        "train": "leaderboardTrainTitle",
+        "bus": "leaderboardBusTitle",
+        "air": "leaderboardAirTitle",
+        "ferry": "leaderboardFerryTitle",
+    }.get(type, "leaderboard")
+
     return render_template(
         template,
         nav=nav,
         username=getUser(),
-        title=lang[session["userinfo"]["lang"]]["leaderboard"],
+        title=texts[title_key],
         type=type,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -13916,6 +13955,7 @@ os.makedirs(LOGO_UPLOAD_FOLDER, exist_ok=True)
 def show_operators():
     return render_template(
         "admin/operators.html",
+        title="Operators",
         nav="bootstrap/navigation.html",
         username=getUser(),
         **session["userinfo"],
@@ -14499,10 +14539,8 @@ def user_completion(username):
 def sitemap():
     # Only list the routes you want
     pages = [
-        url_for('landing', _external=True),
-        url_for('login', _external=True),
-        url_for('signup', _external=True),
-        url_for('privacy', _external=True),
+        external_url('landing'),
+        external_url('about'),
     ]
 
     xml = ['<?xml version="1.0" encoding="UTF-8"?>']

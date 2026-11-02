@@ -4,7 +4,7 @@
 <head>
   {% if session.get("userinfo", {}).get("is_owner") %}<script>window.TRAINLOG_OWNER = true;</script>{% endif %}
   <script>window.MAP_LANG = {{ (mapLang or langId or "en")|tojson }};</script>
-  <title>Train log</title>
+  {% include "_page_title.html" %}
   <meta charset="utf-8">
   
   <link rel="shortcut icon" href="/static/favicon/favicon.ico" type="image/x-icon">

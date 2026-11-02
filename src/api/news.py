@@ -150,6 +150,7 @@ def news(username=None):
     response = make_response(
         render_template(
             "news.html",
+            title=lang.get(userinfo.get("lang", "en"), lang["en"])["news"],
             username=current_user,
             news_list=news_list,
             news_has_more=has_more,

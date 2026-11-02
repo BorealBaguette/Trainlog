@@ -18,18 +18,12 @@
         "applicationCategory": "TravelApplication"
     }
   </script>
-  <link rel="canonical" href="https://trainlog.me" />
+  {#- Each page is its own canonical: pointing them all at the homepage told Google
+      every page was a duplicate of it. The query string is dropped on purpose. #}
+  <link rel="canonical" href="https://trainlog.me{{ request.path }}" />
   <link rel="shortcut icon" href="/static/favicon/favicon.ico" type="image/x-icon">
 
-    <title>
-      {% if title %}
-          {{title}} - 
-      {% endif %}
-      Trainlog
-      {% if username %}
-          - {{username}}
-      {% endif %}
-  </title>
+  {% include "_page_title.html" %}
   {% if not special_og %}
     <meta content="Trainlog" property="og:title" />
     <meta content="Your online travel diary" property="og:description" />
