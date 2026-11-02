@@ -727,6 +727,18 @@
               {% endif %}
             </div>
 
+            {% if discord_id %}
+            <div class="settings2-integration-row">
+              <div>
+                <div class="fw-semibold">{{ discordAvatarLabel }}</div>
+                <div class="settings2-hint">{{ discordAvatarHint }}</div>
+              </div>
+              <form method="POST" action="{{ url_for('toggle_discord_avatar', username=username) }}" class="form-check form-switch dw-switch">
+                <input class="form-check-input" type="checkbox" role="switch" aria-label="{{ discordAvatarLabel }}" onchange="this.form.submit()" {{ discord_avatar_checked }}>
+              </form>
+            </div>
+            {% endif %}
+
             <div class="dw-section">
               <div class="dw-head">
                 <div class="dw-title">{{ discordWebhooksTitle }}</div>

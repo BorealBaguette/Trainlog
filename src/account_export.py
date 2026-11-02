@@ -224,6 +224,7 @@ def build_account_data_csvs(user: User) -> dict[str, str]:
                 "discord_username": user.discord_username,
                 "discord_autopost": user.discord_autopost,
                 "discord_main_enabled": user.discord_main_enabled,
+                "discord_avatar": user.discord_avatar,
                 "has_gps_token": bool(user.gps_token),
                 "has_mcp_token": bool(user.mcp_token),
             }

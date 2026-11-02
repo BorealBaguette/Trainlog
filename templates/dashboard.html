@@ -610,18 +610,18 @@
     letter-spacing: 0.4px;
     text-transform: uppercase;
   }
-  .friend-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: 700;
-    font-size: 0.8rem;
-    flex-shrink: 0;
+  /* The badge is already in the user's colour: without a Discord picture its
+     avatar is the old person glyph rather than an initial on the same colour */
+  .friend-username .user-avatar {
+    --avatar-size: 14px;
+    margin: -2px 3px -1px -2px;
+    background: transparent !important;
+    font-size: 0;
+  }
+  .friend-username .user-avatar::after {
+    content: "\f007";
+    font: 900 0.6rem "Font Awesome 6 Free";
+    opacity: 0.8;
   }
   .live-dot {
     display: inline-block;
@@ -1965,17 +1965,7 @@ function confirmCopyTrip() {
 
 // ─── Friends ─────────────────────────────────────────────────────────────────
 
-function usernameColor(name) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  const hue = Math.abs(hash) % 360;
-  // Dark theme: the same hue as a deep fill under light text, not a pastel patch
-  if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
-    return { bg: `hsl(${hue},35%,26%)`, color: `hsl(${hue},70%,82%)` };
-  }
-  return { bg: `hsl(${hue},70%,90%)`, color: `hsl(${hue},55%,32%)` };
-}
-
+// usernameColor comes from static/js/user_avatar.js, shared with the friends page
 function friendItem(t, right) {
   const icon = tripIcon(t.type);
   const tag = t.trip_id ? "a" : "div";
@@ -1999,7 +1989,7 @@ function friendItem(t, right) {
       <i class="trip-icon-static trip-icon-check fa-solid fa-check"></i>
     </button>
     <${tag}${href} style="text-decoration:none;color:inherit;flex:1;min-width:0">
-      <div><span class="friend-username" style="background:${usernameColor(t.username).bg};color:${usernameColor(t.username).color};"><i class="fa-solid fa-user" style="font-size:0.6rem;margin-right:3px;opacity:0.8;"></i>${esc(t.username)}</span></div>
+      <div><span class="friend-username" style="background:${usernameColor(t.username).bg};color:${usernameColor(t.username).color};"><span class="user-avatar" data-username="${esc(t.username)}"></span>${esc(t.username)}</span></div>
       <div class="trip-route">${esc(t.origin) || "?"} → ${esc(t.destination) || "?"}</div>
       <div class="trip-meta">${esc(t.operator)}${t.km ? " · " + fmt(t.km) + " km" : ""}</div>
     </${tag}>
@@ -2044,6 +2034,7 @@ fetch(`/u/${username}/dashboard_friends`)
     }
 
     el.innerHTML = html || emptyState("{{ noFriendsActivity }}");
+    paintUserAvatars(el, {{ url_for('user_avatars', username=username)|tojson }});
   })
   .catch(() => {
     document.getElementById("friends-body").innerHTML = emptyState("—");

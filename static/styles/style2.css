@@ -2403,3 +2403,30 @@ html, body {
 }
 .auth-fineprint a { color: inherit; }
 .auth-logo small { font-size: 1em; color: var(--bs-secondary-color); }
+
+/* User avatar (static/js/user_avatar.js): initial on a per-username colour, or a Discord picture */
+.user-avatar {
+    --avatar-size: 32px;
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: calc(var(--avatar-size) * 0.42);
+    line-height: 1;
+    text-transform: uppercase;
+    vertical-align: middle;
+    user-select: none;
+}
+.user-avatar .user-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}

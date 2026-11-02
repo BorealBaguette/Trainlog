@@ -61,6 +61,7 @@
   .ui-selectmenu-menu { z-index: 2000; }
   .tag-type-help { cursor: pointer; margin-left: 0.25rem; }
   .tag-type-popover { max-width: 340px; }
+  .tag-member-avatar { --avatar-size: 26px; }
 </style>
 
 <div class="container mt-4">
@@ -216,14 +217,14 @@
             <div class="modal-body">
               <ul class="list-group list-group-flush">
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
-                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ username }}</span>
+                  <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ username }}"></span>{{ username }}</span>
                   <span class="badge bg-primary">{{ tag_owner_label }}</span>
                 </li>
                 {% set members = members_by_tag.get(tag.uid, []) %}
                 {% for m in members %}
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
                   <span>
-                    <i class="bi bi-person-fill text-muted me-1"></i> {{ m.username }}
+                    <span class="user-avatar tag-member-avatar me-2" data-username="{{ m.username }}"></span>{{ m.username }}
                     {% if m.status == 'pending' %}<span class="badge bg-secondary">{{ tag_invite_pending }}</span>{% endif %}
                   </span>
                   <form action="{{ url_for('remove_tag_member', username=username, tag_id=tag.uid) }}" method="post" class="mb-0" onsubmit="return confirm({{ remove_member_confirm | tojson }});">
@@ -242,7 +243,7 @@
                   <div class="tag-invite-friends list-group flex-grow-1">
                     {% for friend in invitable %}
                     <label class="list-group-item tag-invite-item d-flex justify-content-between align-items-center py-2">
-                      <span><i class="bi bi-person-fill text-muted me-1"></i> {{ friend }}</span>
+                      <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ friend }}"></span>{{ friend }}</span>
                       <input class="tag-invite-check d-none" type="checkbox" name="friend_username" value="{{ friend }}">
                       <i class="bi bi-check-lg tag-invite-tick"></i>
                     </label>
@@ -270,12 +271,12 @@
             <div class="modal-body">
               <ul class="list-group list-group-flush">
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
-                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ tag.username }}</span>
+                  <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ tag.username }}"></span>{{ tag.username }}</span>
                   <span class="badge bg-primary">{{ tag_owner_label }}</span>
                 </li>
                 {% for m in members_by_tag.get(tag.uid, []) | selectattr('status', 'equalto', 'accepted') %}
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
-                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ m.username }}</span>
+                  <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ m.username }}"></span>{{ m.username }}</span>
                 </li>
                 {% endfor %}
               </ul>
@@ -376,6 +377,7 @@
 
 <script>
   $(document).ready(function() {
+    paintUserAvatars(document, {{ url_for('user_avatars', username=username)|tojson }});
     var table = $('#tagsTable').DataTable({
       order: [],
       responsive: true,

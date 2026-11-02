@@ -15,6 +15,7 @@ import urllib
 import uuid
 import xml.etree.ElementTree as ET
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta, UTC
 from decimal import Decimal
@@ -189,7 +190,7 @@ from src.discord_webhooks import (
     enabled_webhooks,
     list_webhooks,
 )
-from src.discord_bot import sync_discord_tier
+from src.discord_bot import discord_user_profile, sync_discord_tier
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
 from src.api.stats import (
@@ -10082,6 +10083,7 @@ def user_settings(username):
     exact_waypoints_checked = "checked" if user.exact_waypoints else ""
     discord_autopost_checked = "checked" if user.discord_autopost else ""
     discord_main_checked = "checked" if user.discord_main_enabled else ""
+    discord_avatar_checked = "checked" if user.discord_avatar else ""
 
     return render_template(
         "user_settings.html",
@@ -10100,6 +10102,7 @@ def user_settings(username):
         exact_waypoints_checked=exact_waypoints_checked,
         discord_autopost_checked=discord_autopost_checked,
         discord_main_checked=discord_main_checked,
+        discord_avatar_checked=discord_avatar_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
@@ -13487,41 +13490,91 @@ def admin_user_growth():
 
 
 
+def _friend_rows(user_id):
+    """(current friends, incoming requests, outgoing requests) of a user.
+
+    Each row is a dict with uid, username and `since`: when the friendship was
+    accepted, or when the pending request was sent.
+    """
+    outgoing = (
+        authDb.session.query(User.uid, User.username, Friendship.created_at)
+        .join(Friendship, User.uid == Friendship.friend_id)
+        .filter(Friendship.user_id == user_id, Friendship.accepted.is_(None))
+        .order_by(Friendship.created_at.desc())
+        .all()
+    )
+    current = (
+        authDb.session.query(User.uid, User.username, Friendship.accepted)
+        .join(Friendship, User.uid == Friendship.friend_id)
+        .filter(Friendship.user_id == user_id, Friendship.accepted != None)  # noqa: E711
+        .order_by(func.lower(User.username))
+        .all()
+    )
+    incoming = (
+        authDb.session.query(User.uid, User.username, Friendship.created_at)
+        .join(Friendship, User.uid == Friendship.user_id)
+        .filter(Friendship.friend_id == user_id, Friendship.accepted.is_(None))
+        .order_by(Friendship.created_at.desc())
+        .all()
+    )
+
+    def as_dicts(rows):
+        return [
+            {
+                "uid": uid,
+                "username": name,
+                "since": since.date().isoformat() if since else None,
+            }
+            for uid, name, since in rows
+        ]
+
+    return as_dicts(current), as_dicts(incoming), as_dicts(outgoing)
+
+
 @app.route("/u/<username>/friends")
 @login_required
 def friends(username):
     user_id = User.query.filter_by(username=username).first().uid
+    current_friends, incoming_requests, outgoing_requests = _friend_rows(user_id)
 
-    outgoing_requests = (
-        authDb.session.query(User.uid, User.username)
-        .join(Friendship, User.uid == Friendship.friend_id)
-        .filter(Friendship.user_id == user_id, Friendship.accepted.is_(None))
-        .all()
-    )
-    current_friends = (
-        authDb.session.query(User.uid, User.username)
-        .join(Friendship, User.uid == Friendship.friend_id)
-        .filter(Friendship.user_id == user_id, Friendship.accepted != None)  # noqa: E711
-        .all()
-    )
-    incoming_requests = (
-        authDb.session.query(User.uid, User.username)
-        .join(Friendship, User.uid == Friendship.user_id)
-        .filter(Friendship.friend_id == user_id, Friendship.accepted.is_(None))
-        .all()
-    )
-    unavailable_users = outgoing_requests + current_friends + incoming_requests
-    available_users = [
-        (user.uid, user.username)
-        for user in User.query.filter_by(friend_search=True).all()
-        if user.username != username
-        and (user.uid, user.username) not in unavailable_users
-    ]
+    # What each friend's profile shows them: trips they made public or friends-only.
+    if current_friends:
+        with pg_session() as pg:
+            stats = {
+                row["user_id"]: row
+                for row in pg.execute(
+                    """
+                    SELECT user_id,
+                           COUNT(*) FILTER (
+                               WHERE COALESCE(utc_start_datetime, start_datetime) < NOW()
+                           ) AS trips,
+                           COALESCE(SUM(trip_length) FILTER (
+                               WHERE COALESCE(utc_start_datetime, start_datetime) < NOW()
+                           ), 0) AS length,
+                           BOOL_OR(
+                               COALESCE(utc_start_datetime, start_datetime)
+                                   + COALESCE(departure_delay, 0) * interval '1 second' <= NOW()
+                               AND COALESCE(utc_end_datetime, end_datetime)
+                                   + COALESCE(arrival_delay, 0) * interval '1 second' >= NOW()
+                           ) AS traveling
+                    FROM trips
+                    WHERE user_id = ANY(:ids)
+                      AND is_project = false
+                      AND visibility IN ('public', 'friends')
+                    GROUP BY user_id
+                    """,
+                    {"ids": [f["uid"] for f in current_friends]},
+                ).fetchall()
+            }
+        for friend in current_friends:
+            row = stats.get(friend["uid"])
+            friend["trips"] = row["trips"] if row else 0
+            friend["km"] = int((row["length"] if row else 0) / 1000)
+            friend["traveling"] = bool(row and row["traveling"])
 
     return render_template(
         "friends.html",
         nav="bootstrap/navigation.html",
-        available_users=available_users,
         outgoing_requests=outgoing_requests,
         incoming_requests=incoming_requests,
         current_friends=current_friends,
@@ -13529,6 +13582,104 @@ def friends(username):
         title=lang[session["userinfo"]["lang"]]["friends"],
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/friends/search")
+@login_required
+def friend_search(username):
+    """[[uid, username]] of up to 10 users in friend search matching `q`.
+
+    Names starting with `q` come first. Leaves out the user and anyone they are
+    already friends with or have a request pending with either way.
+    """
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    user_id = User.query.filter_by(username=username).first().uid
+    taken = {f["uid"] for rows in _friend_rows(user_id) for f in rows} | {user_id}
+    pattern = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    matches = (
+        User.query.with_entities(User.uid, User.username)
+        .filter(
+            User.friend_search.is_(True),
+            User.uid.notin_(taken),
+            User.username.ilike(f"%{pattern}%", escape="\\"),
+        )
+        .order_by(
+            case((User.username.ilike(f"{pattern}%", escape="\\"), 0), else_=1),
+            func.lower(User.username),
+        )
+        .limit(10)
+        .all()
+    )
+    return jsonify([[uid, name] for uid, name in matches])
+
+
+@app.route("/u/<username>/discord_avatar", methods=["POST"])
+@login_required
+def toggle_discord_avatar(username):
+    """Switch showing the linked Discord account's picture on or off."""
+    user = User.query.filter_by(username=username).first()
+    user.discord_avatar = bool(user.discord_id) and not user.discord_avatar
+    authDb.session.commit()
+    return redirect(url_for("user_settings", username=username) + "#tab-integrations")
+
+
+@app.route("/u/<username>/avatars")
+@login_required
+def user_avatars(username):
+    """{username: Discord avatar url} for the `u` usernames this user may see.
+
+    Only users who turned on their Discord picture in settings have one. Who may
+    see it is themselves, their friends, whoever sent them a friend request, the
+    owner and accepted members of shared tags they own or belong to, and anyone
+    who appears in friend search, whose results show them to every user anyway.
+    Fetched by pages after they render (static/js/user_avatar.js), as each
+    uncached lookup is a call to Discord.
+    """
+    wanted = set(request.args.getlist("u")[:200])
+    user_id = User.query.filter_by(username=username).first().uid
+    current, incoming, _ = _friend_rows(user_id)
+    allowed = {username} | {f["username"] for f in current + incoming}
+    with pg_session() as pg:
+        allowed |= {
+            row["username"]
+            for row in pg.execute(
+                """
+                WITH mine AS (
+                    SELECT uid FROM tags WHERE username = :username
+                    UNION
+                    SELECT tag_id FROM tag_members
+                    WHERE username = :username AND status = 'accepted'
+                )
+                SELECT username FROM tags WHERE uid IN (SELECT uid FROM mine)
+                UNION
+                SELECT username FROM tag_members
+                WHERE tag_id IN (SELECT uid FROM mine) AND status = 'accepted'
+                """,
+                {"username": username},
+            ).fetchall()
+        }
+    discord_ids = {
+        u.username: u.discord_id
+        for u in User.query.filter(
+            User.username.in_(wanted),
+            User.username.in_(allowed) | User.friend_search.is_(True),
+            User.discord_avatar.is_(True),
+            User.discord_id.isnot(None),
+        )
+    }
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        profiles = dict(
+            zip(discord_ids, pool.map(discord_user_profile, discord_ids.values()))
+        )
+    return jsonify(
+        {
+            name: f"{avatar}?size=128"
+            for name, (_display, avatar) in profiles.items()
+            if avatar
+        }
     )
 
 
@@ -14729,6 +14880,13 @@ def ensure_auth_db_columns():
         authDb.session.execute(
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN discord_main_enabled BOOLEAN NOT NULL DEFAULT 1"
+            )
+        )
+        authDb.session.commit()
+    if "discord_avatar" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN discord_avatar BOOLEAN NOT NULL DEFAULT 0"
             )
         )
         authDb.session.commit()

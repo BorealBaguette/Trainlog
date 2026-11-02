@@ -99,6 +99,10 @@ class User(authDb.Model):
     # each of the user's own webhooks. Independent of discord_autopost, which
     # only decides whether posting happens by itself at departure.
     discord_main_enabled = authDb.Column(authDb.Boolean, nullable=False, default=True)
+    # Show the linked Discord account's picture instead of an initial wherever this
+    # user appears to others (friends, shared tags, friend search — see
+    # user_avatars in app.py). Off by default: nothing is shown unless asked.
+    discord_avatar = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Email change requested but not yet confirmed. `email` itself only updates
     # once the user clicks the link sent to `pending_email` (see
     # /u/<username>/change_email), so a user can't take over an inbox they don't
@@ -142,6 +146,7 @@ class User(authDb.Model):
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
             "discord_autopost": self.discord_autopost,
+            "discord_avatar": self.discord_avatar,
             "pending_email": self.pending_email,
         }
 
