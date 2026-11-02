@@ -732,3 +732,46 @@
     cursor: pointer;
 }
 .year-legend-toggle:hover { opacity: 1; }
+
+/* Welcome card over a new account's empty map */
+.empty-map-card {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(28rem, calc(100% - 2rem));
+    z-index: 5;
+}
+.empty-map-types {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+}
+.empty-map-types .btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.875rem;
+}
+.empty-map-types .btn i {
+    font-size: 1.25rem;
+}
+.empty-map-links {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+}
+
+/* One-time tour offer for new accounts, over the bottom of the map */
+.tour-offer {
+    position: absolute;
+    left: 50%;
+    bottom: 1.5rem;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100% - 2rem);
+    z-index: 5;
+}

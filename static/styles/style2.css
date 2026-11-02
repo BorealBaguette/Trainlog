@@ -2351,3 +2351,52 @@ html, body {
   display: flex; align-items: center; justify-content: center; z-index: 1;
 }
 #form .swap-ends button:hover { color: #4b78d6; border-color: #4b78d6; }
+
+/* Navbar tour (static/js/tour.js, driver.js): the site's colours, light and dark */
+.driver-popover.trainlog-tour {
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border: 1px solid var(--bs-border-color);
+  font-family: inherit;
+}
+.driver-popover.trainlog-tour .driver-popover-title { font-size: 1.05rem; }
+.driver-popover.trainlog-tour .driver-popover-description { color: var(--bs-secondary-color); }
+.driver-popover.trainlog-tour .driver-popover-arrow-side-bottom { border-bottom-color: var(--bs-body-bg); }
+.driver-popover.trainlog-tour .driver-popover-arrow-side-top { border-top-color: var(--bs-body-bg); }
+.driver-popover.trainlog-tour .driver-popover-arrow-side-left { border-left-color: var(--bs-body-bg); }
+.driver-popover.trainlog-tour .driver-popover-arrow-side-right { border-right-color: var(--bs-body-bg); }
+.driver-popover.trainlog-tour .driver-popover-footer button {
+  text-shadow: none;
+  border-radius: 6px;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border-color: var(--bs-border-color);
+}
+.driver-popover.trainlog-tour .driver-popover-footer .driver-popover-next-btn {
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+  color: #fff;
+}
+.driver-popover.trainlog-tour .driver-popover-close-btn { color: var(--bs-secondary-color); }
+
+/* Login and signup: the train icon and the name, smaller than the form below */
+.auth-logo {
+  /* Icon above the name, as on the landing page: side by side the dark icon
+     outweighed the light ".me" and the logo leaned left */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 16px;
+}
+.auth-logo img { width: 56px; height: 56px; }
+.auth-logo span { font-size: 2.2rem; font-weight: 600; letter-spacing: -0.5px; line-height: 1; }
+[data-bs-theme="dark"] .auth-logo img { filter: invert(1); }
+.auth-fineprint {
+  text-align: center;
+  margin: 14px 0 0;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+.auth-fineprint a { color: inherit; }
+.auth-logo small { font-size: 1em; color: var(--bs-secondary-color); }

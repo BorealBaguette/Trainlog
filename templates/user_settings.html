@@ -991,6 +991,20 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    // Open the tab the address points to, e.g. settings#tab-data: on arrival, and
+    // whenever it changes after (Back/Forward through such links, an edited URL)
+    const showLinkedTab = () => {
+      const linkedTab = location.hash && document.querySelector(`.settings2-navlink[data-bs-target="${CSS.escape(location.hash)}"]`);
+      if (linkedTab) bootstrap.Tab.getOrCreateInstance(linkedTab).show();
+    };
+    showLinkedTab();
+    window.addEventListener('hashchange', showLinkedTab);
+    // And the other way round: the address follows the open tab, so a reload or a
+    // copied link lands on it. Replaced, not pushed: Back still leaves the page.
+    document.querySelectorAll('.settings2-navlink[data-bs-target]').forEach(link => {
+      link.addEventListener('shown.bs.tab', () => history.replaceState(null, '', link.dataset.bsTarget));
+    });
+
     const downloadAllBtn = document.getElementById('downloadAllDataBtn');
     if (downloadAllBtn) {
       downloadAllBtn.addEventListener('click', () => {

@@ -177,6 +177,7 @@ from src.api.feature_requests import feature_requests_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
+from src.sql import news as news_sql
 from src.api.og import og_blueprint, og_image_url, plan_og_image_url
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
@@ -3430,13 +3431,18 @@ def signup():
                 ),
             )
 
+            # Nothing published before they joined is news to them: without a row
+            # they'd count every item since the news_visits migration as unread
+            with pg_session() as pg:
+                pg.execute(news_sql.upsert_news_visit(), {"username": username})
+
             # Log the user in by setting the session variables
             session[username] = True
             session["logged_in"] = username
             session["logged_in_user_id"] = new_user.uid
 
-            # Redirect to the 'about' page after successful signup and login
-            return redirect(url_for("about"))
+            # Straight to their (empty) map, whose welcome card points at the first trip
+            return redirect(url_for("user_home", username=username))
 
         except sqlalchemy.exc.IntegrityError as e:
             print(e)
@@ -3650,6 +3656,8 @@ def user_home(username):
         tileserver=user.tileserver,
         globe=user.globe,
         public=False,
+        # Accounts this young get offered the navbar tour once they have trips
+        new_account=datetime.now(UTC).replace(tzinfo=None) - user.creation_date.replace(tzinfo=None) < timedelta(days=30),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
