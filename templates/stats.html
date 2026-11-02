@@ -2968,6 +2968,15 @@
     // ECharts' own dark theme draws its axes and grid too faint to read against the
     // page, so the dark theme is the site's greys: the grid one step off the page,
     // axis lines and labels a clear step above it
+    // Canvas text: Windows has no flag glyphs, and ECharts' generic sans-serif can't
+    // be shadowed like the HTML fonts in style2.css, so the bundled flags come first
+    const CHART_FONT = 'FlagEmojis, sans-serif';
+    echarts.registerTheme('trainlog-light', { textStyle: { fontFamily: CHART_FONT } });
+    // A canvas doesn't wait for web fonts: once the flags have loaded, redraw
+    document.fonts.load('16px FlagEmojis', '\u{1F1EB}\u{1F1F7}').then(() => {
+        Object.values(chartsInstances).forEach(chart => chart.resize());
+    });
+
     if (DARK_THEME) {
         const axis = {
             axisLine: { lineStyle: { color: '#6c747d' } },
@@ -2978,7 +2987,7 @@
         };
         echarts.registerTheme('trainlog-dark', {
             backgroundColor: 'transparent',
-            textStyle: { color: '#c3cfdb' },
+            textStyle: { color: '#c3cfdb', fontFamily: CHART_FONT },
             title: { textStyle: { color: '#ced4da' }, subtextStyle: { color: '#aab2bb' } },
             legend: { textStyle: { color: '#c3cfdb' } },
             tooltip: {
@@ -3001,7 +3010,7 @@
     }
 
     function initChart(element) {
-        return echarts.init(element, DARK_THEME ? 'trainlog-dark' : null);
+        return echarts.init(element, DARK_THEME ? 'trainlog-dark' : 'trainlog-light');
     }
 
     function renderChart(spec, rows) {

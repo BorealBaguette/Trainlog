@@ -424,6 +424,9 @@ td.noHidden{
 th {
   background-color: #207cca !important;
   color: white;
+  /* Bootstrap's .table cells take their colour from this, which would beat the
+     plain color above and leave dark text on the blue */
+  --bs-table-color: white;
 }
 
 tr.selected td img{
