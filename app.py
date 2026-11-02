@@ -10245,18 +10245,28 @@ def delete_account(username):
     The form fields are named delete_confirm_secret/delete_confirm_phrase
     rather than password/username on purpose: a real name="password" input
     gets its own save/fill prompt from the browser no matter what autocomplete
-    hints say, which fights the whole point of a confirmation step."""
+    hints say, which fights the whole point of a confirmation step.
+
+    API clients (the mobile app) pass ?raw=1, like /login, to get JSON instead
+    of a flash + redirect: 200 {"deleted": true}, or 400 {"error":
+    "confirm_mismatch"} / 403 {"error": "wrong_password"}. The same two checks
+    apply in both modes."""
+    raw = request.args.get("raw") == "1"
     user = User.query.filter_by(username=username).first()
-    user_lang = lang[session["userinfo"]["lang"]]
+    user_lang = lang[session.get("userinfo", {}).get("lang", "en")]
 
     password = request.form.get("delete_confirm_secret", "")
     confirm_username = request.form.get("delete_confirm_phrase", "").strip()
 
     if confirm_username != username:
+        if raw:
+            return jsonify({"deleted": False, "error": "confirm_mismatch"}), 400
         flash(user_lang["deleteAccountConfirmMismatch"], "error")
         return redirect(url_for("user_settings", username=username))
 
     if not password or not check_password_hash(user.pass_hash, password):
+        if raw:
+            return jsonify({"deleted": False, "error": "wrong_password"}), 403
         flash(user_lang["deleteAccountWrongPassword"], "error")
         return redirect(url_for("user_settings", username=username))
 
@@ -10265,6 +10275,8 @@ def delete_account(username):
 
     session.pop(username, None)
     session.pop("logged_in", None)
+    if raw:
+        return jsonify({"deleted": True})
     flash(user_lang["deleteAccountSuccess"], "success")
     return redirect(url_for("login"))
 
