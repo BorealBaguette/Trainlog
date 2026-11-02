@@ -101,7 +101,7 @@
 	width: 100%;
 	height: auto;
 	margin-top: 2rem;
-	border-radius: 1.25rem;
+	border-radius: 1rem;
 	box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.35);
 }
 
@@ -163,4 +163,9 @@
 }
 #buttons03 {
 	margin-top: clamp(1rem, 3vh, 2rem) !important;
+}
+
+/* Screenshots get the corners of the cards inside them, not main.css's 3rem pill */
+.image.style2 .frame {
+	border-radius: 1rem !important;
 }
