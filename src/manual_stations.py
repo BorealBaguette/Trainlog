@@ -53,6 +53,7 @@ def userManualStations(username):
     texts = lang[session["userinfo"]["lang"]]
     return render_template(
         "manual_stations.html",
+        title=texts["manage_manual_stations"],
         stationsList=stationsList,
         # The trip types a station can be added for, in their usual order and words.
         stationTypes=[(t, texts.get(t, t)) for t in TRIP_TYPES if t != "air"],

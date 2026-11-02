@@ -27,6 +27,7 @@ def explorer_page(editable):
     user = User.query.filter_by(username=username).first()
     return render_template(
         "admin/station_explorer.html",
+        title="Station explorer",
         nav="bootstrap/navigation.html",
         username=username,
         editable=editable,

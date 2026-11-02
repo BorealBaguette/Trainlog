@@ -350,6 +350,7 @@ def wrapped(username, year=None):
     
     return render_template(
         "wrapped.html",
+        title=f"{lang_dict.get('about_explore_wrapped_h', lang['en']['about_explore_wrapped_h'])} {year}",
         data=data,
         available_years=available_years,
         **lang_dict,

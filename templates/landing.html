@@ -1,19 +1,45 @@
 <!DOCTYPE HTML>
 <html lang="{{langId}}">
 	<head>
-		<title>Trainlog</title>
+		<title>Trainlog - {{ landingTitle }}</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width,initial-scale=1" />
 		<meta name="color-scheme" content="light only" />
-		<meta name="description" content="Your go-to app for storing and sharing public transport trips. Use Trainlog to create, edit, share routes using OSM data, and more." />
+		<meta name="description" content="{{ landingMetaDescription }}" />
+		<link rel="canonical" href="https://trainlog.me{{ request.path }}" />
+		{#- Every language version of this page, so search engines show each its own audience #}
+		<link rel="alternate" hreflang="x-default" href="https://trainlog.me/" />
+		<link rel="alternate" hreflang="en" href="https://trainlog.me/" />
+		{%- for code in landing_langs %}
+		<link rel="alternate" hreflang="{{ code }}" href="https://trainlog.me/{{ code }}/" />
+		{%- endfor %}
 		<meta property="og:site_name" content="Trainlog" />
-		<meta property="og:title" content="Trainlog" />
+		<meta property="og:title" content="Trainlog - {{ landingTitle }}" />
 		<meta property="og:type" content="website" />
-		<meta property="og:description" content="Your go-to app for storing and sharing public transport trips. Use Trainlog to create, edit, share routes using OSM data, and more." />
+		<meta property="og:description" content="{{ landingMetaDescription }}" />
+		<meta property="og:image" content="https://trainlog.me/static/images/og_landing.jpg" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:url" content="https://trainlog.me{{ request.path }}" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebApplication",
+				"name": "Trainlog",
+				"url": "https://trainlog.me/",
+				"description": {{ landingMetaDescription|tojson }},
+				"applicationCategory": "TravelApplication",
+				"operatingSystem": "Web",
+				"offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+				"sameAs": ["https://github.com/BorealBaguette/Trainlog", "https://discord.com/invite/2FhrFTQKvU"]
+			}
+		</script>
 		<link href="https://fonts.googleapis.com/css2?display=swap&family=Inter:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700" rel="stylesheet" type="text/css" />
 		<link rel="shortcut icon" href="/static/favicon/favicon.ico" type="image/x-icon">
-		<link rel="stylesheet" href="static/landingassets/main.css" />
-		<noscript><link rel="stylesheet" href="static/landingassets/noscript.css" /></noscript>
+		<link rel="stylesheet" href="/static/landingassets/main.css" />
+		<link rel="stylesheet" href="/static/landingassets/landing_extra.css" />
+		<noscript><link rel="stylesheet" href="/static/landingassets/noscript.css" /></noscript>
 	</head>
 	<body class="is-loading">
 		<div id="wrapper">
@@ -22,15 +48,22 @@
 					<div id="container06" class="style1 container default">
 						<div class="wrapper">
 							<div class="inner">
+								<img class="landing-logo" src="{{ url_for('static', filename='images/logo_square.png') }}" alt="" width="112" height="112" />
 								<h1 id="text01" class="style1"><strong>Trainlog</strong></h1>
-								<p id="text02" class="style4">{{landingSlogan}}</p>
+								<p id="text02" class="style4 landing-tagline">{{ landingTagline }}</p>
+								<p class="style4 landing-promise">{{ landingPromise }} · <span style="white-space: nowrap">{{ landingSince }}</span></p>
 								<ul id="buttons03" class="style1 buttons">
 									<li>
-										<a href="{{url_for('login')}}" class="button n01">{{signupLogin}}</a>
+										<a href="{{ url_for('signup') }}" class="button n01">{{ signup }}</a>
 									</li><li>
-										<a href="#moreinfo" class="button n02">{{landingLearnmore}}</a>
+										<a href="{{ url_for('login') }}" class="button n02">{{ login }}</a>
 									</li>
 								</ul>
+								<p class="style4 landing-links">
+									<a href="{{ url_for('public', username='demo') }}">{{ landingExample }}</a>
+									<span aria-hidden="true">·</span>
+									<a href="#moreinfo">{{ landingLearnmore }}</a>
+								</p>
 							</div>
 						</div>
 					</div>
@@ -39,7 +72,7 @@
 							<div class="inner">
 								<div>
 									<div id="image03" class="style2 image">
-										<span class="frame"><img src="static/landingassets/images/image03.jpg" alt="" /></span>
+										<span class="frame"><img src="/static/landingassets/images/image03.jpg" alt="{{ landingVisualize }}" /></span>
 									</div>
 								</div>
 								<div>
@@ -58,12 +91,21 @@
 								</div>
 								<div>
 									<div id="image11" class="style2 image">
-										<span class="frame"><img src="static/landingassets/images/image11.jpg" alt="" /></span>
+										<span class="frame"><img src="/static/landingassets/images/image11.jpg" alt="{{ landingStats }}" /></span>
 									</div>
 									<div id="image04" class="style2 image">
-										<span class="frame deferred"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHg9IjAiIHk9IjAiIHZpZXdCb3g9IjAgMCA3NzAgNzk0IiB3aWR0aD0iNzcwIiBoZWlnaHQ9Ijc5NCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ibm9uZSI%2BPHJlY3QgZmlsbD0iI2EyYjg5YyIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg%3D%3D" data-src="static/landingassets/images/image04.jpg" alt="" /></span>
+										<span class="frame"><img src="/static/landingassets/images/image04.jpg" width="1000" height="590" style="height: auto" loading="lazy" alt="{{ landingStats }}" /></span>
 									</div>
 								</div>
+							</div>
+						</div>
+					</div>
+					<div id="container09" class="style2 container default">
+						<div class="wrapper">
+							<div class="inner">
+								<h2 class="style2">{{ landingDashboard }}</h2>
+								<p class="style4">{{ landingDashboardDesc }}</p>
+								<img class="landing-wide-shot" src="/static/landingassets/images/image07.jpg" alt="{{ landingDashboard }}" loading="lazy" />
 							</div>
 						</div>
 					</div>
@@ -72,7 +114,7 @@
 							<div class="inner">
 								<div>
 									<div id="image01" class="style2 image">
-										<span class="frame"><img src="static/landingassets/images/image01.jpg" alt="" /></span>
+										<span class="frame"><img src="/static/landingassets/images/image01.jpg" alt="{{ landingShare }}" /></span>
 									</div>
 								</div>
 								<div>
@@ -87,12 +129,27 @@
 							<div class="inner">
 								<div>
 									<div id="image05" class="style2 image">
-										<span class="frame"><img src="static/landingassets/images/image05.jpg" alt="" /></span>
+										<span class="frame"><img src="/static/landingassets/images/image05.jpg" alt="{{ landingLeaderboards }}" /></span>
 									</div>
 								</div>
 								<div>
 									<h2 id="text07" class="style2">{{landingLeaderboards}}</h2>
 									<p id="text08" class="style4">{{landingLeaderboardsDesc}}</p>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div id="container07" class="style2 container columns">
+						<div class="wrapper">
+							<div class="inner" data-reorder="1,0">
+								<div>
+									<h2 class="style2">{{ landingYours }}</h2>
+									<p class="style4"><span class="p">{{ landingYoursDesc1 }}</span><span class="p">{{ landingYoursDesc2 }}</span><span class="p">{{ landingImportDesc }}</span></p>
+								</div>
+								<div>
+									<div class="style2 image">
+										<span class="frame"><img src="/static/landingassets/images/image06.jpg" alt="{{ landingYours }}" /></span>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -104,15 +161,30 @@
 								<p id="text23" class="style4">{{landingInterestedDesc}}</p>
 								<ul id="buttons02" class="style1 buttons">
 									<li>
-										<a href="{{url_for('login')}}" class="button n01">{{signup}}</a>
+										<a href="{{ url_for('signup') }}" class="button n01">{{ signup }}</a>
+									</li><li>
+										<a href="{{ url_for('login') }}" class="button n02">{{ login }}</a>
 									</li>
 								</ul>
 							</div>
 						</div>
 					</div>
+					<footer class="landing-footer">
+						<a href="{{ url_for('about') }}">{{ about }}</a>
+						<a href="{{ url_for('privacy') }}">{{ privacy_title }}</a>
+						<a href="{{ url_for('news.news') }}">{{ news }}</a>
+						<a href="https://github.com/BorealBaguette/Trainlog" rel="noopener">GitHub</a>
+						<a href="https://discord.com/invite/2FhrFTQKvU" rel="noopener">Discord</a>
+					</footer>
+					{#- Plain links to every language version: for visitors, and for crawlers to find them #}
+					<nav class="landing-languages" aria-label="Languages">
+						{%- for l in available_languages|sort(attribute='id') %}
+						<a href="{{ '/' if l.id == 'en' else '/' ~ l.id ~ '/' }}" hreflang="{{ l.id }}" lang="{{ l.id }}"{% if l.id == langId %} aria-current="page"{% endif %}>{{ l.name.split(' ', 1)[-1] }}</a>
+						{%- endfor %}
+					</nav>
 				</div>
 			</div>
 		</div>
-		<script src="static/landingassets/main.js"></script>
+		<script src="/static/landingassets/main.js"></script>
 	</body>
 </html>

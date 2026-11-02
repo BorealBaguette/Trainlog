@@ -19,8 +19,9 @@ def new_trip_ai(username):
     user = User.query.filter_by(username=username).first()
     l = lang.get(user.lang, lang["en"])
     return render_template(
-        "new_trip_ai.html", 
-        username=username, 
+        "new_trip_ai.html",
+        title=lang[session["userinfo"]["lang"]]["ai_trip_title"],
+        username=username,
         l=l,
         ai_calls=ai_usage(username),
         **lang[session["userinfo"]["lang"]],

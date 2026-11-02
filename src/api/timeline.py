@@ -775,6 +775,7 @@ def _render_schengen(username, nav):
     citizenship = chosen_citizenship or inferred_citizenship
     response = make_response(render_template(
         "timeline_schengen.html",
+        title=lang[session["userinfo"]["lang"]]["tl_tab_schengen"],
         username=username,
         schengen=getSchengenData(username, residence_blocks, ignore_residence, citizenship),
         ignore_residence=ignore_residence,
@@ -812,6 +813,7 @@ def timeline(username):
     # Pass to the template
     return render_template(
         "timeline.html",
+        title=lang[session["userinfo"]["lang"]]["timeline"],
         username=username,
         country_blocks=blocks,
         days_abroad_by_year=days_abroad_by_year,
@@ -834,6 +836,7 @@ def p_timeline(username):
     # Pass to the template
     return render_template(
         "timeline.html",
+        title=lang[session["userinfo"]["lang"]]["timeline"],
         username=username,
         country_blocks=blocks,
         days_abroad_by_year=days_abroad_by_year,

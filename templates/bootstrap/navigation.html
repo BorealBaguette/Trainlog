@@ -63,7 +63,7 @@
       {% endif %}
 
 
-        <li class="nav-item dropdown">
+        <li data-tour="map" class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-map"></i> {{ username.title() }}
           </a>
@@ -102,7 +102,7 @@
            ('poi', 'fa-solid fa-map-location-dot', poi),
            ('restaurant', 'fa-solid fa-utensils', restaurant)]
         ] %}
-        <li class="nav-item dropdown">
+        <li data-tour="new" class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
             <i class="bi bi-plus-circle"></i> {{new}}
           </a>
@@ -121,7 +121,7 @@
             {%- endfor %}
           </div>
         </li>
-        <li class="nav-item dropdown">
+        <li data-tour="trips" class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
             <i class="bi bi-card-list"></i> {{trips}}
           </a>
@@ -131,7 +131,7 @@
             <a class="dropdown-item" href="{{ url_for('plan_list', username=username) }}"><i class="bi bi-signpost-2"></i> {{plans}}</a>
           </div>
         </li>
-        <li class="nav-item dropdown">
+        <li data-tour="coverage" class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
             <i class="bi bi-percent"></i> {{coverage}}
           </a>
@@ -172,7 +172,7 @@
       </li>
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-          <i class="bi bi-three-dots"></i> {{tools}}{{friendsIcon | safe}}{{tagInvitesIcon | safe}}
+          <i class="bi bi-three-dots"></i> {{tools}}{{tagInvitesIcon | safe}}
         </a>
         <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
           <a class="dropdown-item" href="{{ url_for('ai.new_trip_ai', username=username) }}"><i class="fa-solid fa-wand-magic-sparkles"></i> {{smart_logging}} ᵦ</a>
@@ -198,12 +198,10 @@
           {% if request.endpoint != 'user_settings' %}
           <a class="dropdown-item" href="#" id="mapBgNav" style="display:none"><i class="fa-solid fa-map"></i> {{ tilesetLabel }}</a>
           {% endif %}
-          <a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a>
           <a class="dropdown-item" href="{{ url_for('timeline.timeline', username=username) }}"><i class="bi bi-calendar3"></i> {{ timeline }}</a>
           <a class="dropdown-item" href="{{ url_for('viz.index', username=username) }}"><i class="bi bi-hexagon"></i> {{ vizTitle }}</a>
           <a class="dropdown-item" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
           <div class="dropdown-divider"></div>
-          <a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a>
           <a class="dropdown-item" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i> {{tsBuilderTitle}}</a>
           {% if is_alpha %}
           <div class="dropdown-divider"></div>
@@ -214,11 +212,17 @@
           {% endif %}
       </div>
       </li>
-      <li class="nav-item dropdown">
+      {#- Everything that involves other travellers. The boards stay listed one by one:
+          users asked for a direct link to each. -#}
+      <li data-tour="community" class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-          <i class="bi bi-trophy"></i> {{leaderboard}}
+          <i class="bi bi-people"></i> {{ community }}{{friendsIcon | safe}}
         </a>
         <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+          <li><a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><h6 class="dropdown-header">{{ leaderboard }}</h6></li>
           {%- for code, icon, label in leaderboard_types %}
           <li>
             <a class="dropdown-item" href="{{ url_for('leaderboard', type=code) }}"><i class="{{ icon }}"></i> {{ label }}</a>
@@ -226,7 +230,7 @@
           {%- endfor %}
         </ul>
       </li>
-      <li class="nav-item dropdown">
+      <li data-tour="stats" class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
           <i class="bi bi-bar-chart-line"></i> {{ stats }}
         </a>
@@ -275,10 +279,10 @@
           {% endfor %}
         </li>
         {% endif %}
-        <li class="nav-item">
+        <li data-tour="settings" class="nav-item">
           <a class="nav-link" href="{{ url_for('user_settings', username=username) }}"><i class="bi bi-gear"></i> {{user_settings}}</a>
         </li>
-        <li class="nav-item dropdown">
+        <li data-tour="about" class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" id="infoDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-info-circle"></i>{{ about }}<span id="aboutNewsNotification" style="display:none;"></span>
           </a>
@@ -291,6 +295,11 @@
             <li>
               <a class="dropdown-item" href="{{ url_for('about') }}">
                 <i class="fa fa-info-circle"></i> {{ about }}
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" onclick="startTrainlogTour(); return false;">
+                <i class="bi bi-signpost-split"></i> {{ tourTake }}
               </a>
             </li>
             <li>
@@ -375,6 +384,22 @@
 }
 
 </style>
+
+{% if tourTake is defined %}
+<script>
+  window.TOUR_I18N = {{ {
+    'next': tourNext, 'prev': tourPrev, 'done': tourDone,
+    'mapTitle': tourMapTitle, 'mapText': tourMapText,
+    'newTitle': tourNewTitle, 'newText': tourNewText,
+    'tripsTitle': tourTripsTitle, 'tripsText': tourTripsText,
+    'statsTitle': tourStatsTitle, 'statsText': tourStatsText,
+    'coverageTitle': tourCoverageTitle, 'coverageText': tourCoverageText,
+    'communityTitle': community, 'communityText': tourCommunityText,
+    'settingsTitle': user_settings, 'settingsText': tourSettingsText,
+  }|tojson }};
+</script>
+<script src="{{ static_autoversion(filename='js/tour.js') }}"></script>
+{% endif %}
 
 <script type="text/javascript">
  $(".countries_menu").each(function () {

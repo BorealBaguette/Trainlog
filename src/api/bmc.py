@@ -336,6 +336,7 @@ def pending():
     events = PendingBmcEvent.query.order_by(PendingBmcEvent.created_at.desc()).all()
     return render_template(
         "admin/bmc_pending.html",
+        title="Pending memberships",
         events=events,
         username=getUser(),
         **lang[session["userinfo"]["lang"]],

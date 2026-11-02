@@ -2504,7 +2504,8 @@ function renderPlainText(data, type, row) {
 }
 
 function renderNotes(data, type, row) {
-    if (type === 'display') return `<span style="white-space: pre-line">${sanitize(data || '')}</span>`;
+    // Empty, not an empty <span>: the detail row shows any column whose display isn't ""
+    if (type === 'display') return data ? `<span style="white-space: pre-line">${sanitize(data)}</span>` : '';
     return data;
 }
 

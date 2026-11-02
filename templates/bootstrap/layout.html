@@ -5,8 +5,8 @@
   <script>window.MAP_LANG = {{ (mapLang or langId or "en")|tojson }};</script>
 	<meta http-equiv="Content-type" content="text/html; charset=utf-8">
 	<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-  <meta name="title" content="Trainlog - Your online trip diary">
-  <meta name="description" content="Your go-to app for storing and sharing public transport trips. Use Trainlog to create, edit, share routes using OSM data, and more.">
+  {%- set page_description = meta_description or landingMetaDescription or "Trainlog is a free travel log for trains, flights, buses, ferries and more: log your trips, see them on a map and get detailed statistics." %}
+  <meta name="description" content="{{ page_description }}">
   <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -14,27 +14,22 @@
         "name": "Trainlog",
         "url": "https://trainlog.me",
         "logo": "https://trainlog.me/static/images/logo_square.png",
-        "description": "Track and log your train journeys",
+        "description": {{ page_description|tojson }},
         "applicationCategory": "TravelApplication"
     }
   </script>
-  <link rel="canonical" href="https://trainlog.me" />
+  {#- Each page is its own canonical: pointing them all at the homepage told Google
+      every page was a duplicate of it. The query string is dropped on purpose. #}
+  <link rel="canonical" href="https://trainlog.me{{ request.path }}" />
   <link rel="shortcut icon" href="/static/favicon/favicon.ico" type="image/x-icon">
 
-    <title>
-      {% if title %}
-          {{title}} - 
-      {% endif %}
-      Trainlog
-      {% if username %}
-          - {{username}}
-      {% endif %}
-  </title>
+  {% include "_page_title.html" %}
   {% if not special_og %}
     <meta content="Trainlog" property="og:title" />
-    <meta content="Your online travel diary" property="og:description" />
+    <meta content="{{ page_description }}" property="og:description" />
     <meta content="{{request.url_root}}" property="og:url" />
-    <meta content="{{ url_for('static',filename='images/logo_og.png', _external=True) }}" property="og:image" />
+    <meta content="https://trainlog.me/static/images/og_landing.jpg" property="og:image" />
+    <meta name="twitter:card" content="summary_large_image" />
   {% else %}
     <meta content="{{og['title']}}" property="og:title" />
     <meta content="Your online travel diary" property="og:description" />

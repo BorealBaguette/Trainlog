@@ -57,6 +57,7 @@ SQUARES_QUERY = """
 def generate_visited_squares_geojson(username):
     visited_squares = {}
     first_year = {}
+    first_land_year = {}
 
     with pg_session() as pg:
         rows = pg.execute(SQUARES_QUERY, {"user_id": get_user_id(username)}).fetchall()
@@ -70,6 +71,8 @@ def generate_visited_squares_geojson(username):
             elif visited_squares.get(square) != "stopped":
                 visited_squares[square] = "passed"
             first_year.setdefault(square, row["year"])
+            if row["type"] not in ("air", "helicopter"):
+                first_land_year.setdefault(square, row["year"])
 
         air_count = sum(1 for status in visited_squares.values() if status == "air")
         total_squares = 180 * 360  # entire world grid
@@ -91,7 +94,12 @@ def generate_visited_squares_geojson(username):
             {
                 "type": "Feature",
                 "geometry": _square_polygon(lat, lon),
-                "properties": {"status": status, "year": first_year[(lat, lon)]},
+                "properties": {
+                    "status": status,
+                    "year": first_year[(lat, lon)],
+                    # The year without air trips, for when they're hidden
+                    "land_year": first_land_year.get((lat, lon)),
+                },
             }
             for (lat, lon), status in visited_squares.items()
         ],
