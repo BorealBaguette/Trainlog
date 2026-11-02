@@ -56,10 +56,6 @@ giphy:
 bmc:
   key: BMC_API_KEY
 
-# FriendlyCaptcha (used for form bot protection, registration)
-friendlyCaptcha:
-  APIKey: FRIENDLYCAPTCHA_API_KEY
-
 # HERE Maps API (used for autorouting)
 here:
   APIKey: HERE_API_KEY

@@ -220,6 +220,7 @@ from src.global_map import (
     get_cache_path,
 )
 from src.operators import find_operator_ids, get_trip_operator_logos
+from src.captcha import check_solution, new_challenge
 from src.pg import setup_db, pg_session
 from src.search_terms import like_pattern
 from src.trip_search import (
@@ -3296,6 +3297,14 @@ def ship_routing(username):
     )
 
 
+@app.route("/signup/challenge")
+def signup_challenge():
+    """A fresh proof-of-work challenge for the signup form's ALTCHA widget."""
+    response = jsonify(new_challenge(app.secret_key))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/signup/", methods=["GET", "POST"])
 def signup():
     """
@@ -3342,34 +3351,16 @@ def signup():
     ]
 
     if request.method == "POST":
-        captcha_solution = request.form.get("frc-captcha-solution")
-        if not captcha_solution:
+        # The hidden "website" field is a honeypot: people never see it, form
+        # fillers fill it in
+        if request.form.get("website"):
+            captcha_error = "honeypot"
+        else:
+            captcha_error = check_solution(request.form.get("altcha"), app.secret_key)
+        if captcha_error:
             log_suspicious_activity(
                 request.url,
-                "no_captcha",
-                request.method,
-                getIp(request),
-                getRequestData(request),
-            )
-            flash(lang[session["userinfo"]["lang"]]["captchaFailed"])
-            return redirect(url_for("signup"))
-
-        # Verify the CAPTCHA with FriendlyCaptcha
-        captcha_verification = requests.post(
-            "https://api.friendlycaptcha.com/api/v1/siteverify",
-            data={
-                "solution": captcha_solution,
-                "secret": load_config()["friendlyCaptcha"]["APIKey"],
-            },
-        )
-
-        if (
-            captcha_verification.status_code != 200
-            or not captcha_verification.json().get("success", False)
-        ):
-            log_suspicious_activity(
-                request.url,
-                "captcha_failed",
+                captcha_error,
                 request.method,
                 getIp(request),
                 getRequestData(request),

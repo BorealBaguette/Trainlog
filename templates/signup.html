@@ -17,8 +17,11 @@
             {{ userName }} <input type="text" id="username" name="username" required />
             {{ password }} <input type="password" id="password" name="password" required />
             
-            <!-- FriendlyCaptcha widget -->
-            <div class="frc-captcha" style="display: none" data-sitekey="FCMJ2QRSAP6ABT9B"></div>
+            {#- Honeypot: off-screen and skipped by keyboard and autofill, so only form-filling bots set it #}
+            <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden">
+
+            {#- Self-hosted proof-of-work, solved in the background from page load #}
+            <altcha-widget id="signupCaptcha" challenge="{{ url_for('signup_challenge') }}" auto="onload" display="invisible" name="altcha"></altcha-widget>
             
             <div class="d-flex justify-content-center mt-2">
                 <button type="submit" class="btn btn-primary mx-2">{{ signup }}</button>
@@ -41,7 +44,28 @@
     </div>
 </div>
 
-<!-- Include FriendlyCaptcha script -->
-<script src="https://cdn.jsdelivr.net/npm/friendly-challenge@0.9.18/widget.module.min.js" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/altcha@3.3.0/dist/main/altcha.min.js" type="module"></script>
+<script>
+    // A submit before the background solve finishes waits for it instead of
+    // posting without a solution; an expired challenge is fetched again
+    (function () {
+        const form = document.getElementById("signup");
+        const widget = document.getElementById("signupCaptcha");
+        widget.addEventListener("expired", () => widget.verify());
+        form.addEventListener("submit", (ev) => {
+            if (typeof widget.getState !== "function") return;
+            const state = widget.getState();
+            if (state === "verified") return;
+            ev.preventDefault();
+            const submitter = ev.submitter;
+            if (submitter) submitter.disabled = true;
+            widget.addEventListener("verified", () => {
+                if (submitter) submitter.disabled = false;
+                form.requestSubmit(submitter);
+            }, { once: true });
+            if (state !== "verifying") widget.verify();
+        });
+    })();
+</script>
 
 {% endblock %}

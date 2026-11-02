@@ -19,6 +19,7 @@ polyline == 2.0.3
 Flask-Autoversion==0.2.0
 GitPython==3.1.45
 requests==2.32.0
+altcha==2.3.0
 PyYAML==6.0.2
 shapely==2.1.1
 pyproj==3.7.1
