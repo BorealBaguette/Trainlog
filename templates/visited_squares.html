@@ -186,11 +186,12 @@
         applySquareColorMode();
     }
     let squareYearColors = {};
+    const squareYearKey = () => showAir ? "year" : "land_year";
 
     function squareColor() {
         if (document.getElementById('squareColorMode').value === 'year') {
             const pairs = Object.entries(squareYearColors).flat();
-            return pairs.length ? ["match", ["to-string", ["get", "year"]], ...pairs, "#888888"] : "#888888";
+            return pairs.length ? ["match", ["to-string", ["get", squareYearKey()]], ...pairs, "#888888"] : "#888888";
         }
         return ["match", ["get", "status"], "air", STATUS_COLORS.air, "stopped", STATUS_COLORS.stopped, STATUS_COLORS.passed];
     }
@@ -201,8 +202,8 @@
         // Weighted by the squares shown that each year first reached
         const counts = {};
         squareFeatures.forEach(f => {
-            const year = f.properties.year;
-            if (year && (showAir || f.properties.status !== "air")) counts[year] = (counts[year] || 0) + 1;
+            const year = f.properties[squareYearKey()];
+            if (year) counts[year] = (counts[year] || 0) + 1;
         });
         squareYearColors = MapLibreUtils.yearColors(counts);
 
