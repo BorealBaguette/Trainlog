@@ -168,7 +168,8 @@
   .ls-bar { grid-column: 2 / 4; height: 4px; margin-top: 3px; border-radius: 2px; background: var(--bs-secondary-bg); overflow: hidden; }
   .ls-bar > div { height: 100%; border-radius: 2px; }
   @media (max-width: 700px) {
-    #live-stats { top: auto; bottom: 10px; width: auto; max-width: calc(100vw - 20px); }
+    /* Collapsed, it stops short of the attribution's (i) button */
+    #live-stats { top: auto; bottom: 10px; width: auto; max-width: calc(100vw - 60px); }
     #live-stats:not(.open) .ls-title { display: none; }
     #live-stats:not(.open) .ls-chips { display: flex; }
     #live-stats:not(.open) .ls-total { margin-left: 0; padding-right: 8px; border-right: 1px solid var(--bs-border-color); }
@@ -961,6 +962,10 @@ MapLibreUtils.initializeMapLibre({
 }).then(m => {
   map = m;
   map.once('load', () => {
+    // MapLibre unfolds the attribution until the first drag; on a phone it would run under the stats
+    if (matchMedia('(max-width: 700px)').matches) {
+      map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+    }
     map.addSource('live-static', { type: 'geojson', data: emptyFC() });
     map.addSource('live-future', { type: 'geojson', data: emptyFC() });
 

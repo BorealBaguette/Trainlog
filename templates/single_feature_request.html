@@ -51,7 +51,7 @@
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-success' if feature_request.user_vote == 1 else 'btn-outline-success' }} mb-2"
                         data-vote-button
-                        data-feature_request-id="{{ feature_request.id }}"
+                        data-request-id="{{ feature_request.id }}"
                         data-vote-type="upvote"
                         data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
                   <i class="fa-solid fa-chevron-up"></i>
@@ -64,7 +64,7 @@
 
               <div class="fs-2 fw-bold text-{{ 'success' if feature_request.score > 0 else 'danger' if feature_request.score < 0 else 'muted' }} my-3"
                    data-vote-score
-                   data-feature_request-id="{{ feature_request.id }}">
+                   data-request-id="{{ feature_request.id }}">
                 {{ feature_request.score }}
               </div>
 
@@ -72,7 +72,7 @@
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-danger' if feature_request.user_vote == -1 else 'btn-outline-danger' }}"
                         data-vote-button
-                        data-feature_request-id="{{ feature_request.id }}"
+                        data-request-id="{{ feature_request.id }}"
                         data-vote-type="downvote"
                         data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
                   <i class="fa-solid fa-chevron-down"></i>
@@ -89,7 +89,7 @@
                   <span class="text-success">
                     <i class="fa-solid fa-chevron-up"></i>
                     <span onclick="showVoters({{ feature_request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      <span data-vote-up data-feature_request-id="{{ feature_request.id }}">{{ feature_request.upvotes }}</span>
+                      <span data-vote-up data-request-id="{{ feature_request.id }}">{{ feature_request.upvotes }}</span>
                       {{ feature_requests_votes_positive if feature_requests_votes_positive is defined else 'upvotes' }}
                     </span>
                   </span>
@@ -98,7 +98,7 @@
                   <span class="text-danger">
                     <i class="fa-solid fa-chevron-down"></i>
                     <span onclick="showVoters({{ feature_request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      <span data-vote-down data-feature_request-id="{{ feature_request.id }}">{{ feature_request.downvotes }}</span>
+                      <span data-vote-down data-request-id="{{ feature_request.id }}">{{ feature_request.downvotes }}</span>
                       {{ feature_requests_votes_negative if feature_requests_votes_negative is defined else 'downvotes' }}
                     </span>
                   </span>
