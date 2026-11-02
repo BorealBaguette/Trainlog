@@ -17,6 +17,7 @@
 </style>
 {% endif %}
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/routing_panel.css') }}">
+{% include "includes/trip_stops_text.html" %}
 
 <script>
 // ─── Flutter bridge (for app) ───────────────────────────────────────────────
@@ -39,6 +40,7 @@ let useFR24 = true;
 let fr24PathCache = null;
 let fr24AltCache = null;   // altitude (metres), parallel to fr24PathCache
 let fr24TimeCache = null;  // timestamps (epoch seconds), parallel to fr24PathCache
+let fr24StopsCache = [];  // its take-off and landing (src/runway_stops.py), to preview
 
 const id = getGetParams().get("id");
 let newTrip = null;
@@ -98,11 +100,12 @@ async function updateRoute() {
         if (!fr24PathCache) {
             showLoadingSidebar();
             try {
-                const res = await fetch(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${newTrip.fr24_id}`);
+                const res = await fetch(fr24TrackUrl(`{{url_for("flight_tracks", username=username, fr24_id='' )}}`, newTrip));
                 const data = await res.json();
                 fr24PathCache = data.coordinates;
                 fr24AltCache = data.altitude;
                 fr24TimeCache = data.timestamps;
+                fr24StopsCache = data.runway_stops || [];
             } catch (e) {
                 console.warn("FR24 path fetch failed, falling back to geodesic");
                 useFR24 = false;
@@ -177,6 +180,16 @@ function updateSidebar(isFr24Active) {
     let content = `<h4>${origLabel} to ${destLabel}</h4>`;
     var distanceAndTimeText = `<p><i>${km} km, ${time}</i></p>`;
     content += distanceAndTimeText;
+
+    // The take-off and landing the trip will be saved with, read-only: they are put
+    // right on the trip's edit page.
+    if (isFr24Active && fr24StopsCache.length) {
+        content += fr24StopsPreviewHtml(fr24StopsCache, {
+            origin_station: origLabel, destination_station: destLabel,
+            start_time: newTrip.newTripStartTime, end_time: newTrip.newTripEndTime,
+            departure_platform: newTrip.departurePlatform, arrival_platform: newTrip.arrivalPlatform
+        });
+    }
 
     flutterBridge.routeInfo(distanceAndTimeText, kmRaw, durationRaw);
     flutterBridge.loading(false);

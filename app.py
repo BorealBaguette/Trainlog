@@ -219,7 +219,7 @@ from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import ARRIVAL_GRACE, get_live_tracks, live_tracks_blueprint
 from src.api.live_map import live_map_blueprint, live_travellers_count
-from src.runway_stops import apply_to_trip as apply_runway_stops, airport_position, is_runway_stop, land_short_track, track_stops
+from src.runway_stops import apply_to_trip as apply_runway_stops, airport_position, is_runway_stop, land_short_track, track_stops, with_seen
 from src.utils import _timezone_finder as tz_finder
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.api.motis import motis_blueprint
@@ -476,6 +476,10 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 authDb.init_app(app)
 theme_module.init_app(app)
 
+def _round_minute(when):
+    return (when + timedelta(seconds=30)).replace(second=0, microsecond=0)
+
+
 def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date):
     from_iso = f"{target_date - timedelta(days=1)}T12:00:00"
     to_iso = f"{target_date + timedelta(days=1)}T14:00:00"
@@ -500,84 +504,54 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
     except requests.RequestException as e:
         return {"error": "Failed to fetch data from FR24 API", "details": str(e)}, 502
     flights = response.json().get("data", [])
+
+    def utc(value):
+        return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+
     filtered = []
     with pg_session() as pg:
-        for f in flights:
-            orig_icao = f.get("orig_icao")
-            dest_icao = f.get("dest_icao")
-            diverted_icao = f.get("destination_icao_actual")
-            takeoff_str = f.get("datetime_takeoff")
-            first_seen_str = f.get("first_seen")
-            landing_str = f.get("datetime_landed")
-            last_seen_str = f.get("last_seen")
-            
-            if orig_icao and (takeoff_str or first_seen_str):
-                orig_coords = pg.execute(
-                    "SELECT latitude, longitude FROM airports WHERE ident = :icao",
-                    {"icao": orig_icao},
-                ).fetchone()
-                if orig_coords:
-                    try:
-                        # Use takeoff time if available, otherwise fall back to first_seen
-                        departure_str = takeoff_str if takeoff_str else first_seen_str
-                        utc_departure = datetime.fromisoformat(
-                            departure_str.replace("Z", "+00:00")
-                        )
-                        local_departure = getLocalDatetime(
-                            orig_coords[0], orig_coords[1], utc_departure
-                        )
-                        if local_departure.date() == target_date:
-                            # Set the appropriate field based on what we used
-                            if takeoff_str:
-                                f["datetime_takeoff_local"] = local_departure.isoformat()
-                            else:
-                                f["datetime_takeoff_local"] = local_departure.isoformat()
-                                f["_used_first_seen_for_takeoff"] = True  # Optional flag for debugging
+        def position(icao):
+            if not icao:
+                return None
+            return pg.execute(
+                "SELECT latitude, longitude FROM airports WHERE ident = :icao",
+                {"icao": icao},
+            ).fetchone()
 
-                            if diverted_icao and (landing_str or last_seen_str):
-                                dest_coords = pg.execute(
-                                    "SELECT latitude, longitude FROM airports WHERE ident = :icao",
-                                    {"icao": diverted_icao},
-                                ).fetchone()
-                                if dest_coords:
-                                    # Use landing time if available, otherwise fall back to last_seen
-                                    arrival_str = landing_str if landing_str else last_seen_str
-                                    utc_landing = datetime.fromisoformat(
-                                        arrival_str.replace("Z", "+00:00")
-                                    )
-                                    local_landing = getLocalDatetime(
-                                        dest_coords[0], dest_coords[1], utc_landing
-                                    )
-                                    f["datetime_landed_local"] = (
-                                        local_landing.isoformat()
-                                    )
-                                    # Optional flag for debugging
-                                    if not landing_str:
-                                        f["_used_last_seen_for_landing"] = True
-                            
-                            elif dest_icao and (landing_str or last_seen_str):
-                                dest_coords = pg.execute(
-                                    "SELECT latitude, longitude FROM airports WHERE ident = :icao",
-                                    {"icao": dest_icao},
-                                ).fetchone()
-                                if dest_coords:
-                                    # Use landing time if available, otherwise fall back to last_seen
-                                    arrival_str = landing_str if landing_str else last_seen_str
-                                    utc_landing = datetime.fromisoformat(
-                                        arrival_str.replace("Z", "+00:00")
-                                    )
-                                    local_landing = getLocalDatetime(
-                                        dest_coords[0], dest_coords[1], utc_landing
-                                    )
-                                    f["datetime_landed_local"] = (
-                                        local_landing.isoformat()
-                                    )
-                                    # Optional flag for debugging
-                                    if not landing_str:
-                                        f["_used_last_seen_for_landing"] = True
-                            filtered.append(f)
-                    except Exception:
-                        pass
+        for f in flights:
+            try:
+                orig_coords = position(f.get("orig_icao"))
+                # Where it landed, a diversion's airport rather than the planned one
+                dest_coords = position(
+                    f.get("dest_icao_actual") or f.get("destination_icao_actual")
+                ) or position(f.get("dest_icao"))
+                takeoff, first_seen = utc(f.get("datetime_takeoff")), utc(f.get("first_seen"))
+                landed, last_seen = utc(f.get("datetime_landed")), utc(f.get("last_seen"))
+                departure = takeoff or first_seen
+                if not orig_coords or not departure:
+                    continue
+                local_departure = getLocalDatetime(*orig_coords, departure)
+                if local_departure.date() != target_date:
+                    continue
+                # Runway times, for the leg picker
+                f["datetime_takeoff_local"] = local_departure.isoformat()
+                arrival = landed or last_seen
+                if dest_coords and arrival:
+                    f["datetime_landed_local"] = getLocalDatetime(*dest_coords, arrival).isoformat()
+                # The trip's own times: when the transponder was first and last heard,
+                # about at the gates, to the nearest minute. The last one only once the
+                # flight has ended: before, it is merely the latest heard.
+                if first_seen:
+                    f["first_seen_local"] = getLocalDatetime(
+                        *orig_coords, _round_minute(first_seen)
+                    ).isoformat()
+                if dest_coords and last_seen and f.get("flight_ended"):
+                    f["last_seen_local"] = getLocalDatetime(
+                        *dest_coords, _round_minute(last_seen)
+                    ).isoformat()
+                filtered.append(f)
+            except Exception:
+                pass
     return {"data": filtered}, 200
 
 
@@ -701,10 +675,59 @@ def flight_tracks(username, fr24_id):
             "coordinates": coordinates,
             "altitude": altitude,
             "timestamps": timestamps,
-            # For the edit page's stops dialog, which shows them as the import lands.
-            "runway_stops": track_stops(coordinates, altitude, timestamps),
+            # For the edit page's stops dialog, which shows them as the import lands, and
+            # new and compose's preview: with the summary's transponder times the trip's
+            # were filled in from, if given, as apply_to_trip will save them.
+            "runway_stops": with_seen(
+                track_stops(coordinates, altitude, timestamps),
+                request.args.get("first_seen"), request.args.get("last_seen"),
+            ),
         }
     )
+
+
+@app.route("/api/u/<username>/flight_events/<fr24_id>")
+@login_required
+def flight_events(username, fr24_id):
+    """When the flight left and reached its gates, and which gates, from FR24's flight
+    events, where it knows them (not every airport): {"departure": ..., "arrival": ...},
+    each None or {"utc", "local" (at the airport), "gate"}. Part of the import that fetched
+    the flight's summary, so not counted against the user's monthly calls."""
+    config = load_config()
+    try:
+        response = requests.get(
+            "https://fr24api.flightradar24.com/api/historic/flight-events/full",
+            headers={
+                "Accept": "application/json",
+                "Accept-Version": "v1",
+                "Authorization": f"Bearer {config['FR24']['token_auth']}",
+            },
+            params={"flight_ids": fr24_id, "event_types": "gate_departure,landed,gate_arrival"},
+            timeout=25,
+        )
+        response.raise_for_status()
+        flight = next(iter(response.json().get("data") or []), None)
+    except (requests.RequestException, ValueError) as e:
+        return jsonify({"error": "Failed to fetch events from FR24 API", "details": str(e)}), 502
+    out = {"departure": None, "arrival": None}
+    if not flight:
+        return jsonify(out)
+    events = {e.get("type"): e for e in flight.get("events") or []}
+    landed_icao = ((events.get("landed") or {}).get("details") or {}).get("landed_icao")
+    for key, kind, icao in (
+        ("departure", "gate_departure", flight.get("orig_icao")),
+        ("arrival", "gate_arrival", landed_icao or flight.get("dest_icao")),
+    ):
+        event, position = events.get(kind), airport_position(icao)
+        if not event or not event.get("timestamp") or not position:
+            continue
+        when = datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00"))
+        out[key] = {
+            "utc": event["timestamp"],
+            "local": getLocalDatetime(*position, _round_minute(when)).isoformat(),
+            "gate": (event.get("details") or {}).get("gate_ident"),
+        }
+    return jsonify(out)
 
 
 def getLangDropdown(user):
@@ -1020,7 +1043,10 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         route_source=newTrip.get("route_source") or "router",
         raw_path=raw_path,
     )
-    apply_runway_stops(trip)
+    apply_runway_stops(
+        trip, newTrip.get("fr24_first_seen"), newTrip.get("fr24_last_seen"),
+        newTrip.get("fr24_gate_departure"), newTrip.get("fr24_gate_arrival"),
+    )
 
     create_trip(trip)
     tag_ids = [int(t) for t in (newTrip.get("tag_ids") or []) if str(t).isdigit()]
