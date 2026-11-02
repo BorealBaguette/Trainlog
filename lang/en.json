@@ -380,8 +380,8 @@
     "landingVisualize": "Visualize your travels",
     "landingVisualizeDesc": "Keeping track of your journeys made easy. See all your train, bus, ferry, and airplane journeys neatly on a map.",
     "landingStats": "Explore your statistics",
-    "landingStatsDesc1": "See a statistical breakdown of how, when, and where have you travelled.",
-    "landingStatsDesc2": "Get useful statistics on your most frequently visited stations, most frequently used operators, and how much of your country's railway network have you been on.",
+    "landingStatsDesc1": "See a statistical breakdown of how, when and where you have travelled.",
+    "landingStatsDesc2": "Get useful statistics on your most frequently visited stations, most frequently used operators, and how much of your country's railway network you have been on.",
     "landingShare": "Share your travels",
     "landingShareDesc": "Create shareable links about your trips to share your travel plans with anyone.",
     "landingLeaderboards": "Leaderboards",
@@ -1713,5 +1713,19 @@
         "one": "{n} visit",
         "other": "{n} visits"
     },
-    "vizClickToZoom": "click to zoom in"
+    "vizClickToZoom": "click to zoom in",
+    "landingTitle": "Log and map your train trips and travels",
+    "landingTagline": "Log every train, flight, bus and ferry trip, and see them all on a map.",
+    "landingPromise": "Free · Open source · Private by default",
+    "landingMetaDescription": "Trainlog is a free travel log for trains, flights, buses, ferries and more: log your trips, see them on a map and get detailed statistics. Open source and private by default.",
+    "landingExample": "See an example",
+    "landingImportDesc": "Import your past trips from a file or GPX tracks, and export all your data whenever you like.",
+    "landingYours": "Your data, your rules",
+    "landingYoursDesc1": "Trainlog is free, open source and hosted in Switzerland. It runs on donations: your data is never sold or used for anything other than your account.",
+    "landingYoursDesc2": "Your trips stay private until you decide otherwise. Public profile, shared links, leaderboard and live map are all opt-in.",
+    "madeWithTrainlog": "Made with Trainlog",
+    "liveMapOptIn": "Only travelers who choose to appear are shown.",
+    "landingSince": "Since 2021",
+    "landingDashboard": "Everything at a glance",
+    "landingDashboardDesc": "Your dashboard sums it all up: distance, countries, favourite operators, routes and records."
 }

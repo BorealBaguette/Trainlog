@@ -1716,5 +1716,19 @@
         "one": "{n} visita",
         "other": "{n} visitas"
     },
-    "vizClickToZoom": "clique para ampliar"
+    "vizClickToZoom": "clique para ampliar",
+    "landingTitle": "Registre e mapeie suas viagens de trem",
+    "landingTagline": "Registre cada viagem de trem, avião, ônibus ou balsa e veja todas elas em um mapa.",
+    "landingPromise": "Gratuito · Código aberto · Privado por padrão",
+    "landingMetaDescription": "O Trainlog é um diário de viagens gratuito para trens, aviões, ônibus, balsas e muito mais: registre suas viagens, veja-as em um mapa e obtenha estatísticas detalhadas. Código aberto e privado por padrão.",
+    "landingExample": "Ver um exemplo",
+    "landingImportDesc": "Importe suas viagens anteriores de um arquivo ou de trilhas GPX, e exporte todos os seus dados quando quiser.",
+    "landingYours": "Seus dados, suas regras",
+    "landingYoursDesc1": "O Trainlog é gratuito, de código aberto e hospedado na Suíça. Ele se mantém com doações: seus dados nunca são vendidos nem usados para nada além da sua conta.",
+    "landingYoursDesc2": "Suas viagens ficam privadas até você decidir o contrário. Perfil público, links compartilhados, ranking e mapa ao vivo só são ativados se você escolher.",
+    "madeWithTrainlog": "Feito com o Trainlog",
+    "liveMapOptIn": "Só aparecem os viajantes que escolhem aparecer.",
+    "landingSince": "Desde 2021",
+    "landingDashboard": "Tudo em um relance",
+    "landingDashboardDesc": "Seu painel resume tudo: distância, países, operadoras favoritas, rotas e recordes."
 }

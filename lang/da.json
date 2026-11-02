@@ -1716,5 +1716,19 @@
         "one": "{n} besøg",
         "other": "{n} besøg"
     },
-    "vizClickToZoom": "klik for at zoome ind"
+    "vizClickToZoom": "klik for at zoome ind",
+    "landingTitle": "Registrér og kortlæg dine togrejser og rejser",
+    "landingTagline": "Registrér hver tur med tog, fly, bus og færge, og se dem alle på et kort.",
+    "landingPromise": "Gratis · Open source · Privat som standard",
+    "landingMetaDescription": "Trainlog er en gratis rejsedagbog for tog, fly, busser, færger og mere: registrér dine ture, se dem på et kort og få detaljerede statistikker. Open source og privat som standard.",
+    "landingExample": "Se et eksempel",
+    "landingImportDesc": "Importér dine tidligere ture fra en fil eller GPX-spor, og eksportér alle dine data, når du vil.",
+    "landingYours": "Dine data, dine regler",
+    "landingYoursDesc1": "Trainlog er gratis, open source og hostet i Schweiz. Det drives af donationer: dine data bliver aldrig solgt eller brugt til andet end din konto.",
+    "landingYoursDesc2": "Dine ture forbliver private, indtil du beslutter andet. Offentlig profil, delte links, rangliste og livekort er alle noget, du selv slår til.",
+    "madeWithTrainlog": "Lavet med Trainlog",
+    "liveMapOptIn": "Kun rejsende, der selv vælger det, bliver vist.",
+    "landingSince": "Siden 2021",
+    "landingDashboard": "Alt på ét blik",
+    "landingDashboardDesc": "Dit dashboard samler det hele: distance, lande, foretrukne operatører, ruter og rekorder."
 }

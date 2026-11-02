@@ -1748,5 +1748,19 @@
         "few": "{n} návštěvy",
         "other": "{n} návštěv"
     },
-    "vizClickToZoom": "kliknutím přiblížíte"
+    "vizClickToZoom": "kliknutím přiblížíte",
+    "landingTitle": "Zaznamenávejte své cesty vlakem a zobrazte je na mapě",
+    "landingTagline": "Zaznamenejte každou cestu vlakem, letadlem, autobusem či trajektem a prohlédněte si je všechny na mapě.",
+    "landingPromise": "Zdarma · Otevřený zdrojový kód · Ve výchozím stavu soukromé",
+    "landingMetaDescription": "Trainlog je bezplatný cestovní deník pro vlaky, letadla, autobusy, trajekty a další: zaznamenávejte své cesty, prohlížejte si je na mapě a získejte podrobné statistiky. Otevřený zdrojový kód a ve výchozím stavu soukromé.",
+    "landingExample": "Ukázat příklad",
+    "landingImportDesc": "Importujte své dřívější cesty ze souboru nebo stop GPX a exportujte všechna svá data, kdykoli budete chtít.",
+    "landingYours": "Vaše data, vaše pravidla",
+    "landingYoursDesc1": "Trainlog je zdarma, má otevřený zdrojový kód a běží ve Švýcarsku. Funguje z darů: vaše data se nikdy neprodávají ani nepoužívají k ničemu jinému než k vašemu účtu.",
+    "landingYoursDesc2": "Vaše cesty zůstávají soukromé, dokud se nerozhodnete jinak. Veřejný profil, sdílené odkazy, žebříček i živou mapu si zapínáte sami.",
+    "madeWithTrainlog": "Vytvořeno v Trainlogu",
+    "liveMapOptIn": "Zobrazují se jen cestující, kteří se tak sami rozhodli.",
+    "landingSince": "Od roku 2021",
+    "landingDashboard": "Vše na první pohled",
+    "landingDashboardDesc": "Váš přehled shrne vše: vzdálenost, země, oblíbené dopravce, trasy a rekordy."
 }

@@ -1701,5 +1701,19 @@
     "vizVisitCount": {
         "other": "{n} látogatás"
     },
-    "vizClickToZoom": "kattints a nagyításhoz"
+    "vizClickToZoom": "kattints a nagyításhoz",
+    "landingTitle": "Rögzítsd és térképezd fel vonatos utazásaidat",
+    "landingTagline": "Rögzíts minden vonatos, repülős, buszos és kompos utat, és lásd őket egy térképen.",
+    "landingPromise": "Ingyenes · Nyílt forráskódú · Alapértelmezetten privát",
+    "landingMetaDescription": "A Trainlog ingyenes útinapló vonatokhoz, repülőkhöz, buszokhoz, kompokhoz és még sok máshoz: rögzítsd az utaidat, nézd meg őket a térképen, és kapj részletes statisztikákat. Nyílt forráskódú és alapértelmezetten privát.",
+    "landingExample": "Példa megtekintése",
+    "landingImportDesc": "Importáld korábbi utaidat fájlból vagy GPX-nyomvonalakból, és exportáld az összes adatodat, amikor csak szeretnéd.",
+    "landingYours": "A te adataid, a te szabályaid",
+    "landingYoursDesc1": "A Trainlog ingyenes, nyílt forráskódú, és Svájcban fut. Adományokból működik: az adataidat soha nem adjuk el, és csak a fiókodhoz használjuk.",
+    "landingYoursDesc2": "Az utaid privátak maradnak, amíg másként nem döntesz. A nyilvános profilt, a megosztott linkeket, a ranglistát és az élő térképet csak te kapcsolhatod be.",
+    "madeWithTrainlog": "Trainloggal készült",
+    "liveMapOptIn": "Csak azok az utazók jelennek meg, akik ezt maguk választják.",
+    "landingSince": "2021 óta",
+    "landingDashboard": "Minden egy pillantásra",
+    "landingDashboardDesc": "Az irányítópult mindent összefoglal: távolság, országok, kedvenc szolgáltatók, útvonalak és rekordok."
 }

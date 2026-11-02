@@ -1713,5 +1713,19 @@
         "one": "{n} külastus",
         "other": "{n} külastust"
     },
-    "vizClickToZoom": "suurendamiseks klõpsa"
+    "vizClickToZoom": "suurendamiseks klõpsa",
+    "landingTitle": "Pane oma rongi- ja muud reisid kirja ning kaardile",
+    "landingTagline": "Pane kirja iga rongi-, lennu-, bussi- ja praamisõit ning vaata neid kõiki kaardil.",
+    "landingPromise": "Tasuta · Avatud lähtekoodiga · Vaikimisi privaatne",
+    "landingMetaDescription": "Trainlog on tasuta reisipäevik rongide, lendude, busside, praamide ja muu jaoks: pane oma sõidud kirja, vaata neid kaardil ja saa üksikasjalikku statistikat. Avatud lähtekoodiga ja vaikimisi privaatne.",
+    "landingExample": "Vaata näidet",
+    "landingImportDesc": "Impordi oma varasemad sõidud failist või GPX-radadelt ning ekspordi kõik oma andmed, millal iganes soovid.",
+    "landingYours": "Sinu andmed, sinu reeglid",
+    "landingYoursDesc1": "Trainlog on tasuta, avatud lähtekoodiga ja majutatud Šveitsis. See elab annetustest: sinu andmeid ei müüda kunagi ega kasutata millekski muuks kui sinu konto jaoks.",
+    "landingYoursDesc2": "Sinu sõidud jäävad privaatseks, kuni sa ise teisiti otsustad. Avalik profiil, jagatud lingid, edetabel ja reaalajas kaart lülituvad sisse ainult sinu valikul.",
+    "madeWithTrainlog": "Tehtud Trainlogiga",
+    "liveMapOptIn": "Näidatakse ainult reisijaid, kes on ise nii valinud.",
+    "landingSince": "Alates 2021",
+    "landingDashboard": "Kõik ühe pilguga",
+    "landingDashboardDesc": "Sinu töölaud võtab kõik kokku: vahemaa, riigid, lemmikvedajad, marsruudid ja rekordid."
 }

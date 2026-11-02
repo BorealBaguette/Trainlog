@@ -1714,5 +1714,19 @@
         "one": "{n} käynti",
         "other": "{n} käyntiä"
     },
-    "vizClickToZoom": "lähennä napsauttamalla"
+    "vizClickToZoom": "lähennä napsauttamalla",
+    "landingTitle": "Kirjaa junamatkasi ja muut matkasi kartalle",
+    "landingTagline": "Kirjaa jokainen juna-, lento-, bussi- ja lauttamatka ja näe ne kaikki kartalla.",
+    "landingPromise": "Ilmainen · Avoin lähdekoodi · Oletuksena yksityinen",
+    "landingMetaDescription": "Trainlog on ilmainen matkapäiväkirja junille, lennoille, busseille, lautoille ja muulle: kirjaa matkasi, näe ne kartalla ja saa yksityiskohtaiset tilastot. Avoin lähdekoodi ja oletuksena yksityinen.",
+    "landingExample": "Katso esimerkki",
+    "landingImportDesc": "Tuo aiemmat matkasi tiedostosta tai GPX-jäljistä, ja vie kaikki tietosi ulos milloin haluat.",
+    "landingYours": "Sinun tietosi, sinun sääntösi",
+    "landingYoursDesc1": "Trainlog on ilmainen, avointa lähdekoodia ja sitä ylläpidetään Sveitsissä. Se toimii lahjoituksilla: tietojasi ei koskaan myydä eikä käytetä muuhun kuin tiliisi.",
+    "landingYoursDesc2": "Matkasi pysyvät yksityisinä, kunnes päätät toisin. Julkinen profiili, jaetut linkit, tulostaulu ja livekartta otetaan käyttöön vain omasta valinnastasi.",
+    "madeWithTrainlog": "Tehty Trainlogilla",
+    "liveMapOptIn": "Näytetään vain matkustajat, jotka ovat itse valinneet näkyä.",
+    "landingSince": "Vuodesta 2021",
+    "landingDashboard": "Kaikki yhdellä silmäyksellä",
+    "landingDashboardDesc": "Kojelauta kokoaa kaiken yhteen: matkat, maat, suosikkiliikennöitsijät, reitit ja ennätykset."
 }

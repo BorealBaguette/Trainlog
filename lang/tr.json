@@ -1701,5 +1701,19 @@
     "vizVisitCount": {
         "other": "{n} ziyaret"
     },
-    "vizClickToZoom": "yakınlaştırmak için tıklayın"
+    "vizClickToZoom": "yakınlaştırmak için tıklayın",
+    "landingTitle": "Tren yolculuklarını ve seyahatlerini kaydet, haritada gör",
+    "landingTagline": "Her tren, uçak, otobüs ve feribot yolculuğunu kaydet ve hepsini bir haritada gör.",
+    "landingPromise": "Ücretsiz · Açık kaynak · Varsayılan olarak gizli",
+    "landingMetaDescription": "Trainlog; tren, uçak, otobüs, feribot ve daha fazlası için ücretsiz bir seyahat günlüğüdür: yolculuklarını kaydet, haritada gör ve ayrıntılı istatistikler al. Açık kaynak ve varsayılan olarak gizli.",
+    "landingExample": "Bir örneğe bak",
+    "landingImportDesc": "Geçmiş yolculuklarını bir dosyadan veya GPX izlerinden içe aktar ve tüm verilerini istediğin zaman dışa aktar.",
+    "landingYours": "Senin verilerin, senin kuralların",
+    "landingYoursDesc1": "Trainlog ücretsiz, açık kaynaklı ve İsviçre'de barındırılıyor. Bağışlarla ayakta duruyor: verilerin asla satılmaz ve hesabın dışında hiçbir şey için kullanılmaz.",
+    "landingYoursDesc2": "Sen aksine karar verene kadar yolculukların gizli kalır. Herkese açık profil, paylaşılan bağlantılar, sıralama ve canlı harita yalnızca sen seçersen açılır.",
+    "madeWithTrainlog": "Trainlog ile yapıldı",
+    "liveMapOptIn": "Yalnızca görünmeyi seçen yolcular gösterilir.",
+    "landingSince": "2021'den beri",
+    "landingDashboard": "Her şey bir bakışta",
+    "landingDashboardDesc": "Panon her şeyi özetler: mesafe, ülkeler, favori işletmeciler, güzergâhlar ve rekorlar."
 }

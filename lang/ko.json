@@ -1703,5 +1703,19 @@
     "vizVisitCount": {
         "other": "{n}회 방문"
     },
-    "vizClickToZoom": "클릭하여 확대"
+    "vizClickToZoom": "클릭하여 확대",
+    "landingTitle": "기차 여행과 모든 여정을 기록하고 지도로 보기",
+    "landingTagline": "기차, 비행기, 버스, 페리 이동을 하나하나 기록하고 모두 지도에서 확인하세요.",
+    "landingPromise": "무료 · 오픈 소스 · 기본값은 비공개",
+    "landingMetaDescription": "Trainlog는 기차, 비행기, 버스, 페리 등을 위한 무료 여행 기록 서비스입니다. 이동을 기록하고, 지도에서 보고, 자세한 통계를 받아 보세요. 오픈 소스이며 기본값은 비공개입니다.",
+    "landingExample": "예시 보기",
+    "landingImportDesc": "파일이나 GPX 트랙에서 지난 이동을 가져오고, 언제든 모든 데이터를 내보낼 수 있습니다.",
+    "landingYours": "내 데이터는 내 방식대로",
+    "landingYoursDesc1": "Trainlog는 무료이고 오픈 소스이며 스위스에서 호스팅됩니다. 후원으로 운영되며, 여러분의 데이터는 절대 판매되지 않고 계정 운영 외의 용도로 쓰이지 않습니다.",
+    "landingYoursDesc2": "직접 바꾸기 전까지 이동 기록은 비공개로 유지됩니다. 공개 프로필, 공유 링크, 순위표, 실시간 지도는 모두 직접 켜야 합니다.",
+    "madeWithTrainlog": "Trainlog로 만들었습니다",
+    "liveMapOptIn": "표시하기로 선택한 여행자만 보입니다.",
+    "landingSince": "2021년부터",
+    "landingDashboard": "모든 것을 한눈에",
+    "landingDashboardDesc": "대시보드에서 거리, 국가, 즐겨 찾는 운영사, 노선, 기록을 한눈에 볼 수 있습니다."
 }

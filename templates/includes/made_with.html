@@ -1,0 +1,24 @@
+{#- Top of a shared link's sidebar, for visitors who aren't logged in: where this page
+    comes from, out of the way of the trip itself. -#}
+{% if not session.get("logged_in") %}
+<a class="made-with" href="{{ url_for('landing') }}">
+  <img src="{{ url_for('static', filename='images/logo_square.png') }}" alt="" width="22" height="22">
+  {{ madeWithTrainlog }}
+</a>
+<style>
+  .made-with {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 22px 0 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--bs-secondary-color, #888);
+    text-decoration: none;
+  }
+  .made-with img { opacity: 0.7; }
+  [data-bs-theme="dark"] .made-with img { filter: invert(1); }
+  .made-with:hover { color: var(--bs-body-color, #333); text-decoration: underline; }
+</style>
+{% endif %}

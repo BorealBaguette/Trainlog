@@ -1714,5 +1714,19 @@
         "one": "{n} Bsuech",
         "other": "{n} Bsüech"
     },
-    "vizClickToZoom": "zum Vergrössere klicke"
+    "vizClickToZoom": "zum Vergrössere klicke",
+    "landingTitle": "Dini Zugsreise und Reise erfasse und uf de Charte gseh",
+    "landingTagline": "Erfass jedi Fahrt mit Zug, Flugzüüg, Bus und Fähri und lueg sie alli uf ere Charte aa.",
+    "landingPromise": "Gratis · Open Source · Standardmässig privat",
+    "landingMetaDescription": "Trainlog isch es gratis Reisetagebuech für Zug, Flugzüüg, Bus, Fähri und meh: Erfass dini Fahrte, lueg sie uf ere Charte aa und überchum detaillierti Statistike. Open Source und standardmässig privat.",
+    "landingExample": "Es Bischpil aaluege",
+    "landingImportDesc": "Importier dini früenere Fahrte us ere Datei oder GPX-Tracks, und exportier all dini Date, wänn immer du wotsch.",
+    "landingYours": "Dini Date, dini Regle",
+    "landingYoursDesc1": "Trainlog isch gratis, Open Source und i de Schwiiz ghostet. Es läbt vo Spände: Dini Date wärde nie verchauft oder für öppis anders als dis Konto bruucht.",
+    "landingYoursDesc2": "Dini Fahrte bliibed privat, bis du öppis anders entscheidsch. Öffentlichs Profil, teilti Links, Ranglischte und Live-Charte muesch du sälber aktiviere.",
+    "madeWithTrainlog": "Gmacht mit Trainlog",
+    "liveMapOptIn": "Es wärde nur Reisendi aazeigt, wo das sälber wänd.",
+    "landingSince": "Sit 2021",
+    "landingDashboard": "Alles uf ei Blick",
+    "landingDashboardDesc": "Dis Dashboard fasst alles zäme: Distanz, Länder, Lieblingsbetriiber, Strecke und Rekord."
 }

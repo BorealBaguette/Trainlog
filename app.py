@@ -863,6 +863,10 @@ def starts_with_flag_emoji(s):
     return bool(re.match(pattern, s))
 
 
+def strip_flag_emoji(s):
+    return re.sub(r"^[\U0001F1E6-\U0001F1FF]{2}\s*", "", s or "")
+
+
 def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None, raw_path=None):
     newPath[0]["lat"] = float(newPath[0]["lat"])
     newPath[0]["lng"] = float(newPath[0]["lng"])
@@ -1262,6 +1266,11 @@ def create_authDb():
 
 @app.before_request
 def before_request():
+    # One address for search engines: www. was indexed as a second site
+    if request.host == "www.trainlog.me":
+        query = request.query_string.decode()
+        return redirect("https://trainlog.me" + request.path + ("?" + query if query else ""), 301)
+
     allowed_hosts = [
         "127.0.0.1:5000",
         "localhost:5000",
@@ -1452,7 +1461,8 @@ def robots_txt():
 # Only these pages belong in search results; user pages, shared trips and the
 # rest of the app answer noindex. robots.txt must not block them, or Google
 # never sees the header and keeps the URLs indexed from links alone.
-INDEXABLE_ENDPOINTS = {"landing", "about"}
+# News is fresh original content, and shows logged-out visitors no usernames
+INDEXABLE_ENDPOINTS = {"landing", "landing_lang", "about", "news.news"}
 
 
 @app.after_request
@@ -3498,7 +3508,29 @@ def landing():
 
     # If the user is not logged in or is forcing the landing page
     return render_template(
-        "landing.html", **lang[session["userinfo"]["lang"]], **session["userinfo"]
+        "landing.html",
+        landing_langs=LANDING_LANGS,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+# The landing page has an address per language (/fr/, /pt-BR/…), each linked to the
+# others with hreflang: "/" picks the language from the browser, which search engines
+# crawl in English, so without these the translations never reach search results.
+LANDING_LANGS = sorted(code for code in lang if code != "en")
+
+
+# Quoted: unquoted, the any() converter splits "pt-BR" into "pt" and "BR"
+@app.route(f"/<any({', '.join(repr(code) for code in LANDING_LANGS)}):lang_code>/")
+def landing_lang(lang_code):
+    # The visitor chose this language: keep it for the rest of the visit (signup…)
+    changeLang(lang_code, session)
+    return render_template(
+        "landing.html",
+        landing_langs=LANDING_LANGS,
+        **lang[lang_code],
+        **session["userinfo"],
     )
 
 
@@ -4067,6 +4099,7 @@ def about():
         username=getUser(),
         nav="bootstrap/navigation.html",
         title=lang[session["userinfo"]["lang"]]["about"],
+        meta_description=lang[session["userinfo"]["lang"]]["about_lead"],
         translations=lang[session["userinfo"]["lang"]],
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -4816,7 +4849,7 @@ def render_public_trip_page(
         period_args=period,
         # The tag's name, else the journey itself: what a tab or search result should say.
         title=tag_name
-        or f"{trip_list_sorted[0]['origin_station']} → {trip_list_sorted[-1]['destination_station']}",
+        or f"{strip_flag_emoji(trip_list_sorted[0]['origin_station'])} → {strip_flag_emoji(trip_list_sorted[-1]['destination_station'])}",
         collection_voyage=tag_type,
         tag_description=tag_name,
         tag_uuid=tagId,
@@ -14540,7 +14573,9 @@ def sitemap():
     # Only list the routes you want
     pages = [
         external_url('landing'),
+        *(external_url('landing_lang', lang_code=code) for code in LANDING_LANGS),
         external_url('about'),
+        external_url('news.news'),
     ]
 
     xml = ['<?xml version="1.0" encoding="UTF-8"?>']

@@ -1746,5 +1746,19 @@
         "few": "{n} odwiedziny",
         "many": "{n} odwiedzin"
     },
-    "vizClickToZoom": "kliknij, aby przybliżyć"
+    "vizClickToZoom": "kliknij, aby przybliżyć",
+    "landingTitle": "Zapisuj i oznaczaj na mapie swoje podróże koleją",
+    "landingTagline": "Zapisuj każdą podróż pociągiem, samolotem, autobusem i promem i oglądaj je wszystkie na mapie.",
+    "landingPromise": "Za darmo · Otwarte źródło · Domyślnie prywatne",
+    "landingMetaDescription": "Trainlog to darmowy dziennik podróży dla pociągów, samolotów, autobusów, promów i nie tylko: zapisuj swoje podróże, oglądaj je na mapie i korzystaj ze szczegółowych statystyk. Otwarte źródło i domyślnie prywatne.",
+    "landingExample": "Zobacz przykład",
+    "landingImportDesc": "Zaimportuj swoje wcześniejsze podróże z pliku lub śladów GPX i eksportuj wszystkie dane, kiedy tylko chcesz.",
+    "landingYours": "Twoje dane, twoje zasady",
+    "landingYoursDesc1": "Trainlog jest darmowy, ma otwarte źródło i jest hostowany w Szwajcarii. Utrzymuje się z darowizn: twoje dane nigdy nie są sprzedawane ani używane do niczego poza twoim kontem.",
+    "landingYoursDesc2": "Twoje podróże pozostają prywatne, dopóki nie zdecydujesz inaczej. Profil publiczny, udostępnione linki, ranking i mapa na żywo włączają się tylko na twoje życzenie.",
+    "madeWithTrainlog": "Stworzone w Trainlog",
+    "liveMapOptIn": "Pokazywani są tylko podróżni, którzy sami tak wybrali.",
+    "landingSince": "Od 2021 roku",
+    "landingDashboard": "Wszystko w jednym miejscu",
+    "landingDashboardDesc": "Twój pulpit podsumowuje wszystko: dystans, kraje, ulubionych przewoźników, trasy i rekordy."
 }

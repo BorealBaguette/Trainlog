@@ -1701,5 +1701,19 @@
     "vizVisitCount": {
         "other": "{n} 次到访"
     },
-    "vizClickToZoom": "点击放大"
+    "vizClickToZoom": "点击放大",
+    "landingTitle": "记录你的火车旅行，并在地图上查看",
+    "landingTagline": "记录每一次火车、飞机、巴士和渡轮行程，并在地图上一览无余。",
+    "landingPromise": "免费 · 开源 · 默认私密",
+    "landingMetaDescription": "Trainlog 是一款免费的旅行日志，支持火车、飞机、巴士、渡轮等：记录你的行程，在地图上查看，并获得详细统计。开源且默认私密。",
+    "landingExample": "查看示例",
+    "landingImportDesc": "从文件或 GPX 轨迹导入过去的行程，并可随时导出你的全部数据。",
+    "landingYours": "你的数据，你做主",
+    "landingYoursDesc1": "Trainlog 免费、开源，托管于瑞士。它依靠捐赠运营：你的数据绝不会被出售，也不会用于你的账户以外的任何用途。",
+    "landingYoursDesc2": "在你决定之前，你的行程始终保持私密。公开主页、分享链接、排行榜和实时地图都需要你自己开启。",
+    "madeWithTrainlog": "由 Trainlog 制作",
+    "liveMapOptIn": "只显示选择公开显示的旅行者。",
+    "landingSince": "始于 2021 年",
+    "landingDashboard": "一切尽收眼底",
+    "landingDashboardDesc": "仪表盘为你汇总一切：里程、国家、常用运营商、线路和纪录。"
 }

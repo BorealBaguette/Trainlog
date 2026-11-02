@@ -1716,5 +1716,19 @@
         "one": "{n} Besuch",
         "other": "{n} Besuche"
     },
-    "vizClickToZoom": "zum Vergrößern klicken"
+    "vizClickToZoom": "zum Vergrößern klicken",
+    "landingTitle": "Deine Bahnreisen und Reisen erfassen und auf der Karte sehen",
+    "landingTagline": "Erfasse jede Fahrt mit Zug, Flugzeug, Bus und Fähre und sieh sie alle auf einer Karte.",
+    "landingPromise": "Kostenlos · Open Source · Standardmäßig privat",
+    "landingMetaDescription": "Trainlog ist ein kostenloses Reisetagebuch für Zug, Flugzeug, Bus, Fähre und mehr: Erfasse deine Fahrten, sieh sie auf einer Karte und erhalte detaillierte Statistiken. Open Source und standardmäßig privat.",
+    "landingExample": "Beispiel ansehen",
+    "landingImportDesc": "Importiere deine bisherigen Fahrten aus einer Datei oder GPX-Tracks und exportiere all deine Daten, wann immer du willst.",
+    "landingYours": "Deine Daten, deine Regeln",
+    "landingYoursDesc1": "Trainlog ist kostenlos, Open Source und in der Schweiz gehostet. Es finanziert sich durch Spenden: Deine Daten werden nie verkauft oder für etwas anderes als dein Konto verwendet.",
+    "landingYoursDesc2": "Deine Fahrten bleiben privat, bis du etwas anderes entscheidest. Öffentliches Profil, geteilte Links, Rangliste und Live-Karte musst du selbst aktivieren.",
+    "madeWithTrainlog": "Erstellt mit Trainlog",
+    "liveMapOptIn": "Angezeigt werden nur Reisende, die das ausdrücklich wollen.",
+    "landingSince": "Seit 2021",
+    "landingDashboard": "Alles auf einen Blick",
+    "landingDashboardDesc": "Dein Dashboard fasst alles zusammen: Distanz, Länder, Lieblingsbetreiber, Strecken und Rekorde."
 }

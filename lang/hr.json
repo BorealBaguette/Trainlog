@@ -1731,5 +1731,19 @@
         "few": "{n} posjeta",
         "other": "{n} posjeta"
     },
-    "vizClickToZoom": "kliknite za povećanje"
+    "vizClickToZoom": "kliknite za povećanje",
+    "landingTitle": "Bilježite i ucrtajte na kartu svoja putovanja vlakom",
+    "landingTagline": "Zabilježite svako putovanje vlakom, avionom, autobusom i trajektom te ih sve pogledajte na karti.",
+    "landingPromise": "Besplatno · Otvoreni kod · Zadano privatno",
+    "landingMetaDescription": "Trainlog je besplatni putni dnevnik za vlakove, avione, autobuse, trajekte i više: bilježite svoja putovanja, gledajte ih na karti i dobijte detaljnu statistiku. Otvoreni kod i zadano privatno.",
+    "landingExample": "Pogledajte primjer",
+    "landingImportDesc": "Uvezite svoja prijašnja putovanja iz datoteke ili GPX tragova te izvezite sve svoje podatke kad god želite.",
+    "landingYours": "Vaši podaci, vaša pravila",
+    "landingYoursDesc1": "Trainlog je besplatan, otvorenog koda i smješten u Švicarskoj. Živi od donacija: vaši se podaci nikad ne prodaju niti koriste za išta osim vašeg računa.",
+    "landingYoursDesc2": "Vaša putovanja ostaju privatna dok ne odlučite drukčije. Javni profil, dijeljene poveznice, ljestvica i karta uživo uključuju se samo ako to odaberete.",
+    "madeWithTrainlog": "Izrađeno uz Trainlog",
+    "liveMapOptIn": "Prikazuju se samo putnici koji su to sami odabrali.",
+    "landingSince": "Od 2021.",
+    "landingDashboard": "Sve na prvi pogled",
+    "landingDashboardDesc": "Vaša nadzorna ploča sve sažima: udaljenost, zemlje, omiljene prijevoznike, rute i rekorde."
 }

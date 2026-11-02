@@ -1716,5 +1716,19 @@
         "one": "{n} besök",
         "other": "{n} besök"
     },
-    "vizClickToZoom": "klicka för att zooma in"
+    "vizClickToZoom": "klicka för att zooma in",
+    "landingTitle": "Logga och kartlägg dina tågresor och resor",
+    "landingTagline": "Logga varje resa med tåg, flyg, buss och färja, och se dem alla på en karta.",
+    "landingPromise": "Gratis · Öppen källkod · Privat som standard",
+    "landingMetaDescription": "Trainlog är en gratis resedagbok för tåg, flyg, bussar, färjor och mer: logga dina resor, se dem på en karta och få detaljerad statistik. Öppen källkod och privat som standard.",
+    "landingExample": "Se ett exempel",
+    "landingImportDesc": "Importera dina tidigare resor från en fil eller GPX-spår, och exportera all din data när du vill.",
+    "landingYours": "Din data, dina regler",
+    "landingYoursDesc1": "Trainlog är gratis, har öppen källkod och drivs i Schweiz. Det finansieras av donationer: din data säljs aldrig och används inte till något annat än ditt konto.",
+    "landingYoursDesc2": "Dina resor förblir privata tills du bestämmer något annat. Offentlig profil, delade länkar, topplista och livekarta slår du själv på.",
+    "madeWithTrainlog": "Gjord med Trainlog",
+    "liveMapOptIn": "Endast resenärer som själva väljer det visas.",
+    "landingSince": "Sedan 2021",
+    "landingDashboard": "Allt i en överblick",
+    "landingDashboardDesc": "Din översikt sammanfattar allt: sträcka, länder, favoritoperatörer, rutter och rekord."
 }
