@@ -13041,7 +13041,6 @@ def leaderboard(type):
 
     texts = lang[session["userinfo"]["lang"]]
     title_key = {
-        "all": "leaderboardTotal",
         "countries": "leaderboardCountries",
         "train_countries": "leaderboardTrainCountries",
         "wagons": "leaderboardWagonsTitle",

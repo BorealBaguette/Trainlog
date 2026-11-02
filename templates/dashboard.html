@@ -855,7 +855,7 @@
     <div class="row dash-row g-3">
       <div class="col-md-6">
         <div class="dash-card">
-          <div class="dash-card-header"><i class="bi bi-calendar2-week"></i>{{ thisYear }} <span id="year-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;"></span></div>
+          <div class="dash-card-header"><i class="bi bi-calendar2-week"></i><span id="year-card-title">{{ thisYear }}</span> <span id="year-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;"></span></div>
           <div class="dash-card-body" id="year-body">
             <div class="skeleton skeleton-line medium"></div>
             <div class="skeleton skeleton-line short"></div>
@@ -1589,6 +1589,9 @@ function renderYearCard(d) {
   const isAllTime = (_hlScope === "alltime");
   document.getElementById("year-label").textContent =
     isAllTime ? "{{ allTime }}" : d.year ? (isCurrentYear ? `${d.year} · YTD` : String(d.year)) : "";
+  // The card's name follows its scope: a past year or all time is not "this year"
+  document.getElementById("year-card-title").textContent =
+    isAllTime ? {{ total|tojson }} : (isCurrentYear || !d.year) ? {{ thisYear|tojson }} : {{ year|tojson }};
   const yearEl = document.getElementById("year-body");
 
   const trips = isAllTime && _totalsData ? _totalsData.total_trips : d.total_trips;

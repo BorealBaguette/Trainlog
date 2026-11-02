@@ -17,7 +17,8 @@
 <div id="leaderboard-container" class="container mt-3">
     <h1>
         {% if type == "all" %}
-            {{ leaderboardTotal }}
+            {#- leaderboardTotal is the short name in the list of boards; the page itself is the leaderboard #}
+            {{ leaderboard }}
         {% else %}
             {{ transport_types[type] }}
         {% endif %}
