@@ -1,71 +1,71 @@
-/* A trip's stops (static/js/trip_stops.js), in the trips list's detail row and the
-   public trip page's itinerary: folded, then a timeline like the edit
+/* A trip's stops (static/js/trip_stops.js), in the trips list's detail row, the
+   public trip page's itinerary and an FR24 import's preview (.ts-preview): folded, then a timeline like the edit
    page's stops dialog — a line down the left, a dot per stop, the ends ringed. Plain
    rows, nothing of the page's table chrome (no header bar, no borders, no stripes). */
 /* The fold: its own ▸/▾ just before the count, so a caption put in front of it
    (cards, processHiddenData) reads "STOPS: ▸ 1 stop" */
-:is(#dataTable td.child, #itinerary) details.trip-stops > summary { cursor: pointer; list-style: none; user-select: none; }
-:is(#dataTable td.child, #itinerary) details.trip-stops > summary::-webkit-details-marker { display: none; }
-:is(#dataTable td.child, #itinerary) details.trip-stops .ts-toggle { color: #3b63b8; }
-:is(#dataTable td.child, #itinerary) details.trip-stops .ts-toggle::before { content: "\25B8\00a0"; }
-:is(#dataTable td.child, #itinerary) details.trip-stops[open] .ts-toggle::before { content: "\25BE\00a0"; }
-:is(#dataTable td.child, #itinerary) tr.trip-stops-row details.trip-stops > summary > strong { margin-right: 10px; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table {
+:is(#dataTable td.child, #itinerary, .ts-preview) details.trip-stops > summary { cursor: pointer; list-style: none; user-select: none; }
+:is(#dataTable td.child, #itinerary, .ts-preview) details.trip-stops > summary::-webkit-details-marker { display: none; }
+:is(#dataTable td.child, #itinerary, .ts-preview) details.trip-stops .ts-toggle { color: #3b63b8; }
+:is(#dataTable td.child, #itinerary, .ts-preview) details.trip-stops .ts-toggle::before { content: "\25B8\00a0"; }
+:is(#dataTable td.child, #itinerary, .ts-preview) details.trip-stops[open] .ts-toggle::before { content: "\25BE\00a0"; }
+:is(#dataTable td.child, #itinerary, .ts-preview) tr.trip-stops-row details.trip-stops > summary > strong { margin-right: 10px; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table {
     border-collapse: collapse; margin: 4px 0 2px; width: auto; background: none;
 }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr { background: none !important; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td {
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr { background: none !important; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td {
     padding: 2px 14px 2px 0; vertical-align: middle; border: 0 !important; background: none !important;
     white-space: nowrap; font-size: 0.875rem; line-height: 1.5;
 }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-time { font-variant-numeric: tabular-nums; color: #374151; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-platform { color: #8a93a2; font-size: 0.8rem; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-stop td.ts-name { color: #4b5563; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-name { font-weight: 600; color: #1f2733; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark { position: relative; width: 14px; padding: 0 10px 0 0; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark::before {
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-time { font-variant-numeric: tabular-nums; color: #374151; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-platform { color: #8a93a2; font-size: 0.8rem; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-stop td.ts-name { color: #4b5563; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-end td.ts-name { font-weight: 600; color: #1f2733; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-mark { position: relative; width: 14px; padding: 0 10px 0 0; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-mark::before {
     content: ""; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: #e2e6eb;
 }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tbody tr:first-child td.ts-mark::before { top: 50%; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tbody tr:last-child td.ts-mark::before { bottom: 50%; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark > span {
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tbody tr:first-child td.ts-mark::before { top: 50%; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tbody tr:last-child td.ts-mark::before { bottom: 50%; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-mark > span {
     position: relative; display: block; width: 6px; height: 6px; margin-left: 4px;
     border-radius: 50%; background: #b3bac4;
 }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-mark > span {
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-end td.ts-mark > span {
     width: 10px; height: 10px; margin-left: 2px; background: #fff; border: 2px solid #3b63b8;
 }
 /* Station names wrap; times and platforms don't */
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-name { white-space: normal; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-name { white-space: normal; }
 /* A flight's take-off and landing: a plane for a mark, and when it was first (last)
    heard at the gate beside the name, so the time column keeps one time per row. */
-:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-runway-icon { color: #8a93a2; font-size: 0.75rem; margin-right: 5px; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table .ts-runway-icon { color: #8a93a2; font-size: 0.75rem; margin-right: 5px; }
 /* Transponder off: the broadcast tower struck through (Font Awesome Free has no
    slashed one), the slash laid over it. */
-:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-icon-off { position: relative; display: inline-block; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-icon-off .fa-slash { position: absolute; left: -1px; top: 50%; transform: translateY(-50%); }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table .ts-icon-off { position: relative; display: inline-block; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table .ts-icon-off .fa-slash { position: absolute; left: -1px; top: 50%; transform: translateY(-50%); }
 /* A flight still in the air: where it is going, not yet reached. */
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-pending td:not(.ts-mark),
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-pending td.ts-mark > span { opacity: 0.4; }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-airborne td.ts-mark::before,
-:is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-pending td.ts-mark::before {
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-pending td:not(.ts-mark),
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-pending td.ts-mark > span { opacity: 0.4; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-airborne td.ts-mark::before,
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-pending td.ts-mark::before {
     -webkit-mask: repeating-linear-gradient(to bottom, #000 0 3px, transparent 3px 6px);
     mask: repeating-linear-gradient(to bottom, #000 0 3px, transparent 3px 6px);
 }
-:is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-seen { color: #8a93a2; font-size: 0.8rem; margin-left: 4px; white-space: nowrap; }
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table .ts-seen { color: #8a93a2; font-size: 0.8rem; margin-left: 4px; white-space: nowrap; }
 /* Times and platforms stay on one line whatever the card's cell rules say */
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-time,
-:is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-platform { white-space: nowrap !important; }
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) details.trip-stops .ts-toggle { color: #8fb0f5; }
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-time,
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-stop td.ts-name { color: var(--bs-body-color); }
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-platform,
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-runway-icon,
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table .ts-seen { color: var(--bs-secondary-color); }
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-name { color: var(--bs-emphasis-color); }
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark::before { background: var(--bs-border-color); }
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table td.ts-mark > span { background: #5b7189; }
-[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary) table.trip-stops-table tr.ts-end td.ts-mark > span {
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-time,
+:is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-platform { white-space: nowrap !important; }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) details.trip-stops .ts-toggle { color: #8fb0f5; }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-time,
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-stop td.ts-name { color: var(--bs-body-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-platform,
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table .ts-runway-icon,
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table .ts-seen { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-end td.ts-name { color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-mark::before { background: var(--bs-border-color); }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table td.ts-mark > span { background: #5b7189; }
+[data-bs-theme="dark"] :is(#dataTable td.child, #itinerary, .ts-preview) table.trip-stops-table tr.ts-end td.ts-mark > span {
     background: var(--bs-body-bg); border-color: #8fb0f5;
 }
 

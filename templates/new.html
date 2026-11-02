@@ -172,7 +172,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Data is available starting from 30 days in the past to one day in the future</p>
+        <p class="text-muted" id="fr24Availability">{{ fr24DataAvailability|default('Data available from 30 days ago to 1 day ahead.') }}</p>
         <form id="fr24Form">
           <div class="mb-3">
             <label class="form-label d-block">{{searchBy}}</label>
@@ -1995,6 +1995,7 @@
 
   // ---------- FR24 import ----------
   $("#fr24Date").val(getCurrentDate());
+  fr24DateBounds($("#fr24Date"));
 
   let allFlightLegs = [];
 
@@ -2011,6 +2012,11 @@
     }
     if (searchType === 'reg' && (!regNumber || !flightDate)) {
       $("#fr24Error").text("Please enter both registration and date.").removeClass("d-none");
+      return;
+    }
+
+    if (!fr24DateOk($("#fr24Date"))) {
+      $("#fr24Error").text($("#fr24Availability").text()).removeClass("d-none");
       return;
     }
 
@@ -2141,14 +2147,8 @@
   async function processFlightLeg(flight) {
     updateProgressBar(10);
 
-    let durationSeconds = null;
-    if (flight.datetime_takeoff && flight.datetime_landed) {
-      const takeoff = new Date(flight.datetime_takeoff);
-      const landed = new Date(flight.datetime_landed);
-      durationSeconds = Math.floor((landed - takeoff) / 1000);
-    }
-
-    window.FR24 = { "fr24_id": flight.fr24_id, "fr24_duration": durationSeconds };
+    const picked = await fr24WithEvents(`{{url_for("flight_events", username=username, fr24_id='')}}`, flight);
+    window.FR24 = fr24TripFields(picked);
 
     updateProgressBar(25);
 
@@ -2181,18 +2181,8 @@
 
     updateProgressBar(65);
 
-    // Runway times only stand in for times not given: logged ones are kept, and the
-    // runway ones become take-off and landing stops when the trip is saved.
-    if (flight.datetime_takeoff_local && flight.datetime_landed_local && !$('#newTripStartTime').val()) {
-      const startLocal = new Date(flight.datetime_takeoff_local);
-      const endLocal = new Date(flight.datetime_landed_local);
-
-      $('#newTripStartDate').val(startLocal.toTimezonedISOString().split('T')[0]);
-      $('#newTripStartTime').val(startLocal.toTimeString().slice(0, 5));
-      $('#newTripEndDate').val(endLocal.toTimezonedISOString().split('T')[0]);
-      $('#newTripEndTime').val(endLocal.toTimeString().slice(0, 5));
-      $('#radioPreciseDates').prop('checked', true);
-    }
+    fillFr24Times(picked);
+    $('#radioPreciseDates').prop('checked', true).trigger('change');
 
     updateProgressBar(100);
     setTimeout(() => {
@@ -2205,14 +2195,8 @@
   async function processFlightLegWithData(flight, processedData) {
     updateProgressBar(10);
 
-    let durationSeconds = null;
-    if (flight.datetime_takeoff && flight.datetime_landed) {
-      const takeoff = new Date(flight.datetime_takeoff);
-      const landed = new Date(flight.datetime_landed);
-      durationSeconds = Math.floor((landed - takeoff) / 1000);
-    }
-
-    window.FR24 = { "fr24_id": flight.fr24_id, "fr24_duration": durationSeconds };
+    const picked = await fr24WithEvents(`{{url_for("flight_events", username=username, fr24_id='')}}`, flight);
+    window.FR24 = fr24TripFields(picked);
 
     updateProgressBar(25);
 
@@ -2252,13 +2236,8 @@
 
     updateProgressBar(65);
 
-    if (processedData.departureLocal && processedData.arrivalLocal && !$('#newTripStartTime').val()) {
-      $('#newTripStartDate').val(processedData.departureLocal.toTimezonedISOString().split('T')[0]);
-      $('#newTripStartTime').val(processedData.departureLocal.toTimeString().slice(0, 5));
-      $('#newTripEndDate').val(processedData.arrivalLocal.toTimezonedISOString().split('T')[0]);
-      $('#newTripEndTime').val(processedData.arrivalLocal.toTimeString().slice(0, 5));
-      $('#radioPreciseDates').prop('checked', true);
-    }
+    fillFr24Times(picked);
+    $('#radioPreciseDates').prop('checked', true).trigger('change');
 
     updateProgressBar(100);
     setTimeout(() => { updateProgressBar(0); }, 400);

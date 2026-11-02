@@ -1,6 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
+{% if vehicle_type == 'air' %}{% include "includes/trip_stops_text.html" %}{% endif %}
 {% include "bootstrap/leafletLayout.html" %}
 
 {% if vehicle_type == 'ferry' %}
@@ -585,7 +586,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">{{ fr24DataAvailability|default('Data available from 30 days ago to 1 day ahead.') }}</p>
+        <p class="text-muted" id="fr24Availability">{{ fr24DataAvailability|default('Data available from 30 days ago to 1 day ahead.') }}</p>
         <form id="fr24Form">
           <div class="mb-3">
             <label class="form-label d-block">{{ searchBy|default('Search by') }}</label>
@@ -848,6 +849,10 @@
           </div>
         </div>
 
+        {% if vehicle_type == 'air' %}
+        {# An FR24 import's take-off and landing, read-only (renderFr24Stops) #}
+        <div id="fr24Stops" class="cp-input-row" hidden></div>
+        {% endif %}
         {# Delays are a fact about a trip that happened, so they only make sense against
            precise datetimes — and a plan has none of either. #}
         {% if not plan_uuid and vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
@@ -1798,6 +1803,7 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
     $('#fr24Error').addClass('d-none');
     if (!isReg && (!flightNumber || !flightDate)) { $('#fr24Error').text('Please enter flight number and date.').removeClass('d-none'); return; }
     if (isReg && (!regNumber || !flightDate)) { $('#fr24Error').text('Please enter registration and date.').removeClass('d-none'); return; }
+    if (!fr24DateOk($('#fr24Date'))) { $('#fr24Error').text($('#fr24Availability').text()).removeClass('d-none'); return; }
     updateProgressBar(10);
     try {
       var url = isReg ? '{{ url_for("flight_summary_reg", username=username) }}' : '{{ url_for("flight_summary", username=username) }}';
@@ -1816,14 +1822,20 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
     $('#regNumberGroup').toggleClass('d-none', !isReg);
   });
 
+  // The flight's FR24 fields on the trip (fr24TripFields), and its track fetched afresh:
+  // the one cached may be an earlier import's.
+  async function useFr24Flight(flight) {
+    var picked = await fr24WithEvents(flightEventsUrl, flight);
+    Object.assign(newTrip, fr24TripFields(picked));
+    fr24PathCache = fr24AltCache = fr24TimeCache = null;
+    fr24StopsCache = [];
+    useFR24 = true;
+    return picked;
+  }
+
   async function processFlightLeg(flight) {
     updateProgressBar(10);
-    var durationSeconds = null;
-    if (flight.datetime_takeoff && flight.datetime_landed) {
-      durationSeconds = Math.floor((new Date(flight.datetime_landed) - new Date(flight.datetime_takeoff)) / 1000);
-    }
-    newTrip.fr24_id = flight.fr24_id;
-    newTrip.fr24_duration = durationSeconds;
+    var picked = await useFr24Flight(flight);
     updateProgressBar(25);
     await fillFromBarcode($('#originStation'), flight.orig_icao);
     await fillFromBarcode($('#destinationStation'), flight.dest_icao);
@@ -1837,12 +1849,8 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
       } catch(e) { setOperatorValue(flight.operating_as); }
     }
     updateProgressBar(65);
-    if (flight.datetime_takeoff_local && flight.datetime_landed_local) {
-      var s = new Date(flight.datetime_takeoff_local), e = new Date(flight.datetime_landed_local);
-      $('#newTripStartDate').val(s.toTimezonedISOString().split('T')[0]); $('#newTripStartTime').val(s.toTimeString().slice(0,5));
-      $('#newTripEndDate').val(e.toTimezonedISOString().split('T')[0]);   $('#newTripEndTime').val(e.toTimeString().slice(0,5));
-      $('#prec-precise').prop('checked', true).trigger('change');
-    }
+    fillFr24Times(picked);
+    $('#prec-precise').prop('checked', true).trigger('change');
     updateProgressBar(100);
     setTimeout(function() { bootstrap.Modal.getInstance(document.getElementById('fr24Modal'))?.hide(); updateProgressBar(0); }, 400);
   }
@@ -1875,10 +1883,7 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
       item.on('click', async function(e) {
         e.preventDefault();
         bootstrap.Modal.getInstance(document.getElementById('legSelectorModal'))?.hide();
-        var durationSeconds = null;
-        if (pl.leg.datetime_takeoff && pl.leg.datetime_landed)
-          durationSeconds = Math.floor((new Date(pl.leg.datetime_landed) - new Date(pl.leg.datetime_takeoff)) / 1000);
-        newTrip.fr24_id = pl.leg.fr24_id; newTrip.fr24_duration = durationSeconds;
+        var picked = await useFr24Flight(pl.leg);
         globalStationDict[pl.originLabel] = [[pl.origAirport.latitude, pl.origAirport.longitude], pl.originLabel];
         globalStationDict[pl.destLabel]   = [[pl.destAirport.latitude, pl.destAirport.longitude], pl.destLabel];
         $('#originStation').val(pl.originLabel); onStationSelected('origin', globalStationDict[pl.originLabel], 'dot-origin');
@@ -1889,17 +1894,15 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
             setOperatorValue(al ? al.name : pl.leg.operating_as);
           } catch(e) { setOperatorValue(pl.leg.operating_as); }
         }
-        if (pl.depLocal && pl.arrLocal) {
-          $('#newTripStartDate').val(pl.depLocal.toTimezonedISOString().split('T')[0]); $('#newTripStartTime').val(pl.depLocal.toTimeString().slice(0,5));
-          $('#newTripEndDate').val(pl.arrLocal.toTimezonedISOString().split('T')[0]);   $('#newTripEndTime').val(pl.arrLocal.toTimeString().slice(0,5));
-          $('#prec-precise').prop('checked', true).trigger('change');
-        }
+        fillFr24Times(picked);
+        $('#prec-precise').prop('checked', true).trigger('change');
       });
       legsList.append(item);
     });
   }
 
   $('#fr24Date').val(getCurrentDate());
+  fr24DateBounds($('#fr24Date'));
   {% else %}
   stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{ manual|default('Manual') }}");
   materialTypeAutocomplete($("#material_type"), manAndOps);
@@ -1965,8 +1968,9 @@ function placeTempPin(entry, role) {
 var airPolyline = null;
 var airOrigMarker = null, airDestMarker = null;
 var useFR24 = true;
-var fr24PathCache = null, fr24AltCache = null, fr24TimeCache = null;
+var fr24PathCache = null, fr24AltCache = null, fr24TimeCache = null, fr24StopsCache = [];
 var flightTracksUrl = "{{ url_for('flight_tracks', username=username, fr24_id='') }}";
+var flightEventsUrl = "{{ url_for('flight_events', username=username, fr24_id='') }}";
 var saveFlightUrl = "{{ url_for('saveFlight', username=username, type='air') }}";
 
 function normalizeDateLinePath(path) {
@@ -1988,12 +1992,13 @@ function updateAirRoute() {
 
   if (newTrip.fr24_id && useFR24) {
     if (!fr24PathCache) {
-      fetch(flightTracksUrl + newTrip.fr24_id)
+      fetch(fr24TrackUrl(flightTracksUrl, newTrip))
         .then(function(r) { return r.json(); })
         .then(function(data) {
           fr24PathCache = data.coordinates;
           fr24AltCache = data.altitude;
           fr24TimeCache = data.timestamps;
+          fr24StopsCache = data.runway_stops || [];
           updateAirRoute();
         })
         .catch(function() { useFR24 = false; updateAirRoute(); });
@@ -2021,7 +2026,22 @@ function updateAirRoute() {
   map.fitBounds(airPolyline.getBounds(), { padding: [40, 40] });
   // No router here, so no route events either: the geodesic sets the distance itself.
   renderRouteSummary('ok');
+  renderFr24Stops();
 }
+
+// The take-off and landing the trip will be saved with, under its times, read-only:
+// they are put right on the trip's edit page. Not on the geodesic, which has none.
+function renderFr24Stops() {
+  var shown = newTrip.fr24_id && useFR24 && fr24StopsCache.length;
+  $('#fr24Stops').prop('hidden', !shown).html(shown ? fr24StopsPreviewHtml(fr24StopsCache, {
+    origin_station: $('#originStation').val(), destination_station: $('#destinationStation').val(),
+    start_time: $('#newTripStartTime').val(), end_time: $('#newTripEndTime').val(),
+    departure_platform: $('#departurePlatform').val(), arrival_platform: $('#arrivalPlatform').val()
+  }) : '');
+}
+$(function () {
+  $('#newTripStartTime, #newTripEndTime').on('change', renderFr24Stops);
+});
 {% endif %}
 
 function startRouting() {

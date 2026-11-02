@@ -582,8 +582,7 @@ function toRouting(data, routingUrl, type){
   });
   // Carry FR24-imported flight data through (set by the FR24 import on the air form)
   if (typeof window.FR24 !== "undefined" && window.FR24){
-    newTrip["fr24_id"] = window.FR24["fr24_id"];
-    newTrip["fr24_duration"] = window.FR24["fr24_duration"];
+    Object.assign(newTrip, window.FR24);
   }
   // Collect selected tag IDs from the tag chip list
   newTrip["tag_ids"] = Array.from(document.querySelectorAll('#tagList [data-tag-id]'))
@@ -2046,6 +2045,73 @@ function hideLoading() {
 // date.toISOString() returns the date in UTC, we want to return it in local time but in the same format
 Date.prototype.toTimezonedISOString = function() {
   return new Date(this.getTime() - (this.getTimezoneOffset() * 60000)).toISOString()
+}
+
+// FR24 has flights from 30 days back to a day ahead: the date picker offers no others,
+// and fr24DateOk says whether the one typed is among them.
+function fr24DateBounds($input) {
+  var today = Date.parse(getCurrentDate() + 'T00:00:00Z');
+  function day(k) { return new Date(today + k * 864e5).toISOString().slice(0, 10); }
+  $input.attr({ min: day(-30), max: day(1) });
+}
+function fr24DateOk($input) {
+  var v = $input.val();
+  return !v || (v >= $input.attr('min') && v <= $input.attr('max'));
+}
+
+// A flight picked from an FR24 search, with when it left and reached its gates
+// (/flight_events, where FR24 knows them): { flight, events }, events null if that failed.
+async function fr24WithEvents(eventsBase, flight) {
+  var events = null;
+  try { events = await $.get(eventsBase + flight.fr24_id); } catch (e) { /* the transponder's times will do */ }
+  return { flight: flight, events: events || {} };
+}
+
+// What a flight imported from FR24 carries to the track request and the save
+// (src/runway_stops.py apply_to_trip): where and when it landed, to finish a track lost
+// short of the runway, and the gate and transponder times the trip's own were filled in from.
+function fr24TripFields(picked) {
+  var flight = picked.flight, events = picked.events;
+  var duration = flight.datetime_takeoff && flight.datetime_landed
+    ? Math.floor((new Date(flight.datetime_landed) - new Date(flight.datetime_takeoff)) / 1000) : null;
+  return {
+    fr24_id: flight.fr24_id,
+    fr24_duration: duration,
+    fr24_dest: flight.dest_icao_actual || flight.dest_icao || '',
+    fr24_landed: flight.datetime_landed || '',
+    fr24_first_seen: flight.first_seen_local ? flight.first_seen : null,
+    fr24_last_seen: flight.last_seen_local ? flight.last_seen : null,
+    fr24_gate_departure: events.departure ? events.departure.utc : null,
+    fr24_gate_arrival: events.arrival ? events.arrival.utc : null,
+  };
+}
+
+// The trip's times from when the flight left and reached its gates, or where FR24 doesn't
+// know, when the transponder was first and last heard, about there; the arrival left
+// empty while the flight hasn't ended. The gates go in as its departure and arrival
+// gates. The runway times become take-off and landing stops when the trip is saved.
+// Actual times, so no delays on top.
+function fillFr24Times(picked) {
+  var flight = picked.flight, events = picked.events;
+  function fill(dateSel, timeSel, local) {
+    var when = local ? new Date(local) : null;
+    $(dateSel).val(when ? when.toTimezonedISOString().split('T')[0] : '');
+    $(timeSel).val(when ? when.toTimeString().slice(0, 5) : '');
+  }
+  fill('#newTripStartDate', '#newTripStartTime', events.departure ? events.departure.local : flight.first_seen_local);
+  fill('#newTripEndDate', '#newTripEndTime', events.arrival ? events.arrival.local : flight.last_seen_local);
+  $('#newTripEndTime').removeAttr('min');
+  $('#departurePlatform').val(events.departure && events.departure.gate || '');
+  $('#arrivalPlatform').val(events.arrival && events.arrival.gate || '');
+  if ($('#delayToggle').is(':checked')) $('#delayToggle').prop('checked', false).trigger('change');
+  $('#departureDelayMinutes, #arrivalDelayMinutes').val('').trigger('input');
+}
+
+// The FR24 track request for an imported flight, finished at the airport when it was
+// lost short of the runway, its take-off and landing with the transponder times above.
+function fr24TrackUrl(base, trip) {
+  return base + trip.fr24_id + '?' + $.param({ dest: trip.fr24_dest || '', landed: trip.fr24_landed || '',
+                                              first_seen: trip.fr24_first_seen || '', last_seen: trip.fr24_last_seen || '' });
 }
 
 // Pick the grammatically correct plural form for the page's locale (read from

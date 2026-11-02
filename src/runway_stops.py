@@ -240,11 +240,31 @@ def _seconds(delay):
     return float(delay) if delay not in (None, "") else 0
 
 
-def apply_to_trip(trip):
+def with_seen(stops, first_seen, last_seen):
+    """The stops with FR24's summary first and last seen (UTC ISO) as the transponder
+    times, rather than the track's ends: they are what a new trip's own times were filled
+    in from (new and compose), so the arrival reads on time to the minute."""
+    seen = {"takeoff": ("arr_rt", first_seen, "dep_rt"), "landing": ("dep_rt", last_seen, "arr_rt")}
+    for stop in stops:
+        st = stop["stop"]
+        field, when, runway = seen[st["kind"]]
+        if not when or not st.get(runway):
+            continue
+        when = _iso(_epoch(when.replace("T", " ").rstrip("Z")))
+        # Before the take-off, after the landing: else it was heard in the air
+        if (when < st[runway]) == (st["kind"] == "takeoff") and when != st[runway]:
+            st[field] = when
+    return stops
+
+
+def apply_to_trip(trip, first_seen=None, last_seen=None, gate_departure=None, gate_arrival=None):
     """For a Trip saved with a freshly imported FR24 track: its runway stops, from the
     track unless the page already sent them (the edit page shows them as it imports, to be
     put right before saving), and the delays they prove wrong. Corrected without asking:
-    importing the flight is the user asking for its real times."""
+    importing the flight is the user asking for its real times. first_seen / last_seen are
+    FR24's summary times (UTC ISO) the page filled the trip's times from, if it did;
+    gate_departure / gate_arrival its gate events (UTC ISO), where FR24 knows them: when
+    the flight really left and reached the gate, so they set the delays outright."""
     if trip.route_source != "fr24" or not trip.altitude or not trip.timestamps:
         return
     start, end = trip.utc_start_datetime, trip.utc_end_datetime
@@ -254,7 +274,16 @@ def apply_to_trip(trip):
         coords = [[p["lat"], p["lng"]] if isinstance(p, dict) else p for p in trip.path]
         if len(coords) != len(altitude) or len(coords) != len(timestamps):
             return
-        trip.waypoints = with_stops(trip.waypoints, track_stops(coords, altitude, timestamps),
-                                    start, end, dep_delay, arr_delay)
-    for name, value in delay_fields(trip.waypoints, start, end, dep_delay, arr_delay).items():
+        stops = with_seen(track_stops(coords, altitude, timestamps), first_seen, last_seen)
+        trip.waypoints = with_stops(trip.waypoints, stops, start, end, dep_delay, arr_delay)
+    fields = delay_fields(trip.waypoints, start, end, dep_delay, arr_delay)
+    for name, gate, logged, current in (("departure_delay", gate_departure, start, dep_delay),
+                                        ("arrival_delay", gate_arrival, end, arr_delay)):
+        gate, logged = _epoch(gate.replace("T", " ").rstrip("Z")) if gate else None, _epoch(logged)
+        if gate is not None and logged is not None:
+            delay = round((gate - logged) / 60) * 60
+            fields.pop(name, None)
+            if delay != current:
+                fields[name] = delay
+    for name, value in fields.items():
         setattr(trip, name, value)

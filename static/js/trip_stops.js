@@ -176,6 +176,13 @@ function tripStopsHtml(data, row, compact) {
                  : '<table class="trip-stops-table"><tbody>' + rows.join('') + '</tbody></table>') + '</details>';
 }
 
+// An FR24 import's take-off and landing before the trip is saved (new and compose), as
+// the trips list will show them: open, between the form's ends. `row` as tripStopsHtml's.
+function fr24StopsPreviewHtml(stops, row) {
+    return '<div class="ts-preview">' + tripStopsHtml(stops, Object.assign({ type: 'air' }, row))
+        .replace('<details class="trip-stops">', '<details class="trip-stops" open>') + '</div>';
+}
+
 function addSecsToDisplayTime(timeStr, secs) {
     if (!secs) return timeStr;
     var dayOffset = 0;
