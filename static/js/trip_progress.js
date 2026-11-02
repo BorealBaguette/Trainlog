@@ -19,6 +19,9 @@
   // A stop further than this from the route is not on it (the route was edited after the
   // stops were saved): it is ignored rather than allowed to pull the position around.
   var MAX_STOP_OFFSET_M = 2000;
+  // A stop timed this far outside the trip's own departure and arrival belongs to another
+  // day's run (the trip was moved after its stops were loaded): its times are ignored.
+  var MAX_STOP_SLACK_MS = 3600 * 1000;
 
   function toMs(value) {
     if (!value) return NaN;
@@ -88,17 +91,30 @@
     return isNaN(arr) ? null : { arr: arr, dep: dep };
   }
 
+  // Departure and arrival, ms, delays included. null when unusable.
+  function tripWindow(trip) {
+    var t0 = toMs(trip.utc_start_datetime || trip.utc_filtered_start_datetime) +
+             Number(trip.departure_delay || 0) * 1000;
+    var t1 = toMs(trip.utc_end_datetime || trip.utc_filtered_end_datetime) +
+             Number(trip.arrival_delay || 0) * 1000;
+    return isNaN(t0) || isNaN(t1) || t1 <= t0 ? null : { t0: t0, t1: t1 };
+  }
+
+  function outside(times, w) {
+    return w && (times.arr < w.t0 - MAX_STOP_SLACK_MS || times.dep > w.t1 + MAX_STOP_SLACK_MS);
+  }
+
   // The trip's named, timed stops: [{ name, lat, lng, arr, dep, tz, ... }], times in ms with
   // the delays included, the same as the position is worked out from.
   function timedStops(trip) {
     var depDelay = Number(trip.departure_delay || 0) * 1000;
     var arrDelay = Number(trip.arrival_delay || 0) * 1000;
-    var stops = stopsOf(trip), out = [];
+    var stops = stopsOf(trip), out = [], w = tripWindow(trip);
     stops.forEach(function (wp, n) {
       var s = wp.stop;
       var lat = wp.lat != null ? wp.lat : s.lat, lng = wp.lng != null ? wp.lng : s.lng;
       var times = stopTimes(s, n, stops.length, depDelay, arrDelay);
-      if (!s.name || !times || lat == null || lng == null) return;
+      if (!s.name || !times || outside(times, w) || lat == null || lng == null) return;
       out.push({
         name: s.name, lat: lat, lng: lng, arr: times.arr, dep: times.dep, tz: s.tz || null,
         // as timetabled, and the platform and country, for showing what changed
@@ -112,11 +128,9 @@
   // Time-ordered [time, distance] pairs: the departure, each stop's arrival and departure
   // (the vehicle stands still between them), the arrival.
   function buildAnchors(trip, coords, latFirst) {
-    var t0 = toMs(trip.utc_start_datetime || trip.utc_filtered_start_datetime) +
-             Number(trip.departure_delay || 0) * 1000;
-    var t1 = toMs(trip.utc_end_datetime || trip.utc_filtered_end_datetime) +
-             Number(trip.arrival_delay || 0) * 1000;
-    if (isNaN(t0) || isNaN(t1) || t1 <= t0) return null;
+    var w = tripWindow(trip);
+    if (!w) return null;
+    var t0 = w.t0, t1 = w.t1;
 
     var cum = cumulative(coords, latFirst);
     var total = cum[cum.length - 1];
@@ -134,7 +148,7 @@
       from = hit.index; // the stops come in route order: later ones can't be behind this one
 
       var times = stopTimes(s, n, stops.length, depDelay, arrDelay);
-      if (!times) return;
+      if (!times || outside(times, w)) return;
       var arr = times.arr, dep = times.dep;
 
       anchors.push([arr, cum[hit.index]]);

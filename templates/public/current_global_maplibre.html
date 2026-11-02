@@ -23,6 +23,162 @@
   .spinner-container.hidden { opacity: 0; }
   .spinner-container .lds-spinner { top: auto; margin-top: 0; }
 
+  /* Traveller's avatar in the pin's head, over MapLibre's default white dot */
+  .maplibregl-marker .user-avatar { --avatar-size: 19px; position: absolute; left: 4px; top: 4px; }
+  .popup-user-avatar { --avatar-size: 36px; }
+
+  /* --accent is the trip type's colour, set on .live-popup */
+  .live-popup { min-width: 280px; font-size: .9rem; line-height: 1.35; }
+  /* The strip takes the card's width, set by the rest of the content (up to the popup's
+     maxWidth), and scrolls within it: it never widens the card itself */
+  .live-popup .trainset-inline-scroll { width: 0; min-width: 100%; }
+  .lp-head { display: flex; align-items: center; gap: 10px; margin: 0 18px 12px 0; }
+  .lp-who { flex: 1; min-width: 0; font-weight: 700; font-size: 1.05rem; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+  .lp-who:hover { text-decoration: underline; }
+  .lp-type {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 50%; flex: none; color: var(--accent);
+  }
+  .lp-type::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: .15; }
+  .lp-operators { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .lp-operators img { max-height: 28px; max-width: 110px; object-fit: contain; }
+  .lp-route { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
+  .lp-route > div { min-width: 0; overflow-wrap: anywhere; }
+  .lp-arrival { text-align: right; }
+  .lp-time { color: var(--bs-secondary-color); font-weight: 400; font-size: .82rem; margin-top: 2px; }
+  .lp-progress { height: 5px; margin-top: 8px; border-radius: 3px; background: var(--bs-secondary-bg); overflow: hidden; }
+  .lp-progress > div { height: 100%; border-radius: 3px; background: var(--accent); }
+  .lp-place { font-weight: 600; }
+  .live-popup .popup-vehicle { margin-top: 12px; }
+
+  /* Where the vehicle is, and every stop: the dashboard's current trip tile, in the type's colour */
+  .lp-status {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    margin-top: 12px; padding: 8px 10px; border: 0; border-radius: 10px;
+    background: var(--bs-tertiary-bg); color: inherit; text-align: left;
+  }
+  .lp-status:hover { background: var(--bs-secondary-bg); }
+  .lp-status > div { flex: 1; min-width: 0; }
+  .lp-status-label { font-size: .68rem; text-transform: uppercase; letter-spacing: 1px; color: var(--bs-secondary-color); }
+  .lp-status-name { font-weight: 700; overflow-wrap: anywhere; }
+  .lp-chevron { color: var(--bs-secondary-color); transition: transform .2s; }
+  .live-popup.stops-open .lp-chevron { transform: rotate(180deg); }
+  .lp-marker {
+    position: relative; flex: none; width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bs-body-bg); color: var(--accent); font-size: .8rem;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .lp-marker.running { animation: lp-ring 1.5s infinite; }
+  .lp-badge {
+    position: absolute; right: -4px; bottom: -4px; width: 13px; height: 13px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #fbbf24; color: #3a2a00; font-size: .4rem;
+  }
+  @keyframes lp-ring {
+    0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); }
+    50%      { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 10%, transparent); }
+  }
+  .lp-timeline {
+    display: none;
+    list-style: none;
+    margin: 8px 0 0;
+    position: relative; /* the stops' offsetTop, to open on the current one */
+    /* room for the current dot's ring on the left; on the right for overlay scrollbars,
+       which scrollbar-gutter does not reserve */
+    padding: 6px 16px 0 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: .84rem;
+  }
+  .live-popup.stops-open .lp-timeline { display: block; }
+  .lp-timeline li {
+    position: relative; display: flex; justify-content: space-between; gap: 10px;
+    padding: 0 0 9px 22px;
+  }
+  .lp-timeline li::before {
+    content: ""; position: absolute; left: 5px; top: .55rem; bottom: -.55rem; width: 2px;
+    background: linear-gradient(var(--accent) var(--f), var(--bs-border-color) var(--f));
+  }
+  .lp-timeline li:last-child::before { display: none; }
+  .lp-timeline li.past > span:not(.lp-here):not(.lp-dot) { opacity: .55; }
+  .lp-timeline li.current, .lp-timeline li.terminus { font-weight: 700; }
+  .lp-dot {
+    position: absolute; left: 6px; top: .55rem; width: 11px; height: 11px; border-radius: 50%;
+    border: 2px solid var(--bs-border-color); background: var(--bs-body-bg);
+    transform: translate(-50%, -50%);
+  }
+  .lp-dot.passed { background: var(--accent); border-color: var(--accent); }
+  .lp-dot.terminus { width: 15px; height: 15px; border-width: 3px; }
+  .lp-dot.current { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .lp-here {
+    position: absolute; left: 6px; z-index: 1; width: 16px; height: 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bs-body-bg); color: var(--accent); font-size: .5rem;
+    animation: lp-ring 1.5s infinite;
+  }
+  .lp-tl-time { white-space: nowrap; color: var(--bs-secondary-color); }
+  .lp-operators .lp-line { margin-left: auto; }
+  .lp-line {
+    padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: .8rem;
+    background: var(--bs-secondary-bg); color: var(--bs-emphasis-color);
+  }
+
+  /* Panel top-left on desktop. On mobile, a summary bar at the bottom-left that
+     expands upwards, clear of the popup that mobile pins to the top. */
+  #live-stats {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    width: 260px;
+    border-radius: 12px;
+    background: light-dark(rgba(255,255,255,.95), rgba(33,37,41,.95));
+    box-shadow: 0 2px 10px rgba(0,0,0,.2);
+    font-size: .88rem;
+    overflow: hidden;
+  }
+  #live-stats:empty { display: none; }
+  .ls-head {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 10px 14px; border: 0; background: none; color: inherit; text-align: left;
+  }
+  .ls-title { font-weight: 700; font-size: 1rem; }
+  .ls-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #dc3545; flex: none;
+    animation: ls-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes ls-pulse { 50% { opacity: .35; } }
+  .ls-total { margin-left: auto; font-weight: 700; white-space: nowrap; }
+  .ls-chips { display: none; gap: 8px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+  .ls-chevron { color: var(--bs-secondary-color); transition: transform .2s; }
+  #live-stats.open .ls-chevron { transform: rotate(180deg); }
+  .ls-body { display: none; padding: 0 14px 12px; }
+  #live-stats.open .ls-body { display: block; }
+  .ls-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .ls-tiles > div { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 8px; background: var(--bs-tertiary-bg); text-align: center; }
+  .ls-tiles strong { font-size: 1rem; white-space: nowrap; }
+  .ls-tiles small { color: var(--bs-secondary-color); font-size: .72rem; }
+  .ls-flags { display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bs-border-color); }
+  .ls-flags .flag { font-size: 1.1rem !important; line-height: 1; }
+  .ls-row { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; column-gap: 8px; padding: 3px 0; }
+  .ls-row i { text-align: center; }
+  .ls-count { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ls-bar { grid-column: 2 / 4; height: 4px; margin-top: 3px; border-radius: 2px; background: var(--bs-secondary-bg); overflow: hidden; }
+  .ls-bar > div { height: 100%; border-radius: 2px; }
+  @media (max-width: 700px) {
+    #live-stats { top: auto; bottom: 10px; width: auto; max-width: calc(100vw - 20px); }
+    #live-stats:not(.open) .ls-title { display: none; }
+    #live-stats:not(.open) .ls-chips { display: flex; }
+    #live-stats:not(.open) .ls-total { margin-left: 0; padding-right: 8px; border-right: 1px solid var(--bs-border-color); }
+    #live-stats.open { width: calc(100vw - 20px); }
+    .ls-body { max-height: 50vh; overflow-y: auto; }
+    /* The panel opens upwards here */
+    .ls-chevron { transform: rotate(180deg); }
+    #live-stats.open .ls-chevron { transform: none; }
+  }
+
   .delay-time { color: light-dark(#dc3545, #db8a92); }
   .early-time  { color: light-dark(#28a745, #8fd69f); }
 
@@ -76,10 +232,12 @@
   .popup-media .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
 
   /* Keep popups within the viewport on narrow/mobile screens — the fixed
-     460px maxWidth passed to maplibregl.Popup otherwise overflows small
+     540px maxWidth passed to maplibregl.Popup otherwise overflows small
      screens and the popup content itself needs to shrink & scroll with it. */
   .maplibregl-popup {
     max-width: calc(100vw - 20px) !important;
+    /* Over the zoom buttons, which would otherwise cover its edge */
+    z-index: 3;
   }
   .maplibregl-popup-content {
     max-width: calc(100vw - 20px);
@@ -121,15 +279,28 @@
 </div>
 
 <div id="map"></div>
+<div id="live-stats"></div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
-<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/user_avatar.js') }}"></script>
 
 <script>
 var logosList   = {{ logosList | tojson }};
 var apiEndpoint = "{{ api_endpoint }}";
+var liveMapTitle = {{ live_map | tojson }};
+var stopLabels = {{ {'next': ctNextStop, 'at': ctAtStop} | tojson }};
+var statsLabels = {{ {'countries': crossedCountries, 'delays': delaysToggle} | tojson }};
+var typeLabels = {{ {
+  'train': train, 'tram': tram, 'metro': metro, 'bus': bus, 'car': car, 'cycle': cycle,
+  'scooter': scooter, 'funicular': funicular, 'rail': rail, 'ski': ski, 'walk': walk,
+  'air': air, 'ferry': ferry, 'aerialway': aerialway, 'other': other,
+  'accommodation': accommodation, 'restaurant': restaurant, 'poi': poi,
+} | tojson }};
+// Guests only get initials: who may see a Discord picture depends on the viewer
+var avatarsEndpoint = {{ (url_for('user_avatars', username=username) if session.get('logged_in') else none) | tojson }};
 
 /* ── datetime helpers ────────────────────────────────────────────────────── */
 function formatDT(iso) {
@@ -195,7 +366,7 @@ function trainsetHTML(trip) {
   const attr = _attributionText(ts.units);
   const label = ts.label ? `<div class="ts-inline-label">${esc(ts.label)}</div>` : '';
   return `<div class="publicTrainset ts-inline-wrapper" style="margin-top:6px;">
-      <div class="trainset-inline-scroll" style="max-width:420px"${attr ? ` title="${attr}"` : ''}>
+      <div class="trainset-inline-scroll"${attr ? ` title="${attr}"` : ''}>
         <div class="compo-strip ts-strip">${wagons}</div>
       </div>${label}</div>`;
 }
@@ -349,68 +520,159 @@ function getTypeColor(type) {
 
 function getPopupContent(tripObj) {
   const trip        = tripObj.trip || {};
+  const type        = trip.type === 'helicopter' ? 'air' : trip.type;
   const origin      = trip.origin_station || '-';
   const destination = trip.destination_station || '-';
-  const { date: startDate } = formatDT(trip.start_datetime);
   const startTime   = withDelayDisplay(trip.start_datetime, trip.departure_delay, trip.start_datetime);
   const endTime     = withDelayDisplay(trip.end_datetime,   trip.arrival_delay,   trip.start_datetime);
   const profileUrl  = `/public/${tripObj.username}`;
 
-  if (['accommodation', 'poi', 'restaurant'].includes(trip.type)) {
-      let icon = '<i class="fa-solid fa-map-location-dot"></i>'
-      if (trip.type === 'accommodation') icon = '<i class="fa-solid fa-bed"></i>'
-      if (trip.type === 'restaurant') icon = '<i class="fa-solid fa-utensils"></i>'
-      return `
-        <div style="font-family:Century Gothic,sans-serif;min-width:200px;">
-          <div style="font-weight:bold;font-size:1.05em;margin-bottom:6px;">
-            <a href="${profileUrl}" target="_blank" style="text-decoration:none;color:inherit;">${tripObj.username}</a>
-          </div>
-          <div style="font-size:0.9em;color:light-dark(#333, var(--bs-emphasis-color));line-height:1.7;">
-            <div>${icon}&nbsp;<span style="text-transform: capitalize; font-weight: bold">${trip.type === 'poi' ? 'Activity' : trip.type}</strong></div>
-            <div>${origin}</div>
-            <div><strong>Date:</strong> ${startDate}</div>
-            <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
-          </div>
-        </div>`;
+  const header = `
+    <div class="lp-head">
+      <span class="user-avatar popup-user-avatar" data-username="${esc(tripObj.username)}"></span>
+      <a class="lp-who" href="${profileUrl}" target="_blank">${esc(tripObj.username)}</a>
+      <span class="lp-type" title="${esc(typeLabels[type] || type)}"><i class="${typeIcon(type).icon}"></i></span>
+    </div>`;
+
+  if (STAY_ICONS[trip.type]) {
+    return `
+      <div class="live-popup" style="--accent:var(--bs-secondary-color)">
+        ${header}
+        <div class="lp-place">${origin}</div>
+        <div class="lp-time">${startTime} – ${endTime}</div>
+      </div>`;
   }
 
   let operatorParts = [];
   if (trip.multi_operators) {
     trip.multi_operators.forEach(op => {
       operatorParts.push(op.logo_url
-        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op.operator_name}"><img src="/static/${op.logo_url}" alt="${op.operator_name}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`
+        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op.operator_name}"><img src="/static/${op.logo_url}" alt="${op.operator_name}"></div>`
         : `<span>${op.operator_name}</span>`);
     });
   } else if (trip.logo_url) {
-    operatorParts.push(`<div class="popupInfo operator_popupInfo" popupinfo_content="${trip.operator || ''}"><img src="/static/${trip.logo_url}" alt="${trip.operator || ''}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`);
+    operatorParts.push(`<div class="popupInfo operator_popupInfo" popupinfo_content="${trip.operator || ''}"><img src="/static/${trip.logo_url}" alt="${trip.operator || ''}"></div>`);
   } else if (trip.operator) {
     String(trip.operator).split(',').map(s => s.trim()).forEach(op => {
       operatorParts.push(logosList[op]
-        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op}"><img src="/static/${logosList[op]}" alt="${op}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`
+        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op}"><img src="/static/${logosList[op]}" alt="${op}"></div>`
         : `<span>${op}</span>`);
     });
   }
 
-  const logoHTML = operatorParts.length
-    ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;">${operatorParts.join('')}</div>`
-    : '';
+  const { start, end } = tripWindow(trip);
+  const progress = Math.min(1, Math.max(0, (Date.now() - start) / (end - start))) || 0;
 
   return `
-    <div style="font-family:Century Gothic,sans-serif;min-width:200px;">
-      <div style="font-weight:bold;font-size:1.05em;margin-bottom:6px;">
-        <a href="${profileUrl}" target="_blank" style="text-decoration:none;color:inherit;">${tripObj.username}</a>
+    <div class="live-popup" style="--accent:${getTypeColor(type)}">
+      ${header}
+      ${trip.line_name || operatorParts.length ? `
+        <div class="lp-operators">
+          ${operatorParts.join('')}
+          ${trip.line_name ? `<span class="lp-line">${esc(trip.line_name)}</span>` : ''}
+        </div>` : ''}
+      <div class="lp-route">
+        <div>${origin}<div class="lp-time">${startTime}</div></div>
+        <div class="lp-arrival">${destination}<div class="lp-time">${endTime}</div></div>
       </div>
-      <div style="font-size:0.9em;color:light-dark(#333, var(--bs-emphasis-color));line-height:1.7;">
-        <div><strong>From:</strong> ${origin}</div>
-        <div><strong>To:</strong> ${destination}</div>
-        <div><strong>Date:</strong> ${startDate}</div>
-        <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
-        ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
-        ${vehicleHTML(trip)}
-        ${trainsetHTML(trip)}
-      </div>
-      ${logoHTML}
+      <div class="lp-progress"><div style="width:${progress * 100}%"></div></div>
+      ${stopsHTML(trip, start, end, startTime, endTime)}
+      ${vehicleHTML(trip)}
+      ${trainsetHTML(trip)}
     </div>`;
+}
+
+// Departure and arrival, ms, delays included
+function tripWindow(trip) {
+  const ms = v => new Date(String(v).replace(' ', 'T') + 'Z').getTime();
+  return {
+    start: ms(trip.utc_start_datetime) + Number(trip.departure_delay || 0) * 1000,
+    end:   ms(trip.utc_end_datetime)   + Number(trip.arrival_delay || 0) * 1000,
+  };
+}
+
+// The trip's named stops, ends included. Those without a time get one estimated between
+// their timed neighbours (`untimed`), only to place the vehicle; it is never shown.
+function tripStops(trip, start, end) {
+  const timed = TripProgress.timedStops(trip);
+  let wps = [];
+  try { wps = JSON.parse(trip.waypoints || '[]') || []; } catch (e) {}
+  let t = 0;
+  const mid = wps.filter(w => w && w.stop && w.stop.name).map(w => {
+    if (timed[t] && timed[t].name === w.stop.name) return timed[t++];
+    return { name: w.stop.name, untimed: true };
+  });
+  const stops = [
+    { name: trip.origin_station, arr: start, dep: start },
+    ...mid,
+    { name: trip.destination_station, arr: end, dep: end },
+  ];
+  let a = 0;
+  stops.forEach((st, j) => {
+    if (!st.untimed) { a = j; return; }
+    let b = j + 1;
+    while (stops[b].untimed) b++;
+    st.arr = st.dep = stops[a].dep + (stops[b].arr - stops[a].dep) * (j - a) / (b - a);
+  });
+  return stops;
+}
+
+// Next stop (or the one the vehicle stands at) and, unfolded, the whole timeline
+function stopsHTML(trip, start, end, startTime, endTime) {
+  const stops = tripStops(trip, start, end);
+  if (stops.length < 3) return '';
+  const now = Date.now(), last = stops.length - 1;
+  let i = 0;
+  while (i < last && stops[i + 1].arr <= now) i++;
+  const atStop = now < stops[i].dep || i === last;
+  const f = atStop ? 0 : Math.min(1, (now - stops[i].dep) / Math.max(1, stops[i + 1].arr - stops[i].dep));
+  const isPast = n => n < i || (n === i && !atStop);
+  const isTerminus = n => n === 0 || n === last;
+
+  const fmt = (st, which) => {
+    if (st.untimed) return '';
+    const ms = st[which];
+    const t = new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: st.tz || undefined });
+    const late = Math.round((ms - st[which + 'Sched']) / 60000);
+    return late > 0 ? `${t} <span class="delay-time">+${late}'</span>` : t;
+  };
+  const rel = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const inMin = ms => {
+    const m = Math.max(0, Math.round((ms - now) / 60000));
+    return m ? rel.format(m, 'minute') : rel.format(0, 'second');
+  };
+  const fullTime = (st, n) => n === 0 ? startTime : n === last ? endTime
+    : Math.round(st.arr / 60000) === Math.round(st.dep / 60000) ? fmt(st, 'arr')
+    : `${fmt(st, 'arr')} – ${fmt(st, 'dep')}`;
+
+  const st = atStop ? stops[i] : stops[i + 1];
+  const stIndex = atStop ? i : i + 1;
+  const when = st.untimed ? [] : atStop
+    ? (i === last ? [fullTime(st, i)] : [fmt(st, 'dep'), inMin(st.dep)])
+    : [fullTime(st, stIndex).split(' – ')[0], inMin(st.arr)];
+
+  const rows = stops.map((s, n) => {
+    const fill = n < i ? 100 : n === i ? f * 100 : 0;
+    const dot = 'lp-dot' + (n <= i ? ' passed' : '') + (isTerminus(n) ? ' terminus' : '')
+      + (n === i && atStop ? ' current' : '');
+    return `<li class="${isPast(n) ? 'past' : n === i ? 'current' : ''}${isTerminus(n) ? ' terminus' : ''}" style="--f:${fill}%">`
+      + `<span class="${dot}"></span>`
+      + (n === i && !(atStop && n === last) ? `<span class="lp-here" style="top:calc(.55rem + ${fill}%);transform:translate(-50%,-50%) rotate(90deg)"><i class="fa-solid fa-chevron-right"></i></span>` : '')
+      + `<span>${n === 0 || n === last ? s.name : esc(s.name)}</span><span class="lp-tl-time">${fullTime(s, n)}</span></li>`;
+  }).join('');
+
+  return `
+    <button type="button" class="lp-status" data-current="${i}">
+      <span class="lp-marker${atStop ? '' : ' running'}"><i class="${typeIcon(trip.type === 'helicopter' ? 'air' : trip.type).icon}"></i>
+        ${atStop && i < last ? '<span class="lp-badge"><i class="fa-solid fa-pause"></i></span>' : ''}</span>
+      <div>
+        <div class="lp-status-label">${esc(atStop ? stopLabels.at : stopLabels.next)}</div>
+        <div class="lp-status-name">${stIndex === 0 || stIndex === last ? st.name : esc(st.name)}</div>
+        <div class="lp-time">${when.filter(Boolean).join(' · ')}</div>
+      </div>
+      <i class="fa-solid fa-chevron-down lp-chevron"></i>
+    </button>
+    <ol class="lp-timeline">${rows}</ol>`;
 }
 
 /* ── dash animation ──────────────────────────────────────────────────────── */
@@ -432,6 +694,70 @@ function animateDashes(ts) {
   requestAnimationFrame(animateDashes);
 }
 
+/* ── stats ───────────────────────────────────────────────────────────────── */
+const STAY_ICONS = { accommodation: 'fa-bed', restaurant: 'fa-utensils', poi: 'fa-map-location-dot' };
+
+function typeIcon(type) {
+  const t = MapLibreUtils.MapConfig.transportTypes.find(t => t.id === type);
+  return {
+    icon: t ? `${t.iconClass || 'fa-solid'} ${t.icon}` : `fa-solid ${STAY_ICONS[type] || 'fa-circle-question'}`,
+    color: t ? t.color : 'inherit',
+  };
+}
+
+const statsEl = document.getElementById('live-stats');
+statsEl.classList.toggle('open', !matchMedia('(max-width: 700px)').matches);
+statsEl.addEventListener('click', e => {
+  if (e.target.closest('.ls-head')) statsEl.classList.toggle('open');
+});
+
+// `countries`: the country under each pin right now (null at sea), from the server
+function renderStats(trips, countries) {
+  const counts = {};
+  trips.forEach(({ trip }) => {
+    const type = trip.type === 'helicopter' ? 'air' : trip.type;
+    counts[type] = (counts[type] || 0) + 1;
+  });
+  const people = new Set(trips.map(t => t.username)).size;
+  if (!people) { statsEl.innerHTML = ''; return; }
+
+  const moving = trips.filter(({ trip }) => !STAY_ICONS[trip.type]);
+  const delayed = moving.filter(({ trip }) => Math.max(Number(trip.departure_delay || 0), Number(trip.arrival_delay || 0)) >= 60).length;
+  countries = new Set(countries.filter(Boolean));
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const max = sorted[0][1];
+  const chips = sorted.map(([type, n]) => {
+    const { icon, color } = typeIcon(type);
+    return `<span><i class="${icon}" style="color:${color}"></i> ${n}</span>`;
+  });
+  const rows = sorted.map(([type, n]) => {
+    const { icon, color } = typeIcon(type);
+    return `<div class="ls-row">
+      <i class="${icon}" style="color:${color}"></i>
+      <span>${esc(typeLabels[type] || type)}</span>
+      <span class="ls-count">${n}</span>
+      <div class="ls-bar"><div style="width:${n / max * 100}%;background:${color === 'inherit' ? 'var(--bs-secondary-color)' : color}"></div></div>
+    </div>`;
+  });
+  statsEl.innerHTML = `
+    <button type="button" class="ls-head">
+      <span class="ls-dot"></span>
+      <span class="ls-title">${esc(liveMapTitle)}</span>
+      <span class="ls-total"><i class="fa-solid fa-users"></i> ${people}</span>
+      <span class="ls-chips">${chips.join('')}</span>
+      <i class="fa-solid fa-chevron-down ls-chevron"></i>
+    </button>
+    <div class="ls-body">
+      <div class="ls-tiles">
+        <div><strong>${countries.size}</strong><small>${esc(statsLabels.countries)}</small></div>
+        <div><strong>${delayed}</strong><small>${esc(statsLabels.delays)}</small></div>
+      </div>
+      ${rows.join('')}
+      ${countries.size ? `<div class="ls-flags">${[...countries].sort().map(getTooltipNew).join('')}</div>` : ''}
+    </div>`;
+}
+
 /* ── map state ───────────────────────────────────────────────────────────── */
 let map;
 let markers       = [];
@@ -447,10 +773,11 @@ const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
 // map dismiss it too; closeOnMove is disabled so panning doesn't close it.
 function openPopup(lngLat, tripObj) {
   if (activePopup) activePopup.remove();
-  activePopup = new maplibregl.Popup({ offset: 25, maxWidth: '460px', closeOnMove: false })
+  activePopup = new maplibregl.Popup({ offset: 25, maxWidth: '540px', closeOnMove: false, focusAfterOpen: false })
     .setLngLat(lngLat)
     .setHTML(getPopupContent(tripObj))
     .addTo(map);
+  paintUserAvatars(activePopup.getElement(), avatarsEndpoint);
   // Size the trainset strip against its own median height (see normalizeStrip).
   const popupEl = activePopup.getElement();
   if (popupEl) {
@@ -458,6 +785,14 @@ function openPopup(lngLat, tripObj) {
       normalizeStrip(strip, { target: 22, min: 15, max: 38 });
     });
     hydrateVehicle(popupEl);
+    const status = popupEl.querySelector('.lp-status');
+    if (status) status.addEventListener('click', () => {
+      const box = status.closest('.live-popup');
+      box.classList.toggle('stops-open');
+      const list = box.querySelector('.lp-timeline');
+      const cur = list.children[status.dataset.current];
+      if (box.classList.contains('stops-open')) list.scrollTop = cur.offsetTop - list.clientHeight / 3;
+    });
   }
 }
 
@@ -486,6 +821,10 @@ function addMarker(tripObj, coords, pegOverride) {
     const marker = new maplibregl.Marker({ color })
       .setLngLat([pegLng, pegLat])
       .addTo(map);
+    const avatar = document.createElement('span');
+    avatar.className = 'user-avatar';
+    avatar.dataset.username = tripObj.username;
+    marker.getElement().append(avatar);
     marker.getElement().addEventListener('click', e => {
       e.stopPropagation();
       openPopup([pegLng, pegLat], tripObj);
@@ -566,6 +905,8 @@ function renderTrips(trips) {
 
   map.getSource('live-static').setData({ type: 'FeatureCollection', features: staticFeatures });
   map.getSource('live-future').setData({ type: 'FeatureCollection', features: futureFeatures });
+  // All pins at once, so the first render asks for every picture in one request
+  paintUserAvatars(map.getContainer(), avatarsEndpoint);
 
   hideLoading();
 }
@@ -593,6 +934,15 @@ function loadTrips() {
     .then(trips => {
       const sig = JSON.stringify(trips);
       renderTrips(trips);
+      const pins = markers.map(m => { const { lat, lng } = m.getLngLat(); return [lat, lng]; });
+      fetch('/live_map/countries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pins),
+      })
+        .then(r => r.ok ? r.json() : [])
+        .catch(() => [])
+        .then(codes => renderStats(trips, codes));
       if (sig !== lastSignature) {
         lastSignature = sig;
         if (firstLoad) { fitToTrips(); firstLoad = false; }

@@ -220,7 +220,8 @@
         </a>
         <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
           <li><a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a></li>
-          <li><a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}
+            {%- set live_count = live_travellers_count() %}{% if live_count %} <span class="nav-live-count"><span></span>{{ live_count }}</span>{% endif %}</a></li>
           <li><hr class="dropdown-divider"></li>
           <li><h6 class="dropdown-header">{{ leaderboard }}</h6></li>
           {%- for code, icon, label in leaderboard_types %}

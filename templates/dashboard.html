@@ -978,7 +978,7 @@
 <script id="dist-comps-data" type="application/json">{{ dist_comps_json | safe }}</script>
 <script id="dur-comps-data"  type="application/json">{{ dur_comps_json  | safe }}</script>
 
-<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
 <script>
 const username = "{{ username }}";
 const countriesBaseUrl = "{{ url_for('countries', username=username, cc='__CC__') }}";

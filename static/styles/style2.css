@@ -2430,3 +2430,23 @@ html, body {
     border-radius: 50%;
     object-fit: cover;
 }
+
+/* People on the live map right now, next to its menu entry (src/api/live_map.py) */
+.nav-live-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--bs-secondary-bg);
+    font-size: .75em;
+    font-weight: 700;
+    vertical-align: middle;
+}
+.nav-live-count > span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #dc3545;
+}

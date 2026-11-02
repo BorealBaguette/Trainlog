@@ -24,7 +24,7 @@
 
 <div id="map" class="mapIndiv"></div>
 
-<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
 <script>
 var logosList = {{ logosList | tojson }};
 var apiEndpoint = "{{ api_endpoint }}";  // Dynamic endpoint variable

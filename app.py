@@ -211,6 +211,7 @@ from src import visualisations as viz_module
 from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
+from src.api.live_map import live_map_blueprint, live_travellers_count
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.api.motis import motis_blueprint
 from src.consts import DbNames, TripTypes
@@ -388,6 +389,7 @@ app.register_blueprint(station_map_blueprint)
 app.register_blueprint(trips_blueprint)
 app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
+app.register_blueprint(live_map_blueprint)
 app.register_blueprint(wagon_leaderboard_blueprint)
 app.register_blueprint(motis_blueprint)
 
@@ -13849,6 +13851,7 @@ def getStalePremiumCount():
 
 
 app.jinja_env.globals.update(getFriendsRequestsNumber=getFriendsRequestsNumber)
+app.jinja_env.globals.update(live_travellers_count=live_travellers_count)
 app.jinja_env.globals.update(getTagInvitesNumber=getTagInvitesNumber)
 app.jinja_env.globals.update(getStalePremiumCount=getStalePremiumCount)
 
