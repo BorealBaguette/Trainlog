@@ -1,6 +1,7 @@
 import time
 
 from flask import Blueprint, jsonify, request
+from geopip._geopip import GeoPIP
 
 from py.utils import getCountryFromCoordinates
 from src.pg import pg_session
@@ -11,6 +12,10 @@ live_map_blueprint = Blueprint("live_map", __name__)
 # How long the navbar's count of travellers is reused before it is counted again, per worker
 LIVE_COUNT_TTL = 120
 _live_count = {"at": 0, "value": 0}
+
+# GBIF's continent cookie cutter (ODbL): its polygons extend over the sea, so pins
+# offshore still get a continent
+_continents = GeoPIP(filename="static/data/continents.geojson")
 
 
 def live_travellers_count():
@@ -41,10 +46,14 @@ def live_travellers_count():
 
 @live_map_blueprint.route("/live_map/countries", methods=["POST"])
 def live_map_countries():
-    """The country under each [lat, lng] the live map sends (its pins), null at sea."""
+    """[country, continent] under each [lat, lng] the live map sends (its pins), the country null at sea."""
     points = (request.get_json(silent=True) or [])[:500]
-    codes = []
+    places = []
     for lat, lng in points:
-        code = getCountryFromCoordinates(float(lat), float(lng))["countryCode"]
-        codes.append(None if code == "UN" else code)
-    return jsonify(codes)
+        lat, lng = float(lat), float(lng)
+        code = getCountryFromCoordinates(lat, lng)["countryCode"]
+        continent = _continents.search(lng=lng, lat=lat)
+        places.append(
+            [None if code == "UN" else code, continent and continent["continent"]]
+        )
+    return jsonify(places)

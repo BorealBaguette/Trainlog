@@ -156,11 +156,15 @@
   #live-stats.open .ls-chevron { transform: rotate(180deg); }
   .ls-body { display: none; padding: 0 14px 12px; }
   #live-stats.open .ls-body { display: block; }
-  .ls-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .ls-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
   .ls-tiles > div { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 8px; background: var(--bs-tertiary-bg); text-align: center; }
   .ls-tiles strong { font-size: 1rem; white-space: nowrap; }
   .ls-tiles small { color: var(--bs-secondary-color); font-size: .72rem; }
-  .ls-flags { display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bs-border-color); }
+  .ls-flags { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bs-border-color); }
+  .ls-group { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bs-border-color); }
+  .ls-flag { display: inline-flex; align-items: center; }
+  .ls-flag sup { margin-left: 1px; font-size: .65rem; font-weight: 700; color: var(--bs-secondary-color); }
+  .ls-sea { font-size: .8rem; color: #3b82f6; cursor: context-menu; }
   .ls-flags .flag { font-size: 1.1rem !important; line-height: 1; }
   .ls-row { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; column-gap: 8px; padding: 3px 0; }
   .ls-row i { text-align: center; }
@@ -293,7 +297,23 @@ var logosList   = {{ logosList | tojson }};
 var apiEndpoint = "{{ api_endpoint }}";
 var liveMapTitle = {{ live_map | tojson }};
 var stopLabels = {{ {'next': ctNextStop, 'at': ctAtStop} | tojson }};
-var statsLabels = {{ {'countries': crossedCountries, 'delays': delaysToggle} | tojson }};
+var statsLabels = {{ {
+  'countries': crossedCountries, 'continents': liveContinents, 'delays': delaysToggle,
+  'country': liveCountry, 'continent': liveContinent, 'delay': liveDelay, 'sea': internationalWaters,
+} | tojson }};
+const pluralRules = new Intl.PluralRules(langId);
+var continentLabels = {{ {
+  'europe': EU, 'africa': AF, 'asia': AS, 'north_america': NA, 'south_america': SA, 'oceania': OC,
+} | tojson }};
+const CONTINENT_STYLE = {
+  europe:        { icon: 'fa-earth-europe',   color: '#3b82f6' },
+  africa:        { icon: 'fa-earth-africa',   color: '#f59e0b' },
+  asia:          { icon: 'fa-earth-asia',     color: '#ef4444' },
+  north_america: { icon: 'fa-earth-americas', color: '#10b981' },
+  south_america: { icon: 'fa-earth-americas', color: '#84cc16' },
+  oceania:       { icon: 'fa-earth-oceania',  color: '#8b5cf6' },
+  antarctica:    { icon: 'fa-snowflake',      color: '#06b6d4' },
+};
 var typeLabels = {{ {
   'train': train, 'tram': tram, 'metro': metro, 'bus': bus, 'car': car, 'cycle': cycle,
   'scooter': scooter, 'funicular': funicular, 'rail': rail, 'ski': ski, 'walk': walk,
@@ -712,8 +732,8 @@ statsEl.addEventListener('click', e => {
   if (e.target.closest('.ls-head')) statsEl.classList.toggle('open');
 });
 
-// `countries`: the country under each pin right now (null at sea), from the server
-function renderStats(trips, countries) {
+// `places`: [country, continent] under each pin right now (country null at sea), from the server
+function renderStats(trips, places) {
   const counts = {};
   trips.forEach(({ trip }) => {
     const type = trip.type === 'helicopter' ? 'air' : trip.type;
@@ -724,7 +744,10 @@ function renderStats(trips, countries) {
 
   const moving = trips.filter(({ trip }) => !STAY_ICONS[trip.type]);
   const delayed = moving.filter(({ trip }) => Math.max(Number(trip.departure_delay || 0), Number(trip.arrival_delay || 0)) >= 60).length;
-  countries = new Set(countries.filter(Boolean));
+  const tally = values => values.reduce((acc, v) => (v && (acc[v] = (acc[v] || 0) + 1), acc), {});
+  const countries = Object.entries(tally(places.map(p => p[0]))).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const continents = Object.entries(tally(places.map(p => p[1]))).sort((a, b) => b[1] - a[1]);
+  const atSea = places.filter(p => !p[0]).length;
 
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const max = sorted[0][1];
@@ -732,15 +755,23 @@ function renderStats(trips, countries) {
     const { icon, color } = typeIcon(type);
     return `<span><i class="${icon}" style="color:${color}"></i> ${n}</span>`;
   });
-  const rows = sorted.map(([type, n]) => {
-    const { icon, color } = typeIcon(type);
-    return `<div class="ls-row">
+  const tile = (n, one, many) => `<div><strong>${n}</strong><small>${esc(pluralRules.select(n) === 'one' ? one : many)}</small></div>`;
+  const row = (icon, color, label, n, max) => `<div class="ls-row">
       <i class="${icon}" style="color:${color}"></i>
-      <span>${esc(typeLabels[type] || type)}</span>
+      <span>${esc(label)}</span>
       <span class="ls-count">${n}</span>
       <div class="ls-bar"><div style="width:${n / max * 100}%;background:${color === 'inherit' ? 'var(--bs-secondary-color)' : color}"></div></div>
     </div>`;
+  const rows = sorted.map(([type, n]) => {
+    const { icon, color } = typeIcon(type);
+    return row(icon, color, typeLabels[type] || type, n, max);
   });
+  const continentRows = continents.map(([c, n]) => {
+    const { icon, color } = CONTINENT_STYLE[c] || { icon: 'fa-earth-americas', color: 'inherit' };
+    return row(`fa-solid ${icon}`, color, continentLabels[c] || regionNames.of('AQ'), n, continents[0][1]);
+  });
+  const flags = countries.map(([cc, n]) => `<span class="ls-flag">${getTooltipNew(cc)}${n > 1 ? `<sup>${n}</sup>` : ''}</span>`);
+  if (atSea) flags.push(`<span class="ls-sea" data-toggle="tooltip" title="${esc(statsLabels.sea)}"><i class="fa-solid fa-water"></i> ${atSea}</span>`);
   statsEl.innerHTML = `
     <button type="button" class="ls-head">
       <span class="ls-dot"></span>
@@ -751,12 +782,15 @@ function renderStats(trips, countries) {
     </button>
     <div class="ls-body">
       <div class="ls-tiles">
-        <div><strong>${countries.size}</strong><small>${esc(statsLabels.countries)}</small></div>
-        <div><strong>${delayed}</strong><small>${esc(statsLabels.delays)}</small></div>
+        ${tile(countries.length, statsLabels.country, statsLabels.countries)}
+        ${tile(continents.length, statsLabels.continent, statsLabels.continents)}
+        ${tile(delayed, statsLabels.delay, statsLabels.delays)}
       </div>
       ${rows.join('')}
-      ${countries.size ? `<div class="ls-flags">${[...countries].sort().map(getTooltipNew).join('')}</div>` : ''}
+      ${continentRows.length ? `<div class="ls-group">${continentRows.join('')}</div>` : ''}
+      ${flags.length ? `<div class="ls-flags">${flags.join('')}</div>` : ''}
     </div>`;
+  $(statsEl).find('[data-toggle="tooltip"]').tooltip();
 }
 
 /* ── map state ───────────────────────────────────────────────────────────── */
@@ -943,7 +977,7 @@ function loadTrips() {
       })
         .then(r => r.ok ? r.json() : [])
         .catch(() => [])
-        .then(codes => renderStats(trips, codes));
+        .then(places => renderStats(trips, places));
       if (sig !== lastSignature) {
         lastSignature = sig;
         if (firstLoad) { fitToTrips(); firstLoad = false; }
