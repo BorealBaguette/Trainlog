@@ -811,6 +811,7 @@ function planValidate() {
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/live_motion.js') }}"></script>
 <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
 
 <script>
@@ -1245,7 +1246,7 @@ async function initializeMapAndTrips() {
     map.on('click', (e) => {
         if (highlightedTripUid == null) return;
         const onFeature = map.queryRenderedFeatures(e.point)
-            .some(f => ['trips', 'current-trips', 'current-future', 'numbered-markers'].includes(f.source));
+            .some(f => ['trips', 'current-trips', 'numbered-markers'].includes(f.source));
         if (!onFeature) clearHighlight();
     });
 
@@ -1777,25 +1778,63 @@ function liveCandidates(trips) {
     });
 }
 
-// Moving dashes on the part still to travel: cycles through dash-array phases, as on the
-// live map. Only the layers of the types in progress are touched.
-const DASH_SEQ = [
-    [0,4,3],[0.5,4,2.5],[1,4,2],[1.5,4,1.5],[2,4,1],
-    [2.5,4,0.5],[3,4,0],[0,0.5,3,3.5],[0,1,3,3],
-    [0,1.5,3,2.5],[0,2,3,2],[0,2.5,3,1.5],[0,3,3,1],
-    [0,3.5,3,0.5],[0,4,3,0]
-];
-let dashStep = 0;
+// Moving dashes on the part still to travel, with each type's own look and pace, as on the
+// live map: worked out every frame from where the pin is, so they grow into real trains
+// coming along when zoomed in (see LiveMotion.dashLines), and drawn on a canvas over the map
+// after each of its frames (LiveMotion.overlay).
+let futureLines = [], futureOverlay = null;
 function animateFutureDashes(ts) {
-    const step = Math.floor(ts / 50) % DASH_SEQ.length;
-    if (step !== dashStep) {
-        dashStep = step;
-        MapLibreUtils.MapConfig.transportTypes.forEach(type => {
-            const id = `current-${type.id}-future-overlay`;
-            try { if (map.getLayer(id)) map.setPaintProperty(id, 'line-dasharray', DASH_SEQ[step]); } catch (_) {}
-        });
-    }
+    moveCurrentPins(ts);
+    if (futureLines.length) map.triggerRepaint(); // drawFutureDashes runs after it
     requestAnimationFrame(animateFutureDashes);
+}
+function drawFutureDashes() {
+    const ts = performance.now();
+    const items = futureLines.map(f => {
+        const uid = f.properties.id.replace(/_future$/, '');
+        const entry = currentPositionMarkers[uid];
+        const coords = f.geometry.coordinates;
+        return {
+            key: uid, coords, from: { index: 0, point: coords[0] }, type: f.properties.type,
+            speed: entry && entry.coords ? TripProgress.averageSpeed(entry.trip, entry.coords) : null,
+            state: entry ? (entry.dashState = entry.dashState || {}) : {},
+            width: f.properties.type === 'air' ? 1 : 3
+        };
+    });
+    futureOverlay.draw(LiveMotion.dashLines(items, map, ts)
+        .map((geometry, n) => ({ geometry, width: items[n].width })));
+}
+
+// Between two re-splits of the line the pins carry on moving with the clock: as often as
+// the zoom makes it visible, every frame while one glides to a new live fix.
+// The line is re-split on its own every 5 s, and as soon as a pin has moved off where its
+// dashes start: only the trips in progress are in that source, so it's cheap.
+let lastPinMove = -Infinity, resplitCurrent = null;
+function currentPinTarget(entry, now) {
+    return entry.fixIndex !== null
+        ? TripProgress.extrapolate(entry.trip, entry.coords, entry.fixIndex, entry.fixAt, { now })
+        : TripProgress.position(entry.trip, entry.coords, { now });
+}
+function moveCurrentPins(ts) {
+    if (LiveMotion.reduced) return;
+    const entries = Object.values(currentPositionMarkers).filter(e => e.coords);
+    if (!entries.length) return;
+    const gliding = entries.some(e => e.glideFrom);
+    const fastest = Math.max(...entries.map(e => LiveMotion.speed(e.trip.type)));
+    if (!gliding && ts - lastPinMove < LiveMotion.moveInterval(map, fastest)) return;
+    lastPinMove = ts;
+    const now = Date.now();
+    let drift = 0;
+    entries.forEach(e => {
+        const pos = currentPinTarget(e, now);
+        if (!pos) return;
+        e.marker.setLngLat(LiveMotion.glide(e, pos.point));
+        if (e.cutPoint) {
+            const a = map.project(e.cutPoint), b = map.project(pos.point);
+            drift = Math.max(drift, Math.hypot(a.x - b.x, a.y - b.y));
+        }
+    });
+    if (resplitCurrent && drift > 0.5) resplitCurrent();
 }
 
 // The timetable stops of the trip in progress (only those with a name and a time), as small
@@ -1946,12 +1985,12 @@ function startGPSIndicator() {
 // The moving dashes sit on a source of their own holding only the parts still to travel:
 // every dash step re-tiles the source of the layer it changes, and on `current-trips`
 // that meant the full lines twenty times a second.
+// The dashes themselves are drawn from these by animateFutureDashes, every frame.
 const futureOnly = features => features.filter(f => f.properties.time === 'plannedFuture');
 function setCurrentTripData(features) {
     const current = map.getSource('current-trips');
     if (current) current.setData({ type: 'FeatureCollection', features });
-    const future = map.getSource('current-future');
-    if (future) future.setData({ type: 'FeatureCollection', features: futureOnly(features) });
+    futureLines = futureOnly(features);
 }
 
 function buildCurrentTripFeatures(trips) {
@@ -1966,6 +2005,8 @@ function buildCurrentTripFeatures(trips) {
         // Convert to [lng, lat] and expand air routes to geodesic before splitting
         let fullCoords = (isTracked ? trip.livePath : trip.path).map(c => [c[1], c[0]]);
         let splitIndex, splitPoint = null;
+        // What the pin needs to move on its own until the next re-split (moveCurrentPins)
+        let motion = { trip: trip.trip, coords: null, fixIndex: null, fixAt: null };
 
         if (isTracked && fullCoords.length >= 2) {
             // FR24's public track sometimes begins well into the climb-out rather than
@@ -1978,14 +2019,20 @@ function buildCurrentTripFeatures(trips) {
                 fullCoords = MapLibreUtils.createGeodesicLine(orig, fullCoords[0])
                     .concat(fullCoords);
             }
-            // livePath is the real flown-so-far track, so the split point is the
-            // aircraft's actual position rather than a guess from the timetable, and
-            // only the leftover leg to the destination has to be estimated.
-            splitIndex = fullCoords.length - 1;
+            // livePath is the real flown-so-far track, so it ends at the aircraft's
+            // actual position at the last fix rather than a guess from the timetable;
+            // only the leftover leg to the destination has to be estimated, and the
+            // aircraft carries on along it until the next fix.
+            const fixIndex = fullCoords.length - 1;
             const dest = [trip.liveDestination[1], trip.liveDestination[0]];
             fullCoords = fullCoords.concat(
-                MapLibreUtils.createGeodesicLine(fullCoords[splitIndex], dest)
+                MapLibreUtils.createGeodesicLine(fullCoords[fixIndex], dest)
             );
+            const fixAt = trip.liveUpdated ? trip.liveUpdated * 1000 : Date.now();
+            const pos = TripProgress.extrapolate(trip.trip, fullCoords, fixIndex, fixAt);
+            splitIndex = pos.index;
+            splitPoint = pos.point;
+            motion = { trip: trip.trip, coords: fullCoords, fixIndex, fixAt };
         } else {
             if (trip.trip.type === 'air' && fullCoords.length === 2) {
                 fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
@@ -1995,6 +2042,7 @@ function buildCurrentTripFeatures(trips) {
             if (pos) {
                 splitIndex = pos.index;
                 splitPoint = pos.point;
+                motion.coords = fullCoords;
             } else {
                 splitIndex = Math.floor(calculatePosition(trip) * fullCoords.length);
             }
@@ -2047,7 +2095,11 @@ function buildCurrentTripFeatures(trips) {
 
         const existing = currentPositionMarkers[trip.trip.uid];
         if (existing && existing.kind === kind) {
-            existing.marker.setLngLat(pegPosition);
+            // A new fix can put the aircraft elsewhere than where it was carried to: glide
+            if (isLive && existing.fixAt !== motion.fixAt) {
+                LiveMotion.startGlide(existing, existing.marker.getLngLat().toArray());
+            }
+            if (!existing.glideFrom) existing.marker.setLngLat(pegPosition);
             if (isLive) {
                 setMarkerHeading(existing.marker, heading);
                 existing.marker.setPopup(
@@ -2068,6 +2120,10 @@ function buildCurrentTripFeatures(trips) {
                 )
             };
         }
+        const entry = currentPositionMarkers[trip.trip.uid];
+        Object.assign(entry, motion, { cutPoint: pegPosition });
+        // Sub-pixel, or a slow pin moves in visible one-pixel steps
+        entry.marker.setSubpixelPositioning(true);
     });
     return features;
 }
@@ -2169,7 +2225,8 @@ function placePolylines(trips) {
     // the timetable position (stops, dwell times, delays) instead of only on load. It
     // stops at the destination once the trip is over (the position is clamped there).
     if (trips.some(t => t.time === 'current')) {
-        setInterval(() => setCurrentTripData(buildCurrentTripFeatures(trips)), 5000);
+        resplitCurrent = () => setCurrentTripData(buildCurrentTripFeatures(trips));
+        setInterval(resplitCurrent, 5000);
         requestAnimationFrame(animateFutureDashes);
         // The viewer's location is for the owner's own /current page only: a shared trip
         // link can be opened by anyone.
@@ -2424,13 +2481,11 @@ if (numberedMarkers.length > 0) {
                     features: currentTripFeatures
                 }
             });
-            map.addSource('current-future', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: futureOnly(currentTripFeatures)
-                }
-            });
+            futureLines = futureOnly(currentTripFeatures);
+            if (!futureOverlay) {
+                futureOverlay = LiveMotion.overlay(map);
+                map.on('render', drawFutureDashes);
+            }
 
             // Add layers for current trips. No beforeId: the pins are DOM markers
             // on top of the map canvas, so nothing added here can cover them.
@@ -2505,41 +2560,6 @@ if (numberedMarkers.length > 0) {
                     });
                 }
                 
-                // Current trip future overlay (white dotted)
-                const currentFutureOverlayId = `current-${type.id}-future-overlay`;
-                if (!map.getLayer(currentFutureOverlayId)) {
-                    map.addLayer({
-                        id: currentFutureOverlayId,
-                        type: 'line',
-                        source: 'current-future',
-                        filter: ['all',
-                            ['==', ['get', 'type'], type.id],
-                            ['==', ['get', 'time'], 'plannedFuture']
-                        ],
-                        layout: { 
-                            'line-join': 'round', 
-                            'line-cap': 'butt',
-                            'visibility': 'visible'
-                        },
-                        paint: {
-                            ...basePaint,
-                            'line-color': '#ffffff',
-                            'line-dasharray': DASH_SEQ[0]
-                        }
-                    });
-
-                    // Add interactions
-                    map.on('click', currentFutureOverlayId, (e) => {
-                        e.originalEvent.stopPropagation();
-                        showTripPopup(e);
-                    });
-                    map.on('mouseenter', currentFutureOverlayId, () => {
-                        map.getCanvas().style.cursor = 'pointer';
-                    });
-                    map.on('mouseleave', currentFutureOverlayId, () => {
-                        map.getCanvas().style.cursor = '';
-                    });
-                }
             });
             addCurrentStops(trips);
         }

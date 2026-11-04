@@ -10,6 +10,10 @@
 //
 //   TripProgress.position(trip, coords, { latFirst })
 //     -> { index, point, progress } | null
+//   TripProgress.extrapolate(trip, coords, fromIndex, fixAt, { latFirst })
+//     -> the same, for a live-tracked flight between two fixes
+//   TripProgress.averageSpeed(trip, coords, { latFirst }) -> m/s, stops included
+//   TripProgress.window(trip) -> { t0, t1 }: departure and arrival, ms, delays included
 //
 // `coords` is the path as drawn ([lng, lat] pairs, or [lat, lng] with latFirst); `point` is
 // the interpolated position, in that same order; `index` is the last vertex at or before
@@ -199,8 +203,19 @@
       }
     }
 
-    // Last vertex at or before the target distance, then the point between it and the next.
-    var cum = built.cum, lo = 0, hi = cum.length - 1;
+    return pointAt(coords, built.cum, target, latFirst);
+  }
+
+  // Web Mercator y of a latitude, and back. Interpolating in it puts the point on the segment
+  // as the map draws it: a straight line in latitude and longitude bows away from it, by
+  // hundreds of metres on a long leg such as a ferry crossing with no points in between.
+  function mercY(lat) { return Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)); }
+  function mercLat(y) { return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI; }
+
+  // The point `target` metres along the route: the last vertex at or before it, then the
+  // point between it and the next.
+  function pointAt(coords, cum, target, latFirst) {
+    var lo = 0, hi = cum.length - 1;
     while (lo < hi) {
       var mid = (lo + hi + 1) >> 1;
       if (cum[mid] <= target) lo = mid; else hi = mid - 1;
@@ -208,10 +223,49 @@
     var point = coords[lo];
     if (lo < coords.length - 1 && cum[lo + 1] > cum[lo]) {
       var f = (target - cum[lo]) / (cum[lo + 1] - cum[lo]), p = coords[lo], q = coords[lo + 1];
-      point = [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f];
+      var li = latFirst ? 0 : 1, gi = 1 - li;
+      point = [];
+      point[gi] = p[gi] + (q[gi] - p[gi]) * f;
+      point[li] = mercLat(mercY(p[li]) + (mercY(q[li]) - mercY(p[li])) * f);
     }
-    return { index: lo, point: point, progress: target / built.total };
+    var total = cum[cum.length - 1];
+    return { index: lo, point: point, progress: total > 0 ? target / total : 1 };
   }
 
-  root.TripProgress = { position: position, timedStops: timedStops };
+  // A live-tracked flight: seen at coords[fromIndex] at `fixAt` (ms), the end of its real
+  // track, with only an estimate of the rest. Between fixes it carries on along that
+  // estimate at the average speed that lands it on time, or at cruising speed once it is
+  // running late. Same result as position().
+  var CRUISE_MS = 230; // m/s
+  function extrapolate(trip, coords, fromIndex, fixAt, opts) {
+    if (!coords || !coords.length) return null;
+    var latFirst = !!(opts && opts.latFirst);
+    var key = [coords.length, latFirst, fromIndex].join('|');
+    var cached = trip.__extrapolation, cum;
+    if (cached && cached.key === key) cum = cached.cum;
+    else {
+      cum = cumulative(coords, latFirst);
+      try {
+        Object.defineProperty(trip, '__extrapolation', { value: { key: key, cum: cum }, writable: true, configurable: true });
+      } catch (e) { /* frozen object: just not cached */ }
+    }
+    var now = (opts && opts.now != null) ? opts.now : Date.now();
+    var start = cum[fromIndex], left = cum[cum.length - 1] - start;
+    var w = tripWindow(trip), due = w ? w.t1 - fixAt : 0;
+    var speed = due > 60000 ? left / (due / 1000) : CRUISE_MS;
+    var covered = Math.min(left, Math.max(0, speed * (now - fixAt) / 1000));
+    return pointAt(coords, cum, start + covered, latFirst);
+  }
+
+  // The trip's average speed along `coords`, m/s, stops included. null without usable times.
+  function averageSpeed(trip, coords, opts) {
+    if (!trip || !coords || coords.length < 2) return null;
+    var built = anchorsFor(trip, coords, !!(opts && opts.latFirst)), w = tripWindow(trip);
+    return built && w ? built.total / ((w.t1 - w.t0) / 1000) : null;
+  }
+
+  root.TripProgress = {
+    position: position, extrapolate: extrapolate, averageSpeed: averageSpeed, timedStops: timedStops,
+    window: tripWindow
+  };
 })(window);

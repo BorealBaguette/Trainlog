@@ -14545,6 +14545,7 @@ def get_current_trips_data(public_only=True):
                 trip["live_destination"] = path[-1] if path else None
                 path = live["path"]
                 trip["live_tracked"] = True
+                trip["live_updated"] = live.get("updated")
             if trip.get("material_type_advanced"):
                 trip["trainset"] = public_trainset_info(
                     pg, trip["material_type_advanced"], trip["username"]

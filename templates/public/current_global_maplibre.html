@@ -26,6 +26,28 @@
   /* Traveller's avatar in the pin's head, over MapLibre's default white dot */
   .maplibregl-marker .user-avatar { --avatar-size: 19px; position: absolute; left: 4px; top: 4px; }
   .popup-user-avatar { --avatar-size: 36px; }
+  /* A group trip's pin: how many are on board, where a traveller's avatar would be, so that
+     nobody in particular stands for the group */
+  .maplibregl-marker .pin-count {
+    position: absolute; left: 4px; top: 4px; width: 19px; height: 19px; border-radius: 50%;
+    background: #fff; color: #222; font-size: 11px; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* Everyone on board, in a group trip's popup: one chip each */
+  .lp-crew { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .lp-member {
+    display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
+    padding: 3px 11px 3px 3px; border-radius: 999px;
+    background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color-translucent);
+    font-weight: 600; font-size: .88rem; line-height: 1.2; color: inherit; text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease;
+  }
+  .lp-member:hover { background: var(--bs-secondary-bg); border-color: var(--accent); }
+  .lp-member .user-avatar { --avatar-size: 24px; flex: none; }
+  .lp-member > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+  /* Where each one gets on and off, on a shared ride: a second line in the chip */
+  .lp-member:has(.lp-member-leg) { border-radius: 16px; padding-block: 4px; }
+  .lp-member-leg { display: block; margin-top: 1px; font-weight: 400; font-size: .76rem; color: var(--bs-secondary-color); }
 
   /* --accent is the trip type's colour, set on .live-popup */
   .live-popup { min-width: 280px; font-size: .9rem; line-height: 1.35; }
@@ -290,6 +312,7 @@
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/live_motion.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/user_avatar.js') }}"></script>
 
 <script>
@@ -547,12 +570,26 @@ function getPopupContent(tripObj) {
   const startTime   = withDelayDisplay(trip.start_datetime, trip.departure_delay, trip.start_datetime);
   const endTime     = withDelayDisplay(trip.end_datetime,   trip.arrival_delay,   trip.start_datetime);
   const profileUrl  = `/public/${tripObj.username}`;
+  // Everyone on board in alphabetical order: the member the group is placed from is no one's lead
+  const members     = (tripObj.members || [tripObj]).slice()
+    .sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }));
+  const typeBadge   = `<span class="lp-type" title="${esc(typeLabels[type] || type)}"><i class="${typeIcon(type).icon}"></i></span>`;
 
-  const header = `
+  const header = members.length > 1 ? `
+    <div class="lp-head">
+      <div class="lp-crew">${members.map(m => `
+        <a class="lp-member" href="/public/${m.username}" target="_blank">
+          <span class="user-avatar" data-username="${esc(m.username)}"></span>
+          <span>${esc(m.username)}${tripObj.shared && m.trip.origin_station ? `
+            <span class="lp-member-leg">${esc(m.trip.origin_station)} → ${esc(m.trip.destination_station || '-')}</span>` : ''}</span>
+        </a>`).join('')}
+      </div>
+      ${typeBadge}
+    </div>` : `
     <div class="lp-head">
       <span class="user-avatar popup-user-avatar" data-username="${esc(tripObj.username)}"></span>
       <a class="lp-who" href="${profileUrl}" target="_blank">${esc(tripObj.username)}</a>
-      <span class="lp-type" title="${esc(typeLabels[type] || type)}"><i class="${typeIcon(type).icon}"></i></span>
+      ${typeBadge}
     </div>`;
 
   if (STAY_ICONS[trip.type]) {
@@ -696,23 +733,43 @@ function stopsHTML(trip, start, end, startTime, endTime) {
     <ol class="lp-timeline">${rows}</ol>`;
 }
 
-/* ── dash animation ──────────────────────────────────────────────────────── */
-// Cycles through dash-array phases to create a "moving dashes" effect
-const DASH_SEQ = [
-  [0,4,3],[0.5,4,2.5],[1,4,2],[1.5,4,1.5],[2,4,1],
-  [2.5,4,0.5],[3,4,0],[0,0.5,3,3.5],[0,1,3,3],
-  [0,1.5,3,2.5],[0,2,3,2],[0,2.5,3,1.5],[0,3,3,1],
-  [0,3.5,3,0.5],[0,4,3,0]
-];
-let dashStep = 0;
+/* ── motion ──────────────────────────────────────────────────────────────── */
+// One dashes layer per type, each with its own look and pace (see live_motion.js); only the
+// types on the map are stepped. Pins move with the clock in between refreshes: as often as
+// the zoom makes it visible, every frame while one glides to where fresh data put it.
+const FUTURE_TYPES = MapLibreUtils.MapConfig.transportTypes.map(t => t.id);
+const futureLayerType = type => FUTURE_TYPES.includes(type) ? type : 'other';
+// The dashes start at the pin, but every cut re-tiles all the paths in the source. So the
+// trips whose route crosses the view, when there are only a few of them (zoomed in, where it
+// would show), are drawn apart: their dashes are worked out every frame, from exactly where
+// the pin is, true to scale when zoomed in (LiveMotion.dashLines), on a canvas over the map
+// (LiveMotion.overlay), redrawn after each of its frames. The
+// others are dash arrays, re-cut once a pin has got a few pixels ahead of its dashes (which
+// zoomed out takes ages), at most once a second, and at least every FUTURE_RECUT_MS.
+const FUTURE_RECUT_MS = 15000, MIN_RECUT_MS = 1000, MAX_DRIFT_PX = 3, NEAR_MAX = 8;
+let futureLayers = new Set(); // [layer id, type] of the dash array layers with something to step
+let nearKeys = new Set();
+let lastMove = -Infinity, lastCut = 0, glidingUntil = 0, fastest = 1, drift = 0;
 
-function animateDashes(ts) {
-  const step = Math.floor(ts / 50) % DASH_SEQ.length;
-  if (step !== dashStep) {
-    dashStep = step;
-    try { map.setPaintProperty('live-future', 'line-dasharray', DASH_SEQ[step]); } catch (_) {}
+function animate(ts) {
+  // Every frame: an unchanged dash array is a no-op in setPaintProperty
+  if (!LiveMotion.reduced) {
+    futureLayers.forEach(([id, type]) => {
+      try { map.setPaintProperty(id, 'line-dasharray', LiveMotion.dashArray(type, ts)); } catch (_) {}
+    });
   }
-  requestAnimationFrame(animateDashes);
+  const interval = LiveMotion.reduced ? FUTURE_RECUT_MS : LiveMotion.moveInterval(map, fastest);
+  if (ts - lastMove >= interval || Date.now() < glidingUntil) {
+    lastMove = ts;
+    movePins();
+  }
+  if (ts - lastCut >= FUTURE_RECUT_MS || (drift > MAX_DRIFT_PX && ts - lastCut >= MIN_RECUT_MS)) {
+    lastCut = ts;
+    cutFuture(Date.now());
+  }
+  updateNear();
+  if (nearKeys.size) map.triggerRepaint(); // drawNear runs after it
+  requestAnimationFrame(animate);
 }
 
 /* ── stats ───────────────────────────────────────────────────────────────── */
@@ -795,10 +852,17 @@ function renderStats(trips, places) {
 
 /* ── map state ───────────────────────────────────────────────────────────── */
 let map;
-let markers       = [];
+// trip uid -> { tripObj, type, coords, liveJunction, fixAt, marker, glideFrom, glideAt }
+const pinsByTrip  = new Map();
+let pinOfTrip     = new Map(); // every trip's uid -> its pin, a group trip's members included
+// The last render's, and this render's pin keys: when a group trip splits up, whoever
+// carries on takes over its pin, so it glides on from there rather than popping up anew
+let prevPinOfTrip = new Map(), renderKeys = new Set();
+const allMarkers  = () => [...pinsByTrip.values()].map(p => p.marker);
 let lastSignature = null;
 let firstLoad     = true;
 let activePopup   = null;
+let activePopupPin = null; // the pin the popup follows, if it was opened from one
 
 const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
 
@@ -806,12 +870,15 @@ const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
 // Only one popup is ever shown at a time: opening a new one always closes
 // the previous one. closeOnClick (default) lets clicking elsewhere on the
 // map dismiss it too; closeOnMove is disabled so panning doesn't close it.
-function openPopup(lngLat, tripObj) {
+function openPopup(lngLat, tripObj, pin) {
   if (activePopup) activePopup.remove();
-  activePopup = new maplibregl.Popup({ offset: 25, maxWidth: '540px', closeOnMove: false, focusAfterOpen: false })
+  const popup = new maplibregl.Popup({ offset: 25, maxWidth: '540px', closeOnMove: false, focusAfterOpen: false })
     .setLngLat(lngLat)
     .setHTML(getPopupContent(tripObj))
     .addTo(map);
+  activePopup = popup;
+  activePopupPin = pin || null;
+  popup.on('close', () => { if (activePopup === popup) activePopupPin = null; });
   paintUserAvatars(activePopup.getElement(), avatarsEndpoint);
   // Size the trainset strip against its own median height (see normalizeStrip).
   const popupEl = activePopup.getElement();
@@ -832,62 +899,288 @@ function openPopup(lngLat, tripObj) {
 }
 
 /* ── rendering ───────────────────────────────────────────────────────────── */
-// Single source of truth for "where along the path are we": the timetable position
-// (stops, dwell times and delays included, see trip_progress.js), used both for the pin
-// and for the start of the animated future segment so the two always agree.
-function currentPosition(tripObj, coords) {
-  return TripProgress.position(tripObj.trip, coords)
-    || { index: 0, point: coords[0], progress: 0 };
+// Single source of truth for "where along the path are we", used both for the pin and for
+// the start of the dashes so the two always agree: the timetable position (stops, dwell
+// times and delays included, see trip_progress.js), or for a live-tracked flight its last
+// real fix, carried on along the estimated remainder.
+function pinTarget(pin, now) {
+  if (pin.coords.length === 1) return { index: 0, point: pin.coords[0], progress: 0 };
+  const pos = pin.liveJunction !== null
+    ? TripProgress.extrapolate(pin.tripObj.trip, pin.coords, pin.liveJunction, pin.fixAt, { now })
+    : TripProgress.position(pin.tripObj.trip, pin.coords, { now });
+  return pos || { index: 0, point: pin.coords[0], progress: 0 };
 }
 
 // `coords` must be the same [lng, lat] array that was drawn (geodesic-expanded
 // for air routes), otherwise the pin lands on the raw 2-point path start.
-// `pegOverride` is the index of the aircraft's real position, known only for a
-// live-tracked flight. When present it beats the timetable position, which can only
-// interpolate.
-function addMarker(tripObj, coords, pegOverride) {
-    const type     = (tripObj.trip.type === 'helicopter') ? 'air' : tripObj.trip.type;
-    const color = getTypeColor(type);
+// `liveJunction` is the index of the aircraft's last real position, known only for a
+// live-tracked flight. Pins are kept across refreshes, so they can carry on moving.
+function placePin(tripObj, coords, liveJunction, now) {
+  const key  = tripObj.trip.uid;
+  const type = (tripObj.trip.type === 'helicopter') ? 'air' : tripObj.trip.type;
+  let pin = pinsByTrip.get(key);
+  if (!pin) {
+    const prev = (tripObj.members || [tripObj]).map(m => prevPinOfTrip.get(m.trip.uid))
+      .find(p => p && p.type === type && !renderKeys.has(p.key) && pinsByTrip.get(p.key) === p);
+    if (prev) {
+      pinsByTrip.delete(prev.key);
+      pinsByTrip.set(key, prev);
+      pin = prev;
+    }
+  }
+  if (pin && pin.type !== type) { pinsByTrip.delete(key); pin.marker.remove(); pin = null; }
 
-    const [pegLng, pegLat] = (pegOverride !== null && pegOverride !== undefined)
-      ? coords[pegOverride]
-      : currentPosition(tripObj, coords).point;
-
-    const marker = new maplibregl.Marker({ color })
-      .setLngLat([pegLng, pegLat])
-      .addTo(map);
-    const avatar = document.createElement('span');
-    avatar.className = 'user-avatar';
-    avatar.dataset.username = tripObj.username;
-    marker.getElement().append(avatar);
-    marker.getElement().addEventListener('click', e => {
+  const shown = pin && pin.marker.getLngLat().toArray();
+  if (!pin) {
+    pin = { type };
+    // Sub-pixel, or a slow pin moves in visible one-pixel steps
+    pin.marker = new maplibregl.Marker({ color: getTypeColor(type), subpixelPositioning: true });
+    pin.marker.getElement().addEventListener('click', e => {
       e.stopPropagation();
-      openPopup([pegLng, pegLat], tripObj);
+      openPopup(pin.marker.getLngLat(), pin.tripObj, pin);
     });
+    pinsByTrip.set(key, pin);
+  }
+  pin.key = key;
+  // A live fix is as old as the server's copy of it, when it says so
+  const fixAt = tripObj.trip.live_updated ? tripObj.trip.live_updated * 1000 : now;
+  Object.assign(pin, { tripObj, coords, liveJunction, fixAt });
+  (tripObj.members || [tripObj]).forEach(m => pinOfTrip.set(m.trip.uid, pin));
 
-    markers.push(marker);
+  // The pin's head: the traveller's avatar, or a group trip's head count. Redone when it
+  // changes, as a pin taken over from a group (or by one) carries someone else's.
+  const count = (tripObj.members || []).length;
+  const head = count > 1 ? `count:${count}` : `user:${tripObj.username}`;
+  if (pin.head !== head) {
+    pin.head = head;
+    pin.marker.getElement().querySelectorAll('.user-avatar, .pin-count').forEach(el => el.remove());
+    const el = document.createElement('span');
+    if (count > 1) {
+      el.className = 'pin-count';
+      el.textContent = count;
+    } else {
+      el.className = 'user-avatar';
+      el.dataset.username = tripObj.username;
+    }
+    pin.marker.getElement().append(el);
+  }
+  // What the dashes come along at when zoomed in: the trip's own average speed
+  pin.speed = liveJunction === null ? TripProgress.averageSpeed(tripObj.trip, coords) : null;
+
+  const target = pinTarget(pin, now).point;
+  if (shown) {
+    LiveMotion.startGlide(pin, shown);
+    glidingUntil = now + LiveMotion.GLIDE_MS;
+  } else {
+    pin.marker.setLngLat(target).addTo(map);
+  }
+}
+
+function movePins() {
+  const now = Date.now();
+  drift = 0;
+  pinsByTrip.forEach((pin, key) => {
+    if (pin.coords.length < 2) return;
+    pin.pos = pinTarget(pin, now);
+    pin.shown = LiveMotion.glide(pin, pin.pos.point);
+    pin.marker.setLngLat(pin.shown);
+    if (pin.cutPoint && !nearKeys.has(key)) {
+      const a = map.project(pin.cutPoint), b = map.project(pin.pos.point);
+      drift = Math.max(drift, Math.hypot(a.x - b.x, a.y - b.y));
+    }
+  });
+  if (activePopup && activePopupPin) activePopup.setLngLat(activePopupPin.marker.getLngLat());
+}
+
+// The trips whose route crosses the view, if there are few enough to draw as geometry. A
+// change of set re-cuts the others, so the same trip is never in both.
+function updateNear() {
+  const inView = [];
+  pinsByTrip.forEach((pin, key) => {
+    if (pin.coords.length >= 2 && pin.pos && pin.pos.progress < 1 && LiveMotion.routeInView(pin.coords, map)) {
+      inView.push(key);
+    }
+  });
+  const near = new Set(inView.length <= NEAR_MAX ? inView : []);
+  if (near.size !== nearKeys.size || [...near].some(k => !nearKeys.has(k))) {
+    nearKeys = near;
+    cutFuture(Date.now());
+  }
+}
+
+// The part still to travel, from `point` on. null once there's nothing left.
+function futureCoords(pin, pos, point) {
+  const future = [point].concat(pin.coords.slice(pos.index + 1));
+  return future.length < 2 || pos.progress >= 1 ? null : future;
+}
+
+// Every trip not in the near source, from where the clock has it now
+function cutFuture(now) {
+  const features = [];
+  drift = 0;
+  pinsByTrip.forEach((pin, key) => {
+    if (pin.coords.length < 2 || nearKeys.has(key)) return;
+    const pos = pinTarget(pin, now);
+    pin.cutPoint = pos.point;
+    const future = futureCoords(pin, pos, pos.point);
+    if (!future) return;
+    features.push({
+      type: 'Feature',
+      // Reversed, so the dashes don't jump when it's cut (see LiveMotion.dashArray)
+      geometry: { type: 'LineString', coordinates: future.reverse() },
+      properties: { type: futureLayerType(pin.type) }
+    });
+  });
+  map.getSource('live-future').setData({ type: 'FeatureCollection', features });
+  futureLayers = new Set();
+  new Set(features.map(f => f.properties.type))
+    .forEach(type => futureLayers.add([`live-future-${type}`, type]));
+}
+
+// The trips in view, from exactly where their pin was just drawn
+let nearOverlay = null;
+function drawNear(ts) {
+  const items = [];
+  nearKeys.forEach(key => {
+    const pin = pinsByTrip.get(key);
+    if (!pin || !pin.pos || pin.pos.progress >= 1) return;
+    pin.dashState = pin.dashState || {};
+    items.push({
+      key, coords: pin.coords, from: { index: pin.pos.index, point: pin.shown },
+      type: pin.type, speed: pin.speed, state: pin.dashState
+    });
+  });
+  nearOverlay.draw(LiveMotion.dashLines(items, map, ts).map(geometry => ({ geometry })));
+}
+
+// Several people on the same train each log their own trip: same type, origin, destination
+// and timetabled times, routes of about the same length (routing quirks aside). They are
+// shown as one group trip, placed from its best-informed member: a live-tracked flight, else
+// the one with the most timed stops, else the most detailed route. The others go along as
+// `members` (the lead included, first), and lend it a trainset if it has none.
+const GROUP_LENGTH_TOLERANCE = 0.15;
+function pathLength(path) {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    const [lat1, lng1] = path[i - 1], [lat2, lng2] = path[i], rad = Math.PI / 180;
+    const h = Math.sin((lat2 - lat1) * rad / 2) ** 2 +
+              Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin((lng2 - lng1) * rad / 2) ** 2;
+    total += 12742000 * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  return total;
+}
+function groupSameTrips(trips) {
+  const informed = t => [t.trip.live_tracked ? 1 : 0, TripProgress.timedStops(t.trip).length, t.path.length];
+  const better = (a, b) => {
+    const x = informed(a), y = informed(b);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] > y[i];
+    return false;
+  };
+  const buckets = new Map(), out = [];
+  trips.forEach(t => {
+    const { trip } = t;
+    if (STAY_ICONS[trip.type] || t.path.length < 2) { out.push(t); return; }
+    const key = [trip.type, trip.origin_station, trip.destination_station,
+                 trip.utc_start_datetime, trip.utc_end_datetime].join('|');
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push({ t, length: pathLength(t.path) });
+  });
+  buckets.forEach(list => {
+    const groups = [];
+    list.forEach(item => {
+      const g = groups.find(g => Math.abs(g[0].length - item.length) <=
+                                 GROUP_LENGTH_TOLERANCE * Math.max(g[0].length, item.length));
+      if (g) g.push(item); else groups.push([item]);
+    });
+    groups.forEach(g => {
+      const members = g.map(i => i.t);
+      if (members.length === 1) { out.push(members[0]); return; }
+      const lead = members.reduce((a, b) => better(b, a) ? b : a);
+      const trainset = lead.trip.trainset || (members.find(m => m.trip.trainset) || {}).trip?.trainset;
+      out.push({ ...lead, trip: { ...lead.trip, trainset }, members: [lead, ...members.filter(m => m !== lead)] });
+    });
+  });
+  return out;
+}
+
+// Two people on the same train for part of the way: one gets on later, or off earlier. Their
+// trips are in progress together for a while, and each one's own timetable has them within
+// SHARED_RIDE_M of each other both when the second gets on and when the first gets off; two
+// different trains aren't in the same place twice. While both are on board they are one group
+// trip too, from the member with the most timed stops (then the one going furthest); the
+// others' routes are still drawn (`others`), as they differ. Not live-tracked flights.
+const SHARED_RIDE_M = 3000, SHARED_RIDE_MIN_MS = 5 * 60 * 1000;
+const operatorKey = trip => String(trip.operator || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function sharedRide(a, b, now) {
+  const x = a.trip, y = b.trip;
+  if (x.type !== y.type || x.live_tracked || y.live_tracked) return false;
+  if (operatorKey(x) && operatorKey(y) && operatorKey(x) !== operatorKey(y)) return false;
+  const wa = TripProgress.window(x), wb = TripProgress.window(y);
+  if (!wa || !wb) return false;
+  const t0 = Math.max(wa.t0, wb.t0), t1 = Math.min(wa.t1, wb.t1);
+  if (t1 - t0 < SHARED_RIDE_MIN_MS || now < t0 || now > t1) return false;
+  return [t0, t1].every(time => {
+    const p = TripProgress.position(x, a.path, { latFirst: true, now: time });
+    const q = TripProgress.position(y, b.path, { latFirst: true, now: time });
+    return p && q && pathLength([p.point, q.point]) <= SHARED_RIDE_M;
+  });
+}
+function groupSharedRides(entries, now) {
+  const moving = entries.filter(e => !STAY_ICONS[e.trip.type] && e.path.length >= 2);
+  const root = new Map(entries.map(e => [e, e]));
+  const find = e => { while (root.get(e) !== e) e = root.get(e); return e; };
+  for (let i = 0; i < moving.length; i++) {
+    for (let j = i + 1; j < moving.length; j++) {
+      const a = moving[i], b = moving[j];
+      if (find(a) !== find(b) && sharedRide(a, b, now)) root.set(find(b), find(a));
+    }
+  }
+  const sets = new Map();
+  entries.forEach(e => {
+    const r = find(e);
+    if (!sets.has(r)) sets.set(r, []);
+    sets.get(r).push(e);
+  });
+  return [...sets.values()].map(set => {
+    if (set.length === 1) return set[0];
+    const end = e => (TripProgress.window(e.trip) || { t1: 0 }).t1;
+    const lead = set.reduce((a, b) => {
+      const sa = TripProgress.timedStops(a.trip).length, sb = TripProgress.timedStops(b.trip).length;
+      return sb > sa || (sb === sa && end(b) > end(a)) ? b : a;
+    });
+    const members = set.flatMap(e => e.members || [e]);
+    const leadMembers = lead.members || [lead];
+    const trainset = lead.trip.trainset || (members.find(m => m.trip.trainset) || {}).trip?.trainset;
+    return {
+      ...lead, trip: { ...lead.trip, trainset }, shared: true,
+      members: [...leadMembers, ...members.filter(m => !leadMembers.includes(m))],
+      others: set.filter(e => e !== lead)
+    };
+  });
 }
 
 function renderTrips(trips) {
-  markers.forEach(m => m.remove());
-  markers = [];
-
+  trips = groupSharedRides(groupSameTrips(trips), Date.now());
+  prevPinOfTrip = pinOfTrip;
+  pinOfTrip = new Map();
+  renderKeys = new Set(trips.map(t => t.trip.uid));
+  const now = Date.now();
+  const seen = new Set();
   const staticFeatures = [];
-  const futureFeatures = [];
 
   trips.forEach(tripObj => {
     const { trip, path } = tripObj;
     const type     = (trip.type === 'helicopter') ? 'air' : trip.type;
     const color    = getTypeColor(type);
+    seen.add(trip.uid);
 
     // API returns [[lat, lng], ...]; MapLibre needs [[lng, lat], ...]
     let coords = path.map(([lat, lng]) => [lng, lat]);
 
     // For a live-tracked flight the server sends the real flown-so-far track as `path`
     // and carries the logged destination separately, so append the estimated remainder.
-    // The junction is the aircraft's actual position, which is both where the dashed
-    // "not yet flown" overlay should start and where the pin belongs — better than
-    // interpolating either from the timetable.
+    // The junction is the aircraft's actual position at its last fix, from which the
+    // pin carries on — better than interpolating from the timetable.
     let liveJunction = null;
     if (trip.live_tracked && trip.live_destination && coords.length >= 2) {
       // FR24's public track can start at the first airborne contact rather than on the
@@ -910,7 +1203,7 @@ function renderTrips(trips) {
     }
 
     if (coords.length === 1 && ['accommodation', 'poi', 'restaurant'].includes(type)) {
-        addMarker(tripObj, coords);
+        placePin(tripObj, coords, null, now);
         return;
     }
 
@@ -918,28 +1211,36 @@ function renderTrips(trips) {
     staticFeatures.push({
       type: 'Feature',
       geometry: { type: 'LineString', coordinates: coords },
-      properties: { color, tripData: JSON.stringify(tripObj) }
+      // A group trip's members are only needed for their names
+      properties: { color, tripData: JSON.stringify(tripObj.members
+        ? { ...tripObj, others: undefined, members: tripObj.members.map(m => ({ username: m.username, trip: {
+            uid: m.trip.uid, origin_station: m.trip.origin_station, destination_station: m.trip.destination_station
+          } })) }
+        : tripObj) }
     });
 
-    // Future segment (animated white dashes overlay)
-    const pos = currentPosition(tripObj, coords);
-    const future = liveJunction !== null
-      ? coords.slice(liveJunction)
-      : [pos.point].concat(coords.slice(pos.index + 1));
-    if (future.length >= 2 && (liveJunction !== null || pos.progress < 1)) {
-      futureFeatures.push({
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: future },
-        properties: {}
-      });
-    }
+    // On a shared ride, the others' own routes too (they get on or off elsewhere)
+    (tripObj.others || []).forEach(other => staticFeatures.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: other.path.map(([lat, lng]) => [lng, lat]) },
+      properties: { color, tripData: staticFeatures[staticFeatures.length - 1].properties.tripData }
+    }));
 
     // Current-position pin marker
-    addMarker(tripObj, coords, liveJunction)
+    placePin(tripObj, coords, liveJunction, now);
   });
 
+  pinsByTrip.forEach((pin, key) => {
+    if (seen.has(key)) return;
+    pin.marker.remove();
+    pinsByTrip.delete(key);
+    if (activePopupPin === pin) activePopupPin = null;
+  });
+  fastest = Math.max(1, ...[...pinsByTrip.values()].map(p => LiveMotion.speed(p.type)));
+
   map.getSource('live-static').setData({ type: 'FeatureCollection', features: staticFeatures });
-  map.getSource('live-future').setData({ type: 'FeatureCollection', features: futureFeatures });
+  cutFuture(now);
+  lastCut = performance.now();
   // All pins at once, so the first render asks for every picture in one request
   paintUserAvatars(map.getContainer(), avatarsEndpoint);
 
@@ -956,6 +1257,7 @@ function hideLoading() {
 }
 
 function fitToTrips() {
+  const markers = allMarkers();
   if (!markers.length) return;
   const bounds = new maplibregl.LngLatBounds();
   markers.forEach(m => bounds.extend(m.getLngLat()));
@@ -969,7 +1271,9 @@ function loadTrips() {
     .then(trips => {
       const sig = JSON.stringify(trips);
       renderTrips(trips);
-      const pins = markers.map(m => { const { lat, lng } = m.getLngLat(); return [lat, lng]; });
+      // One per person, at their pin: a group trip's members count each
+      const pins = trips.map(t => pinOfTrip.get(t.trip.uid)).filter(Boolean)
+        .map(p => { const { lat, lng } = p.marker.getLngLat(); return [lat, lng]; });
       fetch('/live_map/countries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1001,7 +1305,10 @@ MapLibreUtils.initializeMapLibre({
       map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
     }
     map.addSource('live-static', { type: 'geojson', data: emptyFC() });
-    map.addSource('live-future', { type: 'geojson', data: emptyFC() });
+    // A dash pattern starts over in every tile (without lineMetrics, a line's length is
+    // counted per tile), so stopping the tiles at z14 keeps the seams kilometres apart when
+    // zoomed in. The deepest zoom isn't simplified, so the dashes still sit on the line.
+    map.addSource('live-future', { type: 'geojson', data: emptyFC(), maxzoom: 14 });
 
     // Shadow layer (matches style from buildTripLayers in maplibre-utils.js)
     map.addLayer({
@@ -1030,19 +1337,24 @@ MapLibreUtils.initializeMapLibre({
       }
     });
 
-    // Animated white dashes over the remaining path
-    map.addLayer({
-      id: 'live-future',
+    // Animated white dashes over the remaining path, one layer per type for its own dashes
+    FUTURE_TYPES.forEach(type => map.addLayer({
+      id: `live-future-${type}`,
       type: 'line',
       source: 'live-future',
+      filter: ['==', ['get', 'type'], type],
       layout: { 'line-join': 'round', 'line-cap': 'butt' },
       paint: {
         'line-color':      '#ffffff',
         'line-width':      3,
         'line-opacity':    0.9,
-        'line-dasharray':  DASH_SEQ[0]
+        'line-dasharray':  LiveMotion.dashArray(type, 0),
+        'line-dasharray-transition': LiveMotion.TRANSITION
       }
-    });
+    }));
+    // The trips in view, drawn apart (see drawNear)
+    nearOverlay = LiveMotion.overlay(map);
+    map.on('render', () => drawNear(performance.now()));
 
     // Click on a trip line to open popup
     map.on('click', 'live-static', e => {
@@ -1052,7 +1364,7 @@ MapLibreUtils.initializeMapLibre({
     map.on('mouseenter', 'live-static', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'live-static', () => { map.getCanvas().style.cursor = ''; });
 
-    requestAnimationFrame(animateDashes);
+    requestAnimationFrame(animate);
     loadTrips();
     setInterval(loadTrips, 60000);
   });
