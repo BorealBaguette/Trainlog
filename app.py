@@ -14643,6 +14643,7 @@ def live_map():
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
         api_endpoint=url_for("get_public_current_trips"),
+        leaflet_url=url_for("live_map_leaflet"),
         tileserver=user.tileserver if user else "osm",
         globe=user.globe if user else False,
         **lang[session["userinfo"]["lang"]],
@@ -14676,6 +14677,29 @@ def live_map_leaflet():
 def admin_live_map():
     """
     Shows the global map of ALL users currently traveling (admin/owner access)
+    """
+    username = getUser()
+    user = User.query.filter_by(username=username).first() if username else None
+    return render_template(
+        "public/current_global_maplibre.html",
+        title=f"Admin {lang[session['userinfo']['lang']]['live_map']}",
+        username=username,
+        logosList=listOperatorsLogos(),
+        translations=lang[session["userinfo"]["lang"]],
+        api_endpoint=url_for("get_all_current_trips"),
+        leaflet_url=url_for("admin_live_map_leaflet"),
+        tileserver=user.tileserver if user else "osm",
+        globe=user.globe if user else False,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/admin/live_map/leaflet")
+@owner_required
+def admin_live_map_leaflet():
+    """
+    Leaflet fallback for the admin live map
     """
     username = getUser()
     user = User.query.filter_by(username=username).first() if username else None
