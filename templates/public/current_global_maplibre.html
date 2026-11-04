@@ -1106,24 +1106,36 @@ function groupSameTrips(trips) {
 // Two people on the same train for part of the way: one gets on later, or off earlier. Their
 // trips are in progress together for a while, and each one's own timetable has them within
 // SHARED_RIDE_M of each other both when the second gets on and when the first gets off; two
-// different trains aren't in the same place twice. While both are on board they are one group
-// trip too, from the member with the most timed stops (then the one going furthest); the
-// others' routes are still drawn (`others`), as they differ. Not live-tracked flights.
+// different trains aren't in the same place twice. One may have logged a delay the other
+// didn't (a ferry leaving early), so their timetables without the delays will do too. While
+// both are on board they are one group trip too, from the member with the most timed stops
+// (then the one going furthest); the others' routes are still drawn (`others`), as they
+// differ. Not live-tracked flights.
 const SHARED_RIDE_M = 3000, SHARED_RIDE_MIN_MS = 5 * 60 * 1000;
 const operatorKey = trip => String(trip.operator || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const overlap = (x, y) => {
+  const wa = TripProgress.window(x), wb = TripProgress.window(y);
+  return wa && wb && { t0: Math.max(wa.t0, wb.t0), t1: Math.min(wa.t1, wb.t1) };
+};
+function together(x, xPath, y, yPath) {
+  const w = overlap(x, y);
+  if (!w || w.t1 - w.t0 < SHARED_RIDE_MIN_MS) return false;
+  return [w.t0, w.t1].every(time => {
+    const p = TripProgress.position(x, xPath, { latFirst: true, now: time });
+    const q = TripProgress.position(y, yPath, { latFirst: true, now: time });
+    return p && q && pathLength([p.point, q.point]) <= SHARED_RIDE_M;
+  });
+}
+const undelayed = trip => ({ ...trip, departure_delay: 0, arrival_delay: 0 });
 function sharedRide(a, b, now) {
   const x = a.trip, y = b.trip;
   if (x.type !== y.type || x.live_tracked || y.live_tracked) return false;
-  if (operatorKey(x) && operatorKey(y) && operatorKey(x) !== operatorKey(y)) return false;
-  const wa = TripProgress.window(x), wb = TripProgress.window(y);
-  if (!wa || !wb) return false;
-  const t0 = Math.max(wa.t0, wb.t0), t1 = Math.min(wa.t1, wb.t1);
-  if (t1 - t0 < SHARED_RIDE_MIN_MS || now < t0 || now > t1) return false;
-  return [t0, t1].every(time => {
-    const p = TripProgress.position(x, a.path, { latFirst: true, now: time });
-    const q = TripProgress.position(y, b.path, { latFirst: true, now: time });
-    return p && q && pathLength([p.point, q.point]) <= SHARED_RIDE_M;
-  });
+  // "Tallink" and "Tallink Silja" are the same operator, named more or less fully
+  const ox = operatorKey(x), oy = operatorKey(y);
+  if (ox && oy && !ox.includes(oy) && !oy.includes(ox)) return false;
+  const w = overlap(x, y);
+  if (!w || now < w.t0 || now > w.t1) return false;
+  return together(x, a.path, y, b.path) || together(undelayed(x), a.path, undelayed(y), b.path);
 }
 function groupSharedRides(entries, now) {
   const moving = entries.filter(e => !STAY_ICONS[e.trip.type] && e.path.length >= 2);

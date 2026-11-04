@@ -137,6 +137,9 @@
   // a grid of CELL_PX cells, sampled every SAMPLE_PX along each route. Two copies of one line
   // are never quite on top of each other, so a route misses some of the other's cells: every
   // sample lost is widened by LOST_PX along the route, or what slips through shows as specks.
+  // A sample a few cells off is compared as carried along its own route to the point tested:
+  // taken as it is, both vehicles lose wherever they are a few cells apart, and the gaps move
+  // with the zoom.
   var HEADWAY_S = 10, CELL_PX = 6, SAMPLE_PX = 2, REACH_CELLS = 2, LOST_PX = 12;
   function dashLines(items, map, ts) {
     var zoom = map.getZoom(), world = 512 * Math.pow(2, zoom);
@@ -145,18 +148,31 @@
     var padY = (yN - yS) * 0.2;
     var box = [bounds.getWest() - padX, yS - padY, bounds.getEast() + padX, yN + padY];
 
-    function cellOf(pt) {
-      var x = (pt[0] + 180) / 360 * world, y = (0.5 - mercY(pt[1]) / (2 * Math.PI)) * world;
-      return [Math.floor(x / CELL_PX), Math.floor(y / CELL_PX)];
+    function pixel(pt) {
+      return [(pt[0] + 180) / 360 * world, (0.5 - mercY(pt[1]) / (2 * Math.PI)) * world];
     }
+    // cell -> { key: { dist, x, y, dx, dy } }: each route's nearest sample there, with its direction
     var cells = new Map();
     var cellKey = function (cx, cy) { return cx * 1e8 + cy; };
+    var mpp = metresPerPixel(bounds.getCenter().lat, zoom);
     // Whether `a` (distance, key) is nearer than `b`: within a cell of each other is a tie
-    var tie = CELL_PX * metresPerPixel(bounds.getCenter().lat, zoom);
+    var tie = CELL_PX * mpp;
     var before = function (ad, ak, bd, bk) { return ad < bd - tie || (Math.abs(ad - bd) <= tie && ak < bk); };
 
     // Each visible piece of the route ahead: fn(a, b, d0, seg, t0, t1) with d0 how far the
     // vehicle is from a, seg the length a-b, [t0, t1] the share of it in view.
+    // Each sample of the route ahead: fn(px, dir, d) with px its world pixel, dir the route's
+    // unit direction there, d how far the vehicle is from it
+    function eachSample(it, fn) {
+      eachVisible(it, function (a, b, d0, seg, t0, t1) {
+        var pa = pixel(a), pb = pixel(b), vx = pb[0] - pa[0], vy = pb[1] - pa[1];
+        var n = Math.hypot(vx, vy) || 1, dir = [vx / n, vy / n];
+        for (var pos = t0 * seg; pos <= t1 * seg; pos += it._p.step) {
+          var f = pos / seg;
+          fn([pa[0] + vx * f, pa[1] + vy * f], dir, d0 + pos);
+        }
+      });
+    }
     function eachVisible(it, fn) {
       var coords = it.coords, from = it.from, cum = cumulative(coords);
       var origin = cum[from.index] + haversine(coords[from.index], from.point);
@@ -185,20 +201,26 @@
 
     // Who gets where first
     if (items.length > 1) items.forEach(function (it) {
-      var p = it._p, key = String(it.key);
-      eachVisible(it, function (a, b, d0, seg, t0, t1) {
-        for (var pos = t0 * seg; pos <= t1 * seg; pos += p.step) {
-          var c = cellOf(between(a, b, pos / seg)), k = cellKey(c[0], c[1]);
-          var dist = d0 + pos, had = cells.get(k);
-          if (!had || before(dist, key, had.dist, had.key)) cells.set(k, { dist: dist, key: key });
-        }
+      var key = String(it.key);
+      eachSample(it, function (px, dir, dist) {
+        var k = cellKey(Math.floor(px[0] / CELL_PX), Math.floor(px[1] / CELL_PX));
+        var cell = cells.get(k);
+        if (!cell) cells.set(k, cell = {});
+        if (!cell[key] || dist < cell[key].dist) cell[key] = { dist: dist, x: px[0], y: px[1], dx: dir[0], dy: dir[1] };
       });
     });
-    function mine(pt, dist, key) {
-      var c = cellOf(pt);
+    function mine(px, dist, key) {
+      var cx = Math.floor(px[0] / CELL_PX), cy = Math.floor(px[1] / CELL_PX);
       for (var dx = -REACH_CELLS; dx <= REACH_CELLS; dx++) for (var dy = -REACH_CELLS; dy <= REACH_CELLS; dy++) {
-        var had = cells.get(cellKey(c[0] + dx, c[1] + dy));
-        if (had && had.key !== key && before(had.dist, had.key, dist, key)) return false;
+        var cell = cells.get(cellKey(cx + dx, cy + dy));
+        if (!cell) continue;
+        for (var other in cell) {
+          if (other === key) continue;
+          var e = cell[other];
+          var at = e.dist + ((px[0] - e.x) * e.dx + (px[1] - e.y) * e.dy) * mpp;
+          // behind the other vehicle: not its way
+          if (at >= 0 && before(at, other, dist, key)) return false;
+        }
       }
       return true;
     }
@@ -207,14 +229,11 @@
     function lostStretches(it) {
       var p = it._p, key = String(it.key), widen = LOST_PX / SAMPLE_PX * p.step, lost = [];
       if (!cells.size) return lost;
-      eachVisible(it, function (a, b, d0, seg, t0, t1) {
-        for (var pos = t0 * seg; pos <= t1 * seg; pos += p.step) {
-          var d = d0 + pos;
-          if (mine(between(a, b, pos / seg), d, key)) continue;
-          var last = lost[lost.length - 1];
-          if (last && d - widen <= last[1]) last[1] = d + widen;
-          else lost.push([d - widen, d + widen]);
-        }
+      eachSample(it, function (px, dir, d) {
+        if (mine(px, d, key)) return;
+        var last = lost[lost.length - 1];
+        if (last && d - widen <= last[1]) last[1] = d + widen;
+        else lost.push([d - widen, d + widen]);
       });
       return lost;
     }
