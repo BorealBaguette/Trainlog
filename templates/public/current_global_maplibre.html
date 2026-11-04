@@ -182,12 +182,13 @@
   .ls-tiles > div { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 8px; background: var(--bs-tertiary-bg); text-align: center; }
   .ls-tiles strong { font-size: 1rem; white-space: nowrap; }
   .ls-tiles small { color: var(--bs-secondary-color); font-size: .72rem; }
-  .ls-flags { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bs-border-color); }
+  .ls-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bs-border-color); }
   .ls-group { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bs-border-color); }
-  .ls-flag { display: inline-flex; align-items: center; }
-  .ls-flag sup { margin-left: 1px; font-size: .65rem; font-weight: 700; color: var(--bs-secondary-color); }
-  .ls-sea { font-size: .8rem; color: #3b82f6; cursor: context-menu; }
-  .ls-flags .flag { font-size: 1.1rem !important; line-height: 1; }
+  .ls-flag, .ls-sea { display: inline-flex; align-items: flex-end; gap: 1px; }
+  .ls-sea { cursor: context-menu; }
+  .ls-sea i { color: #3b82f6; font-size: 1.2rem; line-height: 1; }
+  .ls-flag b, .ls-sea b { min-width: .45rem; margin-bottom: -2px; color: var(--bs-secondary-color); font-size: .7rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  .ls-flags .flag { font-size: 1.45rem !important; line-height: 1; }
   .ls-row { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; column-gap: 8px; padding: 3px 0; }
   .ls-row i { text-align: center; }
   .ls-count { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -827,8 +828,8 @@ function renderStats(trips, places) {
     const { icon, color } = CONTINENT_STYLE[c] || { icon: 'fa-earth-americas', color: 'inherit' };
     return row(`fa-solid ${icon}`, color, continentLabels[c] || regionNames.of('AQ'), n, continents[0][1]);
   });
-  const flags = countries.map(([cc, n]) => `<span class="ls-flag">${getTooltipNew(cc)}${n > 1 ? `<sup>${n}</sup>` : ''}</span>`);
-  if (atSea) flags.push(`<span class="ls-sea" data-toggle="tooltip" title="${esc(statsLabels.sea)}"><i class="fa-solid fa-water"></i> ${atSea}</span>`);
+  const flags = countries.map(([cc, n]) => `<span class="ls-flag">${getTooltipNew(cc)}<b>${n > 1 ? n : ''}</b></span>`);
+  if (atSea) flags.push(`<span class="ls-sea" data-toggle="tooltip" title="${esc(statsLabels.sea)}"><i class="fa-solid fa-water"></i><b>${atSea > 1 ? atSea : ''}</b></span>`);
   statsEl.innerHTML = `
     <button type="button" class="ls-head">
       <span class="ls-dot"></span>

@@ -215,6 +215,7 @@ from src.api.live_map import live_map_blueprint, live_travellers_count
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.api.motis import motis_blueprint
 from src.consts import DbNames, TripTypes
+from src.live_map_source import prod_current_trips
 from src.global_map import (
     available_bins,
     build_all_async,
@@ -14565,7 +14566,9 @@ def get_current_trips_data(public_only=True):
 @app.route("/public/current_trips")
 def get_public_current_trips():
     """Get all currently active trips from public users."""
-    result = get_current_trips_data(public_only=True)
+    result = prod_current_trips()
+    if result is None:
+        result = get_current_trips_data(public_only=True)
     return jsonify(result)
 
 
@@ -14573,7 +14576,9 @@ def get_public_current_trips():
 @owner_required
 def get_all_current_trips():
     """Get all currently active trips (admin/owner access required)."""
-    result = get_current_trips_data(public_only=False)
+    result = prod_current_trips()
+    if result is None:
+        result = get_current_trips_data(public_only=False)
     return jsonify(result)
 
 
