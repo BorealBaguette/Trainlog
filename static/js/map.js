@@ -3,8 +3,8 @@ function createMap(translations=null, center = [50, 10]) {
     const mapOptions = {
         center: center,
         zoom: 5,
-        zoomSnap: 0.25,
-        zoomDelta: 0.01,
+        zoomSnap: 0,
+        zoomDelta: 1,
         wheelPxPerZoomLevel: 90,
         attributionControl: true,
     };
