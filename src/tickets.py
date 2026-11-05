@@ -477,6 +477,16 @@ def trip_ticket_fields(ticket_ids, trip_id, user_currency):
         "ticket_price": sum(shares) if one_currency else total,
         "ticket_currency": currencies.pop() if one_currency else user_currency,
         "ticket_price_in_user_currency": total,
+        "tickets": [
+            {
+                "uid": t["uid"],
+                "name": t["name"],
+                "price": share,
+                "currency": t["currency"],
+                "price_in_user_currency": share_in_user,
+            }
+            for t, share, share_in_user in zip(tickets, shares, in_user)
+        ],
     }
 
 
