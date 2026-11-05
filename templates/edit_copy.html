@@ -3609,11 +3609,6 @@
         formData['origin_station'] = formData['originCountry'] + ' ' + formData['originStation'];
         formData['destination_station'] = formData['destinationCountry'] + ' ' + formData['destinationStation'];
 
-        // Stops edited without touching the route: the stored waypoints, stops edited.
-        // (With the route edited, newTrip.waypoints below carries the same edited stops.)
-        if (updatedPath == null && editedStopsWaypoints != null) {
-            formData["waypoints"] = editedStopsWaypoints;
-        }
         if (stopsStart) formData["stopsStart"] = stopsStart;
         if (updatedPath != null) {
             formData["path"] = JSON.stringify(updatedPath);
@@ -3628,6 +3623,9 @@
                 ...newTrip
             };
         }
+        // Stops edited after the route was last confirmed (or with it untouched): newTrip's
+        // waypoints were taken at that confirm, without these edits.
+        if (editedStopsWaypoints != null) formData["waypoints"] = editedStopsWaypoints;
 
         formData = processFormDates(formData);
         formData["trip_id"] = tripId;
