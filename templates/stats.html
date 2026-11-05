@@ -956,7 +956,7 @@
             return monthNumber;
         }
 
-        return new Intl.DateTimeFormat(LANG, { month: 'long' }).format(
+        return new Intl.DateTimeFormat(LANG, { month: 'long', timeZone: 'UTC' }).format(
             new Date(Date.UTC(2024, monthIndex, 1))
         );
     }
