@@ -4849,6 +4849,9 @@ def render_public_trip_page(
     shown = share_view.page_flags(
         selection_share_flags(tripIdsParam), request.args, share_owners, own_trips
     )
+    # A ticket's page is about what it cost: its price always shows.
+    if ticketId is not None:
+        shown["price"] = True
 
     return render_template(
         template,
@@ -5054,8 +5057,11 @@ def create_trip_share():
     # else's prices.
     share_flags = None
     show = request.form.get("show")
-    if target == "public_trip" and show is not None:
-        if not show or set(show) - {"p", "c", "n"}:
+    # The ticket page's map: a ticket group's trips, with their prices (the rest as
+    # the settings say), baked into the key so whoever gets the link sees them too.
+    ticket_map = request.form.get("price") and show is None
+    if target == "public_trip" and (show is not None or ticket_map):
+        if show is not None and (not show or set(show) - {"p", "c", "n"}):
             abort(400)
         user = User.query.filter_by(username=getUser()).first()
         if user is None:
@@ -5067,8 +5073,9 @@ def create_trip_share():
             ).fetchone()["n"]
         if owned != len(set(ids)):
             abort(403)
-        wanted = share_view.decode(show)
-        if wanted != share_view.owner_defaults([user]):
+        defaults = share_view.owner_defaults([user])
+        wanted = dict(defaults, price=True) if ticket_map else share_view.decode(show)
+        if wanted != defaults:
             share_flags = share_view.encode(wanted)
 
     try:
@@ -5077,9 +5084,6 @@ def create_trip_share():
         abort(400)
 
     url = url_for(target, tripIds=key)
-    # The ticket page's map opens with prices shown (honoured for the owner only).
-    if request.form.get("price"):
-        url += "?price"
     # The copy items want the link itself, not to go there.
     if request.form.get("format") == "json":
         return jsonify(url=url)

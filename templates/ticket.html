@@ -141,7 +141,8 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             {% if all_trip_ids %}
-                {# Posted to the short-link store: a group's ids spelled out overflow the request line. #}
+                {# Posted to the short-link store: a group's ids spelled out overflow the request line.
+                   `price` bakes the prices into the key, so the link shows them to anyone. #}
                 <form method="post" action="{{ url_for('create_trip_share') }}" class="d-inline">
                     <input type="hidden" name="trips" value="{{ all_trip_ids|join(',') }}">
                     <input type="hidden" name="price" value="1">
@@ -255,7 +256,7 @@
                     <td class="ticket-cell-actions text-end text-nowrap">
                         <div class="ticket-actions d-inline-flex gap-1">
                             {% if ticket.trip_ids %}
-                                <a class="btn btn-sm" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price" title="{{map}}">
+                                <a class="btn btn-sm" href="{{ url_for('public_trip', ticketId=ticket.uid) }}" title="{{map}}">
                                     <i class="bi bi-link-45deg"></i>
                                 </a>
                                 <a class="btn btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ ticket.uid) }}" title="{{trips}}">

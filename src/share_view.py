@@ -67,9 +67,10 @@ def page_flags(key_flags, args, owners, viewer_owns):
     """What this page view shows: the choice baked into its share key first
     (`key_flags`, None for a plain key or link), then the owner's settings.
 
-    The old `?price` / `?carbon` switches are honoured for the owner only (the
-    ticket page's map link still uses `?price`). For anyone else they did nothing
-    but reveal what the JSON already held, which is exactly what this replaces.
+    The old `?price` / `?carbon` switches are honoured for the owner only, for
+    links they kept. For anyone else they did nothing but reveal what the JSON
+    already held, which is exactly what this replaces. (A ticket's own page always
+    shows prices: render_public_trip_page sets that itself.)
     """
     if key_flags:
         return decode(key_flags)
