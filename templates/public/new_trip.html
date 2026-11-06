@@ -1,5 +1,9 @@
 {% extends "layout.html" %}
 {% block content %}
+{# Prices and CO₂ are decided server-side for trip pages (src/share_view.py); plan
+   views, rendered without these, keep the old ?price / ?carbon switches. #}
+{% set show_price = show_price if show_price is defined else ('price' in request.args) %}
+{% set show_carbon = show_carbon if show_carbon is defined else ('carbon' in request.args) %}
 {% include "includes/trainset_display.html" %}
 <style>
 /* Controls, not facts: at rest they sit at the meta line's own weight (the primary
@@ -1213,7 +1217,7 @@ async function initializeMapAndTrips() {
         response = await $.post({
             url: '{{url_for("getPublicTrips")}}',
             contentType: 'application/json',
-            data: JSON.stringify({ tripIds: tripIds })
+            data: JSON.stringify({ tripIds: tripIds, view: {{ share_view_token|default('')|tojson }} })
         });
     }
 
@@ -1272,14 +1276,14 @@ function buildItinerary(trips, prices) {
     var total_duration = 0;
     var total_carbon = 0; // Added
 
-{% if 'price' in request.args %}              
+{% if show_price %}              
     if (prices.total_price != 0) {
         $(".currencyContainer").show();
         $(".currency").text(formatCurrency("{{langId}}", prices.total_price, prices.user_currency));
     }
 {% endif %}
 
-{% if 'carbon' in request.args %} // Added
+{% if show_carbon %} // Added
     if (prices.total_carbon != 0) {
         $(".carbonContainer").show();
     }
@@ -1567,7 +1571,7 @@ function buildItinerary(trips, prices) {
             startTimeDisplay = startTimeContent;
         }
 
-{% if 'price' in request.args %}              
+{% if show_price %}              
         var formattedTripPrice = null;
         var formattedTicketPrice = null;
         var formattedTicketInfo = null;
@@ -1604,7 +1608,7 @@ function buildItinerary(trips, prices) {
         }
 {% endif %}
 
-{% if 'carbon' in request.args %} // Added
+{% if show_carbon %} // Added
         var formattedCarbon = createCarbonInfo(trip.trip.carbon_footprint, trip.trip.trip_length, "{{langId}}");
 {% endif %}
 
@@ -1650,11 +1654,11 @@ function buildItinerary(trips, prices) {
                         tsToggle ? $('<div>').addClass('legMeta').html(durationDisplay).append(tsToggle)
                                  : $('<div>').addClass('legMeta').html(durationDisplay))
                 ).append(tsContainer).append('<br>').append(
-                    {% if 'price' in request.args and 'carbon' in request.args %} // Modified conditional
+                    {% if show_price and show_carbon %} // Modified conditional
                         $("<div>").append($('<div>').addClass('legMeta').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? '<span class="legValue legMetaSep">·</span>' : '') + (formattedCarbon || '')))
-                    {% elif 'price' in request.args %} // Modified conditional
+                    {% elif show_price %} // Modified conditional
                         $("<div>").append($('<div>').addClass('legMeta').html(formattedPrice || ''))
-                    {% elif 'carbon' in request.args %} // Added conditional
+                    {% elif show_carbon %} // Added conditional
                         $("<div>").append($('<div>').addClass('legMeta').html(formattedCarbon || ''))
                     {% else %}
                         $("<div>").append($('<div>').html(''))

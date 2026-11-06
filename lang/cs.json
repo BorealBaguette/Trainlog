@@ -1795,5 +1795,10 @@
     "community": "Komunita",
     "tourCommunityText": "Vaši přátelé, žebříčky a živá mapa. Chcete-li se objevit v žebříčcích nebo na živé mapě, zapněte to v nastavení.",
     "landingDashboard": "Vše na první pohled",
-    "landingDashboardDesc": "Váš přehled shrne vše: vzdálenost, země, oblíbené dopravce, trasy a rekordy."
+    "landingDashboardDesc": "Váš přehled shrne vše: vzdálenost, země, oblíbené dopravce, trasy a rekordy.",
+    "shareShowHint": "Co sdílené odkazy na cesty ve výchozím stavu zobrazují. Chcete-li volit pro jednotlivý odkaz, použijte nabídku ▲ vedle „Ukázat na mapě“ ve svém seznamu cest.",
+    "shareCopyLink": "Kopírovat odkaz",
+    "shareLinkShows": "Odkaz zobrazuje:",
+    "viewOnMap": "Ukázat na mapě",
+    "shareLinksHeading": "Sdílené odkazy"
 }

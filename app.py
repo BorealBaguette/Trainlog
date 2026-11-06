@@ -144,7 +144,8 @@ from src.trip_periods import (
     MIN_YEAR as MIN_PERIOD_YEAR,
 )
 from src.trip_periods import parse_period, period_label, period_trip_ids
-from src.trip_selections import parse_trip_ids, store_trip_ids
+from src.trip_selections import parse_trip_ids, selection_share_flags, store_trip_ids
+from src import share_view
 from src.trip_stats import discord_summary, trip_stats
 from src.update_currency import run_currency_update
 from py.utils import (
@@ -4839,6 +4840,16 @@ def render_public_trip_page(
     if owner_only and not own_trips:
         abort(401)
 
+    # Prices and CO₂: what this view shows, signed for /getPublicTrips
+    # (src/share_view.py).
+    page_trip_ids = ",".join(str(trip["uid"]) for trip in trip_list_sorted)
+    share_owners = [
+        users_by_name[name] for name in {trip["username"] for trip in trip_list_sorted}
+    ]
+    shown = share_view.page_flags(
+        selection_share_flags(tripIdsParam), request.args, share_owners, own_trips
+    )
+
     return render_template(
         template,
         # The owner's own /current page, not a shared link: only there may the page use the
@@ -4846,7 +4857,10 @@ def render_public_trip_page(
         current_page=current_page,
         own_trips=own_trips,
         logosList=listOperatorsLogos(),
-        tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
+        tripIds=page_trip_ids,
+        show_price=shown["price"],
+        show_carbon=shown["carbon"],
+        share_view_token=share_view.sign_view(page_trip_ids, shown),
         tripIdsParam=og_trip_ids,
         period_args=period,
         # The tag's name, else the journey itself: what a tab or search result should say.
@@ -5029,15 +5043,46 @@ def create_trip_share():
     """
     try:
         ids = [int(part) for part in request.form.get("trips", "").split(",") if part]
-        key = store_trip_ids(ids)
     except ValueError:
         abort(400)
 
     target = "multi_trip" if request.form.get("view") == "multiTrip" else "public_trip"
+    # The trips table's copy row says exactly what the link shows (`show`: 'p', 'c',
+    # 'pc' or 'n', src/share_view.py). The owner's usual choice stays the plain key,
+    # which follows their settings; anything else is baked into a key of its own.
+    # Only for the owner of every trip, or anyone could mint a link to someone
+    # else's prices.
+    share_flags = None
+    show = request.form.get("show")
+    if target == "public_trip" and show is not None:
+        if not show or set(show) - {"p", "c", "n"}:
+            abort(400)
+        user = User.query.filter_by(username=getUser()).first()
+        if user is None:
+            abort(401)
+        with pg_session() as pg:
+            owned = pg.execute(
+                "SELECT count(*) AS n FROM trips WHERE trip_id = ANY(:ids) AND user_id = :uid",
+                {"ids": ids, "uid": user.uid},
+            ).fetchone()["n"]
+        if owned != len(set(ids)):
+            abort(403)
+        wanted = share_view.decode(show)
+        if wanted != share_view.owner_defaults([user]):
+            share_flags = share_view.encode(wanted)
+
+    try:
+        key = store_trip_ids(ids, share_flags)
+    except ValueError:
+        abort(400)
+
     url = url_for(target, tripIds=key)
-    # The ticket page's map opens with prices shown.
+    # The ticket page's map opens with prices shown (honoured for the owner only).
     if request.form.get("price"):
         url += "?price"
+    # The copy items want the link itself, not to go there.
+    if request.form.get("format") == "json":
+        return jsonify(url=url)
     return redirect(url, code=303)
 
 
@@ -9064,9 +9109,28 @@ def getPublicTrips():
     data = request.get_json()
     tripIds = data.get("tripIds")
     sortedTripList, priceDict = processPublicTrips(tripIds)
+    # Prices and CO₂ only for the trips' owner, or as far as the page's signed
+    # view allows (src/share_view.py): otherwise they are not sent at all.
+    allowed = share_view.read_view(tripIds, data.get("view"))
+    _strip_unowned_share_fields(sortedTripList, priceDict, allowed)
     for trip in sortedTripList:
         trip["trip"].pop("username")
     return jsonify([sortedTripList, priceDict])
+
+
+def _strip_unowned_share_fields(trip_list, price_dict, allowed):
+    """Drop what `allowed` does not cover from trips the viewer does not own, and
+    blank the totals they fed into."""
+    removed = set()
+    for item in trip_list:
+        trip = item["trip"]
+        if session.get(trip["username"]) or session.get(owner):
+            continue
+        removed |= share_view.strip_trip(trip, allowed)
+    if "price" in removed:
+        price_dict["total_price"] = 0
+    if "carbon" in removed:
+        price_dict["total_carbon"] = 0
 
 
 @app.route("/u/<username>/toType/<tripType>/<tripIds>", methods=["GET"])
@@ -9287,6 +9351,8 @@ def getMultiTrips():
     # URL length limits.
     tripIds = request.get_json().get("tripIds")
     sortedTripList, priceDict = processPublicTrips(tripIds)
+    # The multiTrip view shows neither prices nor CO₂: keep them out of the JSON.
+    _strip_unowned_share_fields(sortedTripList, priceDict, share_view.NO_FLAGS)
     userList = set()
     anonymous = {}
     users_cache = {}
@@ -10076,6 +10142,8 @@ def user_settings(username):
         params["new_station_search"] = "new_station_search" in request.form
         params["all_rail_stations"] = "all_rail_stations" in request.form
         params["exact_tracks"] = "exact_tracks" in request.form
+        params["share_price"] = "share_price" in request.form
+        params["share_carbon"] = "share_carbon" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
@@ -10104,6 +10172,8 @@ def user_settings(username):
     discord_autopost_checked = "checked" if user.discord_autopost else ""
     discord_main_checked = "checked" if user.discord_main_enabled else ""
     discord_avatar_checked = "checked" if user.discord_avatar else ""
+    share_price_checked = "checked" if user.share_price else ""
+    share_carbon_checked = "checked" if user.share_carbon else ""
 
     return render_template(
         "user_settings.html",
@@ -10123,6 +10193,8 @@ def user_settings(username):
         discord_autopost_checked=discord_autopost_checked,
         discord_main_checked=discord_main_checked,
         discord_avatar_checked=discord_avatar_checked,
+        share_price_checked=share_price_checked,
+        share_carbon_checked=share_carbon_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
@@ -10423,6 +10495,10 @@ def dynamic_trips(username, time=None):
         projects=projects,
         trip_column_names=trip_column_names,
         country_list=get_all_countries(),
+        # What a plain link shows, so the "Create link" menu can offer the other way round.
+        share_defaults=share_view.owner_defaults(
+            [User.query.filter_by(username=username).first()]
+        ),
         # Which rows offer to take their Discord post down, and which offer to
         # post themselves. Read here rather than joined into the trips API: the
         # table is paged server-side, and both lists are short enough to send
@@ -14979,6 +15055,12 @@ def ensure_auth_db_columns():
             sqlalchemy.text("ALTER TABLE user ADD COLUMN premium_cancel_at DATETIME")
         )
         authDb.session.commit()
+    for column in ("share_price", "share_carbon"):
+        if column not in existing:
+            authDb.session.execute(
+                sqlalchemy.text(f"ALTER TABLE user ADD COLUMN {column} BOOLEAN NOT NULL DEFAULT 0")
+            )
+            authDb.session.commit()
     ensure_station_name_columns(authDb.session)
 
     # Same idempotent-ALTER treatment for pending_bmc_event: create_all() created

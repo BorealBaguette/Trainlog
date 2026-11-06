@@ -1760,5 +1760,10 @@
     "community": "Community",
     "tourCommunityText": "Your friends, the leaderboards and the live map. To appear on the leaderboards or the live map, turn it on in the settings.",
     "landingDashboard": "Everything at a glance",
-    "landingDashboardDesc": "Your dashboard sums it all up: distance, countries, favourite operators, routes and records."
+    "landingDashboardDesc": "Your dashboard sums it all up: distance, countries, favourite operators, routes and records.",
+    "shareShowHint": "What the trip links you share show by default. To choose for a single link, use the ▲ menu next to “View on map” in your trips list.",
+    "shareCopyLink": "Copy link",
+    "shareLinkShows": "Link shows:",
+    "viewOnMap": "View on map",
+    "shareLinksHeading": "Shared links"
 }

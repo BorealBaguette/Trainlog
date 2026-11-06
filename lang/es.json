@@ -1763,5 +1763,10 @@
     "community": "Comunidad",
     "tourCommunityText": "Tus amigos, las clasificaciones y el mapa en vivo. Para aparecer en las clasificaciones o en el mapa en vivo, actívalo en la configuración.",
     "landingDashboard": "Todo de un vistazo",
-    "landingDashboardDesc": "Tu panel lo resume todo: distancia, países, operadores favoritos, rutas y récords."
+    "landingDashboardDesc": "Tu panel lo resume todo: distancia, países, operadores favoritos, rutas y récords.",
+    "shareShowHint": "Lo que muestran por defecto los enlaces de viajes que compartes. Para elegir enlace por enlace, usa el menú ▲ junto a «Ver en el mapa» en tu lista de viajes.",
+    "shareCopyLink": "Copiar enlace",
+    "shareLinkShows": "El enlace muestra:",
+    "viewOnMap": "Ver en el mapa",
+    "shareLinksHeading": "Enlaces compartidos"
 }

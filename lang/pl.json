@@ -1793,5 +1793,10 @@
     "community": "Społeczność",
     "tourCommunityText": "Twoi znajomi, rankingi i mapa na żywo. Aby pojawić się w rankingach lub na mapie na żywo, włącz tę opcję w ustawieniach.",
     "landingDashboard": "Wszystko w jednym miejscu",
-    "landingDashboardDesc": "Twój pulpit podsumowuje wszystko: dystans, kraje, ulubionych przewoźników, trasy i rekordy."
+    "landingDashboardDesc": "Twój pulpit podsumowuje wszystko: dystans, kraje, ulubionych przewoźników, trasy i rekordy.",
+    "shareShowHint": "Co domyślnie pokazują udostępniane linki do podróży. Aby wybrać dla pojedynczego linku, użyj menu ▲ obok „Pokaż na mapie” na liście podróży.",
+    "shareCopyLink": "Kopiuj link",
+    "shareLinkShows": "Link pokazuje:",
+    "viewOnMap": "Pokaż na mapie",
+    "shareLinksHeading": "Udostępniane linki"
 }

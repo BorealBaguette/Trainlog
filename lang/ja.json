@@ -1748,5 +1748,10 @@
     "community": "コミュニティ",
     "tourCommunityText": "フレンド、ランキング、ライブマップ。ランキングやライブマップに表示するには、設定で有効にしてください。",
     "landingDashboard": "すべてがひと目で",
-    "landingDashboardDesc": "ダッシュボードで距離、国、よく使う事業者、路線、記録をまとめて確認できます。"
+    "landingDashboardDesc": "ダッシュボードで距離、国、よく使う事業者、路線、記録をまとめて確認できます。",
+    "shareShowHint": "共有する旅程リンクに既定で表示される内容です。リンクごとに選ぶには、旅程一覧の「地図で見る」の横にある▲メニューを使ってください。",
+    "shareCopyLink": "リンクをコピー",
+    "shareLinkShows": "リンクに表示：",
+    "viewOnMap": "地図で見る",
+    "shareLinksHeading": "共有リンク"
 }

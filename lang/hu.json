@@ -1748,5 +1748,10 @@
     "community": "Közösség",
     "tourCommunityText": "A barátaid, a ranglisták és az élő térkép. Ha szeretnél megjelenni a ranglistákon vagy az élő térképen, kapcsold be a beállításokban.",
     "landingDashboard": "Minden egy pillantásra",
-    "landingDashboardDesc": "Az irányítópult mindent összefoglal: távolság, országok, kedvenc szolgáltatók, útvonalak és rekordok."
+    "landingDashboardDesc": "Az irányítópult mindent összefoglal: távolság, országok, kedvenc szolgáltatók, útvonalak és rekordok.",
+    "shareShowHint": "Amit a megosztott útlinkjeid alapértelmezetten mutatnak. Egyetlen link beállításához használd a „Mutasd térképen” melletti ▲ menüt az utaid listájában.",
+    "shareCopyLink": "Link másolása",
+    "shareLinkShows": "A link mutatja:",
+    "viewOnMap": "Mutasd térképen",
+    "shareLinksHeading": "Megosztott linkek"
 }

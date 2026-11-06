@@ -1748,5 +1748,10 @@
     "community": "社区",
     "tourCommunityText": "你的好友、排行榜和实时地图。想出现在排行榜或实时地图上，请在设置中开启。",
     "landingDashboard": "一切尽收眼底",
-    "landingDashboardDesc": "仪表盘为你汇总一切：里程、国家、常用运营商、线路和纪录。"
+    "landingDashboardDesc": "仪表盘为你汇总一切：里程、国家、常用运营商、线路和纪录。",
+    "shareShowHint": "您分享的行程链接默认显示的内容。如需逐个链接选择，请使用行程列表中“在地图上查看”旁的 ▲ 菜单。",
+    "shareCopyLink": "复制链接",
+    "shareLinkShows": "链接显示：",
+    "viewOnMap": "在地图上查看",
+    "shareLinksHeading": "共享链接"
 }

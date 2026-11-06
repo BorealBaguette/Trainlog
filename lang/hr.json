@@ -1778,5 +1778,10 @@
     "community": "Zajednica",
     "tourCommunityText": "Vaši prijatelji, ljestvice i karta uživo. Da biste se pojavili na ljestvicama ili karti uživo, uključite to u postavkama.",
     "landingDashboard": "Sve na prvi pogled",
-    "landingDashboardDesc": "Vaša nadzorna ploča sve sažima: udaljenost, zemlje, omiljene prijevoznike, rute i rekorde."
+    "landingDashboardDesc": "Vaša nadzorna ploča sve sažima: udaljenost, zemlje, omiljene prijevoznike, rute i rekorde.",
+    "shareShowHint": "Što poveznice putovanja koje dijelite prikazuju prema zadanim postavkama. Za odabir za pojedinu poveznicu upotrijebite izbornik ▲ pokraj „Prikaži na karti” u popisu putovanja.",
+    "shareCopyLink": "Kopiraj poveznicu",
+    "shareLinkShows": "Poveznica prikazuje:",
+    "viewOnMap": "Prikaži na karti",
+    "shareLinksHeading": "Dijeljene poveznice"
 }

@@ -1760,5 +1760,10 @@
     "community": "Kogukond",
     "tourCommunityText": "Sinu sõbrad, edetabelid ja reaalajas kaart. Edetabelites või reaalajas kaardil osalemiseks lülita see seadetes sisse.",
     "landingDashboard": "Kõik ühe pilguga",
-    "landingDashboardDesc": "Sinu töölaud võtab kõik kokku: vahemaa, riigid, lemmikvedajad, marsruudid ja rekordid."
+    "landingDashboardDesc": "Sinu töölaud võtab kõik kokku: vahemaa, riigid, lemmikvedajad, marsruudid ja rekordid.",
+    "shareShowHint": "Mida sinu jagatud reisilingid vaikimisi näitavad. Üksiku lingi jaoks valimiseks kasuta reiside loendis nupu „Vaata kaardil” kõrval olevat ▲-menüüd.",
+    "shareCopyLink": "Kopeeri link",
+    "shareLinkShows": "Link näitab:",
+    "viewOnMap": "Vaata kaardil",
+    "shareLinksHeading": "Jagatud lingid"
 }

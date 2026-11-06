@@ -1761,5 +1761,10 @@
     "community": "Yhteisö",
     "tourCommunityText": "Kaverisi, tulostaulut ja livekartta. Jos haluat näkyä tulostauluilla tai livekartalla, ota se käyttöön asetuksista.",
     "landingDashboard": "Kaikki yhdellä silmäyksellä",
-    "landingDashboardDesc": "Kojelauta kokoaa kaiken yhteen: matkat, maat, suosikkiliikennöitsijät, reitit ja ennätykset."
+    "landingDashboardDesc": "Kojelauta kokoaa kaiken yhteen: matkat, maat, suosikkiliikennöitsijät, reitit ja ennätykset.",
+    "shareShowHint": "Mitä jakamasi matkalinkit näyttävät oletuksena. Jos haluat valita yksittäiselle linkille, käytä matkaluettelosi ”Näytä kartalla” -painikkeen vieressä olevaa ▲-valikkoa.",
+    "shareCopyLink": "Kopioi linkki",
+    "shareLinkShows": "Linkki näyttää:",
+    "viewOnMap": "Näytä kartalla",
+    "shareLinksHeading": "Jaetut linkit"
 }

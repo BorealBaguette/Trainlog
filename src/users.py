@@ -109,6 +109,10 @@ class User(authDb.Model):
     # control — this also gates BMC webhook matching, which is keyed on `email`.
     pending_email = authDb.Column(authDb.String(100), nullable=True)
     email_verify_token = authDb.Column(authDb.String(100), nullable=True)
+    # What a plain shared link to this user's trips shows (src/share_view.py). Off by
+    # default: a price only leaves the account when its owner says so.
+    share_price = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    share_carbon = authDb.Column(authDb.Boolean, nullable=False, default=False)
 
     def toDict(self):
         return {
@@ -148,6 +152,8 @@ class User(authDb.Model):
             "discord_autopost": self.discord_autopost,
             "discord_avatar": self.discord_avatar,
             "pending_email": self.pending_email,
+            "share_price": self.share_price,
+            "share_carbon": self.share_carbon,
         }
 
     def is_public(self):

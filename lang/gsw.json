@@ -1761,5 +1761,10 @@
     "community": "Community",
     "tourCommunityText": "Dini Fründe, d Ranglischte und d Live-Charte. Zum i de Ranglischte oder uf de Live-Charte erschiine, aktivier d Option i de Iistellige.",
     "landingDashboard": "Alles uf ei Blick",
-    "landingDashboardDesc": "Dis Dashboard fasst alles zäme: Distanz, Länder, Lieblingsbetriiber, Strecke und Rekord."
+    "landingDashboardDesc": "Dis Dashboard fasst alles zäme: Distanz, Länder, Lieblingsbetriiber, Strecke und Rekord.",
+    "shareShowHint": "Was dini teilte Fahrtlinks standardmässig zeiged. Für en einzelne Link z wähle, bruuch s ▲-Menü näbe „Uf Charte zeige“ i dinere Fahrteliste.",
+    "shareCopyLink": "Link kopiere",
+    "shareLinkShows": "Link zeigt:",
+    "viewOnMap": "Uf Charte zeige",
+    "shareLinksHeading": "Teilti Links"
 }

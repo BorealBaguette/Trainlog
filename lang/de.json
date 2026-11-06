@@ -1763,5 +1763,10 @@
     "community": "Community",
     "tourCommunityText": "Deine Freunde, die Ranglisten und die Live-Karte. Um in den Ranglisten oder auf der Live-Karte zu erscheinen, aktiviere die Option in den Einstellungen.",
     "landingDashboard": "Alles auf einen Blick",
-    "landingDashboardDesc": "Dein Dashboard fasst alles zusammen: Distanz, Länder, Lieblingsbetreiber, Strecken und Rekorde."
+    "landingDashboardDesc": "Dein Dashboard fasst alles zusammen: Distanz, Länder, Lieblingsbetreiber, Strecken und Rekorde.",
+    "shareShowHint": "Was deine geteilten Fahrtlinks standardmäßig zeigen. Um für einen einzelnen Link zu wählen, nutze das ▲-Menü neben „Auf Karte zeigen“ in deiner Fahrtenliste.",
+    "shareCopyLink": "Link kopieren",
+    "shareLinkShows": "Link zeigt:",
+    "viewOnMap": "Auf Karte zeigen",
+    "shareLinksHeading": "Geteilte Links"
 }

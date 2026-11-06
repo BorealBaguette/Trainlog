@@ -1763,5 +1763,10 @@
     "community": "Community",
     "tourCommunityText": "Je vrienden, de ranglijsten en de live kaart. Wil je in de ranglijsten of op de live kaart verschijnen, zet het dan aan in de instellingen.",
     "landingDashboard": "Alles in één oogopslag",
-    "landingDashboardDesc": "Je dashboard vat alles samen: afstand, landen, favoriete vervoerders, routes en records."
+    "landingDashboardDesc": "Je dashboard vat alles samen: afstand, landen, favoriete vervoerders, routes en records.",
+    "shareShowHint": "Wat de ritlinks die je deelt standaard tonen. Om per link te kiezen, gebruik je het ▲-menu naast ‘Bekijk op kaart’ in je rittenlijst.",
+    "shareCopyLink": "Link kopiëren",
+    "shareLinkShows": "Link toont:",
+    "viewOnMap": "Bekijk op kaart",
+    "shareLinksHeading": "Gedeelde links"
 }

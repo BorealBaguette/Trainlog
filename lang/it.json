@@ -1763,5 +1763,10 @@
     "community": "Community",
     "tourCommunityText": "I tuoi amici, le classifiche e la mappa in tempo reale. Per comparire nelle classifiche o sulla mappa, attiva l'opzione nelle preferenze.",
     "landingDashboard": "Tutto a colpo d'occhio",
-    "landingDashboardDesc": "La tua dashboard riassume tutto: distanza, paesi, operatori preferiti, tratte e record."
+    "landingDashboardDesc": "La tua dashboard riassume tutto: distanza, paesi, operatori preferiti, tratte e record.",
+    "shareShowHint": "Cosa mostrano di default i link dei viaggi che condividi. Per scegliere link per link, usa il menu ▲ accanto a «Vedi sulla mappa» nel tuo elenco di viaggi.",
+    "shareCopyLink": "Copia link",
+    "shareLinkShows": "Il link mostra:",
+    "viewOnMap": "Vedi sulla mappa",
+    "shareLinksHeading": "Link condivisi"
 }

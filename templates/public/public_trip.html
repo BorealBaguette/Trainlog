@@ -229,14 +229,14 @@ function buildItinerary(trips, prices){
     "ski": '{{ski}}',
   }
 
-{% if 'price' in request.args %}              
+{% if show_price %}              
   if (prices.total_price != 0){
     $(".currencyContainer").show();
     $(".currency").text(formatCurrency("{{langId}}",prices.total_price, prices.user_currency));
   }
 {% endif %}
 
-{% if 'carbon' in request.args %}        
+{% if show_carbon %}        
 if (prices.total_carbon != 0){
   $(".carbonContainer").show();
 }
@@ -484,7 +484,7 @@ if (operatorContents.length) {
       }
 
       
-{% if 'price' in request.args %}              
+{% if show_price %}              
     var formattedTripPrice = null;
     var formattedTicketPrice = null;
     var formattedTicketInfo = null;
@@ -536,11 +536,11 @@ if (operatorContents.length) {
         tsToggle ? $('<div>').html(durationDisplay).append(tsToggle)
                  : $('<div>').html(durationDisplay))
     ).append(tsContainer).append('<br>').append(
-      {% if 'price' in request.args and 'carbon' in request.args %}
+      {% if show_price and show_carbon %}
         $("<div>").append($('<div>').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? ' ' : '') + (formattedCarbon || '')))
-      {% elif 'price' in request.args %}
+      {% elif show_price %}
         $("<div>").append($('<div>').html(formattedPrice || ''))
-      {% elif 'carbon' in request.args %}
+      {% elif show_carbon %}
         $("<div>").append($('<div>').html(formattedCarbon || ''))
       {% else %}
         $("<div>").append($('<div>').html(''))
@@ -783,11 +783,12 @@ function placePolylines(trips) {
 
 
 function copyURL(){
+  var url = window.location.href;
 
   if (window.AndroidFunction) {
-    AndroidFunction.copyTextToClipboard(window.location.href);
+    AndroidFunction.copyTextToClipboard(url);
   } else {
-    navigator.clipboard.writeText(window.location.href);
+    navigator.clipboard.writeText(url);
   }
   
   $('#snackbar').attr('class','show');
@@ -847,7 +848,7 @@ var tripIds = {{tripIds|tojson}};
 $.post({
   url: '{{url_for("getPublicTrips")}}',
   contentType: 'application/json',
-  data: JSON.stringify({ tripIds: tripIds }),
+  data: JSON.stringify({ tripIds: tripIds, view: {{ share_view_token|tojson }} }),
   success: function(data, status) {
     var trips = data[0];
     var prices = data[1];

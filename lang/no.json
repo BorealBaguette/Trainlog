@@ -1763,5 +1763,10 @@
     "community": "Fellesskap",
     "tourCommunityText": "Vennene dine, topplistene og livekartet. Slå det på i innstillingene for å komme med på topplistene eller livekartet.",
     "landingDashboard": "Alt på ett blikk",
-    "landingDashboardDesc": "Dashbordet ditt oppsummerer alt: distanse, land, favorittoperatører, ruter og rekorder."
+    "landingDashboardDesc": "Dashbordet ditt oppsummerer alt: distanse, land, favorittoperatører, ruter og rekorder.",
+    "shareShowHint": "Hva reiselenkene du deler, viser som standard. For å velge for én lenke om gangen, bruker du ▲-menyen ved siden av «Vis på kart» i reiselisten din.",
+    "shareCopyLink": "Kopier lenke",
+    "shareLinkShows": "Lenken viser:",
+    "viewOnMap": "Vis på kart",
+    "shareLinksHeading": "Delte lenker"
 }

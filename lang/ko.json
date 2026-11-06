@@ -1750,5 +1750,10 @@
     "community": "커뮤니티",
     "tourCommunityText": "친구, 순위표, 실시간 지도. 순위표나 실시간 지도에 나오려면 설정에서 켜 주세요.",
     "landingDashboard": "모든 것을 한눈에",
-    "landingDashboardDesc": "대시보드에서 거리, 국가, 즐겨 찾는 운영사, 노선, 기록을 한눈에 볼 수 있습니다."
+    "landingDashboardDesc": "대시보드에서 거리, 국가, 즐겨 찾는 운영사, 노선, 기록을 한눈에 볼 수 있습니다.",
+    "shareShowHint": "공유하는 여행 링크에 기본으로 표시되는 항목입니다. 링크마다 선택하려면 여행 목록의 ‘지도에서 보기’ 옆 ▲ 메뉴를 사용하세요.",
+    "shareCopyLink": "링크 복사",
+    "shareLinkShows": "링크에 표시:",
+    "viewOnMap": "지도에서 보기",
+    "shareLinksHeading": "공유 링크"
 }

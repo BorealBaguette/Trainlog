@@ -1760,5 +1760,10 @@
     "community": "Communauté",
     "tourCommunityText": "Vos amis, les classements et la carte en direct. Pour figurer dans les classements ou sur la carte en direct, activez l'option dans les préférences.",
     "landingDashboard": "Tout en un coup d'œil",
-    "landingDashboardDesc": "Votre tableau de bord résume tout : distance, pays, opérateurs préférés, trajets et records."
+    "landingDashboardDesc": "Votre tableau de bord résume tout : distance, pays, opérateurs préférés, trajets et records.",
+    "shareShowHint": "Ce qu'affichent par défaut les liens de trajets que vous partagez. Pour choisir lien par lien, utilisez le menu ▲ à côté de « Voir sur la carte » dans votre liste de trajets.",
+    "shareCopyLink": "Copier le lien",
+    "shareLinkShows": "Le lien affiche :",
+    "viewOnMap": "Voir sur la carte",
+    "shareLinksHeading": "Liens partagés"
 }

@@ -1748,5 +1748,10 @@
     "community": "Topluluk",
     "tourCommunityText": "Arkadaşların, sıralamalar ve canlı harita. Sıralamalarda veya canlı haritada görünmek için bunu ayarlardan aç.",
     "landingDashboard": "Her şey bir bakışta",
-    "landingDashboardDesc": "Panon her şeyi özetler: mesafe, ülkeler, favori işletmeciler, güzergâhlar ve rekorlar."
+    "landingDashboardDesc": "Panon her şeyi özetler: mesafe, ülkeler, favori işletmeciler, güzergâhlar ve rekorlar.",
+    "shareShowHint": "Paylaştığınız yolculuk bağlantılarının varsayılan olarak gösterdikleri. Tek bir bağlantı için seçmek isterseniz yolculuk listenizdeki “Haritada göster” düğmesinin yanındaki ▲ menüsünü kullanın.",
+    "shareCopyLink": "Bağlantıyı kopyala",
+    "shareLinkShows": "Bağlantı gösterir:",
+    "viewOnMap": "Haritada göster",
+    "shareLinksHeading": "Paylaşılan bağlantılar"
 }

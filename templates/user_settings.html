@@ -46,6 +46,28 @@
   .settings2-label { font-size: 0.8rem; font-weight: 600; color: light-dark(#6c757d, var(--bs-body-color)); margin: 1.5rem 0 0.4rem; text-transform: uppercase; letter-spacing: 0.03em; }
   .settings2-label:first-of-type { margin-top: 0; }
   .settings2-hint { color: light-dark(#6c757d, var(--bs-body-color)); font-size: 0.85rem; margin: 0.4rem 0 0; }
+  /* Shared links: the trips table's share-menu toggles (dynamic_trips.html), as
+     labelled chips over hidden checkboxes. */
+  .shareToggles { display: flex; flex-wrap: wrap; gap: 8px; }
+  .shareToggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--bs-border-color); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; user-select: none;
+    color: light-dark(#6c757d, var(--bs-secondary-color));
+  }
+  .btn-check:checked + .shareToggle {
+    background: rgba(var(--bs-primary-rgb), 0.1);
+    border-color: var(--bs-primary);
+    color: var(--bs-body-color);
+  }
+  .btn-check:focus-visible + .shareToggle { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+  .btn-check:checked + .shareToggle .fa-coins { color: light-dark(#bfa055, #ccbd99); }
+  .btn-check:checked + .shareToggle .fa-leaf { color: light-dark(#4f9d5d, #8fd69f); }
+  .btn-check:not(:checked) + .shareToggle .shareStateIcon { position: relative; color: light-dark(#b8bdc2, #6c757d); }
+  .btn-check:not(:checked) + .shareToggle .shareStateIcon::after {
+    content: ""; position: absolute; left: -1px; right: -1px; top: 50%;
+    border-top: 2px solid light-dark(#dc3545, #ea868f); transform: rotate(-45deg);
+  }
   .settings2-hr { margin: 1.75rem 0; border-color: light-dark(#e9ecef, var(--bs-border-color)); }
   .settings2-toggle-row .form-check { margin-bottom: 0.9rem; }
   .settings2-toggle-row .form-check:last-child { margin-bottom: 0; }
@@ -256,6 +278,22 @@
               </label>
             </div>
             {% endif %}
+            <hr class="settings2-hr">
+
+            {# What a plain shared trip link shows (src/share_view.py). The heading and
+               its hint sit above both toggles, so the hint reads as covering both. #}
+            <div class="settings2-label mt-0">{{ shareLinksHeading }}</div>
+            <div class="settings2-hint mt-0 mb-3">{{ shareShowHint }}</div>
+            {# Same coin / leaf toggles as the trips table's share menu: coloured when
+               shown, greyed and struck through when left out. Still checkboxes, so the
+               form saves them as before. #}
+            <div class="shareToggles">
+              <input type="checkbox" class="btn-check" id="share_price" name="share_price" form="settingsForm" autocomplete="off" {{ share_price_checked }} />
+              <label class="shareToggle" for="share_price"><i class="fa-solid fa-coins fa-fw shareStateIcon"></i> {{ price }}</label>
+              <input type="checkbox" class="btn-check" id="share_carbon" name="share_carbon" form="settingsForm" autocomplete="off" {{ share_carbon_checked }} />
+              <label class="shareToggle" for="share_carbon"><i class="fa-solid fa-leaf fa-fw shareStateIcon"></i> {{ CO2 }}</label>
+            </div>
+
 
             <div class="settings2-save">
               <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
