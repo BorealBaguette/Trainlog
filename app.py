@@ -9673,10 +9673,11 @@ def get_trips_api_internal(username, is_public=False):
         # The countries column is JSON keyed by code, matched on the quoted, upper-case
         # code so that "NO" does not find every trip with a "nonelec" split.
         terms.append(f"COALESCE(countries, '') LIKE :{param}_country")
-        terms.append(
-            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ANY(FilteredTrips.ticket_ids)"
-            f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
-        )
+        if not hide_price:
+            terms.append(
+                "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ANY(FilteredTrips.ticket_ids)"
+                f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
+            )
         terms.append(
             "EXISTS (SELECT 1 FROM tags_associations fta JOIN tags ft ON fta.tag_id = ft.uid"
             f" WHERE fta.trip_id = FilteredTrips.uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
