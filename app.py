@@ -5256,13 +5256,20 @@ def download_path(trip_ids):
         trip = get_trip_pg(trip_id)
         if trip is not None:
             user = User.query.filter_by(username=trip["username"]).first()
-            # Verify that either user session is valid or the user has public trips
-            if (
-                not session.get(user.username)
-                and not user.is_public_trips()
-                and not session.get(owner)
-            ):
-                abort(401, description=f"Unauthorized for trip_id={trip_id}")
+            # Someone other than the trip's owner needs the account to share
+            # trips AND the trip itself to be visible to them (same per-trip
+            # rule as the public trip page: private hidden, friends gated).
+            if not session.get(user.username) and not session.get(owner):
+                visibility = trip.get("visibility")
+                if (
+                    not user.is_public_trips()
+                    or visibility == "private"
+                    or (
+                        visibility == "friends"
+                        and not current_user_is_friend_with(user.username)
+                    )
+                ):
+                    abort(401, description=f"Unauthorized for trip_id={trip_id}")
         else:
             abort(410, description=f"Trip with id={trip_id} is gone")
 
@@ -6933,8 +6940,6 @@ def saveFlight(username, type):
         jsonNewTrip = request.form["newTrip"]
         newTrip = json.loads(jsonNewTrip)
         airlineLogoProcess(newTrip)
-        # TODO : Fix visibility for flights
-        newTrip["visibility"] = "public"
 
         # Building a flight for a plan -> write to plan_trips (parallel world), reusing
         # savePlanTripToDb's air branch. The 3D track isn't kept for plans.
@@ -8607,16 +8612,29 @@ def rename_user(uid):
         return jsonify(success=False, error="Username already taken"), 409
 
     old_username = user.username
-    # All username-keyed tables now live in PostgreSQL.
-    pg_tables = [
-        "percents",
-        "fr24_usage",
-        "ai_usage",
-        "trainsets",
-        "tickets",
-        "tags",
-        "tag_members",
-        "gpx",
+    # Every (table, column) holding an account's username, all in PostgreSQL.
+    # Not denied_logins (a log of attempts on the old name) nor wagons/ship_pictures
+    # .author (free-text image credits).
+    pg_columns = [
+        ("percents", "username"),
+        ("fr24_usage", "username"),
+        ("ai_usage", "username"),
+        ("trainsets", "username"),
+        ("tickets", "username"),
+        ("tags", "username"),
+        ("tag_members", "username"),
+        ("gpx", "username"),
+        ("feature_requests", "username"),
+        ("feature_requests", "closed_by"),
+        ("feature_request_comments", "username"),
+        ("feature_request_votes", "username"),
+        ("news", "username"),
+        ("news_visits", "username"),
+        ("news_reactions", "username"),
+        ("news_views", "username"),
+        ("manual_stations", "creator"),
+        ("station_overrides", "updated_by"),
+        ("operator_dismissed_spellings", "dismissed_by"),
     ]
 
     try:
@@ -8624,9 +8642,9 @@ def rename_user(uid):
         authDb.session.commit()
 
         with pg_session() as pg:
-            for table in pg_tables:
+            for table, column in pg_columns:
                 pg.execute(
-                    f"UPDATE {table} SET username = :new WHERE username = :old",
+                    f"UPDATE {table} SET {column} = :new WHERE {column} = :old",
                     {"new": new_username, "old": old_username},
                 )
     except Exception as e:
@@ -14444,6 +14462,20 @@ def router_status():
     )
 
 
+# Trip fields the public live map (templates/public/current_global*.html, trip_progress.js,
+# vehicle_display.js) reads; everything else is stripped from /public/current_trips.
+LIVE_MAP_TRIP_FIELDS = (
+    "uid", "type", "username", "time",
+    "origin_station", "destination_station", "waypoints", "stops",
+    "start_datetime", "end_datetime", "utc_start_datetime", "utc_end_datetime",
+    "utc_filtered_start_datetime", "utc_filtered_end_datetime",
+    "departure_delay", "arrival_delay",
+    "operator", "multi_operators", "logo_url", "line_name",
+    "material_type", "manufacturer", "model", "reg", "vessel_name", "vessel_country",
+    "trainset", "live_tracked", "live_updated", "live_origin", "live_destination",
+)
+
+
 def get_current_trips_data(public_only=True):
     """
     Get current trips data, optionally filtered by public visibility.
@@ -14550,6 +14582,10 @@ def get_current_trips_data(public_only=True):
                 trip["trainset"] = public_trainset_info(
                     pg, trip["material_type_advanced"], trip["username"]
                 )
+            if public_only:
+                # Anonymous endpoint: only what the live map draws, never notes,
+                # price, seat, ticket ids or any column added to trips later.
+                trip = {k: trip[k] for k in LIVE_MAP_TRIP_FIELDS if k in trip}
             result.append(
                 {
                     "username": trip["username"],

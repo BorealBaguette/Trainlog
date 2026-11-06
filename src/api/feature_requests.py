@@ -480,7 +480,11 @@ def _close_feature_request_and_notify(request_id, new_status, closure_reason=Non
         )
 
     # Send email if closed
-    if new_status in ("completed", "not_doing", "merged") and author_username:
+    author = (
+        User.query.filter_by(username=author_username).first() if author_username else None
+    )
+    # No author account (deleted, alias left behind): nobody to notify
+    if new_status in ("completed", "not_doing", "merged") and author:
         try:
             subject = f"Your feature request #{request_id} was closed"
             if new_status == "completed":
@@ -490,8 +494,7 @@ def _close_feature_request_and_notify(request_id, new_status, closure_reason=Non
             else:
                 msg_status = "won't be done"
 
-            user = User.query.filter_by(username=author_username).first()
-            user_lang = user.lang
+            user_lang = author.lang
             message = f"{lang[user_lang]['fr_email_greeting'].format(username=author_username)}<br><br>"
             message += f"{lang[user_lang]['fr_email_feature_closed'].format(request_id=request_id, status=msg_status, url=url_for('feature_requests.single_feature_request', request_id=request_id, _external=True))}<br><br>"
             if closure_reason:
