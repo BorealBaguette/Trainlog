@@ -9577,6 +9577,7 @@ def get_trips_api_internal(username, is_public=False):
     )
 
     is_friend = current_user_is_friend_with(username)
+    hide_price = is_public and not (session.get(username) or session.get(owner))
 
     # Sorting parameters
     sort_column = request.form.get("order[0][column]", type=int, default=3)
@@ -9896,9 +9897,10 @@ def get_trips_api_internal(username, is_public=False):
                 trip["vessel_name"] = names.get(trip["uid"])
 
     # If public, remove price information
-    if is_public:
+    if hide_price:
         for trip in trip_dicts:
-            trip.pop("price", None)
+            for field in share_view.PRICE_FIELDS:
+                trip.pop(field, None)
 
     # Format trips for display
     trip_list = [formatTrip(trip) for trip in trip_dicts]
