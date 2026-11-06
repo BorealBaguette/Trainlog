@@ -29,8 +29,8 @@
  *
  * fetchAircraftPhoto(reg) / fetchVesselPhoto(endpoint, reg, at)
  *   Resolve a registration to { thumb, link, attr, country } or null; a vessel also
- *   resolves a `name`, since a ship may be logged by name, IMO or MMSI and is always
- *   shown by name — the one it carried at `at`, the trip's own date, so a crossing keeps
+ *   resolves a `name`, since a ship is logged by its hull key and shown by
+ *   name — the one it carried at `at`, the trip's own date, so a crossing keeps
  *   the ship as it was rather than as it is now. Both are memoised per registration for the page's lifetime, so
  *   reopening a popup or re-toggling a leg costs nothing and a repeated vehicle is
  *   fetched once.
