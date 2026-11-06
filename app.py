@@ -9577,6 +9577,7 @@ def get_trips_api_internal(username, is_public=False):
     )
 
     is_friend = current_user_is_friend_with(username)
+    hide_price = is_public and not (session.get(username) or session.get(owner))
 
     # Sorting parameters
     sort_column = request.form.get("order[0][column]", type=int, default=3)
@@ -9593,6 +9594,8 @@ def get_trips_api_internal(username, is_public=False):
     if custom_sort_field and custom_sort_field in SORT_FIELD_EXPRS:
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
+    if hide_price and sort_column_name == "price":
+        sort_column_name = "temporal"
 
     # Now-anchor: with upcoming trips folded in, the descending timeline runs
     # [far future … now … oldest past], so its first page is the most distant plan —
@@ -9670,10 +9673,11 @@ def get_trips_api_internal(username, is_public=False):
         # The countries column is JSON keyed by code, matched on the quoted, upper-case
         # code so that "NO" does not find every trip with a "nonelec" split.
         terms.append(f"COALESCE(countries, '') LIKE :{param}_country")
-        terms.append(
-            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ANY(FilteredTrips.ticket_ids)"
-            f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
-        )
+        if not hide_price:
+            terms.append(
+                "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ANY(FilteredTrips.ticket_ids)"
+                f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
+            )
         terms.append(
             "EXISTS (SELECT 1 FROM tags_associations fta JOIN tags ft ON fta.tag_id = ft.uid"
             f" WHERE fta.trip_id = FilteredTrips.uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
@@ -9896,9 +9900,10 @@ def get_trips_api_internal(username, is_public=False):
                 trip["vessel_name"] = names.get(trip["uid"])
 
     # If public, remove price information
-    if is_public:
+    if hide_price:
         for trip in trip_dicts:
-            trip.pop("price", None)
+            for field in share_view.PRICE_FIELDS:
+                trip.pop(field, None)
 
     # Format trips for display
     trip_list = [formatTrip(trip) for trip in trip_dicts]
