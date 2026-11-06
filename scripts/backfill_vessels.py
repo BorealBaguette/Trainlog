@@ -256,6 +256,10 @@ def build_plan(report_names=False):
                   AND reg IS NOT NULL AND btrim(reg) <> ''
                   AND btrim(reg) ~ '^([0-9]{7}|[0-9]{9})$'
                   AND vessel_resolve(reg) IS NULL
+                  -- An MMSI is not a key, but one the register holds is no new ship.
+                  AND NOT EXISTS (
+                      SELECT 1 FROM vessel_registrations r WHERE r.mmsi = btrim(reg)
+                  )
                 """
             ).fetchall()
         ]
@@ -368,8 +372,10 @@ def apply_plan(plan):
             reg = (item.get("reg") or "").strip()
             # Passes 1-2 may have just given some other row this very number.
             if pg.execute(
-                "SELECT vessel_resolve(:reg)", {"reg": reg}
-            ).scalar() is not None:
+                "SELECT vessel_resolve(:reg) IS NOT NULL OR EXISTS ("
+                " SELECT 1 FROM vessel_registrations WHERE mmsi = :reg)",
+                {"reg": reg},
+            ).scalar():
                 continue
 
             row = {
@@ -394,6 +400,18 @@ def apply_plan(plan):
                     """,
                     {"vessel_id": vessel_id, "name": row["name"], "mmsi": row["mmsi"]},
                 )
+            # Only the hull key resolves, so trips logged under the MMSI are re-pointed.
+            pg.execute(
+                """
+                UPDATE trips SET reg = COALESCE(v.imo, v.trainlog_id)
+                FROM vessels v
+                WHERE v.uid = :vessel_id
+                  AND trips.trip_type = 'ferry'
+                  AND btrim(trips.reg) = :reg
+                  AND btrim(trips.reg) <> COALESCE(v.imo, v.trainlog_id)
+                """,
+                {"vessel_id": vessel_id, "reg": reg},
+            )
             applied_created.append({**item, **row})
 
     return {"filled": applied_filled, "created": applied_created, "skipped": skipped}
@@ -446,6 +464,11 @@ def _name_candidates(pg):
               AND reg IS NOT NULL AND btrim(reg) <> ''
               AND btrim(reg) !~ '^[0-9]+$'
               AND vessel_resolve(reg) IS NULL
+              -- A name the register holds is merged on the register page, not created.
+              AND NOT EXISTS (
+                  SELECT 1 FROM vessel_registrations r
+                  WHERE lower(btrim(r.name)) = lower(btrim(trips.reg))
+              )
         ),
         per_country AS (
             -- Metres travelled per country across all the trips naming this ship, so the

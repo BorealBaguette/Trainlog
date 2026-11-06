@@ -11384,10 +11384,8 @@ def _clean_vessel_number(value, digits, label):
 
 # The register itself, as one query (see _register_rows).
 SHIP_REGISTER_SQL = """
-            -- How many logged trips each hull actually accounts for. Resolved
-            -- through vessel_resolve, so trips logged under an old name count
-            -- towards the same hull; the register is sorted by it, which puts the
-            -- ships worth curating at the top.
+            -- How many logged trips each hull actually accounts for; the register
+            -- is sorted by it, which puts the ships worth curating at the top.
             WITH trip_counts AS (
                 SELECT vessel_resolve(reg) AS vessel_id,
                        COUNT(*) AS trips,
@@ -11583,12 +11581,12 @@ def ships():
             dict(row._mapping, unregistered=True)
             for row in pg.execute(
                 """
-                -- Grouped by the NORMALISED name, so "MS Pont-Aven", "Pont Aven" and
-                -- "pont-aven" are one ship and one decision, exactly as vessel_resolve
-                -- would treat them once the row exists. The spelling offered back is the
-                -- commonest one; the others are shown so a mis-grouping is visible.
+                -- Grouped by the text ignoring case only: "MS Friesland" and
+                -- "Friesland" may be two ships, and adopting a row rewrites every trip
+                -- in it (_unresolved_trips). The spelling offered back is the commonest
+                -- one; the others are shown so a mis-grouping is visible.
                 WITH unlinked AS (
-                    SELECT vessel_normalize(reg) AS name_key,
+                    SELECT lower(btrim(reg)) AS name_key,
                            MODE() WITHIN GROUP (ORDER BY btrim(reg)) AS reg,
                            COUNT(*) AS trips,
                            COUNT(DISTINCT user_id) AS users,
@@ -11951,10 +11949,8 @@ def _unresolved_trips(pg, reg):
     """
     The ferry trips logged under this text that still resolve to no hull.
 
-    Read BEFORE anything is written, in both the register and the merge paths: once a row
-    exists that resolves the name, "trips that resolve to nothing" no longer describes
-    them, and a name two hulls share would be settled by vessel_resolve's own tie-break
-    (lowest uid) rather than by the admin who is looking at it.
+    Only a hull key resolves, so these are the trips whose reg is text, matched ignoring
+    case as the register page groups them.
     """
     return [
         row[0]
@@ -11963,7 +11959,7 @@ def _unresolved_trips(pg, reg):
             SELECT trip_id FROM trips
             WHERE trip_type = 'ferry'
               AND reg IS NOT NULL AND btrim(reg) <> ''
-              AND vessel_normalize(reg) = vessel_normalize(:reg)
+              AND lower(btrim(reg)) = lower(btrim(:reg))
               AND vessel_resolve(reg) IS NULL
             """,
             {"reg": reg},
@@ -11983,10 +11979,6 @@ def adopt_ship():
     its first registration under the name as logged, and re-point the trips at the hull's
     key — the same rewrite migration 0056 did, and what makes a later rename reach every
     trip at once instead of orphaning them.
-
-    The trips are chosen BEFORE the row exists, while they still resolve to nothing. Two
-    hulls may end up sharing a name, and vessel_resolve settles that by uid; picking the
-    trips afterwards would quietly hand them to whichever hull won.
 
     `merge_into` registers nothing and moves the trips onto a hull already held. That is
     the answer when the number given belongs to one — "IMO 9107796, Polarlys" logged as
@@ -12481,8 +12473,11 @@ def confirm_backfill_suggestion():
         return jsonify({"success": False, "error": "No name given"}), 400
 
     with pg_session() as pg:
-        # If the name already resolves, the register has moved on since the preview.
-        if pg.execute("SELECT vessel_resolve(:name)", {"name": name}).scalar():
+        # If the register holds the name, it has moved on since the preview.
+        if pg.execute(
+            "SELECT 1 FROM vessel_registrations WHERE lower(btrim(name)) = lower(:name)",
+            {"name": name},
+        ).fetchone():
             return jsonify(
                 {"success": False, "error": f"{name} already names a ship"}
             ), 409
@@ -12525,22 +12520,22 @@ def confirm_backfill_suggestion():
                 # can be fetched or uploaded from the Periods view afterwards.
                 logger.exception("Commons photo import failed for %s", image_url)
 
-        # The trips that named it can now point at the hull, exactly as the migration
-        # did for the ships it already knew.
-        trips = pg.execute(
-            """
-            UPDATE trips SET reg = COALESCE(v.imo, v.trainlog_id)
-            FROM vessels v
-            WHERE v.uid = :vessel_id
-              AND trips.trip_type = 'ferry'
-              AND trips.reg IS NOT NULL AND btrim(trips.reg) <> ''
-              AND vessel_resolve(trips.reg) = v.uid
-              AND btrim(trips.reg) <> COALESCE(v.imo, v.trainlog_id)
-            """,
-            {"vessel_id": vessel_id},
-        ).rowcount
+        # The trips that named it, by name or by its MMSI, now point at the hull. One
+        # logged under its IMO already does.
+        trip_ids = _unresolved_trips(pg, name)
+        if mmsi:
+            trip_ids += _unresolved_trips(pg, mmsi)
+        if trip_ids:
+            pg.execute(
+                """
+                UPDATE trips SET reg = COALESCE(v.imo, v.trainlog_id)
+                FROM vessels v
+                WHERE v.uid = :vessel_id AND trips.trip_id = ANY(:ids)
+                """,
+                {"vessel_id": vessel_id, "ids": trip_ids},
+            )
 
-    return jsonify({"success": True, "vessel_id": vessel_id, "trips": trips})
+    return jsonify({"success": True, "vessel_id": vessel_id, "trips": len(trip_ids)})
 
 
 @app.route("/admin/ships/registrations/upload_photo", methods=["POST"])
@@ -12748,8 +12743,7 @@ def vesselAutocomplete():
                        -- it is what the suggestion has to offer.
                        COALESCE(per.name, cur.name) AS name,
                        COALESCE(per.country_code, cur.country_code) AS country_code,
-                       p.local_image_path,
-                       (v.uid = vessel_resolve(:query)) AS is_exact
+                       p.local_image_path
                 FROM vessels v
                 JOIN vessel_registrations r ON r.vessel_id = v.uid
                 -- What the ship is called now, and what it was called at :at.
@@ -12777,7 +12771,7 @@ def vesselAutocomplete():
                    OR (:normalized <> '' AND r.name_key LIKE '%' || :normalized || '%')
                    OR v.imo LIKE :starts
                    OR r.mmsi LIKE :starts
-                   -- Whatever the text resolves to EXACTLY, which is how a reg already
+                   -- The hull the text is the key of, which is how a reg already
                    -- stored on a trip names its ship. It matters for the synthetic
                    -- trainlog_id: a ship with no IMO has one in every trip that logged
                    -- it, and without this the edit form could not name the ship it was
@@ -12826,7 +12820,6 @@ def vesselAutocomplete():
                     if row["local_image_path"]
                     else None
                 ),
-                "exact": bool(row["is_exact"]),
             }
             for row in rows
         ]
