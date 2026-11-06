@@ -9594,6 +9594,8 @@ def get_trips_api_internal(username, is_public=False):
     if custom_sort_field and custom_sort_field in SORT_FIELD_EXPRS:
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
+    if hide_price and sort_column_name == "price":
+        sort_column_name = "temporal"
 
     # Now-anchor: with upcoming trips folded in, the descending timeline runs
     # [far future … now … oldest past], so its first page is the most distant plan —
