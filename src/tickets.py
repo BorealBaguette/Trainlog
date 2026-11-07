@@ -321,9 +321,9 @@ def _tickets(username):
     for ticket in tickets:
         countries = _countries(ticket)
         covered = [(trip["trip_id"], _covered_km(trip, countries)) for trip in by_ticket[ticket["uid"]]]
-        covered = [(trip_id, km) for trip_id, km in covered if km is not None]
-        ticket["trip_ids"] = [trip_id for trip_id, _ in covered]
-        ticket["km"] = sum(km for _, km in covered)
+        ticket["trip_km"] = {trip_id: km for trip_id, km in covered if km is not None}
+        ticket["trip_ids"] = list(ticket["trip_km"])
+        ticket["km"] = sum(ticket["trip_km"].values())
         ticket["user_price"] = get_exchange_rate(
             ticket["price"], ticket["currency"], currency, ticket["purchasing_date"]
         )
@@ -367,9 +367,13 @@ def _groups(tickets):
             if len({t[field] or "" for t in tickets}) > 1
         ]
         spent = sum(t["user_price"] or 0 for t in tickets)
-        trips = sum(len(t["trip_ids"]) for t in tickets)
-        per_count = sum(t["per_count"] for t in tickets)
-        km = sum(t["km"] for t in tickets)
+        # A trip on two of its tickets (a supplement, a second fare) counts once.
+        trip_km = {trip_id: km for t in tickets for trip_id, km in t["trip_km"].items()}
+        trips = len(trip_km)
+        km = sum(trip_km.values())
+        per_count = sum(t["per_count"] for t in tickets if t["uses"] is not None) + len(
+            {trip_id for t in tickets if t["uses"] is None for trip_id in t["trip_ids"]}
+        )
         # Who its tickets were bought from, the most used first (the latest on a tie), and
         # who else they were valid with.
         sellers = Counter(t["operator"] for t in tickets if t["operator"])

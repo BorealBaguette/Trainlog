@@ -5,18 +5,18 @@
 {% from "ticket_flags.html" import flags with context %}
 
 <style>
-    /* As high as the title and the line under it. */
     .ticket-logo {
         align-self: stretch;
         min-width: 72px;
-        min-height: 52px;
         flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: center;
     }
+    /* As high as the title and the line under it. A height taken from the block instead
+       sizes the block on the logo's natural width, then widens the logo past it. */
     .ticket-logo img {
-        height: 100%;
+        height: 52px;
         max-width: 240px;
         object-fit: contain;
     }
@@ -44,14 +44,14 @@
         max-width: 90px;
     }
     .ticket-stat {
-        background: #f8f9fa;
+        background: light-dark(#f8f9fa, var(--bs-tertiary-bg));
         border-radius: .75rem;
         padding: .9rem 1.1rem;
         height: 100%;
     }
     .ticket-stat-label {
         font-size: .8rem;
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-secondary-color));
     }
     .ticket-stat-value {
         font-size: 1.3rem;

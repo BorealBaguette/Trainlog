@@ -690,9 +690,9 @@ function stopsHTML(trip, start, end, startTime, endTime) {
 
   const fmt = (st, which) => {
     if (st.untimed) return '';
-    const ms = st[which];
+    const late = Math.round((st[which] - st[which + 'Sched']) / 60000);
+    const ms = late > 0 ? st[which + 'Sched'] : st[which];
     const t = new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: st.tz || undefined });
-    const late = Math.round((ms - st[which + 'Sched']) / 60000);
     return late > 0 ? `${t} <span class="delay-time">+${late}'</span>` : t;
   };
   const rel = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
