@@ -233,7 +233,7 @@
                                     data-live-search="true" data-size="10" title="—"
                                     data-container="body">
                                 {% for code, emoji in country_list.items() %}
-                                    <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
+                                    <option value="{{ code }}" data-code="{{ code }}" data-tokens="{{ code }}">{{ emoji }}</option>
                                 {% endfor %}
                             </select>
                             <script>
@@ -365,7 +365,7 @@
                                             data-live-search="true" data-size="10" title="—"
                                             data-container="body">
                                         {% for code, emoji in country_list.items() %}
-                                            <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
+                                            <option value="{{ code }}" data-code="{{ code }}" data-tokens="{{ code }}">{{ emoji }}</option>
                                         {% endfor %}
                                     </select>
                                     {# Named and initialised here, while the document is still
