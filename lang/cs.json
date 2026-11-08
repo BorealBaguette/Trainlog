@@ -1809,5 +1809,8 @@
     "aircraftFlights": "Lety",
     "aircraftFirstFlown": "První let",
     "aircraftLastFlown": "Poslední let",
-    "aircraftVariantsFlown": "Vyzkoušeno {flown} z {total} variant"
+    "aircraftVariantsFlown": "Vyzkoušeno {flown} z {total} variant",
+    "aircraftLbIntro": "Každá vyzkoušená varianta letadla je za bod: 777-200, 777-200LR, 777-300 a 777-300ER jsou čtyři.",
+    "aircraftLbVariants": "Vyzkoušené varianty",
+    "aircraftLbFamilies": "Vyzkoušené rodiny"
 }

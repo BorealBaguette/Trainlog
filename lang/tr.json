@@ -1762,5 +1762,8 @@
     "aircraftFlights": "Uçuşlar",
     "aircraftFirstFlown": "İlk uçuş",
     "aircraftLastFlown": "Son uçuş",
-    "aircraftVariantsFlown": "{total} varyanttan {flown} tanesiyle uçuldu"
+    "aircraftVariantsFlown": "{total} varyanttan {flown} tanesiyle uçuldu",
+    "aircraftLbIntro": "Uçulan her uçak varyantı bir puan değerindedir: 777-200, 777-200LR, 777-300 ve 777-300ER dört eder.",
+    "aircraftLbVariants": "Uçulan varyantlar",
+    "aircraftLbFamilies": "Uçulan aileler"
 }

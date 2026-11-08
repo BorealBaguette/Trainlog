@@ -1792,5 +1792,8 @@
     "aircraftFlights": "Letovi",
     "aircraftFirstFlown": "Prvi let",
     "aircraftLastFlown": "Zadnji let",
-    "aircraftVariantsFlown": "Letjeli ste na {flown} od {total} inačica"
+    "aircraftVariantsFlown": "Letjeli ste na {flown} od {total} inačica",
+    "aircraftLbIntro": "Svaka inačica zrakoplova kojom ste letjeli donosi bod: 777-200, 777-200LR, 777-300 i 777-300ER su četiri.",
+    "aircraftLbVariants": "Inačice kojima ste letjeli",
+    "aircraftLbFamilies": "Obitelji kojima ste letjeli"
 }

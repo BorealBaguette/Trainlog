@@ -1777,5 +1777,8 @@
     "aircraftFlights": "Flygningar",
     "aircraftFirstFlown": "Första flygningen",
     "aircraftLastFlown": "Senaste flygningen",
-    "aircraftVariantsFlown": "{flown} av {total} varianter flugna"
+    "aircraftVariantsFlown": "{flown} av {total} varianter flugna",
+    "aircraftLbIntro": "Varje flygplansvariant man har flugit med ger en poäng: 777-200, 777-200LR, 777-300 och 777-300ER ger fyra.",
+    "aircraftLbVariants": "Flugna varianter",
+    "aircraftLbFamilies": "Flugna familjer"
 }

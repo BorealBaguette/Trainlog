@@ -1774,5 +1774,8 @@
     "aircraftFlights": "Flights",
     "aircraftFirstFlown": "First flown",
     "aircraftLastFlown": "Last flown",
-    "aircraftVariantsFlown": "{flown} of {total} variants flown"
+    "aircraftVariantsFlown": "{flown} of {total} variants flown",
+    "aircraftLbIntro": "Every aircraft variant flown scores a point: a 777-200, 777-200LR, 777-300 and 777-300ER make four.",
+    "aircraftLbVariants": "Variants flown",
+    "aircraftLbFamilies": "Families flown"
 }

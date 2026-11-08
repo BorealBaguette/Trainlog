@@ -1762,5 +1762,8 @@
     "aircraftFlights": "Repülések",
     "aircraftFirstFlown": "Első repülés",
     "aircraftLastFlown": "Utolsó repülés",
-    "aircraftVariantsFlown": "{total} változatból {flown} kipróbálva"
+    "aircraftVariantsFlown": "{total} változatból {flown} kipróbálva",
+    "aircraftLbIntro": "Minden kipróbált repülőgép-változat egy pont: a 777-200, 777-200LR, 777-300 és 777-300ER négy.",
+    "aircraftLbVariants": "Kipróbált változatok",
+    "aircraftLbFamilies": "Kipróbált családok"
 }

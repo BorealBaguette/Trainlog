@@ -1775,5 +1775,8 @@
     "aircraftFlights": "Lennot",
     "aircraftFirstFlown": "Ensimmäinen lento",
     "aircraftLastFlown": "Viimeisin lento",
-    "aircraftVariantsFlown": "{flown}/{total} versiota lennetty"
+    "aircraftVariantsFlown": "{flown}/{total} versiota lennetty",
+    "aircraftLbIntro": "Jokainen lennetty konetyypin versio on yksi piste: 777-200, 777-200LR, 777-300 ja 777-300ER ovat neljä.",
+    "aircraftLbVariants": "Lennetyt versiot",
+    "aircraftLbFamilies": "Lennetyt perheet"
 }

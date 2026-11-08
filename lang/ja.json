@@ -1762,5 +1762,8 @@
     "aircraftFlights": "フライト",
     "aircraftFirstFlown": "初搭乗",
     "aircraftLastFlown": "最終搭乗",
-    "aircraftVariantsFlown": "{total}派生型中{flown}に搭乗"
+    "aircraftVariantsFlown": "{total}派生型中{flown}に搭乗",
+    "aircraftLbIntro": "搭乗した派生型ごとに1ポイント：777-200、777-200LR、777-300、777-300ERで4ポイントです。",
+    "aircraftLbVariants": "搭乗した派生型",
+    "aircraftLbFamilies": "搭乗したファミリー"
 }

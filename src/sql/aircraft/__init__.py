@@ -1,3 +1,3 @@
 from src.sql import SqlTemplate
 
-aircraft_types = SqlTemplate("src/sql/aircraft/aircraft_types.sql")
+flown_aircraft = SqlTemplate("src/sql/aircraft/flown_aircraft.sql")

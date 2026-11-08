@@ -53,83 +53,111 @@ def _image(code):
     return None
 
 
+def _load_types(pg):
+    """Every row of `airliners`, by upper-case code (trips are matched that way)."""
+    return {
+        row["iata"].strip().upper(): {
+            "code": row["iata"],
+            "manufacturer": row["manufacturer"],
+            "name": " ".join(p for p in (row["manufacturer"], row["model"]) if p)
+            or row["iata"],
+        }
+        for row in pg.execute(
+            "SELECT iata, manufacturer, model FROM airliners WHERE iata IS NOT NULL"
+        ).fetchall()
+    }
+
+
+def resolve_codes(types):
+    """What each type code counts as: {code: (variant code or None, family)}.
+
+    - Most codes are a variant of their own.
+    - An alias (a code clashing with a specific model) counts as that model.
+    - A generic code stands for its whole family: no variant (None), but its
+      flights still count as flying the family. If no variant of that family
+      is in the table it is treated as a plain variant instead.
+
+    The aircraft page and the leaderboard both go through this, so they
+    always agree on what a flight is worth.
+    """
+
+    def family_of(code):
+        return FAMILY_OF.get(code, (types[code]["name"],))[0]
+
+    families_with_variants = {
+        family_of(code)
+        for code in types
+        if code not in GENERICS and not (code in ALIASES and ALIASES[code] in types)
+    }
+    resolved = {}
+    for code in types:
+        target = ALIASES.get(code)
+        if target in types:
+            resolved[code] = (target, family_of(target))
+        elif code in GENERICS and GENERICS[code] in families_with_variants:
+            resolved[code] = (None, GENERICS[code])
+        else:
+            resolved[code] = (code, family_of(code))
+    return resolved
+
+
 def get_aircraft_families(user_id):
     with pg_session() as pg:
-        rows = pg.execute(
-            aircraft_sql.aircraft_types(), {"user_id": user_id}
+        types = _load_types(pg)
+        flown = pg.execute(
+            aircraft_sql.flown_aircraft(codes_only=False), {"user_ids": [user_id]}
         ).fetchall()
-
-    types = {}
-    for row in rows:
-        r = row._mapping
-        types[r["code"]] = {
-            "manufacturer": r["manufacturer"],
-            "name": " ".join(p for p in (r["manufacturer"], r["model"]) if p)
-            or r["code"],
-            "trips": {
-                trip_id: (length, flown_on)
-                for trip_id, length, flown_on in zip(
-                    r["trip_ids"], r["trip_lengths"], r["flown_on"]
-                )
-            },
-        }
-
-    # An alias's flights belong to the type it stands for, and it is not
-    # listed on its own (unless that type is missing from the table).
-    for alias, target in ALIASES.items():
-        if alias in types and target in types:
-            types[target]["trips"].update(types.pop(alias)["trips"])
-
-    # A generic code stands for its whole family: kept aside so it is not a
-    # variant, then used for the family's picture and flights. If no variant
-    # of that family is in the table, it is listed as a plain type instead.
-    generics = {}
-    for code, family_name in GENERICS.items():
-        has_variant = any(
-            FAMILY_OF.get(other, (None,))[0] == family_name for other in types
-        )
-        if code in types and has_variant:
-            generics[family_name] = {"code": code, **types.pop(code)}
+    resolved = resolve_codes(types)
 
     families = {}
-    for code, t in types.items():
-        family_name, representative = FAMILY_OF.get(code, (t["name"], 0))
+    for code, (variant, family_name) in resolved.items():
         family = families.setdefault(
             family_name,
             {
                 "name": family_name,
-                "manufacturer": t["manufacturer"],
-                "variants": [],
+                "manufacturer": types[code]["manufacturer"],
+                "variants": {},
+                "generic": None,
                 "trips": {},
             },
         )
-        family["trips"].update(t["trips"])
-        family["variants"].append(
-            {
-                "code": code,
-                "name": t["name"],
-                "representative": representative,
-                "image": _image(code),
-                **_summarise(t["trips"]),
+        if variant is None:
+            family["generic"] = types[code]["code"]
+        elif variant == code:
+            family["variants"][code] = {
+                "code": types[code]["code"],
+                "name": types[code]["name"],
+                "representative": FAMILY_OF.get(code, (None, 0))[1],
+                "image": _image(types[code]["code"]),
+                "trips": {},
             }
-        )
 
-    for family_name, generic in generics.items():
-        families[family_name]["trips"].update(generic["trips"])
+    # Codes outside the table have no picture or family, so are left out.
+    for row in flown:
+        if row["code"] not in resolved:
+            continue
+        variant, family_name = resolved[row["code"]]
+        trip = (row["trip_length"], row["flown_on"])
+        family = families[family_name]
+        family["trips"][row["trip_id"]] = trip
+        if variant is not None:
+            family["variants"][variant]["trips"][row["trip_id"]] = trip
 
     result = []
     for family in families.values():
-        generic = generics.get(family["name"])
-        variants = sorted(family["variants"], key=lambda v: _sort_key(None, v["name"]))
-        flown = [v for v in variants if v["flights"]]
+        variants = sorted(
+            ({**v, **_summarise(v.pop("trips"))} for v in family["variants"].values()),
+            key=lambda v: _sort_key(None, v["name"]),
+        )
+        flown_variants = [v for v in variants if v["flights"]]
         # The family is pictured by its generic code if it has one, else by the
         # variant flown most, else by its usual representative (listed first
         # in AIRCRAFT_FAMILIES).
-        if flown:
-            pictured = max(flown, key=lambda v: v["flights"])
+        if flown_variants:
+            pictured = max(flown_variants, key=lambda v: v["flights"])
         else:
             pictured = min(variants, key=lambda v: v["representative"])
-        image = (generic and _image(generic["code"])) or pictured["image"]
+        image = (family["generic"] and _image(family["generic"])) or pictured["image"]
         result.append(
             {
                 "name": family["name"],
@@ -137,7 +165,7 @@ def get_aircraft_families(user_id):
                 "image": image
                 or next((v["image"] for v in variants if v["image"]), None),
                 "variants": variants,
-                "variants_flown": len(flown),
+                "variants_flown": len(flown_variants),
                 **_summarise(family["trips"]),
             }
         )
@@ -146,6 +174,33 @@ def get_aircraft_families(user_id):
         key=lambda f: _sort_key(f["manufacturer"], SORT_AS.get(f["name"], f["name"]))
     )
     return result
+
+
+def aircraft_leaderboard(user_ids):
+    """{user_id: {"variants": n, "families": n}} for users who have flown any
+    type in the table. A variant scores once however often it was flown; an
+    alias scores as the model it stands for, a generic code only as its family.
+    """
+    with pg_session() as pg:
+        types = _load_types(pg)
+        rows = pg.execute(
+            aircraft_sql.flown_aircraft(codes_only=True), {"user_ids": user_ids}
+        ).fetchall()
+    resolved = resolve_codes(types)
+
+    flown = {}
+    for row in rows:
+        if row["code"] not in resolved:
+            continue
+        variant, family_name = resolved[row["code"]]
+        user = flown.setdefault(row["user_id"], {"variants": set(), "families": set()})
+        user["families"].add(family_name)
+        if variant is not None:
+            user["variants"].add(variant)
+    return {
+        uid: {"variants": len(u["variants"]), "families": len(u["families"])}
+        for uid, u in flown.items()
+    }
 
 
 @aircraft_blueprint.route("/u/<username>/aircraft")
@@ -159,6 +214,8 @@ def aircraft_types(username):
         username=username,
         families=families,
         flown_count=sum(1 for f in families if f["flights"]),
+        variants_total=sum(len(f["variants"]) for f in families),
+        variants_flown=sum(f["variants_flown"] for f in families),
         nav="bootstrap/navigation.html"
         if username == getUser()
         else "bootstrap/public_nav.html",

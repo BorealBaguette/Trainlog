@@ -1775,5 +1775,8 @@
     "aircraftFlights": "Flüg",
     "aircraftFirstFlown": "Erschte Flug",
     "aircraftLastFlown": "Letschte Flug",
-    "aircraftVariantsFlown": "{flown} vo {total} Variante gfloge"
+    "aircraftVariantsFlown": "{flown} vo {total} Variante gfloge",
+    "aircraftLbIntro": "Jedi gflogeni Flugzügvariante git en Punkt: 777-200, 777-200LR, 777-300 und 777-300ER gänd vier.",
+    "aircraftLbVariants": "Gflogeni Variante",
+    "aircraftLbFamilies": "Gflogeni Familie"
 }

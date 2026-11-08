@@ -1777,5 +1777,8 @@
     "aircraftFlights": "Flyvninger",
     "aircraftFirstFlown": "Første flyvning",
     "aircraftLastFlown": "Siste flyvning",
-    "aircraftVariantsFlown": "{flown} av {total} varianter fløyet"
+    "aircraftVariantsFlown": "{flown} av {total} varianter fløyet",
+    "aircraftLbIntro": "Hver flyvariant man har fløyet med, gir ett poeng: 777-200, 777-200LR, 777-300 og 777-300ER gir fire.",
+    "aircraftLbVariants": "Fløyne varianter",
+    "aircraftLbFamilies": "Fløyne familier"
 }

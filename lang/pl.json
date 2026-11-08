@@ -1807,5 +1807,8 @@
     "aircraftFlights": "Loty",
     "aircraftFirstFlown": "Pierwszy lot",
     "aircraftLastFlown": "Ostatni lot",
-    "aircraftVariantsFlown": "{flown} z {total} wariantów wylatanych"
+    "aircraftVariantsFlown": "{flown} z {total} wariantów wylatanych",
+    "aircraftLbIntro": "Każdy wylatany wariant samolotu to jeden punkt: 777-200, 777-200LR, 777-300 i 777-300ER dają cztery.",
+    "aircraftLbVariants": "Wylatane warianty",
+    "aircraftLbFamilies": "Wylatane rodziny"
 }

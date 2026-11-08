@@ -1774,5 +1774,8 @@
     "aircraftFlights": "Lennud",
     "aircraftFirstFlown": "Esimene lend",
     "aircraftLastFlown": "Viimane lend",
-    "aircraftVariantsFlown": "{flown}/{total} varianti lennatud"
+    "aircraftVariantsFlown": "{flown}/{total} varianti lennatud",
+    "aircraftLbIntro": "Iga lennatud lennukivariant annab ühe punkti: 777-200, 777-200LR, 777-300 ja 777-300ER annavad neli.",
+    "aircraftLbVariants": "Lennatud variandid",
+    "aircraftLbFamilies": "Lennatud perekonnad"
 }

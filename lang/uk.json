@@ -1792,5 +1792,8 @@
     "aircraftFlights": "Польоти",
     "aircraftFirstFlown": "Перший політ",
     "aircraftLastFlown": "Останній політ",
-    "aircraftVariantsFlown": "Освоєно {flown} з {total} модифікацій"
+    "aircraftVariantsFlown": "Освоєно {flown} з {total} модифікацій",
+    "aircraftLbIntro": "Кожна модифікація літака, якою ви літали, — одне очко: 777-200, 777-200LR, 777-300 і 777-300ER дають чотири.",
+    "aircraftLbVariants": "Освоєно модифікацій",
+    "aircraftLbFamilies": "Освоєно сімейств"
 }

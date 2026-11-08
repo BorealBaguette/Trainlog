@@ -13147,6 +13147,8 @@ def leaderboard(type):
         template = "leaderboard_carbon.html"
     elif type == "wagons":
         template = "leaderboard_wagons.html"
+    elif type == "aircraft":
+        template = "leaderboard_aircraft.html"
     else:
         template = "leaderboard.html"
 
@@ -13155,6 +13157,7 @@ def leaderboard(type):
         "countries": "leaderboardCountries",
         "train_countries": "leaderboardTrainCountries",
         "wagons": "leaderboardWagonsTitle",
+        "aircraft": "aircraftTypesTitle",
         "train": "leaderboardTrainTitle",
         "bus": "leaderboardBusTitle",
         "air": "leaderboardAirTitle",

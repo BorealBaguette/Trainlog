@@ -1764,5 +1764,8 @@
     "aircraftFlights": "항공편",
     "aircraftFirstFlown": "첫 탑승",
     "aircraftLastFlown": "최근 탑승",
-    "aircraftVariantsFlown": "{total}개 파생형 중 {flown}개 탑승"
+    "aircraftVariantsFlown": "{total}개 파생형 중 {flown}개 탑승",
+    "aircraftLbIntro": "탑승한 파생형마다 1점입니다. 777-200, 777-200LR, 777-300, 777-300ER은 4점입니다.",
+    "aircraftLbVariants": "탑승한 파생형",
+    "aircraftLbFamilies": "탑승한 계열"
 }

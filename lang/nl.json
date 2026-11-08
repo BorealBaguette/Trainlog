@@ -1777,5 +1777,8 @@
     "aircraftFlights": "Vluchten",
     "aircraftFirstFlown": "Eerste vlucht",
     "aircraftLastFlown": "Laatste vlucht",
-    "aircraftVariantsFlown": "{flown} van {total} varianten gevlogen"
+    "aircraftVariantsFlown": "{flown} van {total} varianten gevlogen",
+    "aircraftLbIntro": "Elke gevlogen vliegtuigvariant telt voor één punt: een 777-200, 777-200LR, 777-300 en 777-300ER zijn er vier.",
+    "aircraftLbVariants": "Gevlogen varianten",
+    "aircraftLbFamilies": "Gevlogen families"
 }

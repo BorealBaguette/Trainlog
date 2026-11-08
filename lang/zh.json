@@ -1762,5 +1762,8 @@
     "aircraftFlights": "航班",
     "aircraftFirstFlown": "首次乘坐",
     "aircraftLastFlown": "最近乘坐",
-    "aircraftVariantsFlown": "已乘坐 {flown}/{total} 个子型号"
+    "aircraftVariantsFlown": "已乘坐 {flown}/{total} 个子型号",
+    "aircraftLbIntro": "每乘坐过一个子型号得一分：777-200、777-200LR、777-300 和 777-300ER 共计四分。",
+    "aircraftLbVariants": "已乘坐子型号",
+    "aircraftLbFamilies": "已乘坐系列"
 }

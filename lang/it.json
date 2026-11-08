@@ -1777,5 +1777,8 @@
     "aircraftFlights": "Voli",
     "aircraftFirstFlown": "Primo volo",
     "aircraftLastFlown": "Ultimo volo",
-    "aircraftVariantsFlown": "{flown} varianti volate su {total}"
+    "aircraftVariantsFlown": "{flown} varianti volate su {total}",
+    "aircraftLbIntro": "Ogni variante di aereo volata vale un punto: un 777-200, 777-200LR, 777-300 e 777-300ER fanno quattro.",
+    "aircraftLbVariants": "Varianti volate",
+    "aircraftLbFamilies": "Famiglie volate"
 }
