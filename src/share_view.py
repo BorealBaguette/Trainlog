@@ -10,6 +10,9 @@ what they may see:
   settings) and a copy button; a choice other than the settings is baked into a
   share key of its own (trip_selections.share_flags). Nothing in the URL can be
   edited or removed to change what it shows: a different choice is a different key.
+- Tags work the same way from the tag list: the plain tag link follows the settings
+  and any other choice is a key of its own, which still follows the tag's trips
+  (trip_selections.tag_uuid).
 
 The page then signs what it settled on for /getPublicTrips, which leaves the
 fields out of the JSON for anyone who does not own the trips unless that

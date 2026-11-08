@@ -4,6 +4,7 @@
 {% include "bootstrap/navigation.html" %}
 
 <style>
+{% include "includes/share_toggles_style.html" %}
   /* Small round colour swatch for the pending-invite rows */
   .tag-dot {
     display: inline-block;
@@ -154,6 +155,9 @@
               {% if tag.is_owner %}
                 <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editTagModal{{ tag.uid }}"><i class="fa-regular fa-pen-to-square"></i></button>
                 <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#membersModal{{ tag.uid }}" title="{{ tag_members }}"><i class="bi bi-people"></i></button>
+                {% if not tag.is_shared %}
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#shareTagModal" data-url="{{ url_for('tag_share.share_tag', username=username, tag_id=tag.uid) }}" title="{{ shareCopyLink }}"><i class="fa-solid fa-link"></i></button>
+                {% endif %}
                 <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTagModal" data-tag-id="{{ tag.uid }}"><i class="fa-regular fa-trash-can"></i></button>
               {% else %}
                 <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#leaveTagModal" data-url="{{ url_for('leave_tag', username=username, tag_id=tag.uid) }}" title="{{ leave_tag }}"><i class="bi bi-box-arrow-right"></i></button>
@@ -333,6 +337,26 @@
   </div>
 </div>
 
+<div class="modal fade" id="shareTagModal" tabindex="-1" aria-labelledby="shareTagModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="shareTagModalLabel">{{ shareLinkShows }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="shareToggles mb-3">
+          <input type="checkbox" class="btn-check" id="shareTagPrice" autocomplete="off">
+          <label class="shareToggle" for="shareTagPrice"><i class="fa-solid fa-coins fa-fw shareStateIcon"></i> {{ price }}</label>
+          <input type="checkbox" class="btn-check" id="shareTagCarbon" autocomplete="off">
+          <label class="shareToggle" for="shareTagCarbon"><i class="fa-solid fa-leaf fa-fw shareStateIcon"></i> {{ CO2 }}</label>
+        </div>
+        <button type="button" class="btn btn-primary w-100" id="shareTagCopy" data-bs-dismiss="modal"><i class="fa-solid fa-link"></i> {{ shareCopyLink }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteTagModal" tabindex="-1" aria-labelledby="deleteTagModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -375,6 +399,7 @@
   </div>
 </div>
 
+<script src="{{ static_autoversion(filename='js/share_link.js') }}"></script>
 <script>
   $(document).ready(function() {
     paintUserAvatars(document, {{ url_for('user_avatars', username=username)|tojson }});
@@ -416,6 +441,17 @@
       var form = $('#deleteTagForm');
       var actionUrl = "{{ url_for('delete_tag', username=username, tag_id='') }}" + tagId;
       form.attr('action', actionUrl);
+    });
+
+    var shareDefaults = {{ share_defaults|tojson }};
+    $('#shareTagModal').on('show.bs.modal', function (event) {
+      $(this).data('url', $(event.relatedTarget).data('url'));
+      $('#shareTagPrice').prop('checked', shareDefaults.price);
+      $('#shareTagCarbon').prop('checked', shareDefaults.carbon);
+    });
+    $('#shareTagCopy').on('click', function () {
+      var show = ($('#shareTagPrice').prop('checked') ? 'p' : '') + ($('#shareTagCarbon').prop('checked') ? 'c' : '');
+      copyShareLink($('#shareTagModal').data('url'), '', show || 'n', { copied: {{ copyLink|tojson }}, copy: {{ copy|tojson }} });
     });
 
     $('#leaveTagModal').on('show.bs.modal', function (event) {

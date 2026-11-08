@@ -144,7 +144,12 @@ from src.trip_periods import (
     MIN_YEAR as MIN_PERIOD_YEAR,
 )
 from src.trip_periods import parse_period, period_label, period_trip_ids
-from src.trip_selections import parse_trip_ids, selection_share_flags, store_trip_ids
+from src.trip_selections import (
+    parse_trip_ids,
+    selection_share_flags,
+    selection_tag,
+    store_trip_ids,
+)
 from src import share_view
 from src.trip_stats import discord_summary, trip_stats
 from src.update_currency import run_currency_update
@@ -181,6 +186,7 @@ from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
 from src.sql import news as news_sql
 from src.api.og import og_blueprint, og_image_url, plan_og_image_url
+from src.api.tag_share import tag_share_blueprint
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
@@ -376,6 +382,7 @@ app.register_blueprint(tickets_blueprint)
 app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
+app.register_blueprint(tag_share_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
@@ -3119,12 +3126,12 @@ def tag_list(username):
             "SELECT colour FROM tags WHERE username = :username", {"username": username}
         ).fetchall()
 
-    user_uid = User.query.filter_by(username=username).first().uid
+    user = User.query.filter_by(username=username).first()
     friend_usernames = [
         row.username
         for row in authDb.session.query(User.username)
         .join(Friendship, User.uid == Friendship.friend_id)
-        .filter(Friendship.user_id == user_uid, Friendship.accepted != None)  # noqa: E711
+        .filter(Friendship.user_id == user.uid, Friendship.accepted != None)  # noqa: E711
         .order_by(User.username)
         .all()
     ]
@@ -3133,6 +3140,7 @@ def tag_list(username):
         "tag_list.html",
         title=lang[session["userinfo"]["lang"]]["manage_tags"],
         tagsList=tags,
+        share_defaults=share_view.owner_defaults([user]),
         suggested_colour=generate_distinct_color([row[0] for row in own_colours]),
         members_by_tag=members_by_tag,
         pending_invites=pending_invites,
@@ -4604,6 +4612,15 @@ def render_public_trip_page(
     # across the poster and back links instead of expanding to a full id list.
     tripIdsParam = tripIds
 
+    # A key made for a tag never links to the tag's uuid: the plain link can show
+    # more than the key does. Once other people's trips can join it, the key's
+    # choice no longer speaks for them, so it opens multiTrip like the tag itself.
+    key_tag = selection_tag(tripIdsParam)
+    if key_tag:
+        if key_tag["shared"]:
+            return redirect(url_for("multi_trip", tripIds=tripIdsParam))
+        tag_type, tag_name = key_tag["type"], key_tag["name"]
+
     # this needs to be done before changing the tripIds variable
     if period is not None:
         multitrip_url = url_for("multi_trip_period", **period)
@@ -4699,8 +4716,8 @@ def render_public_trip_page(
     }
     # Legacy multi-owner tags (from before attach_tag checked ownership) are as
     # broken on this single-owner page as shared tags — send them along too.
-    if tagId is not None and len(set(usernames.values())) > 1:
-        return redirect(url_for("multi_trip", tagId=tagId))
+    if (tagId is not None or key_tag) and len(set(usernames.values())) > 1:
+        return redirect(url_for("multi_trip", tripIds=tripIdsParam, tagId=tagId))
     users_by_name = {
         username: User.query.filter_by(username=username).first()
         for username in set(usernames.values())

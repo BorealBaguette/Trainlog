@@ -48,26 +48,7 @@
   .settings2-hint { color: light-dark(#6c757d, var(--bs-body-color)); font-size: 0.85rem; margin: 0.4rem 0 0; }
   /* Shared links: the trips table's share-menu toggles (dynamic_trips.html), as
      labelled chips over hidden checkboxes. */
-  .shareToggles { display: flex; flex-wrap: wrap; gap: 8px; }
-  .shareToggle {
-    display: inline-flex; align-items: center; gap: 6px;
-    border: 1px solid var(--bs-border-color); border-radius: 6px;
-    padding: 6px 12px; cursor: pointer; user-select: none;
-    color: light-dark(#6c757d, var(--bs-secondary-color));
-  }
-  .btn-check:checked + .shareToggle {
-    background: rgba(var(--bs-primary-rgb), 0.1);
-    border-color: var(--bs-primary);
-    color: var(--bs-body-color);
-  }
-  .btn-check:focus-visible + .shareToggle { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
-  .btn-check:checked + .shareToggle .fa-coins { color: light-dark(#bfa055, #ccbd99); }
-  .btn-check:checked + .shareToggle .fa-leaf { color: light-dark(#4f9d5d, #8fd69f); }
-  .btn-check:not(:checked) + .shareToggle .shareStateIcon { position: relative; color: light-dark(#b8bdc2, #6c757d); }
-  .btn-check:not(:checked) + .shareToggle .shareStateIcon::after {
-    content: ""; position: absolute; left: -1px; right: -1px; top: 50%;
-    border-top: 2px solid light-dark(#dc3545, #ea868f); transform: rotate(-45deg);
-  }
+{% include "includes/share_toggles_style.html" %}
   .settings2-hr { margin: 1.75rem 0; border-color: light-dark(#e9ecef, var(--bs-border-color)); }
   .settings2-toggle-row .form-check { margin-bottom: 0.9rem; }
   .settings2-toggle-row .form-check:last-child { margin-bottom: 0; }

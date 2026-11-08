@@ -14,7 +14,12 @@ from src.og_card import render_og_card, render_plan_og_card
 from src.pg import pg_session
 from src.trip_card import render_trip_card
 from src.trip_periods import parse_period, period_trip_ids
-from src.trip_selections import is_selection_key, parse_trip_ids, store_trip_ids
+from src.trip_selections import (
+    is_selection_key,
+    parse_trip_ids,
+    selection_tag,
+    store_trip_ids,
+)
 from src.trip_stats import trip_stats
 from src.users import User
 from src.utils import external_url, get_user_id
@@ -211,7 +216,8 @@ def trip_image(trip_ids, ext):
         ids = parse_trip_ids(trip_ids)
     except ValueError:
         return _logo()
-    return _serve(trip_ids, ids)
+    tag = selection_tag(trip_ids)
+    return _serve(trip_ids, ids, title=tag["name"] if tag else None)
 
 
 @og_blueprint.route("/card/trip/<trip_ids>.png")

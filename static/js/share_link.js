@@ -1,4 +1,5 @@
-// Copy a share link without opening it: the ▲ menu beside the trips table's "View on map".
+// Copy a share link without opening it: the ▲ menu beside the trips table's "View on map",
+// and the tag list's link button (which posts to its own route and needs no trips).
 //
 // The link is made by POST /public/share (format=json). `show` ('p', 'c', 'pc' or
 // 'n') is exactly what it shows: the owner's usual choice comes back as the plain
