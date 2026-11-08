@@ -1947,12 +1947,12 @@ function addCurrentStops(trips) {
             r.appendChild(timeCell(actual, sched, p.tz));
             box.appendChild(r);
         };
-        const same = Math.abs(p.arr - p.dep) < 60000;
+        const same = Math.abs(p.arrShown - p.depShown) < 60000;
         if (same) {
-            row(labels.departure, p.dep, p.depSched);
+            row(labels.departure, p.depShown, p.depSched);
         } else {
-            row(labels.arrival, p.arr, p.arrSched);
-            row(labels.departure, p.dep, p.depSched);
+            row(labels.arrival, p.arrShown, p.arrSched);
+            row(labels.departure, p.depShown, p.depSched);
         }
 
         const plat = p.platformRt || p.platform;

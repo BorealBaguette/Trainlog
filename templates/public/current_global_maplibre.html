@@ -688,10 +688,11 @@ function stopsHTML(trip, start, end, startTime, endTime) {
   const isPast = n => n < i || (n === i && !atStop);
   const isTerminus = n => n === 0 || n === last;
 
+  const shown = (st, which) => st[which + 'Shown'] ?? st[which];
   const fmt = (st, which) => {
     if (st.untimed) return '';
-    const late = Math.round((st[which] - st[which + 'Sched']) / 60000);
-    const ms = late > 0 ? st[which + 'Sched'] : st[which];
+    const late = Math.round((shown(st, which) - st[which + 'Sched']) / 60000);
+    const ms = late > 0 ? st[which + 'Sched'] : shown(st, which);
     const t = new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: st.tz || undefined });
     return late > 0 ? `${t} <span class="delay-time">+${late}'</span>` : t;
   };
@@ -701,7 +702,7 @@ function stopsHTML(trip, start, end, startTime, endTime) {
     return m ? rel.format(m, 'minute') : rel.format(0, 'second');
   };
   const fullTime = (st, n) => n === 0 ? startTime : n === last ? endTime
-    : Math.round(st.arr / 60000) === Math.round(st.dep / 60000) ? fmt(st, 'arr')
+    : Math.round(shown(st, 'arr') / 60000) === Math.round(shown(st, 'dep') / 60000) ? fmt(st, 'arr')
     : `${fmt(st, 'arr')} – ${fmt(st, 'dep')}`;
 
   const st = atStop ? stops[i] : stops[i + 1];

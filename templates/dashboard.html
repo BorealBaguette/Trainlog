@@ -1201,9 +1201,10 @@ function _renderCurrentStops(trip, start, end, now) {
   const isTerminus = n => n === 0 || n === last;
 
   const rel = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const shown = (s, which) => s[which + "Shown"] ?? s[which];
   const fmt = (s, which) => {
     if (s.untimed) return "";
-    const ms = s[which];
+    const ms = shown(s, which);
     const t = new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: s.tz || undefined });
     const late = Math.round((ms - s[which + "Sched"]) / 60000);
     return late > 0 ? `${t} <span style="color:#f87171;">+${late}'</span>` : t;
@@ -1215,7 +1216,7 @@ function _renderCurrentStops(trip, start, end, now) {
     return m ? rel.format(m, "minute") : rel.format(0, "second");
   };
   const fullTime = (s, n) => n === 0 ? fmt(s, "dep")
-    : n === last || Math.round(s.arr / 60000) === Math.round(s.dep / 60000) ? fmt(s, "arr")
+    : n === last || Math.round(shown(s, "arr") / 60000) === Math.round(shown(s, "dep") / 60000) ? fmt(s, "arr")
     : `${fmt(s, "arr")} – ${fmt(s, "dep")}`;
   const name = s => s.cc ? `${getFlagEmoji(s.cc)} ${s.name}` : s.name;
   const dotClass = n => "ct-dot" + (n <= i ? " passed" : "") + (isTerminus(n) ? " terminus" : "")
