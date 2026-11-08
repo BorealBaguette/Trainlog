@@ -72,6 +72,8 @@ class Trip:
         co2_override=None,
         departure_platform=None,
         arrival_platform=None,
+        departure_platform_planned=None,
+        arrival_platform_planned=None,
         origin_station_key=None,
         destination_station_key=None,
         altitude=None,
@@ -123,6 +125,9 @@ class Trip:
         # The platform it left from / arrived at (migration 0076), free text.
         self.departure_platform = (_strip_tags(departure_platform) or "").strip()[:20] or None
         self.arrival_platform = (_strip_tags(arrival_platform) or "").strip()[:20] or None
+        # The scheduled one, when the above is an actual one given apart (migration 0088)
+        self.departure_platform_planned = (_strip_tags(departure_platform_planned) or "").strip()[:20] or None
+        self.arrival_platform_planned = (_strip_tags(arrival_platform_planned) or "").strip()[:20] or None
         # The quai station of each end (migration 0078), or None for a manual one.
         self.origin_station_key = (origin_station_key or "").strip()[:100] or None
         self.destination_station_key = (destination_station_key or "").strip()[:100] or None

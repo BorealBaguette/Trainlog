@@ -24,8 +24,19 @@ function stopSlotLabel(slot) {
 // The slot's station entry ([point, label, record?, exact?]): the field's own where it has one
 // (a timetable's stop, whose label another stop of the run can share: out and back through
 // Kerlaurent), else the one of its label.
+// A slot with `ownEntry` (the new trip page's ends) has its own copy of the entry of the
+// station picked there, for as long as the field holds it: both ends at Bronowice SKA, one
+// at track 06 and the other at 02, share a label and so globalStationDict's entry.
 function stopSlotEntry(slot) {
-  return slot.$input.data('stationEntry') || globalStationDict[stopSlotLabel(slot)];
+  return slot.$input.data('stationEntry')
+    || (slot.own && slot.own.value === slot.$input.val() ? slot.own.entry : null)
+    || globalStationDict[stopSlotLabel(slot)];
+}
+// Gives the slot its own copy of the entry of `value`, the station now in its field.
+function ownStopEntry(slot, value) {
+  var shared = globalStationDict[value];
+  slot.own = shared ? { value: value, entry: shared.slice() } : null;
+  if (slot.own && shared.stationPoint) slot.own.entry.stationPoint = shared.stationPoint;
 }
 
 // "Gleis 7", "Voie 7" and "7" are the same track.
@@ -91,13 +102,54 @@ function renderStops(slot, label) {
   var list = (kind === 'track' ? globalStationTracks : globalStationLines)[label];
   var chosen = findStop(list, slot.selected);
   var $chips = $('<div class="track-menu-chips">');
-  // In the order they are numbered: 1a, 1b, 3, … 10, 12; "A" before "B".
-  list.slice().sort(function (a, b) {
-    return String(a.ref).localeCompare(String(b.ref), undefined, { numeric: true, sensitivity: 'base' });
-  }).forEach(function (c) {
+  // In the order they are numbered: 1a, 1b, 3, 3 bis, … 10, 12; "A" before "B". Tracks named
+  // by a word after their number (Bologna's "1 Est", "1 Ovest") come after the plain ones,
+  // each word on rows of its own below a rule: 1, 3, 4 … / 1 Est, 2 Est … / 1 Ovest, ….
+  // A letter or bis/ter/quater after the number is a track of its own, not a group. Tracks
+  // named by letters alone (Gare de Lyon's A … N) are a group too, between the two.
+  var byRef = function (a, b) {
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  };
+  var group = function (c) {
+    var ref = String(c.ref).trim();
+    if (!/^\d/.test(ref)) return ' letters';
+    var m = /^\d+\s+(\S.*)$/.exec(ref);
+    var word = m ? m[1].toLowerCase() : '';
+    return /^(\p{L}|bis|ter|quater)$/u.test(word) ? '' : word;
+  };
+  // In a grid of equal cells, five to a row (three for names like "1 Ovest"), so that the
+  // menu stays narrow and its rows line up. A word group's word names the rule above it, and
+  // is written lighter than the number on its chips ("1 Est"), so the chips still read as the
+  // tracks are signed. The same track twice ("2C", "2c") is shown once.
+  var seen = {};
+  var shown = list.filter(function (c) {
+    var key = stopKey(c.ref);
+    return !seen[key] && (seen[key] = true);
+  }).sort(function (a, b) {
+    // Numbers, then letters (' letters' sorts before any word), then each word.
+    var ga = group(a), gb = group(b);
+    return ga !== gb ? (ga < gb ? -1 : 1) : byRef(a.ref, b.ref);
+  });
+  var wide = shown.some(function (c) { return String(c.ref).trim().length > 3; });
+  $chips.css('--track-cols', Math.min(wide ? 3 : 5, shown.length));
+  var lastGroup = null;
+  shown.forEach(function (c) {
+    var g = group(c);
+    var m = g && g !== ' letters' ? /^(\d+)\s+(.*)$/.exec(String(c.ref).trim()) : null;
+    if (lastGroup !== null && g !== lastGroup) {
+      $chips.append($('<div class="track-menu-break">').append(m ? $('<span>').text(m[2]) : null));
+    }
+    // A half's letter, or bis/ter, raised after its number: 11ᵃ, 20ᵇⁱˢ.
+    if (!g) m = /^(\d+)\s*(\D.*)$/.exec(String(c.ref).trim());
+    lastGroup = g;
     var active = !!chosen && (chosen === c || (chosen.parts || []).indexOf(c) !== -1);
-    var $chip = $('<button type="button" class="track-chip">').text(c.ref).toggleClass('active', active)
+    var $chip = $('<button type="button" class="track-chip">').toggleClass('active', active)
       .on('click', function () { pickStop(slot, kind, active ? '' : c.ref); });
+    if (m) {
+      $chip.append(document.createTextNode(m[1] + (g ? ' ' : '')),
+                   $('<span>').addClass(g ? 'track-chip-word' : 'track-chip-half').text(m[2]));
+    }
+    else $chip.text(c.ref);
     if (c.colour) {
       $chip.css(active ? { background: c.colour, borderColor: c.colour, color: '#fff' }
                        : { borderColor: c.colour, boxShadow: 'inset 3px 0 0 ' + c.colour });
@@ -163,10 +215,40 @@ function forgetStop(slot) {
   slot.setExact(false);
 }
 
+// The track (or line) typed after the station's name ("Bronowice SKA 06", "Part-Dieu voie 7",
+// "Bergerac A"), as the slot's kind names it at `label`, or null: a last word with a digit, a
+// single letter, or one after a track word, that the station has and that does not start a
+// word of its own name ("Jerzmanowska nr 17"; "Gare de L", typing "Gare de Lyon").
+function typedStop(typed, label) {
+  var m = /(?:^|\s)((?:voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа)\s*\S+|\S*\d\S*|\p{L})\s*$/iu.exec(typed || '');
+  var kind = stopKind(label);
+  if (!m || !kind) return null;
+  var key = stopKey(m[1]);
+  // A word of the name it starts, not typed whole before it, is still being typed.
+  var before = typed.slice(0, m.index).toLowerCase().split(/\s+/);
+  var named = String(label).toLowerCase().split(/\s+/).some(function (w) {
+    return w.indexOf(key) === 0 && before.indexOf(w) === -1;
+  });
+  var list = (kind === 'track' ? globalStationTracks : globalStationLines)[label] || [];
+  // "6" for Kraków's "06": leading zeros aside.
+  var bare = function (k) { return k.replace(/^0+(?=\d)/, ''); };
+  var choice = !named && (findStop(list, m[1])
+    || list.find(function (c) { return bare(stopKey(c.ref)) === bare(key); }));
+  return choice ? { kind: kind, ref: choice.ref } : null;
+}
+
 function watchStopSlot(slot) {
   slot.$input.on('autocompleteselect', function (e, ui) {
+    if (slot.ownEntry) ownStopEntry(slot, ui.item.value);
     forgetStop(slot);
     renderStops(slot, ui.item.value);
+    // What was typed: the search's term, the field holding the highlighted station's name
+    // once the list is gone through with the arrow keys. The name replaces it once this returns.
+    var widget = slot.$input.autocomplete('instance');
+    var typed = typedStop((widget && widget.term) || slot.$input.val(), ui.item.value);
+    if (typed) setTimeout(function () {
+      if (slot.$input.val() === ui.item.value) pickStop(slot, typed.kind, typed.ref);
+    }, 0);
   });
   slot.$input.on('input', function () {
     forgetStop(slot);

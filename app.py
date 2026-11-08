@@ -15,6 +15,7 @@ import urllib
 import uuid
 import xml.etree.ElementTree as ET
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta, UTC
 from decimal import Decimal
@@ -99,6 +100,7 @@ from src.g_search import (
     search_commons_images,
 )
 from src.wikidata import search_ships as wikidata_search_ships
+from src.visited_squares import generate_visited_squares_geojson
 from py.image_generator import generate_image
 from src.sql.leaderboards import get_leaderboard_countries_query
 from src.sql.percents import upsert_percent_query
@@ -142,7 +144,13 @@ from src.trip_periods import (
     MIN_YEAR as MIN_PERIOD_YEAR,
 )
 from src.trip_periods import parse_period, period_label, period_trip_ids
-from src.trip_selections import parse_trip_ids, store_trip_ids
+from src.trip_selections import (
+    parse_trip_ids,
+    selection_share_flags,
+    selection_tag,
+    store_trip_ids,
+)
+from src import share_view
 from src.trip_stats import discord_summary, trip_stats
 from src.update_currency import run_currency_update
 from py.utils import (
@@ -156,7 +164,6 @@ from py.utils import (
     getIpDetails,
     getRequestData,
     hex_to_rgb,
-    interpolate_great_circle,
     interpolate_points_if_gaps,
     interpolate_track_if_gaps,
     load_config,
@@ -177,7 +184,9 @@ from src.api.feature_requests import feature_requests_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
-from src.api.og import og_blueprint, og_image_url
+from src.sql import news as news_sql
+from src.api.og import og_blueprint, og_image_url, plan_og_image_url
+from src.api.tag_share import tag_share_blueprint
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
@@ -188,7 +197,7 @@ from src.discord_webhooks import (
     enabled_webhooks,
     list_webhooks,
 )
-from src.discord_bot import sync_discord_tier
+from src.discord_bot import discord_user_profile, sync_discord_tier
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
 from src.api.stats import (
@@ -204,10 +213,12 @@ from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src.api.station_cleanup import station_cleanup_blueprint
 from src.api.station_explorer import station_explorer_blueprint
+from src.api.station_map import station_map_blueprint
 from src import visualisations as viz_module
 from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
+from src.api.live_map import live_map_blueprint, live_travellers_count
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.api.motis import motis_blueprint
 from src.consts import DbNames, TripTypes
@@ -218,6 +229,7 @@ from src.global_map import (
     get_cache_path,
 )
 from src.operators import find_operator_ids, get_trip_operator_logos
+from src.captcha import check_solution, new_challenge
 from src.pg import setup_db, pg_session
 from src.search_terms import like_pattern
 from src.trip_search import (
@@ -280,7 +292,7 @@ from src.trips import (
     change_trips_visibility,
     get_current_trip_id,
 )
-from src.paths import Path, coords_to_ewkt, fetch_path, fetch_raw_path, geom_geojson_to_coords
+from src.paths import Path, coords_to_ewkt, fetch_raw_path, geom_geojson_to_coords
 from src.trips.freehand_transform import (
     apply_to_trip,
     purge_expired_backups,
@@ -321,6 +333,7 @@ from src.users import (User, Friendship, all_rail_stations, authDb, ensure_stati
                        new_station_search,
                        exact_waypoints_context, map_lang_context, station_names_context,
                        valid_station_names)
+from src import theme as theme_module
 from src.email_parser import start_email_listener
 from src.trip_announcer import (
     announced_trip_ids,
@@ -369,6 +382,7 @@ app.register_blueprint(tickets_blueprint)
 app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
+app.register_blueprint(tag_share_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
@@ -379,9 +393,11 @@ app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(station_cleanup_blueprint)
 app.register_blueprint(station_explorer_blueprint)
+app.register_blueprint(station_map_blueprint)
 app.register_blueprint(trips_blueprint)
 app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
+app.register_blueprint(live_map_blueprint)
 app.register_blueprint(wagon_leaderboard_blueprint)
 app.register_blueprint(motis_blueprint)
 
@@ -455,6 +471,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 
 authDb.init_app(app)
+theme_module.init_app(app)
 
 def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date):
     from_iso = f"{target_date - timedelta(days=1)}T12:00:00"
@@ -706,6 +723,7 @@ def changeLang(langToSet, session=False):
     session["userinfo"]["is_admin"] = True if user and user.admin else False
     session["userinfo"]["is_translator"] = True if user and user.translator else False
     session["userinfo"]["is_feature_admin"] = True if user and user.feature_admin else False
+    theme_module.fill_session(session["userinfo"], user)
     session["userinfo"]["available_languages"] = available_languages
     session["userinfo"]["lang"] = langToSet
 
@@ -858,6 +876,10 @@ def starts_with_flag_emoji(s):
     return bool(re.match(pattern, s))
 
 
+def strip_flag_emoji(s):
+    return re.sub(r"^[\U0001F1E6-\U0001F1FF]{2}\s*", "", s or "")
+
+
 def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None, raw_path=None):
     newPath[0]["lat"] = float(newPath[0]["lat"])
     newPath[0]["lng"] = float(newPath[0]["lng"])
@@ -974,6 +996,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
         departure_platform=newTrip.get("departurePlatform"),
         arrival_platform=newTrip.get("arrivalPlatform"),
+        departure_platform_planned=newTrip.get("departurePlatformPlanned"),
+        arrival_platform_planned=newTrip.get("arrivalPlatformPlanned"),
         origin_station_key=newTrip.get("originStationKey"),
         destination_station_key=newTrip.get("destinationStationKey"),
         altitude=altitude,
@@ -1255,6 +1279,11 @@ def create_authDb():
 
 @app.before_request
 def before_request():
+    # One address for search engines: www. was indexed as a second site
+    if request.host == "www.trainlog.me":
+        query = request.query_string.decode()
+        return redirect("https://trainlog.me" + request.path + ("?" + query if query else ""), 301)
+
     allowed_hosts = [
         "127.0.0.1:5000",
         "localhost:5000",
@@ -1442,6 +1471,20 @@ def robots_txt():
     return send_from_directory(app.static_folder, "robots.txt")
 
 
+# Only these pages belong in search results; user pages, shared trips and the
+# rest of the app answer noindex. robots.txt must not block them, or Google
+# never sees the header and keeps the URLs indexed from links alone.
+# News is fresh original content, and shows logged-out visitors no usernames
+INDEXABLE_ENDPOINTS = {"landing", "landing_lang", "about", "news.news"}
+
+
+@app.after_request
+def noindex_outside_landing(response):
+    if request.endpoint not in INDEXABLE_ENDPOINTS:
+        response.headers.setdefault("X-Robots-Tag", "noindex")
+    return response
+
+
 @app.route("/favicon.ico")
 def favicon():
     return send_from_directory(
@@ -1465,7 +1508,7 @@ def apple_touch_icon(icon_name):
 def new_auto(username):
     return render_template(
         "new_auto.html",
-        title="new_trip",
+        title=lang[session["userinfo"]["lang"]]["newTripCar"],
         vehicle_type="car",
         username=username,
         **lang[session["userinfo"]["lang"]],
@@ -2103,11 +2146,11 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
             rows = parse_gpx_files(cleaned_files, source="gpslogger", username=user.username)
             for row in rows:
                 newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
-                    row, trip_type, params, use_routing, request
+                    row, trip_type, params, use_routing
                 )
                 # Distinct from the manual GPX-upload UI's "gpx"/"gpx_routed" — this is a
                 # direct, unreviewed import (Tasker/GPSLogger hitting the API).
-                newTrip["route_source"] = "routed_gpx_api" if use_routing else "gpx_api"
+                newTrip["route_source"] = {"gpx": "gpx_api", "gpx_routed": "routed_gpx_api"}[newTrip["route_source"]]
                 saveTripToDb(
                     username=user.username,
                     newTrip=newTrip,
@@ -2351,7 +2394,7 @@ def saveTripFromGPX(username, gpx_id):
     row = dict(gpx._mapping)
     raw_count = len(json.loads(row["path"]))
     newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
-        row, trip_type, parse_trip_params(request.args), use_routing, request
+        row, trip_type, parse_trip_params(request.args), use_routing
     )
 
     # Delete the GPX file after saving as a trip
@@ -2361,7 +2404,6 @@ def saveTripFromGPX(username, gpx_id):
             {"uid": gpx_id, "username": username},
         )
 
-    newTrip["route_source"] = "gpx_routed" if use_routing else "gpx"
     saveTripToDb(
         username=username,
         newTrip=newTrip,
@@ -2407,13 +2449,7 @@ def previewSmartRouting(username, gpx_id, trip_type):
     ]
    
     # Clean the GPS route with smart routing
-    cleaning_result = clean_gps_route(
-        raw_waypoints=raw_waypoints,
-        forwardRouting=lambda path, routingType, options=None: forward_routing_core(routingType=routingType, path=path, flask_request=request, extra_args=options),
-        trip_type=trip_type,
-        deviation_threshold=800,       # Kept: Now defines the "validation corridor" width
-        max_search_points=75
-    )
+    cleaning_result = clean_gps_route(raw_waypoints, trip_type)
    
     if request.method == "POST":
         # Return JSON for API usage
@@ -2426,7 +2462,6 @@ def previewSmartRouting(username, gpx_id, trip_type):
                 "compression_ratio": cleaning_result["compression_ratio"],
                 "reroute_count": cleaning_result["reroute_count"],
                 "distance": cleaning_result["distance"],
-                "duration": cleaning_result["duration"],
                 "preview_path": cleaning_result["path"][:100]  # First 100 points for preview
             })
         else:
@@ -2463,14 +2498,7 @@ def simplify_path(username):
         return jsonify({"error": "Need at least 2 points"}), 400
 
     raw_waypoints = [{"lat": p[0], "lng": p[1]} for p in path]
-    cleaning_result = clean_gps_route(
-        raw_waypoints=raw_waypoints,
-        forwardRouting=lambda rpath, routingType, options=None: forward_routing_core(
-            routingType=routingType, path=rpath, flask_request=request, extra_args=options
-        ),
-        trip_type=trip_type,
-        deviation_threshold=800,
-    )
+    cleaning_result = clean_gps_route(raw_waypoints, trip_type)
 
     if not cleaning_result["success"]:
         return jsonify({"error": cleaning_result.get("error", "routing failed")}), 502
@@ -3098,12 +3126,12 @@ def tag_list(username):
             "SELECT colour FROM tags WHERE username = :username", {"username": username}
         ).fetchall()
 
-    user_uid = User.query.filter_by(username=username).first().uid
+    user = User.query.filter_by(username=username).first()
     friend_usernames = [
         row.username
         for row in authDb.session.query(User.username)
         .join(Friendship, User.uid == Friendship.friend_id)
-        .filter(Friendship.user_id == user_uid, Friendship.accepted != None)  # noqa: E711
+        .filter(Friendship.user_id == user.uid, Friendship.accepted != None)  # noqa: E711
         .order_by(User.username)
         .all()
     ]
@@ -3112,6 +3140,7 @@ def tag_list(username):
         "tag_list.html",
         title=lang[session["userinfo"]["lang"]]["manage_tags"],
         tagsList=tags,
+        share_defaults=share_view.owner_defaults([user]),
         suggested_colour=generate_distinct_color([row[0] for row in own_colours]),
         members_by_tag=members_by_tag,
         pending_invites=pending_invites,
@@ -3272,11 +3301,20 @@ def ship_routing(username):
     colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_template(
         "ship_routing.html",
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         username=username,
         colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
+
+
+@app.route("/signup/challenge")
+def signup_challenge():
+    """A fresh proof-of-work challenge for the signup form's ALTCHA widget."""
+    response = jsonify(new_challenge(app.secret_key))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/signup/", methods=["GET", "POST"])
@@ -3325,34 +3363,16 @@ def signup():
     ]
 
     if request.method == "POST":
-        captcha_solution = request.form.get("frc-captcha-solution")
-        if not captcha_solution:
+        # The hidden "website" field is a honeypot: people never see it, form
+        # fillers fill it in
+        if request.form.get("website"):
+            captcha_error = "honeypot"
+        else:
+            captcha_error = check_solution(request.form.get("altcha"), app.secret_key)
+        if captcha_error:
             log_suspicious_activity(
                 request.url,
-                "no_captcha",
-                request.method,
-                getIp(request),
-                getRequestData(request),
-            )
-            flash(lang[session["userinfo"]["lang"]]["captchaFailed"])
-            return redirect(url_for("signup"))
-
-        # Verify the CAPTCHA with FriendlyCaptcha
-        captcha_verification = requests.post(
-            "https://api.friendlycaptcha.com/api/v1/siteverify",
-            data={
-                "solution": captcha_solution,
-                "secret": load_config()["friendlyCaptcha"]["APIKey"],
-            },
-        )
-
-        if (
-            captcha_verification.status_code != 200
-            or not captcha_verification.json().get("success", False)
-        ):
-            log_suspicious_activity(
-                request.url,
-                "captcha_failed",
+                captcha_error,
                 request.method,
                 getIp(request),
                 getRequestData(request),
@@ -3414,13 +3434,18 @@ def signup():
                 ),
             )
 
+            # Nothing published before they joined is news to them: without a row
+            # they'd count every item since the news_visits migration as unread
+            with pg_session() as pg:
+                pg.execute(news_sql.upsert_news_visit(), {"username": username})
+
             # Log the user in by setting the session variables
             session[username] = True
             session["logged_in"] = username
             session["logged_in_user_id"] = new_user.uid
 
-            # Redirect to the 'about' page after successful signup and login
-            return redirect(url_for("about"))
+            # Straight to their (empty) map, whose welcome card points at the first trip
+            return redirect(url_for("user_home", username=username))
 
         except sqlalchemy.exc.IntegrityError as e:
             print(e)
@@ -3492,7 +3517,29 @@ def landing():
 
     # If the user is not logged in or is forcing the landing page
     return render_template(
-        "landing.html", **lang[session["userinfo"]["lang"]], **session["userinfo"]
+        "landing.html",
+        landing_langs=LANDING_LANGS,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+# The landing page has an address per language (/fr/, /pt-BR/…), each linked to the
+# others with hreflang: "/" picks the language from the browser, which search engines
+# crawl in English, so without these the translations never reach search results.
+LANDING_LANGS = sorted(code for code in lang if code != "en")
+
+
+# Quoted: unquoted, the any() converter splits "pt-BR" into "pt" and "BR"
+@app.route(f"/<any({', '.join(repr(code) for code in LANDING_LANGS)}):lang_code>/")
+def landing_lang(lang_code):
+    # The visitor chose this language: keep it for the rest of the visit (signup…)
+    changeLang(lang_code, session)
+    return render_template(
+        "landing.html",
+        landing_langs=LANDING_LANGS,
+        **lang[lang_code],
+        **session["userinfo"],
     )
 
 
@@ -3612,6 +3659,8 @@ def user_home(username):
         tileserver=user.tileserver,
         globe=user.globe,
         public=False,
+        # Accounts this young get offered the navbar tour once they have trips
+        new_account=datetime.now(UTC).replace(tzinfo=None) - user.creation_date.replace(tzinfo=None) < timedelta(days=30),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -3674,16 +3723,12 @@ def vector_style(language, style):
 
     with open(json_path, "r", encoding="utf-8") as f:
         file_contents = f.read()
-        # Match the incoming request's scheme rather than hardcoding https: in
-        # local dev (plain http) a forced https sprite URL is a different
-        # origin from the page itself — nothing listens there, so the sprite
-        # fetch just times out/CORS-fails. In production this still resolves
-        # to https, since the site itself is only ever served over https.
+        # Relative on purpose: behind the proxy request.scheme is http, so an
+        # external URL is blocked as mixed content on the https site, while a
+        # forced https one breaks local dev. resolveBackground() makes the
+        # sprite absolute against the page's own origin.
         file_contents = file_contents.replace(
-            "{{mapPinUrl}}",
-            url_for(
-                "static", filename="styles/vector_maps", _scheme=request.scheme, _external=True
-            ),
+            "{{mapPinUrl}}", url_for("static", filename="styles/vector_maps")
         )
         template_url = "https://tiles.trainlog.me/tile/streets-v2+landcover-v1.1+hillshade-v1/{x}/{y}/{z}/{language}"
         final_url = template_url.replace("{language}", language)
@@ -4065,6 +4110,7 @@ def about():
         username=getUser(),
         nav="bootstrap/navigation.html",
         title=lang[session["userinfo"]["lang"]]["about"],
+        meta_description=lang[session["userinfo"]["lang"]]["about_lead"],
         translations=lang[session["userinfo"]["lang"]],
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -4162,6 +4208,7 @@ def edit_translations(langid):
     # Render the template with saved keys
     response = render_template(
         "admin/edit_translations.html",
+        title="Translations",
         translations=translations,
         langid=langid,
         en_translations=en_translations,
@@ -4565,6 +4612,15 @@ def render_public_trip_page(
     # across the poster and back links instead of expanding to a full id list.
     tripIdsParam = tripIds
 
+    # A key made for a tag never links to the tag's uuid: the plain link can show
+    # more than the key does. Once other people's trips can join it, the key's
+    # choice no longer speaks for them, so it opens multiTrip like the tag itself.
+    key_tag = selection_tag(tripIdsParam)
+    if key_tag:
+        if key_tag["shared"]:
+            return redirect(url_for("multi_trip", tripIds=tripIdsParam))
+        tag_type, tag_name = key_tag["type"], key_tag["name"]
+
     # this needs to be done before changing the tripIds variable
     if period is not None:
         multitrip_url = url_for("multi_trip_period", **period)
@@ -4660,8 +4716,8 @@ def render_public_trip_page(
     }
     # Legacy multi-owner tags (from before attach_tag checked ownership) are as
     # broken on this single-owner page as shared tags — send them along too.
-    if tagId is not None and len(set(usernames.values())) > 1:
-        return redirect(url_for("multi_trip", tagId=tagId))
+    if (tagId is not None or key_tag) and len(set(usernames.values())) > 1:
+        return redirect(url_for("multi_trip", tripIds=tripIdsParam, tagId=tagId))
     users_by_name = {
         username: User.query.filter_by(username=username).first()
         for username in set(usernames.values())
@@ -4801,6 +4857,19 @@ def render_public_trip_page(
     if owner_only and not own_trips:
         abort(401)
 
+    # Prices and CO₂: what this view shows, signed for /getPublicTrips
+    # (src/share_view.py).
+    page_trip_ids = ",".join(str(trip["uid"]) for trip in trip_list_sorted)
+    share_owners = [
+        users_by_name[name] for name in {trip["username"] for trip in trip_list_sorted}
+    ]
+    shown = share_view.page_flags(
+        selection_share_flags(tripIdsParam), request.args, share_owners, own_trips
+    )
+    # A ticket's page is about what it cost: its price always shows.
+    if ticketId is not None:
+        shown["price"] = True
+
     return render_template(
         template,
         # The owner's own /current page, not a shared link: only there may the page use the
@@ -4808,10 +4877,15 @@ def render_public_trip_page(
         current_page=current_page,
         own_trips=own_trips,
         logosList=listOperatorsLogos(),
-        tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
+        tripIds=page_trip_ids,
+        show_price=shown["price"],
+        show_carbon=shown["carbon"],
+        share_view_token=share_view.sign_view(page_trip_ids, shown),
         tripIdsParam=og_trip_ids,
         period_args=period,
-        title=lang[session["userinfo"]["lang"]]["sharedLink"],
+        # The tag's name, else the journey itself: what a tab or search result should say.
+        title=tag_name
+        or f"{strip_flag_emoji(trip_list_sorted[0]['origin_station'])} → {strip_flag_emoji(trip_list_sorted[-1]['destination_station'])}",
         collection_voyage=tag_type,
         tag_description=tag_name,
         tag_uuid=tagId,
@@ -4989,12 +5063,48 @@ def create_trip_share():
     """
     try:
         ids = [int(part) for part in request.form.get("trips", "").split(",") if part]
-        key = store_trip_ids(ids)
     except ValueError:
         abort(400)
 
     target = "multi_trip" if request.form.get("view") == "multiTrip" else "public_trip"
-    return redirect(url_for(target, tripIds=key), code=303)
+    # The trips table's copy row says exactly what the link shows (`show`: 'p', 'c',
+    # 'pc' or 'n', src/share_view.py). The owner's usual choice stays the plain key,
+    # which follows their settings; anything else is baked into a key of its own.
+    # Only for the owner of every trip, or anyone could mint a link to someone
+    # else's prices.
+    share_flags = None
+    show = request.form.get("show")
+    # The ticket page's map: a ticket group's trips, with their prices (the rest as
+    # the settings say), baked into the key so whoever gets the link sees them too.
+    ticket_map = request.form.get("price") and show is None
+    if target == "public_trip" and (show is not None or ticket_map):
+        if show is not None and (not show or set(show) - {"p", "c", "n"}):
+            abort(400)
+        user = User.query.filter_by(username=getUser()).first()
+        if user is None:
+            abort(401)
+        with pg_session() as pg:
+            owned = pg.execute(
+                "SELECT count(*) AS n FROM trips WHERE trip_id = ANY(:ids) AND user_id = :uid",
+                {"ids": ids, "uid": user.uid},
+            ).fetchone()["n"]
+        if owned != len(set(ids)):
+            abort(403)
+        defaults = share_view.owner_defaults([user])
+        wanted = dict(defaults, price=True) if ticket_map else share_view.decode(show)
+        if wanted != defaults:
+            share_flags = share_view.encode(wanted)
+
+    try:
+        key = store_trip_ids(ids, share_flags)
+    except ValueError:
+        abort(400)
+
+    url = url_for(target, tripIds=key)
+    # The copy items want the link itself, not to go there.
+    if request.form.get("format") == "json":
+        return jsonify(url=url)
+    return redirect(url, code=303)
 
 
 @app.route("/public/multiTrip/<tripIds>")
@@ -5212,13 +5322,20 @@ def download_path(trip_ids):
         trip = get_trip_pg(trip_id)
         if trip is not None:
             user = User.query.filter_by(username=trip["username"]).first()
-            # Verify that either user session is valid or the user has public trips
-            if (
-                not session.get(user.username)
-                and not user.is_public_trips()
-                and not session.get(owner)
-            ):
-                abort(401, description=f"Unauthorized for trip_id={trip_id}")
+            # Someone other than the trip's owner needs the account to share
+            # trips AND the trip itself to be visible to them (same per-trip
+            # rule as the public trip page: private hidden, friends gated).
+            if not session.get(user.username) and not session.get(owner):
+                visibility = trip.get("visibility")
+                if (
+                    not user.is_public_trips()
+                    or visibility == "private"
+                    or (
+                        visibility == "friends"
+                        and not current_user_is_friend_with(user.username)
+                    )
+                ):
+                    abort(401, description=f"Unauthorized for trip_id={trip_id}")
         else:
             abort(410, description=f"Trip with id={trip_id} is gone")
 
@@ -5429,6 +5546,7 @@ def admin_stats(tripType=None, year=None, metric=None):
 
     return render_template(
         "stats.html",
+        title=lang[session["userinfo"]["lang"]]["stats"],
         nav="bootstrap/navigation.html",
         username=getUser(),
         statYear=year,
@@ -5835,7 +5953,7 @@ def _render_plan_view(plan, username, controls):
         og={
             "title": plan["name"],
             "description": plan["description"] or "Trainlog plan",
-            "image": external_url("og.plan_image", uuid=plan["uuid"], ext="jpg"),
+            "image": plan_og_image_url(plan["uuid"]),
         },
         num_hidden_trips=hidden_legs,
         colorblind=getattr(user, "colorblind", False) if user else False,
@@ -6424,8 +6542,14 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
     independently of the plan's anchor_date (see process_plan_dates)."""
     plan = get_owned_plan(plan_uuid, username)
     pt = _get_plan_trip_row(plan, plan_trip_uid)
-    formData = dict(request.form)
+    save_plan_trip_edit(plan, pt, dict(request.form))
+    # edit_copy posts via AJAX and redirects client-side.
+    return ""
 
+
+def save_plan_trip_edit(plan, pt, formData):
+    """Write the rich editor's payload `formData` over the plan-trip row `pt` (with its
+    geojson) of `plan`. The MCP's update_plan_trip saves through it too."""
     # Path: edited on the map, otherwise keep the stored geometry.
     if formData.get("path"):
         path = [{"lat": c["lat"], "lng": c["lng"]} for c in json.loads(formData["path"])]
@@ -6499,9 +6623,8 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
         created=pt["created"],
         last_modified=now,
     )
-    update_plan_trip_full(plan_trip_uid, plan_trip)
-    # edit_copy posts via AJAX and redirects client-side.
-    return ""
+    update_plan_trip_full(pt["uid"], plan_trip)
+    return plan_trip
 
 
 @app.route("/u/<username>/plan/<plan_uuid>/reorder", methods=["POST"])
@@ -6883,8 +7006,6 @@ def saveFlight(username, type):
         jsonNewTrip = request.form["newTrip"]
         newTrip = json.loads(jsonNewTrip)
         airlineLogoProcess(newTrip)
-        # TODO : Fix visibility for flights
-        newTrip["visibility"] = "public"
 
         # Building a flight for a plan -> write to plan_trips (parallel world), reusing
         # savePlanTripToDb's air branch. The 3D track isn't kept for plans.
@@ -7193,9 +7314,18 @@ def patchTrip(username):
     except (TypeError, ValueError):
         return jsonify({"error": "A numeric trip_id is required"}), 400
 
-    # Aborts 404 if the trip is missing or is not the caller's, so it is known
-    # to exist by the time it is read.
+    # Aborts 404 if the trip is missing or is not the caller's.
     check_current_user_owns_trip(trip_id)
+    try:
+        return jsonify(apply_trip_patch(trip_id, payload))
+    except ValueError as e:
+        return jsonify({"error": f"Invalid date: {e}"}), 400
+
+
+def apply_trip_patch(trip_id, payload):
+    """patchTrip's edit of a trip the caller owns: `payload` in `trips` column terms
+    (see patchTrip). Returns {trip_id, patched, ignored}; ValueError for a date that
+    doesn't parse. The MCP's update_trip edits trips through it too."""
     stored = get_trip_pg(trip_id)
 
     patched = _read_patch_payload(payload)
@@ -7206,10 +7336,7 @@ def patchTrip(username):
     ignored = sorted(set(patched) - known)
     trip = {**stored, **patched}
 
-    try:
-        formData = build_form_data_from_trip(trip)
-    except ValueError as e:
-        return jsonify({"error": f"Invalid date: {e}"}), 400
+    formData = build_form_data_from_trip(trip)
 
     # A route the caller worked out for itself: its geometry, the 3D track that
     # belongs with it, and the measurements taken off it.
@@ -7223,9 +7350,7 @@ def patchTrip(username):
     new_trip = update_trip_values_from_form_data(trip_id, formData)
     update_trip(trip_id, new_trip, formData)
 
-    return jsonify(
-        {"trip_id": trip_id, "patched": sorted(patched), "ignored": ignored}
-    )
+    return {"trip_id": trip_id, "patched": sorted(patched), "ignored": ignored}
 
 
 def check_current_user_owns_trip(trip_id):
@@ -7498,6 +7623,8 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         co2_override=co2_override,
         departure_platform=formData.get("departurePlatform"),
         arrival_platform=formData.get("arrivalPlatform"),
+        departure_platform_planned=formData.get("departurePlatformPlanned"),
+        arrival_platform_planned=formData.get("arrivalPlatformPlanned"),
         # The edit page sends the ends' quai stations, cleared when an end is retyped; a
         # client sending none (an older page) leaves them as they were.
         origin_station_key=formData["originStationKey"] if "originStationKey" in formData
@@ -7580,6 +7707,7 @@ def here_route_display(
 
     return render_template(
         "here_routing.html",  # see below
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         trips_json=trips_json,
         username=username,
         colorblind=colorblind,
@@ -7658,6 +7786,7 @@ def google_route_display(
     # You can reuse "here_routing.html" or create a new template "google_routing.html"
     return render_template(
         "here_routing.html",
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         trips_json=trips_json,
         username=username,
         **lang[session["userinfo"]["lang"]],
@@ -7879,8 +8008,22 @@ def stopsByDirection():
 
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
-    # Check if this is a reverse geocoding request
-    params = request.args.to_dict(flat=False)
+    payload, error = station_autocomplete(request.args.to_dict(flat=False))
+    return error if payload is None else jsonify(payload)
+
+
+def station_autocomplete(params):
+    """The station search behind every station field of the site, for the query string
+    `params` (as request.args.to_dict(flat=False)): (FeatureCollection, None), or
+    (None, the error response) when the search service failed. The MCP's
+    search_stations asks it too, so an AI picks from what a user would."""
+
+    def arg(name, type=str):
+        try:
+            return type((params.get(name) or [None])[0])
+        except (TypeError, ValueError):
+            return None
+
     # lat/lon alone ask what is there; with q, they only bias the search towards them.
     is_reverse = params.get("lat") and params.get("lon") and not params.get("q")
     endpoint = "/reverse" if is_reverse else "/api"
@@ -7894,16 +8037,16 @@ def stationAutocomplete():
         all_rail = all_rail_stations()
         features = search_stations(
             trip_type,
-            q=None if is_reverse else request.args.get("q", ""),
-            lat=request.args.get("lat", type=float),
-            lon=request.args.get("lon", type=float),
-            radius_km=request.args.get("radius", type=float),
-            limit=request.args.get("limit", 10, type=int),
+            q=None if is_reverse else (arg("q") or ""),
+            lat=arg("lat", float),
+            lon=arg("lon", float),
+            radius_km=arg("radius", float),
+            limit=arg("limit", int) or 10,
             all_rail=all_rail,
         )
         if features is None:
-            return jsonify(error="station search unavailable"), 503
-        return jsonify({"type": "FeatureCollection", "features": features})
+            return None, (jsonify(error="station search unavailable"), 503)
+        return {"type": "FeatureCollection", "features": features}, None
     if not is_reverse:
         # The position only biases quai's ranking; Photon answers fewer results with it.
         params.pop("lat", None)
@@ -7914,8 +8057,8 @@ def stationAutocomplete():
     responseJson = photonRequest(endpoint, params=params, timeout=2)
 
     if responseJson is None:
-        return "Photon Error", 500
-    
+        return None, ("Photon Error", 500)
+
     # Unnamed features (a reverse lookup can return a bare platform or a building)
     # can't be offered as a station, and everything below keys on the name.
     responseJson["features"] = [
@@ -7977,7 +8120,7 @@ def stationAutocomplete():
                     if props["name"] == name and props.get("countrycode") == country:
                         props["homonymy_order"] = f" ({chr(suffix)})"
                         suffix += 1
-    return jsonify(responseJson)
+    return responseJson, None
 
 @app.route("/u/<username>/getManAndOps/<station_type>", methods=["GET", "POST"])
 @login_required
@@ -8535,16 +8678,29 @@ def rename_user(uid):
         return jsonify(success=False, error="Username already taken"), 409
 
     old_username = user.username
-    # All username-keyed tables now live in PostgreSQL.
-    pg_tables = [
-        "percents",
-        "fr24_usage",
-        "ai_usage",
-        "trainsets",
-        "tickets",
-        "tags",
-        "tag_members",
-        "gpx",
+    # Every (table, column) holding an account's username, all in PostgreSQL.
+    # Not denied_logins (a log of attempts on the old name) nor wagons/ship_pictures
+    # .author (free-text image credits).
+    pg_columns = [
+        ("percents", "username"),
+        ("fr24_usage", "username"),
+        ("ai_usage", "username"),
+        ("trainsets", "username"),
+        ("tickets", "username"),
+        ("tags", "username"),
+        ("tag_members", "username"),
+        ("gpx", "username"),
+        ("feature_requests", "username"),
+        ("feature_requests", "closed_by"),
+        ("feature_request_comments", "username"),
+        ("feature_request_votes", "username"),
+        ("news", "username"),
+        ("news_visits", "username"),
+        ("news_reactions", "username"),
+        ("news_views", "username"),
+        ("manual_stations", "creator"),
+        ("station_overrides", "updated_by"),
+        ("operator_dismissed_spellings", "dismissed_by"),
     ]
 
     try:
@@ -8552,9 +8708,9 @@ def rename_user(uid):
         authDb.session.commit()
 
         with pg_session() as pg:
-            for table in pg_tables:
+            for table, column in pg_columns:
                 pg.execute(
-                    f"UPDATE {table} SET username = :new WHERE username = :old",
+                    f"UPDATE {table} SET {column} = :new WHERE {column} = :old",
                     {"new": new_username, "old": old_username},
                 )
     except Exception as e:
@@ -8974,9 +9130,28 @@ def getPublicTrips():
     data = request.get_json()
     tripIds = data.get("tripIds")
     sortedTripList, priceDict = processPublicTrips(tripIds)
+    # Prices and CO₂ only for the trips' owner, or as far as the page's signed
+    # view allows (src/share_view.py): otherwise they are not sent at all.
+    allowed = share_view.read_view(tripIds, data.get("view"))
+    _strip_unowned_share_fields(sortedTripList, priceDict, allowed)
     for trip in sortedTripList:
         trip["trip"].pop("username")
     return jsonify([sortedTripList, priceDict])
+
+
+def _strip_unowned_share_fields(trip_list, price_dict, allowed):
+    """Drop what `allowed` does not cover from trips the viewer does not own, and
+    blank the totals they fed into."""
+    removed = set()
+    for item in trip_list:
+        trip = item["trip"]
+        if session.get(trip["username"]) or session.get(owner):
+            continue
+        removed |= share_view.strip_trip(trip, allowed)
+    if "price" in removed:
+        price_dict["total_price"] = 0
+    if "carbon" in removed:
+        price_dict["total_carbon"] = 0
 
 
 @app.route("/u/<username>/toType/<tripType>/<tripIds>", methods=["GET"])
@@ -9197,6 +9372,8 @@ def getMultiTrips():
     # URL length limits.
     tripIds = request.get_json().get("tripIds")
     sortedTripList, priceDict = processPublicTrips(tripIds)
+    # The multiTrip view shows neither prices nor CO₂: keep them out of the JSON.
+    _strip_unowned_share_fields(sortedTripList, priceDict, share_view.NO_FLAGS)
     userList = set()
     anonymous = {}
     users_cache = {}
@@ -9461,6 +9638,12 @@ def get_trips_api_internal(username, is_public=False):
     # column, so a field can carry several terms. They are ANDed, the alternatives
     # inside one term ORed.
     filters = parse_filters(request.form.get("filters"), is_public=is_public)
+    # A link to given trips ("id:123|456", "ticket:864") shows them whether or
+    # not they are still upcoming, regardless of the "show upcoming" switch.
+    if past == 1 and any(
+        f["field"] in ("uid", "ticket_ids") and not f["negate"] for f in filters
+    ):
+        include_planned = 1
 
     additional_conditions, search_params = filter_conditions(filters)
     search_params.update(
@@ -9980,6 +10163,8 @@ def user_settings(username):
         params["new_station_search"] = "new_station_search" in request.form
         params["all_rail_stations"] = "all_rail_stations" in request.form
         params["exact_tracks"] = "exact_tracks" in request.form
+        params["share_price"] = "share_price" in request.form
+        params["share_carbon"] = "share_carbon" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
@@ -9990,6 +10175,8 @@ def user_settings(username):
                 setattr(user, param, params[param])
                 if param == "lang":
                     changeLang(params[param], session)
+        theme_module.save_settings(user, request.form, session["userinfo"])
+        session.modified = True
 
         authDb.session.commit()
 
@@ -10005,6 +10192,9 @@ def user_settings(username):
     exact_waypoints_checked = "checked" if user.exact_waypoints else ""
     discord_autopost_checked = "checked" if user.discord_autopost else ""
     discord_main_checked = "checked" if user.discord_main_enabled else ""
+    discord_avatar_checked = "checked" if user.discord_avatar else ""
+    share_price_checked = "checked" if user.share_price else ""
+    share_carbon_checked = "checked" if user.share_carbon else ""
 
     return render_template(
         "user_settings.html",
@@ -10017,11 +10207,15 @@ def user_settings(username):
         friend_search_checked=friend_search_checked,
         appear_on_global_checked=appear_on_global_checked,
         colorblind_checked=colorblind_checked,
+        user_theme=user.theme,
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
         exact_waypoints_checked=exact_waypoints_checked,
         discord_autopost_checked=discord_autopost_checked,
         discord_main_checked=discord_main_checked,
+        discord_avatar_checked=discord_avatar_checked,
+        share_price_checked=share_price_checked,
+        share_carbon_checked=share_carbon_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
@@ -10322,6 +10516,10 @@ def dynamic_trips(username, time=None):
         projects=projects,
         trip_column_names=trip_column_names,
         country_list=get_all_countries(),
+        # What a plain link shows, so the "Create link" menu can offer the other way round.
+        share_defaults=share_view.owner_defaults(
+            [User.query.filter_by(username=username).first()]
+        ),
         # Which rows offer to take their Discord post down, and which offer to
         # post themselves. Read here rather than joined into the trips API: the
         # table is paged server-side, and both lists are short enough to send
@@ -10511,6 +10709,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripCo2Override": trip.get("co2_override"),
         "tripDeparturePlatform": trip.get("departure_platform") or "",
         "tripArrivalPlatform": trip.get("arrival_platform") or "",
+        "tripDeparturePlatformPlanned": trip.get("departure_platform_planned") or "",
+        "tripArrivalPlatformPlanned": trip.get("arrival_platform_planned") or "",
         "tripOriginStationKey": trip.get("origin_station_key") or "",
         "tripDestinationStationKey": trip.get("destination_station_key") or "",
     }
@@ -11175,6 +11375,7 @@ def adminManual():
         ]
     return render_template(
         "admin/manual.html",
+        title="Manual trips",
         stationsList=stationsList,
         username=getUser(),
         nav="bootstrap/navigation.html",
@@ -11456,6 +11657,7 @@ def ships():
 
     return render_template(
         "admin/ships.html",
+        title="Ships",
         shipList=shipList,
         # The one-click cleanup below acts on exactly these, and the button says how many.
         unusedCount=sum(1 for s in shipList if not s["unregistered"] and not s["trips"]),
@@ -11494,6 +11696,7 @@ def backfill_ships():
     if request.method == "GET":
         return render_template(
             "admin/ships_backfill.html",
+            title="Ships backfill",
             username=getUser(),
             nav="bootstrap/navigation.html",
             **lang[session["userinfo"]["lang"]],
@@ -12711,6 +12914,7 @@ def airliners():
 
     return render_template(
         "admin/airliners.html",
+        title="Airliners",
         airlinerList=airlinerList,
         username=getUser(),
         nav="bootstrap/navigation.html",
@@ -12777,19 +12981,20 @@ def editManual(id):
                 new_data,
             )
             return redirect(url_for("adminManual"))
-        else:
-            station = pg.execute(
-                "SELECT * FROM manual_stations WHERE uid = :uid", {"uid": id}
-            ).fetchone()
-            return render_template(
-                "admin/edit_manual.html",
-                station=station,
-                username=session.get("logged_in"),
-                nav="bootstrap/navigation.html",
-                isCurrent=has_current_trip(get_user_id()),
-                **lang[session["userinfo"]["lang"]],
-                **session["userinfo"],
-            )
+        station = pg.execute(
+            "SELECT * FROM manual_stations WHERE uid = :uid", {"uid": id}
+        ).fetchone()
+    # Rendered outside the session: the layout queries the database itself
+    return render_template(
+        "admin/edit_manual.html",
+        title="Edit manual trip",
+        station=station,
+        username=session.get("logged_in"),
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id()),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
 
 
 @app.errorhandler(405)
@@ -12943,11 +13148,22 @@ def leaderboard(type):
     else:
         template = "leaderboard.html"
 
+    texts = lang[session["userinfo"]["lang"]]
+    title_key = {
+        "countries": "leaderboardCountries",
+        "train_countries": "leaderboardTrainCountries",
+        "wagons": "leaderboardWagonsTitle",
+        "train": "leaderboardTrainTitle",
+        "bus": "leaderboardBusTitle",
+        "air": "leaderboardAirTitle",
+        "ferry": "leaderboardFerryTitle",
+    }.get(type, "leaderboard")
+
     return render_template(
         template,
         nav=nav,
         username=getUser(),
-        title=lang[session["userinfo"]["lang"]]["leaderboard"],
+        title=texts[title_key],
         type=type,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -13391,41 +13607,91 @@ def admin_user_growth():
 
 
 
+def _friend_rows(user_id):
+    """(current friends, incoming requests, outgoing requests) of a user.
+
+    Each row is a dict with uid, username and `since`: when the friendship was
+    accepted, or when the pending request was sent.
+    """
+    outgoing = (
+        authDb.session.query(User.uid, User.username, Friendship.created_at)
+        .join(Friendship, User.uid == Friendship.friend_id)
+        .filter(Friendship.user_id == user_id, Friendship.accepted.is_(None))
+        .order_by(Friendship.created_at.desc())
+        .all()
+    )
+    current = (
+        authDb.session.query(User.uid, User.username, Friendship.accepted)
+        .join(Friendship, User.uid == Friendship.friend_id)
+        .filter(Friendship.user_id == user_id, Friendship.accepted != None)  # noqa: E711
+        .order_by(func.lower(User.username))
+        .all()
+    )
+    incoming = (
+        authDb.session.query(User.uid, User.username, Friendship.created_at)
+        .join(Friendship, User.uid == Friendship.user_id)
+        .filter(Friendship.friend_id == user_id, Friendship.accepted.is_(None))
+        .order_by(Friendship.created_at.desc())
+        .all()
+    )
+
+    def as_dicts(rows):
+        return [
+            {
+                "uid": uid,
+                "username": name,
+                "since": since.date().isoformat() if since else None,
+            }
+            for uid, name, since in rows
+        ]
+
+    return as_dicts(current), as_dicts(incoming), as_dicts(outgoing)
+
+
 @app.route("/u/<username>/friends")
 @login_required
 def friends(username):
     user_id = User.query.filter_by(username=username).first().uid
+    current_friends, incoming_requests, outgoing_requests = _friend_rows(user_id)
 
-    outgoing_requests = (
-        authDb.session.query(User.uid, User.username)
-        .join(Friendship, User.uid == Friendship.friend_id)
-        .filter(Friendship.user_id == user_id, Friendship.accepted.is_(None))
-        .all()
-    )
-    current_friends = (
-        authDb.session.query(User.uid, User.username)
-        .join(Friendship, User.uid == Friendship.friend_id)
-        .filter(Friendship.user_id == user_id, Friendship.accepted != None)  # noqa: E711
-        .all()
-    )
-    incoming_requests = (
-        authDb.session.query(User.uid, User.username)
-        .join(Friendship, User.uid == Friendship.user_id)
-        .filter(Friendship.friend_id == user_id, Friendship.accepted.is_(None))
-        .all()
-    )
-    unavailable_users = outgoing_requests + current_friends + incoming_requests
-    available_users = [
-        (user.uid, user.username)
-        for user in User.query.filter_by(friend_search=True).all()
-        if user.username != username
-        and (user.uid, user.username) not in unavailable_users
-    ]
+    # What each friend's profile shows them: trips they made public or friends-only.
+    if current_friends:
+        with pg_session() as pg:
+            stats = {
+                row["user_id"]: row
+                for row in pg.execute(
+                    """
+                    SELECT user_id,
+                           COUNT(*) FILTER (
+                               WHERE COALESCE(utc_start_datetime, start_datetime) < NOW()
+                           ) AS trips,
+                           COALESCE(SUM(trip_length) FILTER (
+                               WHERE COALESCE(utc_start_datetime, start_datetime) < NOW()
+                           ), 0) AS length,
+                           BOOL_OR(
+                               COALESCE(utc_start_datetime, start_datetime)
+                                   + COALESCE(departure_delay, 0) * interval '1 second' <= NOW()
+                               AND COALESCE(utc_end_datetime, end_datetime)
+                                   + COALESCE(arrival_delay, 0) * interval '1 second' >= NOW()
+                           ) AS traveling
+                    FROM trips
+                    WHERE user_id = ANY(:ids)
+                      AND is_project = false
+                      AND visibility IN ('public', 'friends')
+                    GROUP BY user_id
+                    """,
+                    {"ids": [f["uid"] for f in current_friends]},
+                ).fetchall()
+            }
+        for friend in current_friends:
+            row = stats.get(friend["uid"])
+            friend["trips"] = row["trips"] if row else 0
+            friend["km"] = int((row["length"] if row else 0) / 1000)
+            friend["traveling"] = bool(row and row["traveling"])
 
     return render_template(
         "friends.html",
         nav="bootstrap/navigation.html",
-        available_users=available_users,
         outgoing_requests=outgoing_requests,
         incoming_requests=incoming_requests,
         current_friends=current_friends,
@@ -13433,6 +13699,104 @@ def friends(username):
         title=lang[session["userinfo"]["lang"]]["friends"],
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/friends/search")
+@login_required
+def friend_search(username):
+    """[[uid, username]] of up to 10 users in friend search matching `q`.
+
+    Names starting with `q` come first. Leaves out the user and anyone they are
+    already friends with or have a request pending with either way.
+    """
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    user_id = User.query.filter_by(username=username).first().uid
+    taken = {f["uid"] for rows in _friend_rows(user_id) for f in rows} | {user_id}
+    pattern = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    matches = (
+        User.query.with_entities(User.uid, User.username)
+        .filter(
+            User.friend_search.is_(True),
+            User.uid.notin_(taken),
+            User.username.ilike(f"%{pattern}%", escape="\\"),
+        )
+        .order_by(
+            case((User.username.ilike(f"{pattern}%", escape="\\"), 0), else_=1),
+            func.lower(User.username),
+        )
+        .limit(10)
+        .all()
+    )
+    return jsonify([[uid, name] for uid, name in matches])
+
+
+@app.route("/u/<username>/discord_avatar", methods=["POST"])
+@login_required
+def toggle_discord_avatar(username):
+    """Switch showing the linked Discord account's picture on or off."""
+    user = User.query.filter_by(username=username).first()
+    user.discord_avatar = bool(user.discord_id) and not user.discord_avatar
+    authDb.session.commit()
+    return redirect(url_for("user_settings", username=username) + "#tab-integrations")
+
+
+@app.route("/u/<username>/avatars")
+@login_required
+def user_avatars(username):
+    """{username: Discord avatar url} for the `u` usernames this user may see.
+
+    Only users who turned on their Discord picture in settings have one. Who may
+    see it is themselves, their friends, whoever sent them a friend request, the
+    owner and accepted members of shared tags they own or belong to, and anyone
+    who appears in friend search, whose results show them to every user anyway.
+    Fetched by pages after they render (static/js/user_avatar.js), as each
+    uncached lookup is a call to Discord.
+    """
+    wanted = set(request.args.getlist("u")[:200])
+    user_id = User.query.filter_by(username=username).first().uid
+    current, incoming, _ = _friend_rows(user_id)
+    allowed = {username} | {f["username"] for f in current + incoming}
+    with pg_session() as pg:
+        allowed |= {
+            row["username"]
+            for row in pg.execute(
+                """
+                WITH mine AS (
+                    SELECT uid FROM tags WHERE username = :username
+                    UNION
+                    SELECT tag_id FROM tag_members
+                    WHERE username = :username AND status = 'accepted'
+                )
+                SELECT username FROM tags WHERE uid IN (SELECT uid FROM mine)
+                UNION
+                SELECT username FROM tag_members
+                WHERE tag_id IN (SELECT uid FROM mine) AND status = 'accepted'
+                """,
+                {"username": username},
+            ).fetchall()
+        }
+    discord_ids = {
+        u.username: u.discord_id
+        for u in User.query.filter(
+            User.username.in_(wanted),
+            User.username.in_(allowed) | User.friend_search.is_(True),
+            User.discord_avatar.is_(True),
+            User.discord_id.isnot(None),
+        )
+    }
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        profiles = dict(
+            zip(discord_ids, pool.map(discord_user_profile, discord_ids.values()))
+        )
+    return jsonify(
+        {
+            name: f"{avatar}?size=128"
+            for name, (_display, avatar) in profiles.items()
+            if avatar
+        }
     )
 
 
@@ -13602,6 +13966,7 @@ def getStalePremiumCount():
 
 
 app.jinja_env.globals.update(getFriendsRequestsNumber=getFriendsRequestsNumber)
+app.jinja_env.globals.update(live_travellers_count=live_travellers_count)
 app.jinja_env.globals.update(getTagInvitesNumber=getTagInvitesNumber)
 app.jinja_env.globals.update(getStalePremiumCount=getStalePremiumCount)
 
@@ -13713,11 +14078,14 @@ def visited_squares(username):
     else:
         nav = "bootstrap/public_nav.html"
 
+    viewer = User.query.filter_by(username=getUser()).first()
     return render_template(
         "visited_squares.html",
-        title="Visited Squares Map",
+        title=lang[session["userinfo"]["lang"]]["about_explore_squares_h"],
         username=username,
         nav=nav,
+        tileserver=viewer.tileserver if viewer else "osm",
+        globe=viewer.globe if viewer else False,
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],
     )
@@ -13727,10 +14095,9 @@ def visited_squares(username):
 @public_required
 def visited_squares_data(username):
     """Fetch the GeoJSON data for the visited squares."""
-    geojson_data, grid_geojson, land_percentage, air_percentage = generate_visited_squares_geojson(username)
+    geojson_data, land_percentage, air_percentage = generate_visited_squares_geojson(username)
     response = {
         "geojson": geojson_data,
-        "grid_geojson": grid_geojson,
         "land_percentage": land_percentage,
         "air_percentage": air_percentage,
     }
@@ -13782,147 +14149,6 @@ def active_users():
         **session["userinfo"],
     )
 
-
-def generate_visited_squares_geojson(username):
-    land_squares = set()
-    air_squares = set()
-    visited_squares = {}
-
-    with pg_session() as pg:
-        trips = pg.execute(
-            """
-                SELECT trip_id AS uid, trip_type AS type
-                FROM trips
-                WHERE user_id = :user_id
-                  AND NOT is_project
-                  AND (
-                        COALESCE(utc_start_datetime, start_datetime) IS NULL
-                        OR NOW() > COALESCE(utc_start_datetime, start_datetime)
-                      )
-            """,
-            {"user_id": get_user_id(username)},
-        ).fetchall()
-
-        for trip in trips:
-            trip_id = trip["uid"]
-            trip_type = trip["type"]
-
-            paths = [fetch_path(pg, trip_id)]
-
-            for coordinates in paths:
-                for i in range(len(coordinates)):
-                    lat, lon = coordinates[i]
-                    square = (math.floor(lat), math.floor(lon))
-
-                    if trip_type in ("air", "helicopter"):
-                        if (
-                            visited_squares.get(square) not in ("stopped", "passed")
-                            and square not in land_squares
-                        ):
-                            visited_squares[square] = "air"
-                            air_squares.add(square)
-                    else:
-                        if visited_squares.get(square) != "stopped":
-                            visited_squares[square] = "passed"
-                        land_squares.add(square)
-                        air_squares.discard(square)
-
-                    # Override with "stopped" on first/last point
-                    if i == 0 or i == len(coordinates) - 1:
-                        visited_squares[square] = "stopped"
-                        land_squares.add(square)
-                        air_squares.discard(square)
-
-                    # Interpolate between points (only for air trips)
-                    if (
-                        trip_type in ("air", "helicopter")
-                        and len(coordinates) > 2
-                        and i < len(coordinates) - 1
-                    ):
-                        next_lat, next_lon = coordinates[i + 1]
-                        intermediates = interpolate_great_circle(
-                            (lat, lon), (next_lat, next_lon), max_distance_km=50
-                        )
-
-                        for inter_lat, inter_lon in intermediates:
-                            inter_square = (
-                                math.floor(inter_lat),
-                                math.floor(inter_lon),
-                            )
-
-                            if (
-                                visited_squares.get(inter_square)
-                                not in ("stopped", "passed")
-                                and inter_square not in land_squares
-                            ):
-                                visited_squares[inter_square] = "air"
-                                air_squares.add(inter_square)
-
-    total_squares = 180 * 360  # entire world grid
-    land_percentage = (len(land_squares) / total_squares) * 100
-    air_percentage = (len(air_squares) / total_squares) * 100
-
-    with pg_session() as pg:
-        pg.execute(
-            upsert_percent_query(),
-            {
-                "username": username,
-                "cc": "world_squares",
-                "percent": round(land_percentage, 2),
-            },
-        )
-
-    # --- VISITED FEATURES ---
-    visited_features = []
-    for square, status in visited_squares.items():
-        lat, lon = square
-        feature = {
-            "type": "Feature",
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [[
-                    [lon, lat],
-                    [lon + 1, lat],
-                    [lon + 1, lat + 1],
-                    [lon, lat + 1],
-                    [lon, lat],
-                ]],
-            },
-            "properties": {"status": status},
-        }
-        visited_features.append(feature)
-
-    visited_geojson = {
-        "type": "FeatureCollection",
-        "features": visited_features
-    }
-
-    # --- FULL GRID FEATURES (ALL WORLD SQUARES) ---
-    grid_features = []
-
-    for lat in range(-90, 90):
-        for lon in range(-180, 180):
-            grid_features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [lon, lat],
-                        [lon + 1, lat],
-                        [lon + 1, lat + 1],
-                        [lon, lat + 1],
-                        [lon, lat],
-                    ]],
-                },
-                "properties": {}
-            })
-
-    grid_geojson = {
-        "type": "FeatureCollection",
-        "features": grid_features
-    }
-
-    return visited_geojson, grid_geojson, land_percentage, air_percentage
 
 @app.route("/tile/<style>/<x>/<y>/<z>/")
 @app.route("/tile/<style>/<x>/<y>/<z>/<r>")
@@ -14027,6 +14253,7 @@ os.makedirs(LOGO_UPLOAD_FOLDER, exist_ok=True)
 def show_operators():
     return render_template(
         "admin/operators.html",
+        title="Operators",
         nav="bootstrap/navigation.html",
         username=getUser(),
         **session["userinfo"],
@@ -14332,6 +14559,20 @@ def router_status():
     )
 
 
+# Trip fields the public live map (templates/public/current_global*.html, trip_progress.js,
+# vehicle_display.js) reads; everything else is stripped from /public/current_trips.
+LIVE_MAP_TRIP_FIELDS = (
+    "uid", "type", "username", "time",
+    "origin_station", "destination_station", "waypoints", "stops",
+    "start_datetime", "end_datetime", "utc_start_datetime", "utc_end_datetime",
+    "utc_filtered_start_datetime", "utc_filtered_end_datetime",
+    "departure_delay", "arrival_delay",
+    "operator", "multi_operators", "logo_url", "line_name",
+    "material_type", "manufacturer", "model", "reg", "vessel_name", "vessel_country",
+    "trainset", "live_tracked", "live_updated", "live_origin", "live_destination",
+)
+
+
 def get_current_trips_data(public_only=True):
     """
     Get current trips data, optionally filtered by public visibility.
@@ -14433,10 +14674,15 @@ def get_current_trips_data(public_only=True):
                 trip["live_destination"] = path[-1] if path else None
                 path = live["path"]
                 trip["live_tracked"] = True
+                trip["live_updated"] = live.get("updated")
             if trip.get("material_type_advanced"):
                 trip["trainset"] = public_trainset_info(
                     pg, trip["material_type_advanced"], trip["username"]
                 )
+            if public_only:
+                # Anonymous endpoint: only what the live map draws, never notes,
+                # price, seat, ticket ids or any column added to trips later.
+                trip = {k: trip[k] for k in LIVE_MAP_TRIP_FIELDS if k in trip}
             result.append(
                 {
                     "username": trip["username"],
@@ -14531,6 +14777,7 @@ def live_map():
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
         api_endpoint=url_for("get_public_current_trips"),
+        leaflet_url=url_for("live_map_leaflet"),
         tileserver=user.tileserver if user else "osm",
         globe=user.globe if user else False,
         **lang[session["userinfo"]["lang"]],
@@ -14564,6 +14811,29 @@ def live_map_leaflet():
 def admin_live_map():
     """
     Shows the global map of ALL users currently traveling (admin/owner access)
+    """
+    username = getUser()
+    user = User.query.filter_by(username=username).first() if username else None
+    return render_template(
+        "public/current_global_maplibre.html",
+        title=f"Admin {lang[session['userinfo']['lang']]['live_map']}",
+        username=username,
+        logosList=listOperatorsLogos(),
+        translations=lang[session["userinfo"]["lang"]],
+        api_endpoint=url_for("get_all_current_trips"),
+        leaflet_url=url_for("admin_live_map_leaflet"),
+        tileserver=user.tileserver if user else "osm",
+        globe=user.globe if user else False,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/admin/live_map/leaflet")
+@owner_required
+def admin_live_map_leaflet():
+    """
+    Leaflet fallback for the admin live map
     """
     username = getUser()
     user = User.query.filter_by(username=username).first() if username else None
@@ -14610,10 +14880,10 @@ def user_completion(username):
 def sitemap():
     # Only list the routes you want
     pages = [
-        url_for('landing', _external=True),
-        url_for('login', _external=True),
-        url_for('signup', _external=True),
-        url_for('privacy', _external=True),
+        external_url('landing'),
+        *(external_url('landing_lang', lang_code=code) for code in LANDING_LANGS),
+        external_url('about'),
+        external_url('news.news'),
     ]
 
     xml = ['<?xml version="1.0" encoding="UTF-8"?>']
@@ -14774,6 +15044,13 @@ def ensure_auth_db_columns():
             )
         )
         authDb.session.commit()
+    if "discord_avatar" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN discord_avatar BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        authDb.session.commit()
     if "pending_email" not in existing:
         authDb.session.execute(
             sqlalchemy.text("ALTER TABLE user ADD COLUMN pending_email VARCHAR(100)")
@@ -14799,6 +15076,12 @@ def ensure_auth_db_columns():
             sqlalchemy.text("ALTER TABLE user ADD COLUMN premium_cancel_at DATETIME")
         )
         authDb.session.commit()
+    for column in ("share_price", "share_carbon"):
+        if column not in existing:
+            authDb.session.execute(
+                sqlalchemy.text(f"ALTER TABLE user ADD COLUMN {column} BOOLEAN NOT NULL DEFAULT 0")
+            )
+            authDb.session.commit()
     ensure_station_name_columns(authDb.session)
 
     # Same idempotent-ALTER treatment for pending_bmc_event: create_all() created

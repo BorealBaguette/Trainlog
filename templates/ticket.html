@@ -5,18 +5,18 @@
 {% from "ticket_flags.html" import flags with context %}
 
 <style>
-    /* As high as the title and the line under it. */
     .ticket-logo {
         align-self: stretch;
         min-width: 72px;
-        min-height: 52px;
         flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: center;
     }
+    /* As high as the title and the line under it. A height taken from the block instead
+       sizes the block on the logo's natural width, then widens the logo past it. */
     .ticket-logo img {
-        height: 100%;
+        height: 52px;
         max-width: 240px;
         object-fit: contain;
     }
@@ -44,14 +44,14 @@
         max-width: 90px;
     }
     .ticket-stat {
-        background: #f8f9fa;
+        background: light-dark(#f8f9fa, var(--bs-tertiary-bg));
         border-radius: .75rem;
         padding: .9rem 1.1rem;
         height: 100%;
     }
     .ticket-stat-label {
         font-size: .8rem;
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-secondary-color));
     }
     .ticket-stat-value {
         font-size: 1.3rem;
@@ -141,8 +141,17 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             {% if all_trip_ids %}
-                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('public_trip', tripIds=all_trip_ids|join(',')) }}?price">
-                    <i class="bi bi-map"></i> {{map}}
+                {# Posted to the short-link store: a group's ids spelled out overflow the request line.
+                   `price` bakes the prices into the key, so the link shows them to anyone. #}
+                <form method="post" action="{{ url_for('create_trip_share') }}" class="d-inline">
+                    <input type="hidden" name="trips" value="{{ all_trip_ids|join(',') }}">
+                    <input type="hidden" name="price" value="1">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-map"></i> {{map}}
+                    </button>
+                </form>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ group.tickets | map(attribute='uid') | join('|')) }}">
+                    <i class="bi bi-list-ul"></i> {{trips}}
                 </a>
             {% endif %}
             {# Acting on the whole group: only from its own page. #}
@@ -196,7 +205,7 @@
                         {% if ticket.operator %}{{ operator_pill(ticket.operator) }}{% endif %}
                     </td>
                     {% endif %}
-                    <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
+                    <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on or ticket.purchasing_date }}">
                         {% if group.mixed_names or mixed_logos or (mixed_countries and ticket.active_countries) %}
                             <div class="d-flex flex-wrap align-items-center gap-2 fw-medium text-wrap">
                                 {% if mixed_logos and ticket.logo %}<img src="{{ url_for('static', filename=ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
@@ -206,8 +215,8 @@
                                 {% endif %}
                             </div>
                         {% endif %}
-                        {% if ticket.valid_from or ticket.valid_until %}
-                            <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until }}"></span>
+                        {% if ticket.valid_from or ticket.valid_until or ticket.valid_on %}
+                            <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on }}"></span>
                             {% if ticket.valid_from and ticket.valid_until and ticket.valid_from != ticket.valid_until %}
                                 → <span class="ticket-date" data-date="{{ ticket.valid_until }}"></span>
                             {% endif %}
@@ -247,8 +256,11 @@
                     <td class="ticket-cell-actions text-end text-nowrap">
                         <div class="ticket-actions d-inline-flex gap-1">
                             {% if ticket.trip_ids %}
-                                <a class="btn btn-sm" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price" title="{{map}}">
+                                <a class="btn btn-sm" href="{{ url_for('public_trip', ticketId=ticket.uid) }}" title="{{map}}">
                                     <i class="bi bi-link-45deg"></i>
+                                </a>
+                                <a class="btn btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ ticket.uid) }}" title="{{trips}}">
+                                    <i class="bi bi-list-ul"></i>
                                 </a>
                             {% endif %}
                             <button type="button" class="btn btn-sm edit-button" data-ticket='{{ ticket|tojson }}' title="{{edit}}">

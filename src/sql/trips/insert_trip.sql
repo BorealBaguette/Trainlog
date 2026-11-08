@@ -35,6 +35,8 @@ INSERT INTO trips (
     co2_override,
     departure_platform,
     arrival_platform,
+    departure_platform_planned,
+    arrival_platform_planned,
     origin_station_key,
     destination_station_key,
     route_source
@@ -76,6 +78,8 @@ VALUES (
     :co2_override,
     :departure_platform,
     :arrival_platform,
+    :departure_platform_planned,
+    :arrival_platform_planned,
     :origin_station_key,
     :destination_station_key,
     :route_source

@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 from src.pg import pg_session
 from src.sql.trips import delete_user_trips_query
@@ -86,6 +87,23 @@ def delete_account_data(user: User) -> None:
             "DELETE FROM user_discord_webhooks WHERE user_id = :user_id",
             {"user_id": user_id},
         )
+
+        # Feature requests, comments and votes are kept for the community but no
+        # longer name the person: one random alias per deleted account, so their
+        # posts still read as one author and votes stay unique per request. The
+        # "." can't be in a signed-up username, so nobody can register the alias
+        # and inherit edit rights over these rows.
+        alias = f"deleted.{secrets.token_hex(4)}"
+        for table, column in (
+            ("feature_requests", "username"),
+            ("feature_requests", "closed_by"),
+            ("feature_request_comments", "username"),
+            ("feature_request_votes", "username"),
+        ):
+            pg.execute(
+                f"UPDATE {table} SET {column} = :alias WHERE {column} = :username",
+                {"alias": alias, "username": username},
+            )
 
     Friendship.query.filter(
         (Friendship.user_id == user_id) | (Friendship.friend_id == user_id)

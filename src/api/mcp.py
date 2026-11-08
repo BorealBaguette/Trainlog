@@ -1,10 +1,12 @@
 """src/api/mcp.py — MCP server as a Flask Blueprint (Streamable HTTP transport).
 
 Single POST endpoint — no persistent connections, WSGI-friendly. Lets an external
-AI manage a user's trips. This is the successor to src/ai.py + src/api/ai.py:
-instead of Trainlog calling an LLM internally to parse trips, an external LLM now
-drives Trainlog through MCP tools, reusing the same geocoding/routing/trip-creation
-pipeline (enrich_parsed_trip / create_trip_from_parsed).
+AI manage a user's trips and plans with what the website offers, no more and no less:
+every write goes through the save code the site's own forms post to (saveTripToDb,
+patchTrip's apply_trip_patch, savePlanTripToDb, the plan editor's save_plan_trip_edit),
+after src/api/mcp_form.py has checked the arguments the way the forms check them in
+the browser. The lookups (station search, departures, operators, material types,
+trainsets, wagons, currencies, tags, tickets) are the ones the forms autocomplete from.
 
 Auth: per-user mcp_token (User.mcp_token), accepted as ?api_key=, X-API-Key header
 or Authorization: Bearer. Mint/rotate it from /u/<username>/mcp.
@@ -24,36 +26,26 @@ from __future__ import annotations
 
 import json
 import logging
-import re
+import uuid as _uuid
+from contextlib import contextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-import requests
 from flask import Blueprint, Response, request
+from flask.globals import request_ctx
+from flask.sessions import SecureCookieSession
 from werkzeug.exceptions import HTTPException
 
-import uuid as _uuid
-from datetime import datetime
-
-from py.utils import getCountriesFromPath, getCountryFromCoordinates
-from src.ai import create_trip_from_parsed, enrich_parsed_trip
-from src.api.motis import (
-    TRANSIT_MODES,
-    OutsideTimetable,
-    RateLimited,
-    departures_payload,
-    run_segment,
-)
+from src.api import mcp_form as form
+from src.api.motis import TRANSIT_MODES, departures_payload
 from src.consts import TripTypes
-from src.paths import geom_geojson_to_coords
-from src.photon import photonRequest
+from src.currency import get_available_currencies
 from src.pg import pg_session
-from src.sql.stations import get_airports_query
-from src.plans.create_from_parsed import create_plan_trip_from_parsed
 from src.plans.delete_plan import delete_plan as _delete_plan
 from src.plans.delete_plan import delete_plan_trip as _delete_plan_trip
+from src.plans.duplicate_plan import duplicate_plan as _duplicate_plan
 from src.plans.import_trips import import_trips_to_plan
-from src.plans.plan_trip import PlanTrip
-from src.plans.process_plan_dates import process_plan_dates
-from src.plans.update_plan_trip_full import update_plan_trip_full
+from src.plans.validate_plan import validate_plan as _validate_plan
 from src.sql.plans import (
     archive_plan_query,
     delete_plan_cost_query,
@@ -67,9 +59,14 @@ from src.sql.plans import (
     set_plan_trip_cost_query,
     update_plan_cost_query,
     update_plan_query,
+    update_plan_visibility_query,
 )
+from src.sql.stations import get_airports_query
+from src.sql.trips import get_material_types_query, get_operators_query
+from src.trips import update_trip_type
 from src.trips.delete_trip import delete_trip as _delete_trip
 from src.users import Friendship, User
+from src.utils import external_url
 
 # Trips a friend is allowed to read. Mirrors the friend-facing read path
 # (dashboard_friends): explicit public/friends only — NULL visibility is NOT
@@ -80,37 +77,28 @@ logger = logging.getLogger(__name__)
 
 blueprint = Blueprint("mcp", __name__, url_prefix="/mcp")
 
-TRIP_TYPE_VALUES = [t.value for t in TripTypes]
-
-# Per-trip-type OSM tag filters for the station search, mirroring the URLs map in
-# templates/new.html. A type absent from this map (car, walk, cycle, scooter,
-# other) searches all places with no tag filter. 'air' is handled separately via
-# the airport database, not Photon.
-STATION_SEARCH_OSM_TAGS = {
-    "bus": ["amenity:bus_station", "highway:bus_stop"],
-    "train": ["railway:halt", "railway:station"],
-    "tram": ["railway:tram_stop", "railway:station", "railway:halt"],
-    "metro": ["railway:station", "railway:subway_entrance"],
-    "funicular": ["railway:halt", "railway:station"],
-    "rail": ["railway:halt", "railway:station"],
-    "ferry": ["amenity:ferry_terminal"],
-    "helicopter": ["aeroway:helipad", "aeroway:heliport", "aeroway:aerodrome"],
-    "accommodation": [
-        "tourism:alpine_hut", "tourism:apartment", "tourism:chalet",
-        "tourism:guest_house", "tourism:hostel", "tourism:hotel",
-        "tourism:motel", "tourism:wilderness_hut",
-    ],
-    "poi": [
+# The station search's type filter for each trip type, as new.html's URLs map sets it
+# (`type` makes rail/bus/… search Trainlog's own stations when the user has that on).
+STATION_SEARCH_PARAMS = {
+    "bus": {"osm_tag": ["amenity:bus_station", "highway:bus_stop"], "type": ["bus"]},
+    "train": {"osm_tag": ["railway:halt", "railway:station"], "type": ["train"]},
+    "tram": {"osm_tag": ["railway:tram_stop", "railway:station", "railway:halt"], "type": ["tram"]},
+    "metro": {"osm_tag": ["railway:station", "railway:subway_entrance"], "type": ["metro"]},
+    "funicular": {"osm_tag": ["railway:halt", "railway:station"], "type": ["funicular"]},
+    "rail": {"osm_tag": ["railway:halt", "railway:station"], "type": ["rail"]},
+    "ferry": {"osm_tag": ["amenity:ferry_terminal"], "type": ["ferry"]},
+    "helicopter": {"osm_tag": ["aeroway:helipad", "aeroway:heliport", "aeroway:aerodrome"]},
+    "accommodation": {"osm_tag": [
+        "tourism:alpine_hut", "tourism:apartment", "tourism:chalet", "tourism:guest_house",
+        "tourism:hostel", "tourism:hotel", "tourism:motel", "tourism:wilderness_hut"]},
+    "poi": {"osm_tag": [
         "tourism", "!tourism:alpine_hut", "!tourism:apartment", "!tourism:chalet",
-        "!tourism:guest_house", "!tourism:hostel", "!tourism:hotel",
-        "!tourism:motel", "!tourism:wilderness_hut",
-    ],
-    "restaurant": [
-        "amenity:restaurant", "amenity:pub", "amenity:biergarten",
-        "amenity:cafe", "amenity:bar",
-    ],
-    "aerialway": ["aerialway:station"],
-    "ski": ["aerialway:station"],
+        "!tourism:guest_house", "!tourism:hostel", "!tourism:hotel", "!tourism:motel",
+        "!tourism:wilderness_hut"]},
+    "restaurant": {"osm_tag": [
+        "amenity:restaurant", "amenity:pub", "amenity:biergarten", "amenity:cafe", "amenity:bar"]},
+    "aerialway": {"osm_tag": ["aerialway:station"], "type": ["aerialway"]},
+    "ski": {"osm_tag": ["aerialway:station"], "type": ["ski"]},
 }
 
 # ── auth ──────────────────────────────────────────────────────────────────────
@@ -125,6 +113,27 @@ def _auth():
     if not key:
         return None
     return User.query.filter_by(mcp_token=key).first()
+
+
+@contextmanager
+def _acting_as(user):
+    """Run the site's own code as the token's user: what it reads of the logged-in user
+    (getUser, the station search settings, the currency…) comes from the session, so
+    the request gets one of that user's for the duration. The request's own session is
+    put back before the response is made, so no login cookie is ever issued."""
+    ctx = request_ctx._get_current_object()
+    original = ctx.session
+    # The username key first, so no username can stand in for the other keys.
+    ctx.session = SecureCookieSession({
+        user.username: True,
+        "logged_in": user.username,
+        "userinfo": {"logged_in_user": user.username, "user_id": user.uid,
+                     "lang": user.lang or "en", "is_premium": bool(user.premium)},
+    })
+    try:
+        yield
+    finally:
+        ctx.session = original
 
 
 def _are_friends(viewer_uid: int, owner_uid: int) -> bool:
@@ -149,144 +158,188 @@ def _are_friends(viewer_uid: int, owner_uid: int) -> bool:
 def _owned_plan(plan_uuid: str, uid: int) -> dict:
     """Fetch a plan by uuid and verify the token user owns it. ValueError otherwise
     (never disclose plans owned by others)."""
+    try:
+        _uuid.UUID(str(plan_uuid))
+    except ValueError:
+        raise ValueError("Plan not found.")
     with pg_session() as pg:
-        row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
-    if row is None:
+        row = pg.execute(get_plan_query(), {"uuid": str(plan_uuid)}).fetchone()
+    if row is None or row._mapping["user_id"] != uid:
         raise ValueError("Plan not found.")
-    plan = dict(row._mapping)
-    if plan["user_id"] != uid:
-        raise ValueError("Plan not found.")
-    return plan
+    return dict(row._mapping)
 
 
 def _owned_plan_trip(plan: dict, plan_trip_uid) -> dict:
-    """Fetch one leg (with its path as GeoJSON) of an already-ownership-checked plan.
-    ValueError if it isn't in that plan."""
+    """One leg (with its path as GeoJSON) of an already-ownership-checked plan."""
     with pg_session() as pg:
         row = pg.execute(
             "SELECT *, ST_AsGeoJSON(geom) AS geojson FROM plan_trips"
             " WHERE uid = :uid AND plan_id = :pid",
-            {"uid": plan_trip_uid, "pid": plan["uid"]},
+            {"uid": int(plan_trip_uid), "pid": plan["uid"]},
         ).fetchone()
     if row is None:
         raise ValueError("Plan leg not found.")
     return dict(row._mapping)
 
 
-# Stored station names carry a leading flag emoji ("🇫🇷 Paris Gare de Lyon"), added
-# by enrich_parsed_trip. Strip it before feeding the name back as a geocoding query.
-_FLAG_RE = re.compile(r"^[\U0001F1E6-\U0001F1FF]{2}\s*")
-
-
-def _strip_flag(name):
-    return _FLAG_RE.sub("", name or "")
-
-
-def _iata_from_name(name):
-    """Recover the IATA code from a stored air-leg station name '… (CDG)'."""
-    m = re.search(r"\(([A-Za-z]{3})\)\s*$", name or "")
-    return m.group(1) if m else None
+def _owned_trip_id(trip_id, uid) -> int:
+    try:
+        trip_id = int(trip_id)
+    except (TypeError, ValueError):
+        raise ValueError("trip_id must be a number.")
+    with pg_session() as pg:
+        row = pg.execute("SELECT user_id FROM trips WHERE trip_id = :tid", {"tid": trip_id}).fetchone()
+    if row is None or row["user_id"] != uid:
+        raise ValueError("Trip not found.")
+    return trip_id
 
 
 # ── tool schemas ──────────────────────────────────────────────────────────────
 
+PLACE = {
+    "type": "object",
+    "description": (
+        "A place exactly as search_stations returned it: its `name`, `lat`, `lng` and, "
+        "when given, `station_key`; for flights the airport's `iata` instead. For a "
+        "place search_stations doesn't know, the user's own name and coordinates."
+    ),
+    "properties": {
+        "name": {"type": "string"},
+        "lat": {"type": "number"},
+        "lng": {"type": "number"},
+        "iata": {"type": "string", "description": "Airport IATA code (air / helicopter)."},
+        "station_key": {"type": "string", "description": "From search_stations, when it has one."},
+    },
+}
+
+VIA = {
+    **PLACE,
+    "properties": {
+        **PLACE["properties"],
+        "exact": {"type": "boolean", "description": "Route exactly through this point (rail only)."},
+    },
+}
+
+
+def _timing_schema(plan=False):
+    props = {
+        "start": {"type": "string", "description": "Precise: local departure YYYY-MM-DDTHH:MM (with `end`)."},
+        "end": {"type": "string", "description": "Precise: local arrival YYYY-MM-DDTHH:MM (with `start`)."},
+        "date": {"type": "string", "description": "Date only: YYYY-MM-DD (no times known)."},
+        "unknown": {"type": "string", "enum": ["past", "future"],
+                    "description": "No date at all: a past trip, or a future/planned one."},
+        "duration_minutes": {"type": "integer",
+                             "description": "Duration of a trip without times (date / unknown"
+                                            + (" / untimed relative" if plan else "") + ")."},
+    }
+    if plan:
+        props.update({
+            "start_day": {"type": "integer", "description": "Relative: day of departure (1 = anchor_date)."},
+            "end_day": {"type": "integer", "description": "Relative: day of arrival (default start_day)."},
+            "start_time": {"type": "string", "description": "Relative: local departure HH:MM (with end_time)."},
+            "end_time": {"type": "string", "description": "Relative: local arrival HH:MM (with start_time)."},
+            "weekdays": {"type": "array", "items": {"type": "string", "enum": list(form.WEEKDAYS)},
+                         "description": "Relative: the days the service runs, when not daily."},
+        })
+    else:
+        props.update({
+            "departure_delay_minutes": {"type": "number", "description": "Precise trips only: minutes late leaving (negative = early)."},
+            "arrival_delay_minutes": {"type": "number", "description": "Precise trips only: minutes late arriving."},
+        })
+    return props
+
+
+def _details_schema(plan=False):
+    props = {
+        "operator": {"type": "string", "description": "Operator(s), comma-separated (search_operators)."},
+        "line_name": {"type": "string", "description": "Line / train number / flight number."},
+        "visibility": {"type": "string", "enum": list(form.VISIBILITIES),
+                       "description": "Default: the trip type's default (list_trip_types)."},
+        "material_type": {"type": "string",
+                          "description": "Vehicle type, free text (search_material_types). For flights the ICAO aircraft code, e.g. A320."},
+        "trainset": {
+            "description": (
+                "Train/metro/tram only — the trainset builder's composition: a trainset "
+                "name (list_trainsets), {trainsets: [names], reversed?: [bools]} for "
+                "coupled sets, or {wagons: [{wagon, side: 'L'|'R'}]} (search_wagons) for a "
+                "one-off composition. null removes it."
+            ),
+        },
+        "reg": {"type": "string", "description": "Registration / vehicle number (ships: IMO or MMSI)."},
+        "seat": {"type": "string"},
+        "notes": {"type": "string"},
+        "price": {"type": "number", "description": "Price paid (≥ 0)."},
+        "currency": {"type": "string", "description": "ISO code from list_currencies. Default: the user's currency."},
+        "purchase_date": {"type": "string", "description": "YYYY-MM-DD, not in the future."},
+        "power_type": {"type": "string", "enum": sorted({p for v in form.POWER_TYPES.values() for p in v}),
+                       "description": "Only the values list_trip_types gives for the type."},
+        "co2_override": {"type": "number", "description": "Ferry only: grams of CO2 per passenger-km."},
+    }
+    if plan:
+        props["booked"] = {"type": "boolean", "description": "Ticket already bought."}
+    else:
+        props.update({
+            "seat_car": {"type": "integer", "description": "Index (0 = first) of the car you sat in, in the trainset."},
+            "departure_platform": {"type": "string"},
+            "arrival_platform": {"type": "string"},
+            "tag_ids": {"type": "array", "items": {"type": "integer"}, "description": "Tags (list_tags). Replaces the trip's tags."},
+            "ticket_ids": {"type": "array", "items": {"type": "integer"}, "description": "Tickets this trip used (list_tickets)."},
+        })
+    return props
+
+
+def _trip_write_schema(plan=False, update=False):
+    props = {
+        "type": {"type": "string", "enum": form.form_types(),
+                 "description": "Trip type (default train)." + (
+                     " Changing it is only possible within its family (rail types, bus/car, air/helicopter, cycle/scooter, places)."
+                     if update else "")},
+        "origin": PLACE,
+        "destination": {**PLACE, "description": PLACE["description"] + " Omit for accommodation/restaurant/poi."},
+        "vias": {"type": "array", "items": VIA, "description": "Places to route through, in order."},
+        "transitous_trip_id": {
+            "type": "string",
+            "description": (
+                "trip_id of a run from search_departures: sets the times, operator, line, "
+                "platforms and the run's stops (boarded/left at the run's stops nearest "
+                "origin/destination). Don't pass timing or vias with it."
+            ),
+        },
+        **_timing_schema(plan),
+        **_details_schema(plan),
+    }
+    if update:
+        props["type"]["description"] = props["type"]["description"].replace(" (default train)", "")
+        if plan:
+            props.pop("type")
+            props["clear_timing"] = {"type": "boolean", "description": "Make the leg undated."}
+    return props
+
 
 def _build_tools() -> list:
     return [
+        # ── lookups ─────────────────────────────────────────────────────────
         {
             "name": "search_stations",
             "description": (
-                "Resolve a place name to real stations/stops/airports with their "
-                "exact coordinates, using Trainlog's own station search (the same "
-                "one the website uses). ALWAYS call this FIRST to get coordinates "
-                "for add_trip / add_plan_trip — pass the SAME `type` you will use "
-                "for the trip so the right kind of stop is searched (e.g. railway "
-                "stations for 'train', airports for 'air', ferry terminals for "
-                "'ferry'). Use the lat/lng (and IATA, for flights) of the result "
-                "that matches what the user meant. Only fall back to estimating "
-                "coordinates from your own knowledge when this returns no usable "
-                "match for the place."
+                "Find stations/stops/airports/places with the website's own station search "
+                "(the same suggestions a user gets in the trip form). ALWAYS use it for "
+                "the places of add_trip / add_plan_trip / update_*, with the SAME `type` "
+                "as the trip, and pass the chosen result's name, lat, lng and station_key "
+                "(or iata for flights) unchanged. Pass near_lat/near_lng (e.g. the trip's "
+                "other end) to rank same-named stops nearby first."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Place / station / airport name to search for.",
-                    },
-                    "type": {
-                        "type": "string",
-                        "description": (
-                            "Trip type to scope the search (default 'train'). "
-                            "Determines which kind of stop is matched."
-                        ),
-                        "default": "train",
-                        "enum": TRIP_TYPE_VALUES,
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max results to return (default 8, max 20).",
-                    },
+                    "query": {"type": "string"},
+                    "type": {"type": "string", "default": "train", "enum": form.form_types()},
+                    "near_lat": {"type": "number"},
+                    "near_lng": {"type": "number"},
+                    "limit": {"type": "integer", "description": "Max results (default 8, max 20)."},
                 },
                 "required": ["query"],
             },
-        },
-        {
-            "name": "list_trips",
-            "description": (
-                "List trips, most recent first, as a compact summary per trip. "
-                "By default lists the authenticated user's own trips (all "
-                "visibilities, including price). Pass `username` to read a "
-                "FRIEND's trips instead: this is read-only and only returns their "
-                "public/friends-visibility trips, with private fields (price, "
-                "notes, seat, booking refs) omitted. Use list_friends to find "
-                "whose trips you can read."
-            ),
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "username": {
-                        "type": "string",
-                        "description": "Read this friend's trips (read-only). Omit for your own.",
-                    },
-                    "trip_type": {
-                        "type": "string",
-                        "description": "Optional filter by trip type.",
-                        "enum": TRIP_TYPE_VALUES,
-                    },
-                    "upcoming_only": {
-                        "type": "boolean",
-                        "description": "Only future / planned trips.",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max trips to return (default 50, max 500).",
-                    },
-                },
-                "required": [],
-            },
-        },
-        {
-            "name": "get_trip",
-            "description": (
-                "Return details for one trip by id. Works for your own trips "
-                "(full detail, including price/notes) and for a friend's trip "
-                "when its visibility is public or friends (reduced detail, "
-                "private fields omitted). Otherwise: not found."
-            ),
-            "inputSchema": {
-                "type": "object",
-                "properties": {"trip_id": {"type": "integer"}},
-                "required": ["trip_id"],
-            },
-        },
-        {
-            "name": "list_friends",
-            "description": (
-                "List the users you are friends with (accepted friendships). "
-                "Their trips can be read via list_trips/get_trip, read-only."
-            ),
-            "inputSchema": {"type": "object", "properties": {}, "required": []},
         },
         {
             "name": "search_departures",
@@ -297,8 +350,8 @@ def _build_tools() -> list:
                 "Use it for train/tram/metro/bus/ferry/aerialway/funicular trips "
                 "whenever the user gives a date (and ideally a time or a train "
                 "number): pick the run that matches, then pass its `trip_id` to "
-                "add_trip as `transitous_trip_id`, so the trip gets the real times, "
-                "operator, line, platforms and every intermediate stop.\n\n"
+                "add_trip / add_plan_trip as `transitous_trip_id`, so the trip gets the "
+                "real times, operator, line, platforms and every intermediate stop.\n\n"
                 "Get the coordinates from search_stations first. Runs are listed "
                 "from about 20 minutes before `time` (or the start of `date`) "
                 "onwards; times are local at each stop (YYYY-MM-DDTHH:MM). Only "
@@ -308,11 +361,7 @@ def _build_tools() -> list:
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "type": {
-                        "type": "string",
-                        "default": "train",
-                        "enum": sorted(TRANSIT_MODES),
-                    },
+                    "type": {"type": "string", "default": "train", "enum": sorted(TRANSIT_MODES)},
                     "origin_lat": {"type": "number"},
                     "origin_lng": {"type": "number"},
                     "destination_lat": {"type": "number"},
@@ -326,72 +375,177 @@ def _build_tools() -> list:
             },
         },
         {
-            "name": "add_trip",
+            "name": "list_trip_types",
             "description": (
-                "Create a new trip. One trip = ONE segment (a flight with a "
-                "connection is two trips). Trainlog geocodes the stations, routes "
-                "the path, splits distance across countries and resolves "
-                "timezones for you, so you only supply the facts below.\n\n"
-                "For a scheduled public-transport service, call search_departures "
-                "first and pass the matching run's `trip_id` as "
-                "`transitous_trip_id`: Trainlog then takes the departure/arrival "
-                "times, line, operator, platforms and intermediate stops from the "
-                "timetable (date/time fields are ignored; operator/line_name you "
-                "pass still win) and routes the path through the stops.\n\n"
-                "ALWAYS provide origin_lat/lng and destination_lat/lng. Get them "
-                "by calling search_stations FIRST (with the same `type`) and using "
-                "the matching result's coordinates; only estimate coordinates from "
-                "your own knowledge when search_stations returns no usable match. "
-                "For flights (type='air'), also provide origin_iata/destination_iata "
-                "(search_stations returns them); the airport database is then "
-                "authoritative.\n\n"
-                "Dates are YYYY-MM-DD; times are HH:MM local. Omit times for a "
-                "date-only trip. Put booking reference / ticket number / class in "
-                "the dedicated fields, not in notes."
+                "The trip types you can create, with what each one's form offers: its "
+                "default visibility, power types (first = default), whether it takes a "
+                "trainset, a CO2 override, timetable runs, vias, and whether it is a single "
+                "place (no destination)."
+            ),
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "list_currencies",
+            "description": "The currency codes a price can be in (the form's currency list), the user's own first.",
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "search_operators",
+            "description": (
+                "Operator names the trip form suggests for a type: the user's own past "
+                "operators and the known operators (with logos). Prefer these spellings."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "type": {
-                        "type": "string",
-                        "default": "train",
-                        "enum": TRIP_TYPE_VALUES,
-                    },
-                    "origin": {"type": "string", "description": "Origin station/stop name as shown."},
-                    "origin_city": {"type": "string", "description": "City name only, aids geocoding."},
-                    "origin_iata": {"type": "string", "description": "Airport IATA code (flights only)."},
-                    "origin_lat": {"type": "number", "description": "Origin latitude (required)."},
-                    "origin_lng": {"type": "number", "description": "Origin longitude (required)."},
-                    "destination": {"type": "string", "description": "Destination station/stop name as shown."},
-                    "destination_city": {"type": "string", "description": "City name only, aids geocoding."},
-                    "destination_iata": {"type": "string", "description": "Airport IATA code (flights only)."},
-                    "destination_lat": {"type": "number", "description": "Destination latitude (required)."},
-                    "destination_lng": {"type": "number", "description": "Destination longitude (required)."},
-                    "date": {"type": "string", "description": "Departure date YYYY-MM-DD. Defaults to today."},
-                    "arrival_date": {"type": "string", "description": "Arrival date YYYY-MM-DD (overnight trips)."},
-                    "time_departure": {"type": "string", "description": "Local departure time HH:MM."},
-                    "time_arrival": {"type": "string", "description": "Local arrival time HH:MM."},
-                    "transitous_trip_id": {
-                        "type": "string",
-                        "description": (
-                            "trip_id of the run picked from search_departures. The "
-                            "origin/destination coordinates select where it is "
-                            "boarded and left (the run's stops nearest them)."
-                        ),
-                    },
-                    "operator": {"type": "string", "description": "Operating company."},
-                    "line_name": {"type": "string", "description": "Flight number / train number / line."},
-                    "price": {"type": "number"},
-                    "currency": {"type": "string", "description": "ISO 4217 code, e.g. EUR, USD."},
-                    "aircraft_icao": {"type": "string", "description": "Aircraft type, e.g. B738, A320 (flights)."},
-                    "seat": {"type": "string"},
-                    "booking_reference": {"type": "string", "description": "PNR / booking reference."},
-                    "ticket_number": {"type": "string"},
-                    "cabin_class": {"type": "string", "description": "Economy / Business / First."},
-                    "notes": {"type": "string", "description": "Free-form notes. Keep personally-identifying data out."},
+                    "type": {"type": "string", "default": "train", "enum": form.form_types()},
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "description": "Max results (default 20, max 100)."},
                 },
-                "required": ["origin", "destination", "origin_lat", "origin_lng",
-                             "destination_lat", "destination_lng"],
+                "required": [],
+            },
+        },
+        {
+            "name": "search_material_types",
+            "description": (
+                "Vehicle types (material_type) the trip form suggests: for flights, "
+                "Trainlog's aircraft list (code + name; save the code); otherwise the "
+                "values the user has typed before for that trip type."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "default": "train", "enum": form.form_types()},
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "description": "Max results (default 30, max 200)."},
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "list_trainsets",
+            "description": (
+                "Trainsets (saved train compositions) the user can put on a train/metro/"
+                "tram trip as `trainset`: their own and the public ones, with their cars."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "Filter by name."}},
+                "required": [],
+            },
+        },
+        {
+            "name": "search_wagons",
+            "description": (
+                "Search the wagon/locomotive drawings of the trainset builder (all terms "
+                "must match label/category/era/notes…). Use their `name` in "
+                "trainset {wagons: [{wagon, side}]}."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "description": "Max results (default 20, max 100)."},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "list_tags",
+            "description": "The user's tags, and tags shared with them, for tag_ids.",
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "list_tickets",
+            "description": "The user's tickets (passes, multi-trip tickets…), for ticket_ids.",
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "name": "list_friends",
+            "description": (
+                "List the users you are friends with (accepted friendships). "
+                "Their trips can be read via list_trips/get_trip, read-only."
+            ),
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+        },
+        # ── trips ───────────────────────────────────────────────────────────
+        {
+            "name": "list_trips",
+            "description": (
+                "List trips, most recent first, as a compact summary per trip. "
+                "By default lists the authenticated user's own trips (all "
+                "visibilities, including price). Pass `username` to read a "
+                "FRIEND's trips instead: this is read-only and only returns their "
+                "public/friends-visibility trips, with private fields (price, "
+                "notes, seat, booking refs) omitted. Use get_trip for everything about one."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "username": {"type": "string", "description": "Read this friend's trips (read-only). Omit for your own."},
+                    "trip_type": {"type": "string", "enum": [t.value for t in TripTypes]},
+                    "upcoming_only": {"type": "boolean", "description": "Only future / planned trips."},
+                    "from_date": {"type": "string", "description": "Only trips starting on/after YYYY-MM-DD."},
+                    "to_date": {"type": "string", "description": "Only trips starting on/before YYYY-MM-DD."},
+                    "limit": {"type": "integer", "description": "Max trips to return (default 50, max 500)."},
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "get_trip",
+            "description": (
+                "Everything about one trip by id, in the same terms add_trip/update_trip "
+                "take: places, timing, stops (with times and platforms), platforms, delays, "
+                "material type, trainset, registration, seat, tags, tickets, price… A "
+                "friend's public/friends trip can be read too, without its private fields."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {"trip_id": {"type": "integer"}},
+                "required": ["trip_id"],
+            },
+        },
+        {
+            "name": "add_trip",
+            "description": (
+                "Log a trip, as the website's new-trip form does. One trip = ONE segment "
+                "(a flight with a connection is two trips).\n\n"
+                "Places: from search_stations (same `type`), passed unchanged; flights by "
+                "airport `iata`. Trainlog routes the trip like the website, adds each "
+                "station's flag, splits the distance by country and works out time zones. "
+                "When no route exists the trip is saved as straight lines and the result "
+                "says `straight_line: true`: you MUST tell the user, who can redraw it.\n\n"
+                "Timing, in exactly one way: `start`+`end` (local times), `date`, or "
+                "`unknown`='past'|'future'. For a scheduled service, pass "
+                "`transitous_trip_id` from search_departures instead: times, operator, "
+                "line, platforms and every stop come from the timetable.\n\n"
+                "Details are checked as the form checks them: currencies from "
+                "list_currencies, power types and trainsets only where the type offers "
+                "them (list_trip_types), tags and tickets of the user's.\n\n"
+                "The result's `links` open the trip on a map and in the user's trip list: "
+                "give them to the user. Relay any `remarks`."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": _trip_write_schema(),
+                "required": ["origin"],
+            },
+        },
+        {
+            "name": "update_trip",
+            "description": (
+                "Edit a trip, as its edit page does: only the fields you pass change, "
+                "null clears a detail. Passing origin/destination with coordinates (from "
+                "search_stations), vias, or a transitous_trip_id re-routes the trip; "
+                "passing a place's `name` alone just renames the station. Timing: the "
+                "same ways as add_trip (on a precise trip, `start` or `end` alone keeps "
+                "the other). tag_ids replaces the trip's tags."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {"trip_id": {"type": "integer"}, **_trip_write_schema(update=True)},
+                "required": ["trip_id"],
             },
         },
         {
@@ -403,38 +557,39 @@ def _build_tools() -> list:
                 "required": ["trip_id"],
             },
         },
-        {
-            "name": "list_trip_types",
-            "description": "Return the valid trip type values accepted by add_trip.",
-            "inputSchema": {"type": "object", "properties": {}, "required": []},
-        },
         # ── plans (parallel-world itineraries) ──────────────────────────────
         {
             "name": "list_plans",
             "description": (
                 "List the user's plans (draft itineraries, separate from logged "
-                "trips). Returns uuid, name, trip count and aggregate stats. "
+                "trips). Returns uuid, name, visibility, trip count and aggregate stats. "
                 "Archived plans are included; filter with active_only."
             ),
             "inputSchema": {
                 "type": "object",
-                "properties": {
-                    "active_only": {"type": "boolean", "description": "Exclude archived plans."},
-                },
+                "properties": {"active_only": {"type": "boolean", "description": "Exclude archived plans."}},
                 "required": [],
             },
         },
         {
             "name": "get_plan",
             "description": (
-                "Return one plan with its legs (plan trips, in itinerary order) "
-                "and its shared costs. Use the leg `uid` and cost `uid` with the "
-                "other plan tools."
+                "One plan with its legs (in itinerary order, each with what get_plan_trip "
+                "gives but the stops) and its shared costs."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {"plan_uuid": {"type": "string"}},
                 "required": ["plan_uuid"],
+            },
+        },
+        {
+            "name": "get_plan_trip",
+            "description": "Everything about one plan leg, in the terms add_plan_trip/update_plan_trip take.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"plan_uuid": {"type": "string"}, "plan_trip_uid": {"type": "integer"}},
+                "required": ["plan_uuid", "plan_trip_uid"],
             },
         },
         {
@@ -449,23 +604,35 @@ def _build_tools() -> list:
                 "properties": {
                     "name": {"type": "string"},
                     "description": {"type": "string"},
-                    "anchor_date": {"type": "string", "description": "ISO date YYYY-MM-DD. Day 1. Defaults to today."},
+                    "anchor_date": {"type": "string", "description": "YYYY-MM-DD. Day 1. Defaults to today."},
+                    "visibility": {"type": "string", "enum": list(form.VISIBILITIES),
+                                   "description": "Who may open the plan's share link (default private)."},
                 },
                 "required": ["name"],
             },
         },
         {
             "name": "update_plan",
-            "description": "Update a plan's name / description / anchor_date / archived flag. Only supplied fields change.",
+            "description": "Change a plan's name / description / anchor_date / visibility / archived flag. Only supplied fields change.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "plan_uuid": {"type": "string"},
                     "name": {"type": "string"},
                     "description": {"type": "string"},
-                    "anchor_date": {"type": "string", "description": "ISO date YYYY-MM-DD."},
+                    "anchor_date": {"type": "string", "description": "YYYY-MM-DD."},
+                    "visibility": {"type": "string", "enum": list(form.VISIBILITIES)},
                     "archived": {"type": "boolean"},
                 },
+                "required": ["plan_uuid"],
+            },
+        },
+        {
+            "name": "duplicate_plan",
+            "description": "Copy a plan with all its legs and costs into a new plan. Returns the new plan_uuid.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"plan_uuid": {"type": "string"}},
                 "required": ["plan_uuid"],
             },
         },
@@ -481,50 +648,32 @@ def _build_tools() -> list:
         {
             "name": "add_plan_trip",
             "description": (
-                "Add a leg to a plan. Same geocoding/routing as add_trip: call "
-                "search_stations FIRST (with the same `type`) to get accurate "
-                "origin/destination lat/lng (and IATA for flights), and only "
-                "estimate coordinates yourself when it returns no match.\n\n"
-                "Timing is one of:\n"
-                "  • Relative (default): start_day / end_day (1 = anchor_date) with "
-                "optional start_time / end_time (HH:MM). This is the native plan "
-                "mode — use it unless the user gave real calendar dates.\n"
-                "  • Precise: start_datetime / end_datetime (YYYY-MM-DD HH:MM).\n"
-                "  • Date-only: date (YYYY-MM-DD).\n"
-                "  • Omit all timing for an undated leg.\n\n"
-                "Set booked=true if the ticket is already purchased/ordered."
+                "Add a leg to a plan, as the plan builder does: same places, routing, "
+                "Transitous runs and checks as add_trip. Timing, in one way: relative "
+                "(default) start_day/end_day (1 = anchor_date) with optional "
+                "start_time+end_time and weekdays; precise start+end; date; or "
+                "unknown='future' for an undated leg. No timing = Day 1, untimed."
             ),
             "inputSchema": {
                 "type": "object",
-                "properties": {
-                    "plan_uuid": {"type": "string"},
-                    "type": {"type": "string", "default": "train", "enum": TRIP_TYPE_VALUES},
-                    "origin": {"type": "string"},
-                    "origin_iata": {"type": "string", "description": "Airport IATA (flights)."},
-                    "origin_lat": {"type": "number"},
-                    "origin_lng": {"type": "number"},
-                    "destination": {"type": "string"},
-                    "destination_iata": {"type": "string", "description": "Airport IATA (flights)."},
-                    "destination_lat": {"type": "number"},
-                    "destination_lng": {"type": "number"},
-                    "start_day": {"type": "integer", "description": "Relative day of departure (1 = anchor_date)."},
-                    "end_day": {"type": "integer", "description": "Relative day of arrival (defaults to start_day)."},
-                    "start_time": {"type": "string", "description": "Local departure time HH:MM (relative mode)."},
-                    "end_time": {"type": "string", "description": "Local arrival time HH:MM (relative mode)."},
-                    "start_datetime": {"type": "string", "description": "Precise departure YYYY-MM-DD HH:MM."},
-                    "end_datetime": {"type": "string", "description": "Precise arrival YYYY-MM-DD HH:MM."},
-                    "date": {"type": "string", "description": "Date-only YYYY-MM-DD."},
-                    "operator": {"type": "string"},
-                    "line_name": {"type": "string"},
-                    "aircraft_icao": {"type": "string"},
-                    "seat": {"type": "string"},
-                    "price": {"type": "number"},
-                    "currency": {"type": "string"},
-                    "booked": {"type": "boolean", "description": "Ticket already purchased/ordered."},
-                    "notes": {"type": "string"},
-                },
-                "required": ["plan_uuid", "origin", "destination", "origin_lat",
-                             "origin_lng", "destination_lat", "destination_lng"],
+                "properties": {"plan_uuid": {"type": "string"}, **_trip_write_schema(plan=True)},
+                "required": ["plan_uuid", "origin"],
+            },
+        },
+        {
+            "name": "update_plan_trip",
+            "description": (
+                "Edit a plan leg, as the plan's trip editor does: only the fields you pass "
+                "change. Places/vias/a transitous_trip_id re-route it (a place's `name` "
+                "alone renames it). Timing in the leg's own mode keeps what you don't "
+                "send (start_time alone keeps the day; start_day alone moves end_day with "
+                "it); clear_timing makes it undated."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {"plan_uuid": {"type": "string"}, "plan_trip_uid": {"type": "integer"},
+                               **_trip_write_schema(plan=True, update=True)},
+                "required": ["plan_uuid", "plan_trip_uid"],
             },
         },
         {
@@ -532,65 +681,7 @@ def _build_tools() -> list:
             "description": "Remove one leg from a plan.",
             "inputSchema": {
                 "type": "object",
-                "properties": {
-                    "plan_uuid": {"type": "string"},
-                    "plan_trip_uid": {"type": "integer"},
-                },
-                "required": ["plan_uuid", "plan_trip_uid"],
-            },
-        },
-        {
-            "name": "update_plan_trip",
-            "description": (
-                "Update any field of a plan leg. Only supplied fields change; "
-                "everything else is kept.\n\n"
-                "Route: supplying any of origin/destination (name, lat/lng or "
-                "iata) or `type` re-geocodes and re-routes the leg — call "
-                "search_stations FIRST for the endpoint you are changing; the "
-                "unchanged endpoint is reused as stored.\n\n"
-                "Timing: supplying any timing field re-times the leg, in the same "
-                "modes as add_plan_trip (relative start_day/end_day/start_time/"
-                "end_time, precise start_datetime/end_datetime, or date-only "
-                "`date`). Give fields from one mode only; when the leg is already "
-                "in that mode, missing fields keep their current values (e.g. "
-                "sending only start_time keeps the day), and shifting start_day "
-                "alone shifts end_day with it. Pass an empty string to drop a "
-                "start_time/end_time. Set clear_timing=true to make the leg "
-                "undated.\n\n"
-                "Metadata: booked, price/currency, seat, operator, line_name, "
-                "aircraft_icao, notes."
-            ),
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "plan_uuid": {"type": "string"},
-                    "plan_trip_uid": {"type": "integer"},
-                    "type": {"type": "string", "enum": TRIP_TYPE_VALUES},
-                    "origin": {"type": "string"},
-                    "origin_iata": {"type": "string", "description": "Airport IATA (flights)."},
-                    "origin_lat": {"type": "number"},
-                    "origin_lng": {"type": "number"},
-                    "destination": {"type": "string"},
-                    "destination_iata": {"type": "string", "description": "Airport IATA (flights)."},
-                    "destination_lat": {"type": "number"},
-                    "destination_lng": {"type": "number"},
-                    "start_day": {"type": "integer", "description": "Relative day of departure (1 = anchor_date)."},
-                    "end_day": {"type": "integer", "description": "Relative day of arrival."},
-                    "start_time": {"type": "string", "description": "Local departure time HH:MM (relative mode). Empty string clears it."},
-                    "end_time": {"type": "string", "description": "Local arrival time HH:MM (relative mode). Empty string clears it."},
-                    "start_datetime": {"type": "string", "description": "Precise departure YYYY-MM-DD HH:MM."},
-                    "end_datetime": {"type": "string", "description": "Precise arrival YYYY-MM-DD HH:MM."},
-                    "date": {"type": "string", "description": "Date-only YYYY-MM-DD."},
-                    "clear_timing": {"type": "boolean", "description": "Remove all timing (undated leg)."},
-                    "operator": {"type": "string"},
-                    "line_name": {"type": "string"},
-                    "aircraft_icao": {"type": "string"},
-                    "seat": {"type": "string"},
-                    "price": {"type": "number"},
-                    "currency": {"type": "string"},
-                    "booked": {"type": "boolean", "description": "Ticket already purchased/ordered."},
-                    "notes": {"type": "string"},
-                },
+                "properties": {"plan_uuid": {"type": "string"}, "plan_trip_uid": {"type": "integer"}},
                 "required": ["plan_uuid", "plan_trip_uid"],
             },
         },
@@ -605,11 +696,7 @@ def _build_tools() -> list:
                 "type": "object",
                 "properties": {
                     "plan_uuid": {"type": "string"},
-                    "ordered_uids": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "Leg uids in the order you want them.",
-                    },
+                    "ordered_uids": {"type": "array", "items": {"type": "integer"}},
                 },
                 "required": ["plan_uuid", "ordered_uids"],
             },
@@ -619,7 +706,7 @@ def _build_tools() -> list:
             "description": (
                 "Move existing real (logged) trips into a plan by their trip ids. "
                 "The originals are removed from the trip log (this is the reverse "
-                "of validating a plan). Only your own trips are moved."
+                "of validate_plan). Only your own trips are moved."
             ),
             "inputSchema": {
                 "type": "object",
@@ -628,6 +715,23 @@ def _build_tools() -> list:
                     "trip_ids": {"type": "array", "items": {"type": "integer"}},
                 },
                 "required": ["plan_uuid", "trip_ids"],
+            },
+        },
+        {
+            "name": "validate_plan",
+            "description": (
+                "Log a plan's legs as real trips (the plan page's \"Log as trips\"): "
+                "relative legs are dated from start_date (default: the anchor_date). "
+                "Legs already logged are skipped; pass plan_trip_uids to log only some."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "plan_uuid": {"type": "string"},
+                    "start_date": {"type": "string", "description": "YYYY-MM-DD for Day 1."},
+                    "plan_trip_uids": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["plan_uuid"],
             },
         },
         {
@@ -643,7 +747,7 @@ def _build_tools() -> list:
                     "plan_uuid": {"type": "string"},
                     "name": {"type": "string"},
                     "price": {"type": "number"},
-                    "currency": {"type": "string", "description": "ISO 4217, e.g. EUR. Defaults to plan owner's currency."},
+                    "currency": {"type": "string", "description": "From list_currencies. Default: the user's currency."},
                     "notes": {"type": "string"},
                 },
                 "required": ["plan_uuid", "name", "price"],
@@ -670,10 +774,7 @@ def _build_tools() -> list:
             "description": "Delete a shared cost from a plan (legs assigned to it are detached).",
             "inputSchema": {
                 "type": "object",
-                "properties": {
-                    "plan_uuid": {"type": "string"},
-                    "cost_uid": {"type": "integer"},
-                },
+                "properties": {"plan_uuid": {"type": "string"}, "cost_uid": {"type": "integer"}},
                 "required": ["plan_uuid", "cost_uid"],
             },
         },
@@ -703,6 +804,14 @@ def _iso(v):
     return v.isoformat() if hasattr(v, "isoformat") else v
 
 
+def _km(meters):
+    return round(meters / 1000, 1) if meters is not None else None
+
+
+def _clean(d):
+    return {k: v for k, v in d.items() if v not in (None, "", [], {})}
+
+
 def _trip_summary(r: dict, include_private: bool = True) -> dict:
     """Compact per-trip summary. When include_private is False (friend reads),
     price/currency are dropped so a friend never sees what was paid."""
@@ -715,7 +824,7 @@ def _trip_summary(r: dict, include_private: bool = True) -> dict:
         "end": _iso(r.get("end_datetime")),
         "operator": r.get("operator"),
         "line_name": r.get("line_name"),
-        "distance_km": round(r["trip_length"] / 1000, 1) if r.get("trip_length") is not None else None,
+        "distance_km": _km(r.get("trip_length")),
         "is_project": r.get("is_project"),
         "visibility": r.get("visibility"),
     }
@@ -725,38 +834,179 @@ def _trip_summary(r: dict, include_private: bool = True) -> dict:
     return out
 
 
+def _timing_out(start, end, manual_duration, is_project):
+    """A stored trip's dates in add_trip's terms."""
+    if start is None:
+        out = {"unknown": "future" if is_project else "past"}
+    elif start.second == 1:
+        out = {"date": start.date().isoformat()}
+    else:
+        return {"start": start.strftime("%Y-%m-%dT%H:%M"),
+                "end": (end or start).strftime("%Y-%m-%dT%H:%M")}
+    if manual_duration:
+        out["duration_minutes"] = round(manual_duration / 60)
+    return out
+
+
+def _stops_out(waypoints_json):
+    """The trip's vias: timetable stops with their local times and platforms, and the
+    routing points it was drawn through."""
+    try:
+        waypoints = json.loads(waypoints_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    out = []
+    for wp in waypoints if isinstance(waypoints, list) else []:
+        if not isinstance(wp, dict):
+            continue
+        stop = wp.get("stop") if isinstance(wp.get("stop"), dict) else None
+        item = {"name": wp.get("name") or (stop or {}).get("name"), "lat": wp.get("lat"), "lng": wp.get("lng")}
+        if wp.get("hard"):
+            item["exact"] = True
+        if stop:
+            tz = ZoneInfo(stop["tz"]) if stop.get("tz") else ZoneInfo("UTC")
+
+            def local(value):
+                try:
+                    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+                        tzinfo=ZoneInfo("UTC")).astimezone(tz).strftime("%Y-%m-%dT%H:%M")
+                except (TypeError, ValueError):
+                    return None
+
+            item.update({
+                "timetable_stop": True,
+                "arrival": local(stop.get("arr")), "departure": local(stop.get("dep")),
+                "live_arrival": local(stop.get("arr_rt")), "live_departure": local(stop.get("dep_rt")),
+                "platform": stop.get("platform"), "live_platform": stop.get("platform_rt"),
+            })
+        out.append(_clean(item))
+    return out
+
+
+def _trainset_out(value):
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return value  # a trainset name
+    if isinstance(parsed, list):
+        return {"wagons": [{"wagon": u.get("name"), "side": u.get("_side", "L")} for u in parsed if isinstance(u, dict)]}
+    return parsed
+
+
+def _trip_detail(d: dict, owner: bool) -> dict:
+    """get_trip: the trip in add_trip's terms."""
+    with pg_session() as pg:
+        path = form.stored_path(pg, "paths", "trip_id", d["trip_id"])
+        tags = [dict(r._mapping) for r in pg.execute(
+            "SELECT t.uid AS id, t.name FROM tags_associations a JOIN tags t ON t.uid = a.tag_id"
+            " WHERE a.trip_id = :tid ORDER BY t.name", {"tid": d["trip_id"]})] if owner else []
+    ends = (path[0], path[-1]) if path else ({}, {})
+    out = {
+        "id": d["trip_id"],
+        "type": d["trip_type"],
+        "origin": _clean({"name": d["origin_station"], **ends[0], "station_key": d.get("origin_station_key")}),
+        "destination": _clean({"name": d["destination_station"], **ends[1],
+                               "station_key": d.get("destination_station_key")}),
+        "vias": _stops_out(d.get("waypoints")),
+        **_timing_out(d.get("start_datetime"), d.get("end_datetime"),
+                      d.get("manual_trip_duration"), d.get("is_project")),
+        "utc_start": _iso(d.get("utc_start_datetime")),
+        "utc_end": _iso(d.get("utc_end_datetime")),
+        "duration_minutes_estimated": round((d.get("estimated_trip_duration") or 0) / 60) or None,
+        "distance_km": _km(d.get("trip_length")),
+        "countries": json.loads(d["countries"]) if isinstance(d.get("countries"), str) else d.get("countries"),
+        "operator": d.get("operator"),
+        "line_name": d.get("line_name"),
+        "departure_platform": d.get("departure_platform"),
+        "arrival_platform": d.get("arrival_platform"),
+        "departure_delay_minutes": round(d["departure_delay"] / 60, 1) if d.get("departure_delay") is not None else None,
+        "arrival_delay_minutes": round(d["arrival_delay"] / 60, 1) if d.get("arrival_delay") is not None else None,
+        "material_type": d.get("material_type"),
+        "trainset": _trainset_out(d.get("material_type_advanced")),
+        "reg": d.get("reg"),
+        "power_type": d.get("power_type"),
+        "co2_override": d.get("co2_override"),
+        "carbon_kg": round(d["carbon"], 1) if d.get("carbon") is not None else None,
+        "visibility": d.get("visibility"),
+    }
+    if owner:
+        out.update({
+            "seat": d.get("seat"),
+            "seat_car": d.get("seat_car"),
+            "notes": d.get("notes"),
+            "price": d.get("price"),
+            "currency": d.get("currency"),
+            "purchase_date": d["purchase_date"].date().isoformat() if d.get("purchase_date") else None,
+            "tags": tags,
+            "ticket_ids": d.get("ticket_ids"),
+            "created": _iso(d.get("created")),
+            "last_modified": _iso(d.get("last_modified")),
+        })
+    return _clean(out) | {"id": d["trip_id"]}
+
+
 def _plan_summary(p: dict) -> dict:
     return {
         "plan_uuid": p["uuid"],
         "name": p["name"],
         "description": p.get("description"),
         "anchor_date": _iso(p.get("anchor_date")),
+        "visibility": p.get("visibility") or "private",
         "archived": p.get("archived"),
         "trip_count": p.get("trip_count"),
+        "logged_count": p.get("validated_count"),
         "total_distance_km": round(p["total_distance_km"], 1) if p.get("total_distance_km") is not None else None,
     }
 
 
-def _plan_trip_summary(r: dict) -> dict:
-    return {
+def _plan_trip_detail(r: dict, stops=True) -> dict:
+    """A plan leg in add_plan_trip's terms."""
+    path = [{"lat": c[0], "lng": c[1]} for c in form.geom_geojson_to_coords(r["geojson"])] \
+        if r.get("geojson") else []
+    ends = (path[0], path[-1]) if path else ({}, {})
+    mode = r.get("timing_mode")
+    if mode == "relative":
+        timing = {"start_day": r.get("start_day"), "end_day": r.get("end_day"),
+                  "start_time": r["start_time"].strftime("%H:%M") if r.get("start_time") else None,
+                  "end_time": r["end_time"].strftime("%H:%M") if r.get("end_time") else None,
+                  "weekdays": form.weekdays_list(r.get("weekdays"))}
+        if r.get("manual_trip_duration"):
+            timing["duration_minutes"] = round(r["manual_trip_duration"] / 60)
+    elif mode in ("preciseDates", "onlyDate"):
+        timing = _timing_out(r.get("start_datetime"), r.get("end_datetime"), r.get("manual_trip_duration"), True)
+    else:
+        timing = {"unknown": "future"}
+    out = {
         "uid": r["uid"],
         "type": r["trip_type"],
-        "origin": r["origin_station"],
-        "destination": r["destination_station"],
-        "timing_mode": r.get("timing_mode"),
-        "start_day": r.get("start_day"),
-        "end_day": r.get("end_day"),
-        "start": _iso(r.get("start_datetime")),
-        "end": _iso(r.get("end_datetime")),
+        "origin": _clean({"name": r["origin_station"], **ends[0]}),
+        "destination": _clean({"name": r["destination_station"], **ends[1]}),
+        **timing,
+        "duration_minutes_estimated": round((r.get("estimated_trip_duration") or 0) / 60) or None,
+        "distance_km": _km(r.get("trip_length")),
         "operator": r.get("operator"),
         "line_name": r.get("line_name"),
-        "distance_km": round(r["trip_length"] / 1000, 1) if r.get("trip_length") is not None else None,
+        "material_type": r.get("material_type"),
+        "trainset": _trainset_out(r.get("material_type_advanced")),
+        "reg": r.get("reg"),
+        "seat": r.get("seat"),
+        "notes": r.get("notes"),
         "price": r.get("price"),
         "currency": r.get("currency"),
+        "purchase_date": _iso(r["purchase_date"].date()) if r.get("purchase_date") else None,
         "booked": r.get("booked"),
+        "power_type": r.get("power_type"),
+        "co2_override": r.get("co2_override"),
+        "visibility": r.get("visibility"),
         "cost_uid": r.get("cost_id"),
+        "logged_trip_id": r.get("validated_trip_id"),
         "sort_order": r.get("sort_order"),
     }
+    if stops:
+        out["vias"] = _stops_out(r.get("waypoints"))
+    return _clean(out) | {"uid": r["uid"]}
 
 
 def _plan_cost_summary(r: dict) -> dict:
@@ -770,65 +1020,85 @@ def _plan_cost_summary(r: dict) -> dict:
     }
 
 
-# ── station search ────────────────────────────────────────────────────────────
+# ── links ─────────────────────────────────────────────────────────────────────
 
 
-def _search_stations(query: str, trip_type: str, limit: int) -> list[dict]:
-    """Resolve a place name to candidate stations/stops with their coordinates.
+def _trip_links(username, trip_ids) -> dict:
+    """Where the user sees trips: on a map, and in their trips list filtered to them
+    (`search=id:…`, as the timeline links them) — the trips list, or the projects list
+    for the future ones, following the list's own split (get_dynamic_user_trips)."""
+    ids = sorted({int(t) for t in trip_ids})
+    if not ids:
+        return {}
+    with pg_session() as pg:
+        rows = pg.execute(
+            "SELECT trip_id, is_project OR (utc_start_datetime IS NOT NULL AND NOW() <= utc_start_datetime)"
+            " AS upcoming FROM trips WHERE trip_id = ANY(:ids)", {"ids": ids}).fetchall()
+    lists = {"trips": [r[0] for r in rows if not r[1]], "projects": [r[0] for r in rows if r[1]]}
+    links = {"map": external_url("public_trip", tripIds=",".join(map(str, ids)))}
+    for time, listed in lists.items():
+        if listed:
+            links["trips_list" if time == "trips" else "upcoming_trips_list"] = external_url(
+                "dynamic_trips", username=username, time=time,
+                search="id:" + "|".join(map(str, listed)))
+    return links
 
-    Same backend the website's station autocomplete uses (templates/new.html):
-    airports come from Trainlog's airport database, everything else from the
-    Photon geocoder filtered by the trip type's OSM tags. Returns a list of
-    {name, lat, lng, country, iata?} dicts, best match first."""
-    query = (query or "").strip()
+
+def _plan_links(username, plan_uuid) -> dict:
+    return {"plan": external_url("plan_view", username=username, plan_uuid=plan_uuid),
+            "map": external_url("public_plan", plan_uuid=plan_uuid)}
+
+
+def _straight_line(remarks):
+    return form.STRAIGHT_LINE_REMARK in remarks or None
+
+
+# ── lookups ───────────────────────────────────────────────────────────────────
+
+
+def _search_stations(args: dict) -> list[dict]:
+    """The trip form's station suggestions (station_autocomplete, or the airport search
+    for flights), as the places add_trip takes."""
+    trip_type = form.check_type(args.get("type") or "train")
+    query = (args.get("query") or "").strip()
+    limit = max(1, min(int(args.get("limit") or 8), 20))
     if not query:
         return []
 
-    # Flights resolve against the authoritative airport database (IATA/ICAO/name).
     if trip_type == "air":
         with pg_session() as pg:
-            rows = pg.execute(
-                get_airports_query(), {"searchPattern": "%" + query + "%"}
-            ).fetchall()
-        out = []
-        for r in rows[:limit]:
-            a = dict(r._mapping)
-            out.append({
-                "name": a.get("name"),
-                "iata": a.get("iata"),
-                "lat": a.get("latitude"),
-                "lng": a.get("longitude"),
-                "country": a.get("iso_country"),
-            })
-        return out
+            rows = pg.execute(get_airports_query(), {"searchPattern": "%" + query + "%"}).fetchall()
+        return [{
+            "name": f"{form.get_flag_emoji(a['iso_country'])} {a['name']} ({a['iata']})",
+            "iata": a["iata"], "lat": a["latitude"], "lng": a["longitude"], "country": a["iso_country"],
+        } for a in (dict(r._mapping) for r in rows[:limit]) if a.get("iata")]
 
-    params = {"q": query, "lang": "en"}
-    tags = STATION_SEARCH_OSM_TAGS.get(trip_type)
-    if tags:
-        params["osm_tag"] = tags  # requests serialises a list as repeated params
-    resp = photonRequest("/api", params=params, timeout=3)
-    if resp is None:
+    params = {"q": [query], "limit": [str(limit)], **STATION_SEARCH_PARAMS.get(trip_type, {})}
+    if args.get("near_lat") is not None and args.get("near_lng") is not None:
+        params["lat"], params["lon"] = [str(float(args["near_lat"]))], [str(float(args["near_lng"]))]
+    payload, error = form.site().station_autocomplete(params)
+    if payload is None:
         raise ValueError("Station search is temporarily unavailable.")
-
     out = []
-    for feature in resp.get("features", [])[:limit]:
+    for feature in payload.get("features", [])[:limit]:
         props = feature.get("properties", {})
-        lon, lat = (feature.get("geometry", {}).get("coordinates") or [None, None])[:2]
-        name = props.get("name")
-        city = props.get("city")
-        if city and city != name:
-            name = f"{city} - {name}" if name else city
-        out.append({
-            "name": name,
+        lng, lat = (feature.get("geometry", {}).get("coordinates") or [None, None])[:2]
+        if lat is None or not props.get("name"):
+            continue
+        place = [props.get(k) for k in ("street", "locality", "district", "city", "state")]
+        out.append(_clean({
+            # The label the form saves ([coords, label]): the homonym letter is for the list only.
+            "name": f"{form.get_flag_emoji(props['countrycode'])} {props['name']}" if props.get("countrycode")
+                    else props["name"],
             "lat": lat,
-            "lng": lon,
+            "lng": lng,
+            "station_key": props.get("station_key") if props.get("source") == "quai" else None,
             "country": props.get("countrycode"),
-            "type": props.get("osm_value"),
-        })
+            "where": ", ".join(dict.fromkeys(p for p in place if p)) or None,
+            "kind": props.get("osm_value") or props.get("mode"),
+            "tracks": [t["ref"] for t in props.get("tracks") or [] if t.get("ref")] or None,
+        }))
     return out
-
-
-# ── tool implementations ──────────────────────────────────────────────────────
 
 
 def _search_departures(args: dict) -> dict:
@@ -848,7 +1118,7 @@ def _search_departures(args: dict) -> dict:
         payload, _ = departures_payload(query)
     except (KeyError, TypeError) as e:
         raise ValueError(f"Missing or invalid coordinates: {e}")
-    except HTTPException:
+    except (ValueError, HTTPException):
         raise ValueError("Invalid search: check the coordinates, the date (YYYY-MM-DD) and time (HH:MM).")
     if payload is None or payload.get("error") == "unavailable":
         raise ValueError("The timetable service (Transitous) is unavailable right now. Try again later.")
@@ -861,14 +1131,10 @@ def _search_departures(args: dict) -> dict:
     departures = []
     for d in payload["departures"][:limit]:
         stops = [
-            " ".join(filter(None, [
-                stop[4] or stop[5],
-                stop[2],
-                f"(pl. {stop[6]})" if stop[6] else None,
-            ]))
+            " ".join(filter(None, [stop[4] or stop[5], stop[2], f"(pl. {stop[6]})" if stop[6] else None]))
             for stop in d["stops"]
         ]
-        departures.append({k: v for k, v in {
+        departures.append(_clean({
             "trip_id": d["trip_id"],
             "departure": d["departure"],
             "arrival": d["arrival"],
@@ -885,64 +1151,228 @@ def _search_departures(args: dict) -> dict:
             "departure_delay_min": d["departure_delay"] or None,
             "arrival_delay_min": d["arrival_delay"] or None,
             "intermediate_stops": stops,
-        }.items() if v not in (None, [])})
+        }))
     return {"departures": departures, "more": len(payload["departures"]) > limit}
 
 
-def _run_fields(run_id: str, trip_type: str, args: dict) -> dict:
-    """add_trip with a Transitous run: what a departure picked on the new trip form
-    fills in (times, line, operator, platforms, stops), as create_trip_from_parsed
-    fields."""
-    if trip_type not in TRANSIT_MODES:
-        raise ValueError(f"transitous_trip_id only works for {sorted(TRANSIT_MODES)} trips.")
-    try:
-        origin = (float(args["origin_lat"]), float(args["origin_lng"]))
-        destination = (float(args["destination_lat"]), float(args["destination_lng"]))
-    except (KeyError, TypeError, ValueError):
-        raise ValueError("origin_lat/lng and destination_lat/lng are required with transitous_trip_id.")
-    try:
-        segment = run_segment(run_id, origin, destination)
-    except (RateLimited, OutsideTimetable, requests.RequestException) as e:
-        raise ValueError(f"Could not fetch the run from Transitous ({e}). Try again later.")
-    board, alight = segment["board"], segment["alight"]
-    start, end = board["dep"] or board["arr"], alight["arr"] or alight["dep"]
-    if not start or not end:
-        raise ValueError("The run has no times at those stops.")
+def _trip_types(user) -> list[dict]:
+    out = []
+    for t in form.form_types():
+        out.append(_clean({
+            "type": t,
+            "default_visibility": form.get_default_trip_visibility(t),
+            "power_types": list(form.POWER_TYPES.get(t, ())),
+            "trainset": t in form.TRAINSET_TYPES or None,
+            "co2_override": t in form.CO2_OVERRIDE_TYPES or None,
+            "timetable_runs": t in TRANSIT_MODES or None,
+            "vias": (t not in form.AIR_TYPES and t not in form.SINGLE_POINT_TYPES) or None,
+            "single_place": t in form.SINGLE_POINT_TYPES or None,
+            "places_by": "airport iata" if t == "air" else None,
+        }))
+    return out
 
-    def utc(value):
-        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
 
-    def delay(live, scheduled):
-        return int((utc(live) - utc(scheduled)).total_seconds()) if live and scheduled else None
+def _search_operators(user, args) -> list[dict]:
+    trip_type = form.check_type(args.get("type") or "train")
+    query = (args.get("query") or "").strip().lower()
+    limit = max(1, min(int(args.get("limit") or 20), 100))
+    logo_type = trip_type if trip_type in ("accommodation", "poi", "car") else "operator"
+    with pg_session() as pg:
+        own = [str(r["operator"]).strip() for r in pg.execute(get_operators_query(), {"user_id": user.uid})]
+    known = form.site().listOperatorsLogos(logo_type)
+    names = [n for n in dict.fromkeys(own + list(known)) if n and n.strip()]
+    if query:
+        names = [n for n in names if query in n.lower()]
+        names.sort(key=lambda n: (n.lower().find(query), len(n)))
+    return [_clean({"operator": n, "used_before": n in own or None, "has_logo": n in known or None})
+            for n in names[:limit]]
 
+
+def _search_material_types(user, args) -> list:
+    trip_type = form.check_type(args.get("type") or "train")
+    query = (args.get("query") or "").strip().lower()
+    limit = max(1, min(int(args.get("limit") or 30), 200))
+    with pg_session() as pg:
+        if trip_type == "air":
+            rows = [dict(r._mapping) for r in pg.execute("SELECT iata, manufacturer, model FROM airliners")]
+            items = [{"material_type": r["iata"], "name": f"{r['manufacturer']} {r['model']}"} for r in rows
+                     if query in f"{r['iata']} {r['manufacturer']} {r['model']}".lower()]
+        else:
+            values = [str(r["material_type"]).strip() for r in pg.execute(
+                get_material_types_query(), {"trip_type": trip_type, "user_id": user.uid}) if r["material_type"]]
+            items = [{"material_type": v} for v in sorted(set(values)) if query in v.lower()]
+    return items[:limit]
+
+
+def _list_trainsets(user, args) -> list[dict]:
+    query = (args.get("query") or "").strip().lower()
+    with pg_session() as pg:
+        rows = pg.execute(
+            "SELECT name, is_admin, units_json FROM trainsets WHERE is_admin OR username = :u"
+            " ORDER BY is_admin, name", {"u": user.username}).fetchall()
+        labels = {}
+        out = []
+        for r in rows:
+            if query and query not in r["name"].lower():
+                continue
+            units = json.loads(r["units_json"] or "[]")
+            names = [u.get("name") for u in units if isinstance(u, dict)]
+            missing = [n for n in names if n not in labels]
+            if missing:
+                labels.update({w["name"]: w["label"] for w in pg.execute(
+                    "SELECT name, label FROM wagons WHERE name = ANY(:n)", {"n": missing})})
+            out.append({"name": r["name"], "public": bool(r["is_admin"]), "cars": len(units),
+                        "composition": [labels.get(n, n) for n in names]})
+    return out
+
+
+def _search_wagons(args) -> list[dict]:
+    terms = [t for t in (args.get("query") or "").split() if t]
+    if not terms:
+        return []
+    limit = max(1, min(int(args.get("limit") or 20), 100))
+    fields = ["label", "category", "subcategory", "notes", "era", "source", "name"]
+    params = {"limit": limit}
+    where = []
+    for i, term in enumerate(terms):
+        params[f"t{i}"] = f"%{term}%"
+        where.append("(" + " OR ".join(f"{f} ILIKE :t{i}" for f in fields) + f" OR gauge::text ILIKE :t{i})")
+    with pg_session() as pg:
+        rows = pg.execute(
+            "SELECT name, label, category, subcategory, era, image_type FROM wagons WHERE "
+            + " AND ".join(where) + " ORDER BY label LIMIT :limit", params).fetchall()
+    return [_clean({"wagon": r["name"], "label": r["label"], "category": r["category"],
+                    "subcategory": r["subcategory"], "era": r["era"],
+                    "two_sided": r["image_type"] != "plain" or None}) for r in rows]
+
+
+def _list_tags(user) -> list[dict]:
+    with pg_session() as pg:
+        rows = pg.execute(
+            "SELECT t.uid, t.name, t.username FROM tags t WHERE t.username = :u"
+            " OR EXISTS (SELECT 1 FROM tag_members m WHERE m.tag_id = t.uid AND m.username = :u"
+            "            AND m.status = 'accepted')"
+            " ORDER BY t.name", {"u": user.username}).fetchall()
+    return [_clean({"id": r["uid"], "name": r["name"],
+                    "shared_by": r["username"] if r["username"] != user.username else None}) for r in rows]
+
+
+def _list_tickets(user) -> list[dict]:
+    with pg_session() as pg:
+        rows = pg.execute(
+            "SELECT uid, name, price, currency, operator, valid_from, valid_until, active, product"
+            " FROM tickets WHERE username = :u ORDER BY COALESCE(valid_from, purchasing_date) DESC NULLS LAST",
+            {"u": user.username}).fetchall()
+    return [_clean({"id": r["uid"], "name": r["name"], "price": r["price"], "currency": r["currency"],
+                    "operator": r["operator"], "product": r["product"], "active": r["active"],
+                    "valid_from": _iso(r["valid_from"]), "valid_until": _iso(r["valid_until"])}) for r in rows]
+
+
+# ── writes ────────────────────────────────────────────────────────────────────
+
+
+def _add_trip(user, args) -> dict:
+    new_trip, path, remarks = form.new_trip_form(user, args)
+    trip = form.site().saveTripToDb(username=user.username, newTrip=new_trip, newPath=path,
+                                    trip_type=new_trip["type"])
+    return _clean({"ok": True, "id": trip.trip_id, "origin": trip.origin_station,
+                   "destination": trip.destination_station, "start": _iso(trip.start_datetime),
+                   "end": _iso(trip.end_datetime), "distance_km": _km(trip.trip_length),
+                   "straight_line": _straight_line(remarks), "remarks": remarks,
+                   "links": _trip_links(user.username, [trip.trip_id])})
+
+
+def _update_trip(user, args) -> dict:
+    trip_id = _owned_trip_id(args.get("trip_id"), user.uid)
+    changes = {k: v for k, v in args.items() if k != "trip_id"}
+    if not changes:
+        raise ValueError("Nothing to update.")
+    new_type, patch, tag_ids, remarks = form.trip_patch(user, trip_id, changes)
+    if new_type:
+        update_trip_type(trip_id, TripTypes(new_type))
+    if patch:
+        form.site().apply_trip_patch(trip_id, patch)
+    if tag_ids is not None:
+        with pg_session() as pg:
+            pg.execute("DELETE FROM tags_associations WHERE trip_id = :tid", {"tid": trip_id})
+            for tag_id in tag_ids:
+                pg.execute("INSERT INTO tags_associations (tag_id, trip_id) VALUES (:t, :tid)"
+                           " ON CONFLICT DO NOTHING", {"t": tag_id, "tid": trip_id})
+    with pg_session() as pg:
+        row = pg.execute("SELECT * FROM trips WHERE trip_id = :tid", {"tid": trip_id}).fetchone()
+    return _clean({"ok": True, "trip": _trip_detail(dict(row._mapping), True),
+                   "straight_line": _straight_line(remarks), "remarks": remarks,
+                   "links": _trip_links(user.username, [trip_id])})
+
+
+def _cost_fields(user, args, current=None):
+    current = current or {}
+    name = form.text(args, "name", 200) if "name" in args else current.get("name")
+    if not name:
+        raise ValueError("A cost needs a name.")
+    price = form.number(args, "price", 0) if "price" in args else current.get("price")
+    if price is None:
+        raise ValueError("A cost needs a price (≥ 0).")
+    currency = args.get("currency") or current.get("currency") or user.user_currency or "EUR"
     return {
-        # Timing from the run replaces date/time_departure/time_arrival.
-        "utc_start_datetime": utc(start),
-        "utc_end_datetime": utc(end),
-        "operator": args.get("operator") or segment["operator"],
-        "line_name": args.get("line_name") or segment["line"] or None,
-        "departure_platform": board["platform_rt"] or board["platform"],
-        "arrival_platform": alight["platform_rt"] or alight["platform"],
-        "departure_delay": delay(board["dep_rt"], board["dep"]),
-        "arrival_delay": delay(alight["arr_rt"], alight["arr"]),
-        "_via": [{"lat": wp["lat"], "lng": wp["lng"]} for wp in segment["stops"]],
-        "_waypoints": json.dumps(segment["stops"], ensure_ascii=False) if segment["stops"] else None,
+        "name": name, "price": price,
+        "currency": form.check_currency(user.username, currency),
+        "notes": form.text(args, "notes", 5000) if "notes" in args else current.get("notes"),
     }
+
+
+def _plan_fields(args):
+    out = {}
+    if "name" in args:
+        out["name"] = form.text(args, "name", 200)
+        if not out["name"]:
+            raise ValueError("A plan needs a name.")
+    if "description" in args:
+        out["description"] = form.text(args, "description", 5000)
+    if args.get("anchor_date"):
+        out["anchor_date"] = form.iso_date(args["anchor_date"], "anchor_date")
+    if "visibility" in args:
+        out["visibility"] = form.check_visibility(args["visibility"])
+    return out
 
 
 def _call_tool(name: str, args: dict, user) -> str:
     uid = user.uid
+    args = args or {}
 
+    def out(value):
+        return json.dumps(value, indent=2, ensure_ascii=False, default=str)
+
+    # ── lookups ─────────────────────────────────────────────────────────────
     if name == "search_stations":
-        trip_type = args.get("type", "train")
-        if trip_type not in TRIP_TYPE_VALUES:
-            raise ValueError(f"Unknown trip type: {trip_type}")
-        limit = max(1, min(int(args.get("limit", 8)), 20))
-        results = _search_stations(args.get("query", ""), trip_type, limit)
-        return json.dumps(results, indent=2)
+        return out(_search_stations(args))
+    if name == "search_departures":
+        return out(_search_departures(args))
+    if name == "list_trip_types":
+        return out(_trip_types(user))
+    if name == "list_currencies":
+        return out([c["currency"] for c in get_available_currencies(user.username)])
+    if name == "search_operators":
+        return out(_search_operators(user, args))
+    if name == "search_material_types":
+        return out(_search_material_types(user, args))
+    if name == "list_trainsets":
+        return out(_list_trainsets(user, args))
+    if name == "search_wagons":
+        return out(_search_wagons(args))
+    if name == "list_tags":
+        return out(_list_tags(user))
+    if name == "list_tickets":
+        return out(_list_tickets(user))
+    if name == "list_friends":
+        rows = Friendship.query.filter(Friendship.user_id == uid, Friendship.accepted.isnot(None)).all()
+        friend_uids = [f.friend_id for f in rows]
+        friends = User.query.filter(User.uid.in_(friend_uids)).all() if friend_uids else []
+        return out(sorted(u.username for u in friends))
 
+    # ── trips ───────────────────────────────────────────────────────────────
     if name == "list_trips":
-        limit = max(1, min(int(args.get("limit", 50)), 500))
+        limit = max(1, min(int(args.get("limit") or 50), 500))
         # Whose trips? Default own; an explicit username reads a friend's, read-only.
         target_username = (args.get("username") or "").strip()
         own = not target_username or target_username == user.username
@@ -965,10 +1395,13 @@ def _call_tool(name: str, args: dict, user) -> str:
             clauses.append("trip_type = :trip_type")
             params["trip_type"] = args["trip_type"]
         if args.get("upcoming_only"):
-            clauses.append(
-                "(is_project OR COALESCE(utc_start_datetime, start_datetime) >= NOW())"
-            )
-        where = " AND ".join(clauses)
+            clauses.append("(is_project OR COALESCE(utc_start_datetime, start_datetime) >= NOW())")
+        if args.get("from_date"):
+            clauses.append("start_datetime >= :from_date")
+            params["from_date"] = form.iso_date(args["from_date"], "from_date")
+        if args.get("to_date"):
+            clauses.append("start_datetime < CAST(:to_date AS date) + 1")
+            params["to_date"] = form.iso_date(args["to_date"], "to_date")
         with pg_session() as pg:
             rows = pg.execute(
                 f"""
@@ -976,7 +1409,7 @@ def _call_tool(name: str, args: dict, user) -> str:
                        start_datetime, end_datetime, operator, line_name,
                        trip_length, price, currency, is_project, visibility
                 FROM trips
-                WHERE {where}
+                WHERE {" AND ".join(clauses)}
                 ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
                          COALESCE(utc_start_datetime, start_datetime) DESC NULLS LAST,
                          trip_id DESC
@@ -984,17 +1417,15 @@ def _call_tool(name: str, args: dict, user) -> str:
                 """,
                 params,
             ).fetchall()
-        return json.dumps(
-            [_trip_summary(dict(r._mapping), include_private=own) for r in rows],
-            indent=2,
-        )
+        return out([_trip_summary(dict(r._mapping), include_private=own) for r in rows])
 
     if name == "get_trip":
+        try:
+            trip_id = int(args.get("trip_id"))
+        except (TypeError, ValueError):
+            raise ValueError("trip_id must be a number.")
         with pg_session() as pg:
-            row = pg.execute(
-                "SELECT * FROM trips WHERE trip_id = :tid",
-                {"tid": args["trip_id"]},
-            ).fetchone()
+            row = pg.execute("SELECT * FROM trips WHERE trip_id = :tid", {"tid": trip_id}).fetchone()
         if row is None:
             raise ValueError("Trip not found.")
         d = dict(row._mapping)
@@ -1003,99 +1434,19 @@ def _call_tool(name: str, args: dict, user) -> str:
             # A friend may read only public/friends trips, and only if friends.
             if d.get("visibility") not in FRIEND_VISIBLE or not _are_friends(uid, d["user_id"]):
                 raise ValueError("Trip not found.")
-        out = _trip_summary(d, include_private=owner)
-        out["countries"] = d.get("countries")
+        detail = _trip_detail(d, owner)
         if owner:
-            out.update({
-                "seat": d.get("seat"),
-                "material_type": d.get("material_type"),
-                "reg": d.get("reg"),
-                "notes": d.get("notes"),
-                "purchase_date": _iso(d.get("purchase_date")),
-                "created": _iso(d.get("created")),
-            })
-        return json.dumps(out, indent=2)
-
-    if name == "list_friends":
-        rows = (
-            Friendship.query.filter(
-                Friendship.user_id == uid, Friendship.accepted.isnot(None)
-            ).all()
-        )
-        friend_uids = [f.friend_id for f in rows]
-        friends = (
-            User.query.filter(User.uid.in_(friend_uids)).all() if friend_uids else []
-        )
-        return json.dumps(sorted(u.username for u in friends), indent=2)
-
-    if name == "search_departures":
-        return json.dumps(_search_departures(args), indent=2, ensure_ascii=False)
+            detail["links"] = _trip_links(user.username, [trip_id])
+        return out(detail)
 
     if name == "add_trip":
-        trip_type = args.get("type", "train")
-        if trip_type not in TRIP_TYPE_VALUES:
-            raise ValueError(f"Unknown trip type: {trip_type}")
-        # Shape into the dict create_trip_from_parsed expects (the same schema the
-        # internal AI parser produced). It geocodes, routes and resolves times.
-        parsed = {
-            "type": trip_type,
-            "origin": args.get("origin", ""),
-            "origin_city": args.get("origin_city"),
-            "origin_iata": args.get("origin_iata"),
-            "origin_lat": args.get("origin_lat"),
-            "origin_lng": args.get("origin_lng"),
-            "destination": args.get("destination", ""),
-            "destination_city": args.get("destination_city"),
-            "destination_iata": args.get("destination_iata"),
-            "destination_lat": args.get("destination_lat"),
-            "destination_lng": args.get("destination_lng"),
-            "date": args.get("date"),
-            "arrival_date": args.get("arrival_date"),
-            "time_departure": args.get("time_departure"),
-            "time_arrival": args.get("time_arrival"),
-            "operator": args.get("operator"),
-            "line_name": args.get("line_name"),
-            "price": args.get("price"),
-            "currency": args.get("currency"),
-            "aircraft_icao": args.get("aircraft_icao"),
-            "seat": args.get("seat"),
-            "booking_reference": args.get("booking_reference"),
-            "ticket_number": args.get("ticket_number"),
-            "cabin_class": args.get("cabin_class"),
-            "notes": args.get("notes"),
-        }
-        run_id = (args.get("transitous_trip_id") or "").strip()
-        if run_id:
-            parsed.update(_run_fields(run_id, trip_type, args))
-        trip = create_trip_from_parsed(user, parsed, source="mcp")
-        if trip is None:
-            raise ValueError(
-                "Could not create the trip (geocoding/routing failed). "
-                "Check the station names and coordinates."
-            )
-        return json.dumps({
-            "ok": True,
-            "id": trip.trip_id,
-            "origin": trip.origin_station,
-            "destination": trip.destination_station,
-            "start": _iso(trip.start_datetime),
-            "end": _iso(trip.end_datetime),
-            "distance_km": round(trip.trip_length / 1000, 1) if trip.trip_length else None,
-        }, ensure_ascii=False)
-
+        return out(_add_trip(user, args))
+    if name == "update_trip":
+        return out(_update_trip(user, args))
     if name == "delete_trip":
-        with pg_session() as pg:
-            row = pg.execute(
-                "SELECT user_id FROM trips WHERE trip_id = :tid",
-                {"tid": args["trip_id"]},
-            ).fetchone()
-        if row is None or row["user_id"] != uid:
-            raise ValueError("Trip not found.")
-        _delete_trip(args["trip_id"], user.username)
-        return json.dumps({"ok": True})
-
-    if name == "list_trip_types":
-        return json.dumps(TRIP_TYPE_VALUES)
+        trip_id = _owned_trip_id(args.get("trip_id"), uid)
+        _delete_trip(trip_id, user.username)
+        return out({"ok": True})
 
     # ── plans ───────────────────────────────────────────────────────────────
     if name == "list_plans":
@@ -1104,374 +1455,179 @@ def _call_tool(name: str, args: dict, user) -> str:
         plans = [_plan_summary(dict(r._mapping)) for r in rows]
         if args.get("active_only"):
             plans = [p for p in plans if not p["archived"]]
-        return json.dumps(plans, indent=2)
+        return out(plans)
 
     if name == "get_plan":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
         with pg_session() as pg:
             trips = pg.execute(get_plan_trips_query(), {"plan_id": plan["uid"]}).fetchall()
             costs = pg.execute(get_plan_costs_query(), {"plan_id": plan["uid"]}).fetchall()
-        return json.dumps({
-            "plan_uuid": plan["uuid"],
-            "name": plan["name"],
-            "description": plan.get("description"),
-            "anchor_date": _iso(plan.get("anchor_date")),
-            "archived": plan.get("archived"),
-            "trips": [_plan_trip_summary(dict(r._mapping)) for r in trips],
+        legs = [dict(r._mapping) for r in trips]
+        return out({
+            **_plan_summary({
+                **plan, "trip_count": len(legs),
+                "validated_count": sum(1 for r in legs if r.get("validated_trip_id")),
+                "total_distance_km": sum(r.get("trip_length") or 0 for r in legs) / 1000,
+            }),
+            "trips": [_plan_trip_detail(r, stops=False) for r in legs],
             "costs": [_plan_cost_summary(dict(r._mapping)) for r in costs],
-        }, indent=2)
+            "links": _plan_links(user.username, plan["uuid"]),
+        })
+
+    if name == "get_plan_trip":
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        return out(_plan_trip_detail(_owned_plan_trip(plan, args.get("plan_trip_uid"))))
 
     if name == "create_plan":
+        fields = _plan_fields(args)
+        if not fields.get("name"):
+            raise ValueError("A plan needs a name.")
         now = datetime.now()
         plan_uuid = str(_uuid.uuid4())
         with pg_session() as pg:
             pg.execute(insert_plan_query(), {
-                "uuid": plan_uuid,
-                "user_id": uid,
-                "name": (args.get("name") or "Plan"),
-                "description": args.get("description"),
-                "anchor_date": args.get("anchor_date") or now.date(),
-                "created": now,
-                "last_modified": now,
+                "uuid": plan_uuid, "user_id": uid, "name": fields["name"],
+                "description": fields.get("description"),
+                "anchor_date": fields.get("anchor_date") or now.date(),
+                "created": now, "last_modified": now,
             })
-        return json.dumps({"ok": True, "plan_uuid": plan_uuid})
+            if fields.get("visibility"):
+                row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
+                pg.execute(update_plan_visibility_query(), {
+                    "uid": row._mapping["uid"], "user_id": uid,
+                    "visibility": fields["visibility"], "last_modified": now})
+        return out({"ok": True, "plan_uuid": plan_uuid, "links": _plan_links(user.username, plan_uuid)})
 
     if name == "update_plan":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        fields = _plan_fields(args)
         now = datetime.now()
         with pg_session() as pg:
-            if any(k in args for k in ("name", "description", "anchor_date")):
+            if fields.keys() & {"name", "description", "anchor_date"}:
                 pg.execute(update_plan_query(), {
                     "uid": plan["uid"], "user_id": uid,
-                    "name": args.get("name", plan["name"]),
-                    "description": args.get("description", plan.get("description")),
-                    "anchor_date": args.get("anchor_date") or plan["anchor_date"],
+                    "name": fields.get("name", plan["name"]),
+                    "description": fields["description"] if "description" in fields else plan.get("description"),
+                    "anchor_date": fields.get("anchor_date") or plan["anchor_date"],
                     "last_modified": now,
                 })
+            if "visibility" in fields:
+                pg.execute(update_plan_visibility_query(), {
+                    "uid": plan["uid"], "user_id": uid, "visibility": fields["visibility"],
+                    "last_modified": now})
             if "archived" in args:
                 pg.execute(archive_plan_query(), {
                     "uid": plan["uid"], "user_id": uid,
                     "archived": bool(args["archived"]), "last_modified": now,
                 })
-        return json.dumps({"ok": True})
+        return out({"ok": True})
+
+    if name == "duplicate_plan":
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        suffix = form.site().lang.get(user.lang or "en", {}).get("copySuffix", "(copy)")
+        new_uuid = _duplicate_plan(plan["uuid"], uid, name=f"{plan['name']} {suffix}")
+        if new_uuid is None:
+            raise ValueError("Plan not found.")
+        return out({"ok": True, "plan_uuid": new_uuid, "links": _plan_links(user.username, new_uuid)})
 
     if name == "delete_plan":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
         _delete_plan(plan["uid"], uid)
-        return json.dumps({"ok": True})
+        return out({"ok": True})
 
     if name == "add_plan_trip":
-        plan = _owned_plan(args["plan_uuid"], uid)
-        trip_type = args.get("type", "train")
-        if trip_type not in TRIP_TYPE_VALUES:
-            raise ValueError(f"Unknown trip type: {trip_type}")
-        parsed = {
-            "type": trip_type,
-            "origin": args.get("origin", ""),
-            "origin_iata": args.get("origin_iata"),
-            "origin_lat": args.get("origin_lat"),
-            "origin_lng": args.get("origin_lng"),
-            "destination": args.get("destination", ""),
-            "destination_iata": args.get("destination_iata"),
-            "destination_lat": args.get("destination_lat"),
-            "destination_lng": args.get("destination_lng"),
-            "operator": args.get("operator"),
-            "line_name": args.get("line_name"),
-            "aircraft_icao": args.get("aircraft_icao"),
-            "seat": args.get("seat"),
-            "price": args.get("price"),
-            "currency": args.get("currency"),
-            "notes": args.get("notes"),
-        }
-        if args.get("start_day") is not None:
-            timing_input = {
-                "precision": "relative",
-                "planStartDay": args.get("start_day"),
-                "planEndDay": args.get("end_day") or args.get("start_day"),
-                "planStartTime": args.get("start_time") or "",
-                "planEndTime": args.get("end_time") or "",
-            }
-        elif args.get("start_datetime"):
-            timing_input = {
-                "precision": "preciseDates",
-                "newTripStart": str(args["start_datetime"]).replace(" ", "T"),
-                "newTripEnd": str(args.get("end_datetime") or args["start_datetime"]).replace(" ", "T"),
-            }
-        elif args.get("date"):
-            timing_input = {"precision": "onlyDate", "onlyDate": args["date"], "onlyDateDuration": ""}
-        else:
-            timing_input = {"precision": "unknown", "unknownType": "future"}
-
-        pt = create_plan_trip_from_parsed(
-            plan, parsed, timing_input, booked=bool(args.get("booked", False))
-        )
-        if pt is None:
-            raise ValueError(
-                "Could not add the leg (geocoding/routing failed). "
-                "Check the station names and coordinates."
-            )
-        return json.dumps({
-            "ok": True, "plan_trip_uid": pt.uid,
-            "origin": pt.origin_station, "destination": pt.destination_station,
-        })
-
-    if name == "delete_plan_trip":
-        plan = _owned_plan(args["plan_uuid"], uid)
-        _delete_plan_trip(args["plan_trip_uid"], uid)
-        return json.dumps({"ok": True})
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        new_trip, path, remarks = form.new_trip_form(user, args, plan=True)
+        pt = form.site().savePlanTripToDb(user.username, new_trip, path, plan, trip_type=new_trip["type"])
+        return out(_clean({"ok": True, "plan_trip_uid": pt.uid, "origin": pt.origin_station,
+                           "destination": pt.destination_station,
+                           "straight_line": _straight_line(remarks), "remarks": remarks,
+                           "links": _plan_links(user.username, plan["uuid"])}))
 
     if name == "update_plan_trip":
-        plan = _owned_plan(args["plan_uuid"], uid)
-        pt = _owned_plan_trip(plan, args["plan_trip_uid"])
-
-        route_keys = ("type", "origin", "origin_iata", "origin_lat", "origin_lng",
-                      "destination", "destination_iata", "destination_lat",
-                      "destination_lng")
-        relative_keys = ("start_day", "end_day", "start_time", "end_time")
-        precise_keys = ("start_datetime", "end_datetime")
-        meta_keys = ("operator", "line_name", "aircraft_icao", "seat", "price",
-                     "currency", "booked", "notes")
-        if not any(k in args for k in
-                   route_keys + relative_keys + precise_keys + meta_keys
-                   + ("date", "clear_timing")):
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        pt = _owned_plan_trip(plan, args.get("plan_trip_uid"))
+        changes = {k: v for k, v in args.items() if k not in ("plan_uuid", "plan_trip_uid")}
+        if not changes:
             raise ValueError("Nothing to update.")
+        edit_form, remarks = form.plan_trip_edit_form(user, pt, changes)
+        form.site().save_plan_trip_edit(plan, pt, edit_form)
+        return out(_clean({"ok": True, "plan_trip": _plan_trip_detail(_owned_plan_trip(plan, pt["uid"])),
+                           "straight_line": _straight_line(remarks), "remarks": remarks,
+                           "links": _plan_links(user.username, plan["uuid"])}))
 
-        trip_type = args.get("type") or pt["trip_type"]
-        if trip_type not in TRIP_TYPE_VALUES:
-            raise ValueError(f"Unknown trip type: {trip_type}")
-
-        stored_path = [
-            {"lat": c[0], "lng": c[1]} for c in geom_geojson_to_coords(pt["geojson"])
-        ]
-
-        # ── route: re-geocode/re-route when any endpoint (or the type) changes,
-        # reusing the stored endpoint for the side that wasn't supplied.
-        reroute = any(k in args for k in route_keys)
-        if reroute:
-            parsed = enrich_parsed_trip({
-                "type": trip_type,
-                "origin": args.get("origin") or _strip_flag(pt["origin_station"]),
-                "origin_iata": args.get("origin_iata")
-                    or _iata_from_name(pt["origin_station"]),
-                "origin_lat": args.get("origin_lat")
-                    or (stored_path[0]["lat"] if stored_path else None),
-                "origin_lng": args.get("origin_lng")
-                    or (stored_path[0]["lng"] if stored_path else None),
-                "destination": args.get("destination")
-                    or _strip_flag(pt["destination_station"]),
-                "destination_iata": args.get("destination_iata")
-                    or _iata_from_name(pt["destination_station"]),
-                "destination_lat": args.get("destination_lat")
-                    or (stored_path[-1]["lat"] if stored_path else None),
-                "destination_lng": args.get("destination_lng")
-                    or (stored_path[-1]["lng"] if stored_path else None),
-            })
-            if not parsed:
-                raise ValueError(
-                    "Could not update the leg (geocoding/routing failed). "
-                    "Check the station names and coordinates."
-                )
-            path = parsed["_path"]
-            trip_length = parsed["_distance"]
-            if trip_type in ("air", "helicopter"):
-                countries = json.dumps({
-                    getCountryFromCoordinates(path[0]["lat"], path[0]["lng"])["countryCode"]: trip_length / 2,
-                    getCountryFromCoordinates(path[-1]["lat"], path[-1]["lng"])["countryCode"]: trip_length / 2,
-                })
-            else:
-                countries = getCountriesFromPath(path, trip_type, None, None)
-            origin_station = parsed["_resolved_origin"]
-            destination_station = parsed["_resolved_destination"]
-        else:
-            path = stored_path or [{"lat": 0.0, "lng": 0.0}, {"lat": 0.0, "lng": 0.0}]
-            trip_length = pt["trip_length"]
-            countries = pt["countries"]
-            origin_station = pt["origin_station"]
-            destination_station = pt["destination_station"]
-
-        # ── timing: rebuild when any timing field is supplied, filling gaps from
-        # the current values when the leg is already in that mode.
-        modes_given = [m for m, keys in (
-            ("relative", relative_keys), ("preciseDates", precise_keys), ("onlyDate", ("date",)),
-        ) if any(k in args for k in keys)]
-        if len(modes_given) > 1 or (modes_given and args.get("clear_timing")):
-            raise ValueError("Give timing fields from one mode only.")
-
-        if args.get("clear_timing"):
-            timing_input = {"precision": "unknown", "unknownType": "future"}
-        elif modes_given == ["relative"]:
-            was_relative = pt["timing_mode"] == "relative"
-            old_start = pt["start_day"] if was_relative else None
-            old_end = pt["end_day"] if was_relative else None
-            start_day = args.get("start_day") or old_start or 1
-            if args.get("end_day"):
-                end_day = args["end_day"]
-            elif "start_day" in args and old_start and old_end:
-                end_day = old_end + (start_day - old_start)  # keep the leg's span
-            else:
-                end_day = old_end or start_day
-
-            def _fmt_time(t):
-                return t.strftime("%H:%M") if t else ""
-
-            timing_input = {
-                "precision": "relative",
-                "planStartDay": start_day,
-                "planEndDay": end_day,
-                "planStartTime": (args["start_time"] if "start_time" in args
-                                  else _fmt_time(was_relative and pt["start_time"])) or "",
-                "planEndTime": (args["end_time"] if "end_time" in args
-                                else _fmt_time(was_relative and pt["end_time"])) or "",
-            }
-        elif modes_given == ["preciseDates"]:
-            was_precise = pt["timing_mode"] == "preciseDates"
-
-            def _fmt_dt(d):
-                return d.strftime("%Y-%m-%dT%H:%M") if d else None
-
-            start = args.get("start_datetime") or (
-                _fmt_dt(pt["start_datetime"]) if was_precise else None
-            )
-            if not start:
-                raise ValueError("start_datetime is required to switch to precise timing.")
-            end = args.get("end_datetime") or (
-                _fmt_dt(pt["end_datetime"]) if was_precise else None
-            ) or start
-            timing_input = {
-                "precision": "preciseDates",
-                "newTripStart": str(start).replace(" ", "T"),
-                "newTripEnd": str(end).replace(" ", "T"),
-            }
-        elif modes_given == ["onlyDate"]:
-            timing_input = {"precision": "onlyDate", "onlyDate": args["date"],
-                            "onlyDateDuration": ""}
-        else:
-            timing_input = None  # timing untouched
-
-        if timing_input is not None:
-            timing = process_plan_dates(timing_input, path)
-        else:
-            timing = {k: pt[k] for k in (
-                "timing_mode", "start_day", "end_day", "start_time", "end_time",
-                "start_datetime", "end_datetime", "utc_start_datetime",
-                "utc_end_datetime", "manual_trip_duration",
-            )}
-
-        # Concrete UTC instants give a precise scheduled duration (as in
-        # create_plan_trip_from_parsed); a reroute invalidates the old one, so
-        # fall back to the router's own estimate for the new route, and only
-        # to 0 if that's unavailable too.
-        if reroute:
-            estimated = int(parsed["_route_duration"]) if parsed.get("_route_duration") else 0
-        else:
-            estimated = pt["estimated_trip_duration"] or 0
-        if timing.get("utc_start_datetime") and timing.get("utc_end_datetime"):
-            diff = int((timing["utc_end_datetime"] - timing["utc_start_datetime"]).total_seconds())
-            if diff >= 0:
-                estimated = diff
-
-        def merged(key):
-            return args[key] if key in args else pt[key]
-
-        plan_trip = PlanTrip(
-            plan_id=plan["uid"],
-            user_id=plan["user_id"],
-            origin_station=origin_station,
-            destination_station=destination_station,
-            trip_type=trip_type,
-            operator=merged("operator"),
-            line_name=merged("line_name"),
-            material_type=(args.get("aircraft_icao") if "aircraft_icao" in args
-                           else pt["material_type"]),
-            material_type_advanced=pt["material_type_advanced"],
-            reg=pt["reg"],
-            seat=merged("seat"),
-            notes=merged("notes"),
-            trip_length=trip_length,
-            estimated_trip_duration=estimated,
-            countries=countries,
-            price=merged("price"),
-            currency=merged("currency"),
-            waypoints=None if reroute else pt["waypoints"],
-            visibility=pt["visibility"],
-            path=path,
-            timing=timing,
-            purchase_date=pt["purchase_date"],
-            booked=bool(merged("booked")),
-            power_type=pt["power_type"],
-            co2_override=pt["co2_override"],
-            sort_order=pt["sort_order"],
-            created=pt["created"],
-            last_modified=datetime.now(),
-        )
-        update_plan_trip_full(args["plan_trip_uid"], plan_trip)
-        return json.dumps({
-            "ok": True,
-            "plan_trip_uid": args["plan_trip_uid"],
-            "origin": plan_trip.origin_station,
-            "destination": plan_trip.destination_station,
-        })
+    if name == "delete_plan_trip":
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        _owned_plan_trip(plan, args.get("plan_trip_uid"))
+        _delete_plan_trip(int(args["plan_trip_uid"]), uid)
+        return out({"ok": True})
 
     if name == "reorder_plan_trips":
-        plan = _owned_plan(args["plan_uuid"], uid)
-        order = args.get("ordered_uids") or []
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        order = [int(x) for x in (args.get("ordered_uids") or [])]
+        with pg_session() as pg:
+            legs = {r[0] for r in pg.execute("SELECT uid FROM plan_trips WHERE plan_id = :p", {"p": plan["uid"]})}
+        if set(order) != legs or len(order) != len(legs):
+            raise ValueError(f"ordered_uids must list each of the plan's legs once: {sorted(legs)}.")
         with pg_session() as pg:
             for i, leg_uid in enumerate(order):
                 pg.execute(reorder_plan_trip_query(), {
-                    "uid": int(leg_uid), "plan_id": plan["uid"],
-                    "user_id": uid, "sort_order": i,
-                })
-        return json.dumps({"ok": True})
+                    "uid": leg_uid, "plan_id": plan["uid"], "user_id": uid, "sort_order": i})
+        return out({"ok": True})
 
     if name == "import_trips_to_plan":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
         ids = [int(x) for x in (args.get("trip_ids") or [])]
         moved = import_trips_to_plan(plan, ids) if ids else []
-        return json.dumps({"ok": True, "moved_trip_ids": moved})
+        return out({"ok": True, "moved_trip_ids": moved, "links": _plan_links(user.username, plan["uuid"])})
+
+    if name == "validate_plan":
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        start = form.iso_date(args["start_date"], "start_date") if args.get("start_date") else plan["anchor_date"]
+        uids = args.get("plan_trip_uids")
+        tag_uuid = _validate_plan(plan, start, plan_trip_uids=[int(x) for x in uids] if uids else None)
+        with pg_session() as pg:
+            logged = [dict(r._mapping) for r in pg.execute(
+                "SELECT uid AS plan_trip_uid, validated_trip_id AS trip_id FROM plan_trips"
+                " WHERE plan_id = :p AND validated_trip_id IS NOT NULL ORDER BY sort_order", {"p": plan["uid"]})]
+        return out({"ok": True, "tag_uuid": tag_uuid, "logged": logged, "links": {
+            **_trip_links(user.username, [r["trip_id"] for r in logged]),
+            "plan": _plan_links(user.username, plan["uuid"])["plan"]}})
 
     if name == "add_plan_cost":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
+        fields = _cost_fields(user, args)
         now = datetime.now()
         with pg_session() as pg:
             cost_uid = pg.execute(insert_plan_cost_query(), {
-                "plan_id": plan["uid"],
-                "name": args["name"],
-                "price": float(args["price"]),
-                "currency": args.get("currency") or user.user_currency,
-                "notes": args.get("notes"),
-                "created": now, "last_modified": now,
+                "plan_id": plan["uid"], **fields, "created": now, "last_modified": now,
             }).fetchone()[0]
-        return json.dumps({"ok": True, "cost_uid": cost_uid})
+        return out({"ok": True, "cost_uid": cost_uid})
 
     if name == "update_plan_cost":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
         with pg_session() as pg:
             row = pg.execute(
-                "SELECT name, price, currency, notes FROM plan_costs "
-                "WHERE uid = :uid AND plan_id = :pid",
-                {"uid": args["cost_uid"], "pid": plan["uid"]},
+                "SELECT name, price, currency, notes FROM plan_costs WHERE uid = :uid AND plan_id = :pid",
+                {"uid": args.get("cost_uid"), "pid": plan["uid"]},
             ).fetchone()
             if row is None:
                 raise ValueError("Cost not found.")
-            cur = dict(row._mapping)
+            fields = _cost_fields(user, args, dict(row._mapping))
             pg.execute(update_plan_cost_query(), {
-                "uid": args["cost_uid"], "plan_id": plan["uid"],
-                "name": args.get("name", cur["name"]),
-                "price": float(args["price"]) if "price" in args else cur["price"],
-                "currency": args.get("currency", cur["currency"]),
-                "notes": args.get("notes", cur["notes"]),
+                "uid": args["cost_uid"], "plan_id": plan["uid"], **fields,
                 "last_modified": datetime.now(),
             })
-        return json.dumps({"ok": True})
+        return out({"ok": True})
 
     if name == "delete_plan_cost":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
         with pg_session() as pg:
-            pg.execute(delete_plan_cost_query(), {"uid": args["cost_uid"], "plan_id": plan["uid"]})
-        return json.dumps({"ok": True})
+            pg.execute(delete_plan_cost_query(), {"uid": args.get("cost_uid"), "plan_id": plan["uid"]})
+        return out({"ok": True})
 
     if name == "assign_trip_cost":
-        plan = _owned_plan(args["plan_uuid"], uid)
+        plan = _owned_plan(args.get("plan_uuid"), uid)
         cost_uid = args.get("cost_uid")
         cost_uid = int(cost_uid) if cost_uid not in (None, "", "none") else None
         with pg_session() as pg:
@@ -1484,17 +1640,51 @@ def _call_tool(name: str, args: dict, user) -> str:
                 if exists is None:
                     raise ValueError("Cost not found.")
             res = pg.execute(set_plan_trip_cost_query(), {
-                "uid": args["plan_trip_uid"], "plan_id": plan["uid"],
+                "uid": args.get("plan_trip_uid"), "plan_id": plan["uid"],
                 "cost_id": cost_uid, "last_modified": datetime.now(),
             })
             if res.rowcount == 0:
                 raise ValueError("Plan leg not found.")
-        return json.dumps({"ok": True})
+        return out({"ok": True})
 
     raise ValueError(f"Unknown tool: {name}")
 
 
 # ── JSON-RPC dispatch ─────────────────────────────────────────────────────────
+
+PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18")
+# A JSON-RPC batch is that many tool calls in one request.
+MAX_BATCH = 20
+
+# What each write does to existing data, for the client's approval prompts (MCP tool
+# annotations): destructive = deletes, overwrites, or moves trips out of the log.
+DESTRUCTIVE_TOOLS = {
+    "delete_trip", "update_trip", "delete_plan", "update_plan", "delete_plan_trip",
+    "update_plan_trip", "delete_plan_cost", "update_plan_cost", "import_trips_to_plan",
+}
+IDEMPOTENT_TOOLS = {"reorder_plan_trips", "assign_trip_cost", "update_plan", "update_plan_cost"}
+
+
+def _annotations(name):
+    if name.startswith(("search_", "list_", "get_")):
+        return {"readOnlyHint": True, "openWorldHint": name == "search_departures"}
+    return {
+        "readOnlyHint": False,
+        "destructiveHint": name in DESTRUCTIVE_TOOLS,
+        "idempotentHint": name in IDEMPOTENT_TOOLS,
+        "openWorldHint": False,
+    }
+
+
+SERVER_INSTRUCTIONS = (
+    "Trainlog logs a user's trips and plans; these tools do what its website does, with "
+    "the same checks. Take places from search_stations. After creating or changing trips "
+    "or plans, give the user the result's `links` (map, and the trips list filtered to "
+    "the trips touched, or the plan page). When a result has `straight_line: true`, the "
+    "router found no route and the trip was saved as straight lines: say so clearly, "
+    "and that it can be redrawn on the trip's edit page. Relay any `remarks`."
+)
+
 
 
 def _handle_rpc(msg: dict, user) -> dict | None:
@@ -1508,10 +1698,13 @@ def _handle_rpc(msg: dict, user) -> dict | None:
         return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
 
     if method == "initialize":
+        requested = (msg.get("params") or {}).get("protocolVersion")
         return ok({
-            "protocolVersion": "2024-11-05",
+            # Tool annotations came with 2025-03-26; older clients get what they asked for.
+            "protocolVersion": requested if requested in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[-1],
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "Trainlog", "version": "1.0"},
+            "serverInfo": {"name": "Trainlog", "version": "2.0"},
+            "instructions": SERVER_INSTRUCTIONS,
         })
 
     if method in ("notifications/initialized", "notifications/cancelled"):
@@ -1521,18 +1714,23 @@ def _handle_rpc(msg: dict, user) -> dict | None:
         return ok({})
 
     if method == "tools/list":
-        return ok({"tools": _build_tools()})
+        return ok({"tools": [{**t, "annotations": _annotations(t["name"])} for t in _build_tools()]})
 
     if method == "tools/call":
         params = msg.get("params", {})
         try:
-            text = _call_tool(params.get("name", ""), params.get("arguments", {}), user)
+            with _acting_as(user):
+                text = _call_tool(params.get("name", ""), params.get("arguments") or {}, user)
             return ok({"content": [{"type": "text", "text": text}]})
         except ValueError as e:
             return ok({"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True})
-        except Exception as e:
+        except HTTPException as e:
+            # The site's own checks abort (a 404 for a trip that isn't the user's…).
+            return ok({"content": [{"type": "text", "text": f"Error: {e.description}"}], "isError": True})
+        except Exception:
+            # Logged, not returned: the message may carry SQL or internals.
             logger.exception("MCP tool error")
-            return err(-32603, str(e))
+            return err(-32603, "Internal error.")
 
     if msg_id is not None:
         return err(-32601, f"Method not found: {method}")
@@ -1555,6 +1753,8 @@ def handle():
         return Response("Bad request", status=400)
 
     if isinstance(msg, list):  # JSON-RPC batch
+        if len(msg) > MAX_BATCH:
+            return Response(f"At most {MAX_BATCH} messages per batch.", status=413)
         responses = [r for r in (_handle_rpc(m, user) for m in msg) if r is not None]
         return Response(json.dumps(responses), status=200, content_type="application/json")
 

@@ -2,7 +2,10 @@
 {% block content %}
 
 <div id="form">
-    <figure class="logo"><img src="{{ url_for('static',filename='images/logo.png') }}"></figure>
+    {#- Icon and name as text: no baked-in English slogan above a translated page #}
+    <div class="auth-logo"><img src="{{ url_for('static',filename='images/logo_square.png') }}" alt=""><span>Trainlog<small>.me</small></span></div>
+    {#- The landing's promise, at the moment people decide #}
+    <p class="text-center text-body-secondary small mb-3">{{ landingPromise }}</p>
     <div>
         <form id="signup" action="{{ url_for('signup')}}" method="post">
             <p class="lh-sm">
@@ -14,16 +17,18 @@
             {{ userName }} <input type="text" id="username" name="username" required />
             {{ password }} <input type="password" id="password" name="password" required />
             
-            <!-- FriendlyCaptcha widget -->
-            <div class="frc-captcha" style="display: none" data-sitekey="FCMJ2QRSAP6ABT9B"></div>
+            {#- Honeypot: off-screen and skipped by keyboard and autofill, so only form-filling bots set it #}
+            <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden">
+
+            {#- Self-hosted proof-of-work, solved in the background from page load #}
+            <altcha-widget id="signupCaptcha" challenge="{{ url_for('signup_challenge') }}" auto="onload" display="invisible" name="altcha"></altcha-widget>
             
             <div class="d-flex justify-content-center mt-2">
-                <button type="submit" class="btn btn-primary">{{ signup }}</button>
+                <button type="submit" class="btn btn-primary mx-2">{{ signup }}</button>
+                <a href="{{ url_for('login') }}" class="btn btn-secondary mx-2">{{ login }}</a>
             </div>
 
-            <p class="text-center mt-3 mb-0" style="font-size: 0.8rem;">
-                {{ privacy_notice|safe }}
-            </p>
+            <p class="auth-fineprint">{{ privacy_notice|safe }}</p>
 
         </form>
         
@@ -39,7 +44,28 @@
     </div>
 </div>
 
-<!-- Include FriendlyCaptcha script -->
-<script src="https://cdn.jsdelivr.net/npm/friendly-challenge@0.9.18/widget.module.min.js" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/altcha@3.3.0/dist/main/altcha.min.js" type="module"></script>
+<script>
+    // A submit before the background solve finishes waits for it instead of
+    // posting without a solution; an expired challenge is fetched again
+    (function () {
+        const form = document.getElementById("signup");
+        const widget = document.getElementById("signupCaptcha");
+        widget.addEventListener("expired", () => widget.verify());
+        form.addEventListener("submit", (ev) => {
+            if (typeof widget.getState !== "function") return;
+            const state = widget.getState();
+            if (state === "verified") return;
+            ev.preventDefault();
+            const submitter = ev.submitter;
+            if (submitter) submitter.disabled = true;
+            widget.addEventListener("verified", () => {
+                if (submitter) submitter.disabled = false;
+                form.requestSubmit(submitter);
+            }, { once: true });
+            if (state !== "verifying") widget.verify();
+        });
+    })();
+</script>
 
 {% endblock %}

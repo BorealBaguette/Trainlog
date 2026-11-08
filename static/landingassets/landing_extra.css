@@ -1,0 +1,171 @@
+/* Additions to the landing page (main.css is the original export, left untouched). */
+
+/* Same proportions as #container04: text 65%, image 35% */
+#container07 > .wrapper > .inner > :nth-child(1) {
+	width: calc(65% + (var(--gutters) / 2));
+}
+#container07 > .wrapper > .inner > :nth-child(2) {
+	width: calc(35% + (var(--gutters) / 2));
+}
+@media (max-width: 1024px) {
+	#container07 > .wrapper > .inner > :nth-child(1),
+	#container07 > .wrapper > .inner > :nth-child(2) {
+		--alignment: center;
+		--flex-alignment: center;
+		--indent-left: 1;
+		--indent-right: 1;
+		min-height: 100% !important;
+		width: 100% !important;
+	}
+}
+
+.landing-tagline {
+	color: rgba(255, 255, 255, 0.75) !important;
+	font-size: 1.25em !important;
+	max-width: 32rem;
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+
+.landing-promise {
+	letter-spacing: 0.05rem !important;
+	font-size: 0.875em !important;
+	margin-top: 0.5rem !important;
+}
+
+.landing-links {
+	font-size: 0.875em !important;
+	margin-top: 1rem !important;
+}
+.landing-links a,
+.landing-footer a {
+	color: rgba(255, 255, 255, 0.7);
+	text-decoration: none !important;
+}
+.landing-links a:hover,
+.landing-footer a:hover {
+	color: #00A3FF;
+}
+.landing-links span {
+	margin: 0 0.5rem;
+}
+
+#buttons02 .n02,
+#buttons03 .n02 {
+	border: solid 1px rgba(255, 255, 255, 0.25);
+}
+
+.landing-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.75rem 1.75rem;
+	padding: 2rem 1rem 3rem;
+	font-family: 'Inter', sans-serif;
+	font-size: 0.875em;
+}
+
+/* The train mark above the name, white on the dark sky */
+.landing-logo {
+	display: block;
+	width: 5.5rem;
+	height: auto;
+	margin: 0 auto 0.75rem;
+	filter: invert(1) drop-shadow(0 0 1.5rem rgba(0, 163, 255, 0.35));
+	opacity: 0.92;
+}
+@media (max-width: 736px) {
+	.landing-logo { width: 4.5rem; }
+}
+
+/* main.css pads the page with 9rem of empty sky above and below */
+#main > .inner {
+	padding-top: 3.5rem !important;
+	padding-bottom: 1.5rem !important;
+}
+@media (max-width: 736px) {
+	#main > .inner { padding-top: 2rem !important; padding-bottom: 1rem !important; }
+}
+
+/* The dashboard, as one wide picture under its heading */
+#container09 > .wrapper > .inner {
+	text-align: center;
+}
+#container09 p.style4 {
+	max-width: 40rem;
+	margin-left: auto;
+	margin-right: auto;
+}
+.landing-wide-shot {
+	display: block;
+	width: 100%;
+	height: auto;
+	margin-top: 2rem;
+	border-radius: 1rem;
+	box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.35);
+}
+
+.landing-languages {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.4rem 1.1rem;
+	max-width: 46rem;
+	margin: -1.5rem auto 0;
+	padding: 0 1rem;
+	font-family: 'Inter', sans-serif;
+	font-size: 0.8em;
+}
+.landing-languages a {
+	color: rgba(255, 255, 255, 0.45);
+	text-decoration: none;
+}
+.landing-languages a:hover,
+.landing-languages a[aria-current] {
+	color: rgba(255, 255, 255, 0.85);
+}
+
+/* The first screen is the hero, whole: one screen tall, content centred, nothing cut
+   and nothing peeking from below. Sizes follow the screen's height so it fits short
+   screens too. */
+#container06 {
+	min-height: calc(100vh - 3.5rem);
+	min-height: calc(100svh - 3.5rem);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
+@media (max-width: 736px) {
+	#container06 {
+		min-height: calc(100vh - 2rem);
+		min-height: calc(100svh - 2rem);
+	}
+}
+#container06 .landing-logo {
+	width: clamp(3rem, 9vh, 5.5rem);
+	margin-bottom: clamp(0.25rem, 1.5vh, 0.75rem);
+}
+#container06 #text01 {
+	font-size: clamp(2.75rem, 9vh, 4.25em);
+}
+#container06 .landing-tagline {
+	line-height: 1.5 !important;
+	margin-top: clamp(0.75rem, 2.5vh, 2rem) !important;
+}
+
+/* Sign up and Log in side by side (they wrap below each other on narrow phones) */
+#buttons02,
+#buttons03 {
+	flex-direction: row !important;
+	flex-wrap: wrap !important;
+	justify-content: center;
+}
+#buttons03 {
+	margin-top: clamp(1rem, 3vh, 2rem) !important;
+}
+
+/* Screenshots get the corners of the cards inside them, not main.css's 3rem pill */
+.image.style2 .frame {
+	border-radius: 1rem !important;
+}

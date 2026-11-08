@@ -1,20 +1,72 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 <style>
-    .action-button {
-        font-size: 0.8rem; /* Smaller font size for buttons */
+    .friends-page { max-width: 1100px; }
+    .friends-search { position: relative; }
+    .friends-search .bi-search {
+        position: absolute; left: 1rem; top: 50%; transform: translateY(-50%);
+        color: var(--bs-secondary-color); pointer-events: none;
     }
+    .friends-search input { padding-left: 2.6rem; border-radius: 999px; height: 3rem; }
+
+    .friend-search-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.5rem; }
+    .friend-search-item .user-avatar { --avatar-size: 28px; }
+
+    .friends-section-title {
+        display: flex; align-items: center; gap: 0.5rem;
+        font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+        color: var(--bs-secondary-color); margin: 2rem 0 0.75rem;
+    }
+    .friends-count {
+        background: var(--bs-secondary-bg); color: var(--bs-body-color);
+        border-radius: 999px; padding: 0 0.55rem; font-size: 0.75rem;
+    }
+
+    .friend-card {
+        display: flex; align-items: center; gap: 0.85rem; height: 100%;
+        padding: 0.85rem 1rem; border-radius: 12px;
+        background: light-dark(#fff, var(--bs-tertiary-bg));
+        border: 1px solid var(--bs-border-color-translucent);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        transition: box-shadow .15s, transform .15s;
+    }
+    .friend-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.1); transform: translateY(-1px); }
+    .friend-card.incoming { border-left: 4px solid var(--bs-success); }
+    .friend-card.outgoing { background: transparent; box-shadow: none; border-style: dashed; }
+    .friend-card.outgoing:hover { transform: none; }
+
+    .friend-card .user-avatar { --avatar-size: 52px; }
+    .friend-card.outgoing .user-avatar { --avatar-size: 40px; opacity: 0.75; }
+    .friend-card .live-dot {
+        position: absolute; right: 1px; bottom: 1px; width: 14px; height: 14px;
+        background: #10b981; border-radius: 50%;
+        border: 2px solid light-dark(#fff, var(--bs-tertiary-bg));
+        animation: friend-pulse 1.5s infinite;
+    }
+    @keyframes friend-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+    .friend-info { flex: 1; min-width: 0; }
     .friend-name {
-        font-size: 1.2rem; /* Larger font size for names */
-        margin-left: 0.5rem; /* Space between icon and name */
+        display: block; font-weight: 600; font-size: 1.05rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        color: var(--bs-emphasis-color); text-decoration: none;
     }
-    .friendIcon {
-        font-size: 1.5rem; /* Larger size for icons */
+    a.friend-name:hover { text-decoration: underline; }
+    .friend-meta { font-size: 0.8rem; color: var(--bs-secondary-color); }
+    .friend-live { font-size: 0.75rem; font-weight: 600; color: #10b981; }
+
+    .friend-actions { display: flex; gap: 0.35rem; flex: none; }
+    .friend-actions .btn { border-radius: 999px; }
+    .friend-remove { opacity: 0; transition: opacity .15s; }
+    .friend-card:hover .friend-remove, .friend-remove:focus-visible { opacity: 1; }
+    @media (hover: none) { .friend-remove { opacity: 0.7; } }
+
+    .friends-empty {
+        text-align: center; padding: 3rem 1rem; margin-top: 2rem;
+        border: 2px dashed var(--bs-border-color); border-radius: 16px;
+        color: var(--bs-secondary-color);
     }
-    .friend-action-group {
-        display: flex;
-        gap: 0.25rem; /* Small gap between buttons */
-    }
+    .friends-empty i { font-size: 3rem; display: block; margin-bottom: 0.5rem; opacity: 0.5; }
 </style>
 {% include nav %}
 
@@ -34,127 +86,110 @@
   </div>
 </div>
 
-<div class="container mt-5">
-    <h2>{{ searchForFriends }}</h2>
-    <div class="input-group mb-3">
+{% macro avatar(user) %}
+<span class="user-avatar" data-username="{{ user.username }}">{% if user.traveling %}<span class="live-dot" title="{{ onTrip }}"></span>{% endif %}</span>
+{% endmacro %}
+
+<div class="container friends-page mt-5 mb-5">
+    <h2 class="mb-3"><i class="bi bi-people-fill me-2"></i>{{ friends }}</h2>
+    <div class="friends-search mb-3">
+        <i class="bi bi-search"></i>
         <input type="text" class="form-control" placeholder="{{ searchForFriends }}..." id="friendSearchInput">
     </div>
     {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{category}}" role="alert">
-                    <p>{{ message }}</p>
-                </div>
-                {% endfor %}            
-        {% endif %}
-    {% endwith %}
-    <br><br>
-    <div class="container mt-5">
-        <!-- Determine the number of friend information types present -->
-        {% set num_sections = 0 %}
-        {% if current_friends %}
-            {% set num_sections = num_sections + 1 %}
-        {% endif %}
-        {% if incoming_requests %}
-            {% set num_sections = num_sections + 1 %}
-        {% endif %}
-        {% if outgoing_requests %}
-            {% set num_sections = num_sections + 1 %}
-        {% endif %}
-        {% if num_sections == 0 %}
-            {% set col_class = "col-md-12" %} {# Default to full width if no sections are present #}
-        {% else %}
-            {% set col_class = "col-md-" ~ (12 // num_sections) %}
-        {% endif %}
-        <div class="row">
-            {% if current_friends %}
-                <!-- Adjusted columns for each type of friend information -->
-                <div class="{{col_class}}">
-                    <!-- Current Friends -->
-                    <h3>{{ friendsList }}</h3>
-                    <div class="friend-table">
-                        {% for current_friend_id, current_friend_username in current_friends %}
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <div class="d-flex align-items-center">
-                                <i class="friendIcon bi bi-person-fill"></i>
-                                <span class="friend-name"><a class="leaderboardLink link-dark" href="{{url_for('public', username=current_friend_username)}}">{{ current_friend_username }}</a></span>
-                            </div>
-                            <div class="friend-action-group">
-                                <button class="btn btn-labeled btn-friend btn-primary btn-danger action-button" onclick="unfriend('{{current_friend_id}}', '{{current_friend_username}}', 'unfriend')"><span class="btn-label "><i class="bi bi-trash3-fill"></i></span>{{remove}}</button>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if incoming_requests %}
-                <div class="{{col_class}}">
-                    <!-- Incoming Requests -->
-                    <h3>{{ incomingRequests }}</h3>
-                    <div class="friend-table">
-                        {% for request_userId, request_username in incoming_requests %}
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <div class="d-flex align-items-center">
-                                <i class="friendIcon bi bi-person-fill-down"></i>
-                                <span class="friend-name">{{ request_username }}</span>
-                            </div>
-                            <div class="friend-action-group">
-                                <!-- Accept Button -->
-                                <button onclick="acceptFriend('{{request_userId}}', '{{request_username}}')" class="btn btn-labeled btn-friend btn-success action-button">
-                                    <span class="btn-label"><i class="bi bi-check-lg"></i></span><span class="btn-text">{{ accept }}</span>
-                                </button>
-
-                                <!-- Refuse Button -->
-                                <button onclick="unfriend('{{request_userId}}', '{{request_username}}', 'rejectRequest')" class="btn btn-labeled btn-friend btn-danger action-button">
-                                    <span class="btn-label"><i class="bi bi-x-lg"></i></span><span class="btn-text">{{ refuse }}</span>
-                                </button>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if outgoing_requests %}
-                <div class="{{col_class}}">
-                    <!-- Outgoing Requests -->
-                    <h3>{{ outgoingRequests }}</h3>
-                    <div class="friend-table">
-                        {% for request_userId, request_username in outgoing_requests %}
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <div class="d-flex align-items-center">
-                                <i class="friendIcon bi bi-person-fill-up"></i>
-                                <span class="friend-name">{{ request_username }}</span>
-                            </div>
-                            <div class="friend-action-group">
-                                <button class="btn btn-labeled btn-friend btn-primary btn-warning action-button" onclick="unfriend('{{request_userId}}', '{{request_username}}', 'unrequest')">
-                                    <span class="btn-label"><i class="bi bi-arrow-counterclockwise"></i></span><span class="btn-text">{{cancel}}</span>
-                                </button>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{category}} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
+        {% endfor %}
+    {% endwith %}
+
+    {% if incoming_requests %}
+    <div class="friends-section-title"><i class="bi bi-person-fill-down"></i>{{ incomingRequests }}<span class="friends-count">{{ incoming_requests|length }}</span></div>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        {% for request in incoming_requests %}
+        <div class="col">
+            <div class="friend-card incoming">
+                {{ avatar(request) }}
+                <div class="friend-info">
+                    <span class="friend-name">{{ request.username }}</span>
+                    {% if request.since %}<div class="friend-meta" data-date="{{ request.since }}" data-template="{{ friendRequestDate }}"></div>{% endif %}
+                </div>
+                <div class="friend-actions">
+                    <button class="btn btn-sm btn-success" data-uid="{{ request.uid }}" onclick="acceptFriend(this.dataset.uid)" title="{{ accept }}" aria-label="{{ accept }}"><i class="bi bi-check-lg"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" data-uid="{{ request.uid }}" data-name="{{ request.username }}" onclick="unfriend(this.dataset.uid, this.dataset.name, 'rejectRequest')" title="{{ refuse }}" aria-label="{{ refuse }}"><i class="bi bi-x-lg"></i></button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
     </div>
+    {% endif %}
+
+    {% if current_friends %}
+    <div class="friends-section-title"><i class="bi bi-people"></i>{{ friendsList }}<span class="friends-count">{{ current_friends|length }}</span></div>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        {% for friend in current_friends %}
+        <div class="col">
+            <div class="friend-card">
+                {{ avatar(friend) }}
+                <div class="friend-info">
+                    <a class="friend-name" href="{{ url_for('public', username=friend.username) }}">{{ friend.username }}</a>
+                    {% if friend.traveling %}<div class="friend-live">{{ onTrip }}</div>{% endif %}
+                    <div class="friend-meta friend-stats" data-trips="{{ friend.trips }}" data-km="{{ friend.km }}"></div>
+                    {% if friend.since %}<div class="friend-meta" data-date="{{ friend.since }}" data-template="{{ friendsSince }}"></div>{% endif %}
+                </div>
+                <div class="friend-actions">
+                    <button class="btn btn-sm btn-outline-danger friend-remove" data-uid="{{ friend.uid }}" data-name="{{ friend.username }}" onclick="unfriend(this.dataset.uid, this.dataset.name, 'unfriend')" title="{{ remove }}" aria-label="{{ remove }}"><i class="bi bi-trash3"></i></button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if outgoing_requests %}
+    <div class="friends-section-title"><i class="bi bi-hourglass-split"></i>{{ outgoingRequests }}<span class="friends-count">{{ outgoing_requests|length }}</span></div>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        {% for request in outgoing_requests %}
+        <div class="col">
+            <div class="friend-card outgoing">
+                {{ avatar(request) }}
+                <div class="friend-info">
+                    <span class="friend-name">{{ request.username }}</span>
+                    {% if request.since %}<div class="friend-meta" data-date="{{ request.since }}" data-template="{{ friendRequestDate }}"></div>{% endif %}
+                </div>
+                <div class="friend-actions">
+                    <button class="btn btn-sm btn-outline-secondary" data-uid="{{ request.uid }}" data-name="{{ request.username }}" onclick="unfriend(this.dataset.uid, this.dataset.name, 'unrequest')" title="{{ cancel }}" aria-label="{{ cancel }}"><i class="bi bi-arrow-counterclockwise"></i></button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not (current_friends or incoming_requests or outgoing_requests) %}
+    <div class="friends-empty">
+        <i class="bi bi-people"></i>
+        {{ noFriendsYet }}
+    </div>
+    {% endif %}
+</div>
 
 <script>
 // JavaScript for handling unfriend action
 function unfriend(friendId, friendName, type) {
     if(type == "unfriend"){
-        $('#modalLabel').text("{{unfriend|safe}}".replace("{friend_name}", friendName));
+        $('#modalLabel').text({{unfriend|tojson}}.replace("{friend_name}", friendName));
     }
     else if (type == "unrequest"){
-        $('#modalLabel').text("{{unrequest|safe}}".replace("{friend_name}", friendName));
+        $('#modalLabel').text({{unrequest|tojson}}.replace("{friend_name}", friendName));
     }
     else {
-        $('#modalLabel').text("{{rejectRequest|safe}}".replace("{friend_name}", friendName));
+        $('#modalLabel').text({{rejectRequest|tojson}}.replace("{friend_name}", friendName));
     }
-    // Set the friend's name in the modal
-    $('#friendToUnfriend').text(friendName);
-    // Save friendId in a hidden input or in data attribute to use in confirmUnfriend
+    // Save friendId in a data attribute to use in confirmUnfriend
     $('#confirmationModal').data('friendId', friendId);
-    // Show the modal
     $('#confirmationModal').modal('show');
 }
 
@@ -172,34 +207,57 @@ function sendFriendRequest(username, friendId) {
     location.href = `requestFriend/${encodeURIComponent(friendId)}`;
 }
 
-
 $(document).ready(function() {
-    var availableUsers = {{ available_users | tojson | safe }};
-    
-    // Assuming availableUsers is an array of [uid, username] tuples
-    // Convert each tuple into an object { label: username, value: uid }
-    var usersForAutocomplete = availableUsers.map(function(user) {
-        return { label: user[1], value: user[0] };
+    const locale = document.documentElement.lang || 'en';
+
+    const avatarUrl = {{ url_for('user_avatars', username=username)|tojson }};
+    paintUserAvatars(document, avatarUrl);
+
+    const monthYear = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' });
+    const dayMonthYear = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
+    document.querySelectorAll('[data-date]').forEach(el => {
+        const d = new Date(el.dataset.date + 'T00:00:00');
+        // A friendship is dated by the month, a pending request by the day
+        const fmt = el.closest('.friend-card:not(.incoming):not(.outgoing)') ? monthYear : dayMonthYear;
+        el.textContent = el.dataset.template.replace('{date}', fmt.format(d));
     });
 
+    const kmFmt = new Intl.NumberFormat(locale);
+    const tripForms = {{ vizTrips|tojson }};
+    document.querySelectorAll('.friend-stats').forEach(el => {
+        const trips = +el.dataset.trips, km = +el.dataset.km;
+        el.textContent = trips ? `${pluralize(tripForms, trips)} · ${kmFmt.format(km)} km` : '';
+    });
+
+    const searchUrl = {{ url_for('friend_search', username=username)|tojson }};
     $('#friendSearchInput').autocomplete({
-        source: usersForAutocomplete,
+        minLength: 2,
+        delay: 250,
+        source: function(request, respond) {
+            $.getJSON(searchUrl, { q: request.term })
+                .done(users => respond(users.map(([uid, name]) => ({ label: name, value: uid }))))
+                .fail(() => respond([]));
+        },
         focus: function(event, ui) {
             // Prevent the value (uid) from being inserted into the input on focus
             return false;
         },
         select: function(event, ui) {
             sendFriendRequest("{{username}}", ui.item.value)
-            // Clear the search input
             $('#friendSearchInput').val('');
-            return false; // Prevent the value from being inserted into the input
+            return false;
+        },
+        open: function() {
+            paintUserAvatars($(this).autocomplete("widget")[0], avatarUrl);
         }
     }).autocomplete("instance")._renderItem = function(ul, item) {
-        // Customize the rendering of each item to include an icon next to the username
         return $("<li>")
-            .append('<div><i class="bi bi-person-fill-add"></i> ' + item.label + "</div>")
+            .append($('<div class="friend-search-item">')
+                .append($('<span class="user-avatar">').attr('data-username', item.label))
+                .append($('<span class="flex-grow-1">').text(item.label))
+                .append('<i class="bi bi-person-fill-add text-muted"></i>'))
             .appendTo(ul);
-    };    
+    };
 });
 </script>
 

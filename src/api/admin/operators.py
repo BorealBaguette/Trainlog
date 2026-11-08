@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 LOGO_UPLOAD_FOLDER = "static/images/operator_logos/new"
 os.makedirs(LOGO_UPLOAD_FOLDER, exist_ok=True)
+DARK_LOGO_UPLOAD_FOLDER = "static/images/operator_logos/dark"
+os.makedirs(DARK_LOGO_UPLOAD_FOLDER, exist_ok=True)
 
 operators_api_blueprint = Blueprint("admin_operators", __name__)
 
@@ -205,6 +207,38 @@ def add_operator_logo(operator_id: int):
 @admin_required
 def delete_operator_logo(logo_id: int):
     OperatorsRepository.delete_operator_logo(logo_id)
+    return "", 204
+
+
+@operators_api_blueprint.route("logos/<int:logo_id>/dark", methods=["POST"])
+@admin_required
+def add_dark_logo(logo_id: int):
+    logo = request.files.get("logo")
+    if not logo:
+        return jsonify({"status": "error", "message": "A logo file is required."}), 400
+    try:
+        validate_png_file(logo)
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Invalid logo: {e}"}), 400
+
+    # Its own folder, which dark_logos.js leaves as drawn
+    filename = secure_filename(f"{logo_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_dark.png")
+    logo.save(os.path.join(DARK_LOGO_UPLOAD_FOLDER, filename))
+    if not OperatorsRepository.set_dark_logo(logo_id, f"images/operator_logos/dark/{filename}"):
+        os.remove(os.path.join(DARK_LOGO_UPLOAD_FOLDER, filename))
+        abort(404, description="logo not found")
+
+    with open("logs/operator_logo_log.txt", "a", encoding="utf-8") as log:
+        log.write(
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - From: {getUser()} - Dark logo added for logo ID: {logo_id} - Filename: {filename}\n"
+        )
+    return "", 204
+
+
+@operators_api_blueprint.route("logos/<int:logo_id>/dark", methods=["DELETE"])
+@admin_required
+def delete_dark_logo(logo_id: int):
+    OperatorsRepository.set_dark_logo(logo_id, None)
     return "", 204
 
 

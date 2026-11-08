@@ -27,6 +27,10 @@ class User(authDb.Model):
     user_currency = authDb.Column(authDb.String(3), nullable=False, default="EUR")
     friend_search = authDb.Column(authDb.Boolean, nullable=False, default=True)
     colorblind = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # "auto" (follow the OS), "light" or "dark" — see src/theme.py.
+    theme = authDb.Column(authDb.String(10), nullable=False, default="light")
+    # Leaflet's raster tiles inverted in the dark theme
+    dark_leaflet = authDb.Column(authDb.Boolean, nullable=False, default=False)
     reset_token = authDb.Column(authDb.String(100), default="")
     # Per-user secret token for the GPSLogger GPX ingest endpoint
     # (/api/gps/<token>/upload). Scoped to GPS ingest only; regenerable.
@@ -95,12 +99,20 @@ class User(authDb.Model):
     # each of the user's own webhooks. Independent of discord_autopost, which
     # only decides whether posting happens by itself at departure.
     discord_main_enabled = authDb.Column(authDb.Boolean, nullable=False, default=True)
+    # Show the linked Discord account's picture instead of an initial wherever this
+    # user appears to others (friends, shared tags, friend search — see
+    # user_avatars in app.py). Off by default: nothing is shown unless asked.
+    discord_avatar = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Email change requested but not yet confirmed. `email` itself only updates
     # once the user clicks the link sent to `pending_email` (see
     # /u/<username>/change_email), so a user can't take over an inbox they don't
     # control — this also gates BMC webhook matching, which is keyed on `email`.
     pending_email = authDb.Column(authDb.String(100), nullable=True)
     email_verify_token = authDb.Column(authDb.String(100), nullable=True)
+    # What a plain shared link to this user's trips shows (src/share_view.py). Off by
+    # default: a price only leaves the account when its owner says so.
+    share_price = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    share_carbon = authDb.Column(authDb.Boolean, nullable=False, default=False)
 
     def toDict(self):
         return {
@@ -120,6 +132,8 @@ class User(authDb.Model):
             "share_level": self.share_level,
             "user_currency": self.user_currency,
             "colorblind": self.colorblind,
+            "theme": self.theme,
+            "dark_leaflet": self.dark_leaflet,
             "tileserver": self.tileserver,
             "globe": self.globe,
             "premium": self.premium,
@@ -136,7 +150,10 @@ class User(authDb.Model):
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
             "discord_autopost": self.discord_autopost,
+            "discord_avatar": self.discord_avatar,
             "pending_email": self.pending_email,
+            "share_price": self.share_price,
+            "share_carbon": self.share_carbon,
         }
 
     def is_public(self):

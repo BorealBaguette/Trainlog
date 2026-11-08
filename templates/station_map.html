@@ -1,0 +1,228 @@
+{% extends "layout.html" %}
+{% block content %}
+{% import 'viz/_i18n.html' as i18n with context %}
+
+<link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; }
+  #info { position: fixed; top: 80px; left: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
+  #controls { position: fixed; top: 150px; right: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 210px;
+    max-height: calc(100vh - 170px); overflow-y: auto; display: none; }
+  #controls.open { display: block; }
+  #controls .check { display: flex; align-items: center; gap: 7px; margin: 4px 0; cursor: pointer; }
+  #controls h6 { margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #2a3a4d;
+    color: #8fa6bd; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.04em; font-weight: bold; }
+  .type-row { display: flex; align-items: center; gap: 7px; margin: 4px 0; cursor: pointer; }
+  .type-row input { cursor: pointer; }
+  .type-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 1px #e8edf3; }
+  .type-count { color: #9fb0c3; }
+  #tooltip { position: fixed; z-index: 10; pointer-events: none; display: none; max-width: 280px;
+    background: rgba(0,0,0,0.85); color: #fff; padding: 6px 9px; border-radius: 6px;
+    font-family: "Century Gothic", sans-serif; font-size: 0.82em; }
+  #tooltip .sub { color: #9fb0c3; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<div id="map"></div>
+<div id="tooltip"></div>
+
+<div id="info">
+  <b>{{ stations }}</b><br>
+  <span id="status">{{ vizLoading }}</span>
+</div>
+
+<div id="controls">
+  <label class="check"><input type="checkbox" id="groupToggle"> {{ vizGroupStations }}</label>
+  <label class="check"><input type="checkbox" id="usesToggle" checked> {{ vizSizeByVisits }}</label>
+  <h6>{{ vizTripTypes }}</h6>
+  <div id="type-filters"></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
+
+{{ i18n.type_labels() }}
+<script>
+const DATA_URL = "{{ url_for('station_map.stations_map_data', username=username) }}";
+const T = {
+  stations: {{ vizStationCount | tojson }}, visits: {{ vizVisitCount | tojson }},
+  clickToZoom: {{ vizClickToZoom | tojson }},
+};
+const types = MapLibreUtils.MapConfig.transportTypes;
+const colorOf = ['match', ['get', 'type'], ...types.flatMap(t => [t.id, t.color]), '#888888'];
+
+let map;
+let stations = [];
+const hiddenTypes = new Set();
+const tooltip = document.getElementById('tooltip');
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function showTip(point, html) {
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+  const rect = map.getContainer().getBoundingClientRect();
+  const x = rect.left + point.x + 14, y = rect.top + point.y + 14;
+  tooltip.style.left = Math.min(x, window.innerWidth - tooltip.offsetWidth - 8) + 'px';
+  tooltip.style.top = Math.min(y, window.innerHeight - tooltip.offsetHeight - 8) + 'px';
+}
+function hideTip() { tooltip.style.display = 'none'; }
+
+async function initMap() {
+  const params = new URLSearchParams(window.location.search);
+  map = await MapLibreUtils.initializeMapLibre({
+    container: 'map', tileserver: params.get('tileserver') || 'dark-train', useGlobe: false,
+  });
+
+  class SettingsToggle {
+    onAdd() {
+      this._c = document.createElement('div');
+      this._c.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+      const b = document.createElement('button');
+      b.type = 'button'; b.title = {{ vizSettings | tojson }};
+      b.innerHTML = '<i class="fa-solid fa-sliders"></i>';
+      b.onclick = () => document.getElementById('controls').classList.toggle('open');
+      this._c.appendChild(b);
+      return this._c;
+    }
+    onRemove() { this._c.remove(); }
+  }
+  map.addControl(new SettingsToggle(), 'top-right');
+
+  const [data] = await Promise.all([
+    fetch(DATA_URL).then(r => r.json()),
+    new Promise(resolve => map.loaded() ? resolve() : map.once('load', resolve)),
+  ]);
+  stations = data.features;
+  buildTypeFilters();
+  redraw();
+  fitToStations();
+  document.querySelector('.spinner-container').style.display = 'none';
+
+  map.on('mousemove', 'stations', e => {
+    const p = e.features[0].properties;
+    // Feature properties come back from the map with arrays as JSON.
+    const aliases = JSON.parse(p.names).filter(n => n && n !== p.name);
+    showTip(e.point, `<b>${esc(p.name)}</b><br>${esc(typeLabel(p.type))} · ${p.uses}×`
+      + (aliases.length ? `<br><span class="sub">${aliases.map(esc).join(', ')}</span>` : ''));
+  });
+  map.on('mousemove', 'station-clusters', e => {
+    const p = e.features[0].properties;
+    showTip(e.point, `<b>${pluralize(T.stations, p.point_count)}</b><br><span class="sub">${p.uses}× · ${esc(T.clickToZoom)}</span>`);
+  });
+  map.on('click', 'station-clusters', async e => {
+    const feature = e.features[0];
+    const zoom = await map.getSource('stations').getClusterExpansionZoom(feature.properties.cluster_id);
+    map.easeTo({ center: feature.geometry.coordinates, zoom });
+  });
+  for (const layer of ['stations', 'station-clusters']) {
+    map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; hideTip(); });
+  }
+}
+
+function buildTypeFilters() {
+  const counts = {};
+  stations.forEach(f => { counts[f.properties.type] = (counts[f.properties.type] || 0) + 1; });
+  const container = document.getElementById('type-filters');
+  types.filter(t => counts[t.id]).sort((a, b) => counts[b.id] - counts[a.id]).forEach(type => {
+    const row = document.createElement('label');
+    row.className = 'type-row';
+    row.innerHTML = `
+      <input type="checkbox" checked>
+      <span class="type-dot" style="background:${type.color}"></span>
+      <span>${esc(typeLabel(type.id))} <span class="type-count">(${counts[type.id]})</span></span>
+    `;
+    row.querySelector('input').addEventListener('change', e => {
+      e.target.checked ? hiddenTypes.delete(type.id) : hiddenTypes.add(type.id);
+      redraw();
+    });
+    container.appendChild(row);
+  });
+}
+
+function visibleStations() {
+  return { type: 'FeatureCollection', features: stations.filter(f => !hiddenTypes.has(f.properties.type)) };
+}
+
+// Clustering is a property of the source, so toggling it means rebuilding the source.
+function redraw() {
+  const group = document.getElementById('groupToggle').checked;
+  const uses = document.getElementById('usesToggle').checked;
+  for (const layer of ['stations', 'station-clusters']) {
+    if (map.getLayer(layer)) map.removeLayer(layer);
+  }
+  if (map.getSource('stations')) map.removeSource('stations');
+
+  const data = visibleStations();
+  const visits = data.features.reduce((s, f) => s + f.properties.uses, 0);
+  document.getElementById('status').textContent =
+    `${pluralize(T.stations, data.features.length)} · ${pluralize(T.visits, visits)}`;
+
+  map.addSource('stations', {
+    type: 'geojson',
+    data,
+    cluster: group,
+    clusterMaxZoom: 9,
+    clusterRadius: 40,
+    clusterProperties: { uses: ['+', ['get', 'uses']] },
+  });
+
+  map.addLayer({
+    id: 'station-clusters',
+    type: 'circle',
+    source: 'stations',
+    filter: ['has', 'point_count'],
+    paint: {
+      'circle-color': 'rgba(232, 237, 243, 0.18)',
+      'circle-stroke-color': '#e8edf3',
+      'circle-stroke-width': 1.5,
+      'circle-radius': uses
+        ? ['interpolate', ['linear'], ['sqrt', ['get', 'uses']], 1, 8, 40, 36]
+        : ['interpolate', ['linear'], ['sqrt', ['get', 'point_count']], 1, 8, 20, 24],
+    },
+  });
+
+  map.addLayer({
+    id: 'stations',
+    type: 'circle',
+    source: 'stations',
+    filter: ['!', ['has', 'point_count']],
+    paint: {
+      'circle-color': colorOf,
+      'circle-opacity': 0.85,
+      'circle-stroke-color': '#e8edf3',
+      'circle-stroke-width': 0.8,
+      'circle-radius': uses
+        ? ['interpolate', ['linear'], ['sqrt', ['get', 'uses']], 1, 4, 20, 20]
+        : 5,
+    },
+  });
+}
+
+function fitToStations() {
+  if (!stations.length) return;
+  const bounds = new maplibregl.LngLatBounds();
+  stations.forEach(f => bounds.extend(f.geometry.coordinates));
+  map.fitBounds(bounds, { padding: { top: 90, bottom: 40, left: 40, right: 40 }, maxZoom: 12, duration: 0 });
+}
+
+['groupToggle', 'usesToggle'].forEach(id => document.getElementById(id).addEventListener('change', redraw));
+
+initMap().catch(() => {
+  document.getElementById('status').textContent = {{ vizFailed | tojson }};
+  document.querySelector('.spinner-container').style.display = 'none';
+});
+</script>
+
+{% endblock %}

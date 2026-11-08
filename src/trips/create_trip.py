@@ -52,6 +52,8 @@ def create_trip(trip: Trip, pg_session=None):
                 "co2_override": trip.co2_override,
                 "departure_platform": trip.departure_platform,
                 "arrival_platform": trip.arrival_platform,
+                "departure_platform_planned": trip.departure_platform_planned,
+                "arrival_platform_planned": trip.arrival_platform_planned,
                 "origin_station_key": trip.origin_station_key,
                 "destination_station_key": trip.destination_station_key,
                 "route_source": trip.route_source,

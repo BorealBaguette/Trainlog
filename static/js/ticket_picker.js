@@ -27,12 +27,23 @@ function ticketPicker(opts) {
   let picked = (opts.selected || []).map(Number).filter(Boolean);
   let showAll = false;
 
-  // A clipping card with uses left covers any day, or any within its dates if it has some.
+  // A clipping card with uses left covers any day, or any within its dates if it has some;
+  // a single ticket for a given day, that day.
   function covers(ticket, date) {
     if (ticket.uses != null && ticket.used >= ticket.uses) return false;
-    if (!(ticket.valid_from || ticket.valid_until)) return ticket.uses != null && ticket.active;
-    return Boolean(date && (!ticket.valid_from || date >= ticket.valid_from)
-      && (!ticket.valid_until || date <= ticket.valid_until));
+    const from = ticket.valid_from || ticket.valid_on, until = ticket.valid_until || ticket.valid_on;
+    if (!(from || until)) return ticket.uses != null && ticket.active;
+    return Boolean(date && (!from || date >= from) && (!until || date <= until));
+  }
+
+  // Not valid yet, so not active, but no more past than an active one.
+  function isUpcoming(ticket) {
+    if (ticket.uses != null && ticket.used >= ticket.uses) return false;
+    const now = new Date();
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
+      + '-' + String(now.getDate()).padStart(2, '0');
+    const from = ticket.valid_from || ticket.valid_on;
+    return Boolean(from && from > today);
   }
 
   function runsOn(ticket, operators) {
@@ -59,7 +70,7 @@ function ticketPicker(opts) {
     if (ticket.valid_from && ticket.valid_until && ticket.valid_from !== ticket.valid_until) {
       return formatDay(ticket.valid_from) + ' → ' + formatDay(ticket.valid_until);
     }
-    return formatDay(ticket.valid_from || ticket.valid_until || ticket.purchasing_date);
+    return formatDay(ticket.valid_from || ticket.valid_until || ticket.valid_on || ticket.purchasing_date);
   }
 
   // The picked tickets in the form, each removable; the field opens the modal.
@@ -119,7 +130,8 @@ function ticketPicker(opts) {
     }
 
     section(covering.length ? $('#ticketPickerModal').data('thatDay') : null, covering);
-    section($('#ticketPickerModal').data('current'), tickets.filter(t => t.active || picked.includes(t.uid)));
+    section($('#ticketPickerModal').data('current'),
+      tickets.filter(t => t.active || isUpcoming(t) || picked.includes(t.uid)));
     if (showAll || query) section($('#ticketPickerModal').data('past'), tickets);
     $('#ticketPickerShowAll').toggle(!showAll && !query && tickets.some(t => !shown.has(t.uid)));
     if (!shown.size) $list.append($('<p class="text-muted small mb-0"></p>').text(opts.texts.none));

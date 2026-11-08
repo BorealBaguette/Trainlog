@@ -1,0 +1,3 @@
+{#- "<page> - <user> - Trainlog". The brand comes last so every tab and search result
+    ends the same way; "public" is the logged-out pseudo-user, not a name to show. -#}
+<title>{% if title %}{{ title }} - {% endif %}{% if username and username != "public" %}{{ username }} - {% endif %}Trainlog</title>

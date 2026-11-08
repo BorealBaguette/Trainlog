@@ -2,7 +2,7 @@
 {% set leaflet = True %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
-<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 
 {% include nav%}
 
@@ -11,6 +11,47 @@
 </div>
 
 <div id="map" class="mapUser"></div>
+
+{% if not public %}
+{# Shown over an empty map (a new account): where to start, and that it is all private #}
+<div id="emptyMapCard" class="empty-map-card card shadow" hidden>
+    <div class="card-body">
+        {#- Closed for this visit only: an empty map with no pointer is what the card is for #}
+        <button type="button" class="btn-close float-end" aria-label="×"
+                onclick="document.getElementById('emptyMapCard').hidden = true; try { sessionStorage.setItem('emptyMapCardClosed', '1'); } catch (e) {}"></button>
+        <h5 class="card-title">{{ emptyMapTitle }}</h5>
+        <p class="card-text">{{ emptyMapText }}</p>
+        {#- The commonest types straight away (icons as in the navbar's New menu); the rest are there #}
+        <div class="small fw-semibold mb-2">{{ emptyMapAdd }}</div>
+        <div class="empty-map-types mb-3">
+            {%- for trip_type, icon, label in [
+                ('train', 'fa-solid fa-train', train), ('air', 'fa-solid fa-plane-up', air),
+                ('bus', 'fa-solid fa-bus', bus), ('ferry', 'fa-solid fa-ship', ferry),
+                ('tram', 'fa-solid fa-train-tram', tram), ('metro', 'fa-solid fa-train-subway', metro)] %}
+            <a class="btn btn-outline-primary" href="{{ url_for('new', username=username, vehicle_type=trip_type) }}"><i class="{{ icon }}"></i><span>{{ label }}</span></a>
+            {%- endfor %}
+        </div>
+        <div class="empty-map-links mb-3">
+            <a class="btn btn-sm btn-link px-0" href="{{ url_for('user_settings', username=username) }}#tab-data"><i class="fa-solid fa-file-import"></i> {{ emptyMapImport }}</a>
+            <a class="btn btn-sm btn-link px-0" href="#" onclick="startTrainlogTour(); return false;"><i class="bi bi-signpost-split"></i> {{ tourOffer }}</a>
+        </div>
+        <p class="card-text small text-body-secondary mb-0"><i class="fa-solid fa-lock"></i> {{ emptyMapPrivate }}</p>
+    </div>
+</div>
+
+{#- Offered once to a new account that has logged its first trips (the empty-map card
+    carries the same link before that) #}
+{% if new_account %}
+<div id="tourOffer" class="tour-offer card shadow" hidden>
+    <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-signpost-split fs-4 text-primary"></i>
+        <span class="small">{{ tourPrompt }}</span>
+        <button type="button" class="btn btn-primary btn-sm text-nowrap" onclick="document.getElementById('tourOffer').hidden = true; startTrainlogTour();">{{ tourOffer }}</button>
+        <button type="button" class="btn-close" aria-label="×" onclick="document.getElementById('tourOffer').hidden = true; try { localStorage.setItem('trainlogTourSeen', '1'); } catch (e) {}"></button>
+    </div>
+</div>
+{% endif %}
+{% endif %}
 
 <div class="control-panel" id="controlPanel">
     <button class="control-toggle" onclick="toggleControlPanel()">
@@ -31,6 +72,24 @@
                 <option value="projects">{{ showProjects }}</option>
                 <option value="all">{{ all }}</option>
             </select>
+        </div>
+    </div>
+
+    <div class="control-group">
+        <div class="control-label year-label-row">
+            <label for="colorMode">{{ mapColorBy }}</label>
+            <button type="button" id="yearSpreadToggle" class="year-spread-toggle" title="{{ yearColorSpread }}" style="display: none;"
+                    onclick="document.getElementById('yearSpread').classList.toggle('open')"><i class="fa-solid fa-sliders"></i></button>
+        </div>
+        <div class="select-wrapper">
+            <select id="colorMode" onchange="updateColorMode()">
+                <option value="type">{{ mapColorByType }}</option>
+                <option value="year">{{ year }}</option>
+            </select>
+        </div>
+        <div id="yearSpread" class="year-spread">
+            <input type="range" min="0" max="1" step="0.05" oninput="MapLibreUtils.setYearSpread(this.value); updateColorMode()">
+            <div class="year-spread-ends"><span>{{ yearSpreadEven }}</span><span>{{ yearSpreadTravel }}</span></div>
         </div>
     </div>
 
@@ -64,6 +123,7 @@
     </button>
     <div class="legend-content" id="legendContent">
         <div class="legend-items">
+            <div id="typeLegend">
             <div class="legend-item">
                 <div class="legend-line" style="background-color: #52b0fe;"></div>
                 <span><i class="fa-solid fa-train"></i> {{ train }}</span>
@@ -120,6 +180,8 @@
                 <div class="legend-line" style="background-color: #b8e6f0;"></div>
                 <span><i class="fa-solid fa-person-skiing"></i> {{ ski }}</span>
             </div>
+            </div>
+            <div id="yearLegend" style="display: none;"></div>
             <div class="legend-separator"></div>
             <div class="legend-item">
                 <div class="legend-line future" style="background-color: rgba(255, 255, 255, 0.5);"></div>
@@ -137,7 +199,7 @@
     </div>
 </div>
 
-<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.5/js.cookie.min.js"></script>
 <script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/map_trip_cache.js') }}"></script>
@@ -181,7 +243,8 @@ const transportTypeLabels = {
     scooter: '{{ scooter }}',
     funicular: '{{ funicular }}',
     rail: '{{ rail }}',
-    ski: '{{ ski }}'
+    ski: '{{ ski }}',
+    other: '{{ other }}'
 };
 
 // Initialize map
@@ -363,6 +426,36 @@ function buildSliceLayers() {
     });
 }
 
+function tripYearColors() {
+    const counts = {};
+    trips.forEach(t => {
+        const start = t.trip.start_datetime;
+        if (start !== -1 && start !== 1) counts[start.substring(0, 4)] = (counts[start.substring(0, 4)] || 0) + 1;
+    });
+    return MapLibreUtils.yearColors(counts);
+}
+
+function applyColorMode() {
+    const byYear = document.getElementById('colorMode').value === 'year';
+    const colors = byYear ? tripYearColors() : null;
+    const lineColor = MapLibreUtils.tripLineColor(MapLibreUtils.MapConfig.transportTypes, colors);
+    SLICE_SOURCES.forEach(sourceId => {
+        if (map.getLayer(`${sourceId}-line`)) map.setPaintProperty(`${sourceId}-line`, 'line-color', lineColor);
+    });
+
+    const yearLegend = document.getElementById('yearLegend');
+    document.getElementById('typeLegend').style.display = byYear ? 'none' : '';
+    yearLegend.style.display = byYear ? '' : 'none';
+    yearLegend.innerHTML = byYear ? MapLibreUtils.yearLegendHtml(colors) : '';
+    document.getElementById('yearSpreadToggle').style.display = byYear ? '' : 'none';
+    document.getElementById('yearSpread').style.display = byYear ? '' : 'none';
+}
+
+function updateColorMode() {
+    if (layersBuilt) applyColorMode();
+    savePreferences();
+}
+
 // Current trips blink: their line opacity reads this feature-state
 let pulseTargets = [];
 let pulseOn = false;
@@ -373,6 +466,14 @@ setInterval(() => {
 
 // Process trips and add to map
 function processTrips() {
+    const emptyCard = document.getElementById('emptyMapCard');
+    if (emptyCard) {
+        let closed = false;
+        try { closed = !!sessionStorage.getItem('emptyMapCardClosed'); } catch (e) {}
+        emptyCard.hidden = trips.length > 0 || closed;
+    }
+    const tourOffer = document.getElementById('tourOffer');
+    if (tourOffer && trips.length > 0 && window.trainlogTourSeen && !trainlogTourSeen()) tourOffer.hidden = false;
     if (trips.length === 0) {
         hideLoading();
         return;
@@ -389,13 +490,19 @@ function processTrips() {
         // have landed while the style was loading
         const years = tripYears;
         buildSliceLayers();
+        applyColorMode();
         layersBuilt = true;
 
         // Handle year selection defaults ONLY if no preferences were loaded
         if (selectedYears.size === 0 && activeFilters.viewMode === 'year') {
             if (years.size) {
-                const mostRecent = [...years].sort().reverse()[0];
-                selectedYears.add(mostRecent);
+                // The owner starts on their latest year; a visitor to a public
+                // profile sees all of it
+                {% if public %}
+                years.forEach(year => selectedYears.add(year));
+                {% else %}
+                selectedYears.add([...years].sort().reverse()[0]);
+                {% endif %}
                 activeFilters.years = Array.from(selectedYears);
             } else {
                 // If no years available, switch to 'all' mode
@@ -451,6 +558,7 @@ function applyTripUpdate() {
     prepareTrips();
     if (!layersBuilt) return;  // buildLayers is still waiting for the style and will use the new list
     updateSelectedYears();
+    applyColorMode();
     updateFilters();
     tripLoader.overview.ensure(trips);
 }
@@ -779,6 +887,7 @@ function hideLoading() {
 // Save preferences to cookies
 function savePreferences() {
     Cookies.set('viewMode', activeFilters.viewMode, { expires: 30 });
+    Cookies.set('colorMode', document.getElementById('colorMode').value, { expires: 30 });
     Cookies.set('yearSelect', Array.from(selectedYears).join(','), { expires: 30 });
     
     MapLibreUtils.MapConfig.transportTypes.forEach(type => {
@@ -797,6 +906,10 @@ function loadPreferences() {
         activeFilters.viewMode = savedViewMode;
     }
     
+    const savedColorMode = Cookies.get('colorMode');
+    if (savedColorMode) document.getElementById('colorMode').value = savedColorMode;
+    document.querySelector('#yearSpread input').value = MapLibreUtils.yearSpread();
+
     // Load selected years
     const savedYears = Cookies.get('yearSelect');
     if (savedYears && savedYears !== '') {
