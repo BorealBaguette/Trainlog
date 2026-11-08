@@ -231,6 +231,7 @@
                                the comments there, including why it is built right here. #}
                             <select class="form-control selectpicker" id="adopt_country" name="country_code"
                                     data-live-search="true" data-size="10" title="—"
+                                    data-style-base="form-control" data-style=""
                                     data-container="body">
                                 {% for code, emoji in country_list.items() %}
                                     <option value="{{ code }}" data-code="{{ code }}" data-tokens="{{ code }}">{{ emoji }}</option>
@@ -363,6 +364,7 @@
                                        and lifts its z-index above the modal. #}
                                     <select class="form-control selectpicker" id="period_country" name="country_code"
                                             data-live-search="true" data-size="10" title="—"
+                                            data-style-base="form-control" data-style=""
                                             data-container="body">
                                         {% for code, emoji in country_list.items() %}
                                             <option value="{{ code }}" data-code="{{ code }}" data-tokens="{{ code }}">{{ emoji }}</option>
