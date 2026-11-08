@@ -4,9 +4,9 @@ from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
 
-from src.currency import get_exchange_rate
 from src.api.motis import trip_runs
 from src.api.wrapped import get_wrapped_data
+from src.currency import get_exchange_rate
 from src.pg import pg_session
 from src.trips.utils import get_current_trip_id
 from src.users import Friendship, User
@@ -608,22 +608,32 @@ def dashboard_year(username):
         ).fetchall()
 
         # ── Top countries ─────────────────────────────────────────────────────
-        _countries_base = """
+        # Ordered as on the countries leaderboard: by km on the ground, with
+        # km flown only breaking ties. A flight puts half its distance on each
+        # end country, so a country only flown to would otherwise outrank ones
+        # travelled through. `km` is still the total of both.
+        _country_km = """
+            CASE WHEN jsonb_typeof(value) = 'number' THEN value::numeric
+                 ELSE (value->>'elec')::numeric + COALESCE((value->>'nonelec')::numeric, 0)
+            END
+        """
+        _countries_base = f"""
             SELECT key AS country_code,
-                   COALESCE(SUM(
-                       CASE WHEN jsonb_typeof(value) = 'number' THEN value::numeric
-                            ELSE (value->>'elec')::numeric + COALESCE((value->>'nonelec')::numeric, 0)
-                       END
-                   ), 0) / 1000 AS km
+                   COALESCE(SUM({_country_km}), 0) / 1000 AS km,
+                   COALESCE(SUM({_country_km})
+                       FILTER (WHERE trip_type NOT IN ('air', 'helicopter')), 0) AS ground_km,
+                   COALESCE(SUM({_country_km})
+                       FILTER (WHERE trip_type IN ('air', 'helicopter')), 0) AS flight_km
             FROM trips, LATERAL jsonb_each(countries::jsonb)
             WHERE user_id = :uid AND NOT is_project
               AND countries IS NOT NULL
               AND key != 'UN' AND length(key) = 2
         """
+        _countries_order = " GROUP BY key ORDER BY ground_km DESC, flight_km DESC"
         top_countries_alltime = pg.execute(
             _countries_base
             + " AND COALESCE(utc_start_datetime, start_datetime) < NOW()"
-            " GROUP BY key ORDER BY km DESC",
+            + _countries_order,
             p,
         ).fetchall()
 
@@ -631,7 +641,7 @@ def dashboard_year(username):
             _countries_base
             + " AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr"
             " AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff"
-            " GROUP BY key ORDER BY km DESC",
+            + _countries_order,
             p,
         ).fetchall()
 
