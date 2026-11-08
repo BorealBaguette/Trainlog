@@ -23,6 +23,7 @@ ALIASES = {
     "B73X": "B737",  # 737-700
     "A330": "A333",  # A330-300
     "B787": "B788",  # 787-8
+    "E175": "E75S",  # E175 (Short Wing)
 }
 
 GENERICS = {
@@ -63,7 +64,7 @@ AIRCRAFT_FAMILIES = [
     ("Boeing 787", ["B789", "B788", "B78X"]),
     ("BAe 146 / Avro RJ", ["RJ85", "B461"]),
     ("De Havilland Canada Dash 8", ["DH8D", "DH8A", "DH8B", "DH8C"]),
-    ("Embraer E-Jet", ["E190", "E170", "E175", "E75L", "E75S", "E195"]),
+    ("Embraer E-Jet", ["E190", "E170", "E75L", "E75S", "E195"]),
     ("Embraer E-Jet E2", ["E295", "E275", "E290"]),
     ("Embraer ERJ", ["E145", "E135", "E140"]),
     ("Fokker 50", ["F50"]),
