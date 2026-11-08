@@ -2,65 +2,267 @@
 {% block content %}
 
 <style>
-  .deck-index {
-    position: fixed; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    background: #0d1b2a;
+  .viz-index {
+    box-sizing: border-box; min-height: 100vh; background: #0d1b2a; color: #e8edf3;
+    padding: 32px 16px 40px;
     font-family: "Century Gothic", sans-serif;
   }
-  .deck-index h1 {
-    color: #e8edf3; font-size: 1.1em; font-weight: bold;
-    letter-spacing: 0.06em; text-transform: uppercase;
-    margin-bottom: 18px;
+  .viz-header {
+    max-width: 1100px; margin: 0 auto 22px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   }
-  .deck-index a {
-    display: flex; align-items: center; gap: 12px;
-    padding: 11px 16px; border-radius: 8px;
-    color: #e8edf3; text-decoration: none;
-    background: rgba(255,255,255,0.05);
+  /* The posters' credit: the square icon with the wordmark in real text, ".me" muted. */
+  .viz-brand { display: flex; align-items: center; gap: 9px; color: #f2f2f2; text-decoration: none; }
+  .viz-brand:hover { color: #fff; }
+  .viz-brand img { width: 34px; height: 34px; display: block; filter: invert(1); }
+  .viz-brand-name { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+  .viz-brand-name span { color: #8fa6bd; font-weight: 700; }
+  .viz-header-sep { width: 1px; height: 26px; background: #2a3a4d; }
+  .viz-index h1 {
+    margin: 0; font-size: 1.1em; font-weight: bold; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .viz-grid {
+    max-width: 1100px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px;
+  }
+  @media (max-width: 860px) { .viz-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 540px) { .viz-grid { grid-template-columns: minmax(0, 1fr); } }
+  .viz-card {
+    display: flex; flex-direction: column; overflow: hidden;
+    border-radius: 12px; background: rgba(20,28,40,0.92);
     border: 1px solid rgba(255,255,255,0.08);
-    transition: background 0.15s, border-color 0.15s;
-    font-size: 0.95em;
+    color: #e8edf3; text-decoration: none;
+    transition: border-color 0.15s, transform 0.15s;
   }
-  .deck-index a:hover { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.2); }
-  .deck-index .icon { font-size: 1.3em; width: 24px; text-align: center; }
-  .deck-index .sub { font-size: 0.8em; color: #8fa6bd; }
-  .card { background: rgba(20,28,40,0.92); border-radius: 14px; padding: 22px 26px; width: 280px; }
-  .links { display: flex; flex-direction: column; gap: 8px; }
-  .divider { height: 1px; background: #2a3a4d; margin: 6px 0; }
+  .viz-card:hover { color: #e8edf3; border-color: rgba(255,255,255,0.25); transform: translateY(-2px); }
+  .viz-preview {
+    aspect-ratio: 16 / 9; display: block; width: 100%;
+    background: radial-gradient(ellipse at 50% 40%, #13263a 0%, #0b1622 100%);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .viz-preview svg { display: block; width: 100%; height: 100%; opacity: 0.85; transition: opacity 0.15s; }
+  .viz-card:hover .viz-preview svg { opacity: 1; }
+  .viz-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .viz-title { display: flex; align-items: center; gap: 9px; font-weight: bold; font-size: 0.98em; }
+  .viz-title i, .viz-title .hex { flex: 0 0 18px; text-align: center; color: #8fa6bd; }
+  .viz-sub { font-size: 0.82em; color: #8fa6bd; line-height: 1.35; }
+  .viz-preview { position: relative; }
+  .viz-badge {
+    position: absolute; top: 8px; right: 8px; z-index: 1;
+    padding: 2px 8px; border-radius: 999px; font-size: 0.72em; letter-spacing: 0.03em;
+    background: rgba(11,22,34,0.8); border: 1px solid rgba(255,255,255,0.15); color: #e8edf3;
+  }
+  /* As the site's other beta pills (map background picker, settings). */
+  .viz-beta {
+    padding: 0.3em 0.55em 0.2em; border-radius: 1em; flex: none;
+    background: #fd7e14; color: #fff; font-size: 0.62rem; font-weight: 600; line-height: 1.2; text-transform: uppercase;
+  }
 </style>
 
-<div class="deck-index">
-  <div class="card">
-    <h1>Visualisations</h1>
-    <div class="links">
-      <a href="{{ url_for('viz.bestagons', username=username) }}">
-        <span class="icon">⬡</span>
-        <span>Hexagons <span class="sub">— density grid</span></span>
-      </a>
-      <a href="{{ url_for('viz.calendar', username=username) }}">
-        <span class="icon"><i class="fa-solid fa-calendar-days"></i></span>
-        <span>Calendar <span class="sub">— travel days</span></span>
-      </a>
-      <a href="{{ url_for('viz.arcs', username=username) }}">
-        <span class="icon"><i class="fa-solid fa-bezier-curve"></i></span>
-        <span>Arc flow <span class="sub">— route frequency</span></span>
-      </a>
-      <a href="{{ url_for('viz.heatmap', username=username) }}">
-        <span class="icon"><i class="fa-solid fa-fire"></i></span>
-        <span>Heatmap <span class="sub">— corridor frequency</span></span>
-      </a>
-<a href="{{ url_for('viz.trips_page', username=username) }}">
-        <span class="icon"><i class="fa-solid fa-play"></i></span>
-        <span>Trip replay <span class="sub">— animated timeline</span></span>
-      </a>
-      <div class="divider"></div>
-      <a href="{{ url_for('bestagons_map') }}">
-        <span class="icon"><i class="fa-solid fa-globe"></i></span>
-        <span>Global bestagons <span class="sub">— all users</span></span>
-      </a>
-    </div>
+{# Three rows of three: the Bestagons pair and the calendar, the maps, then the networks. #}
+{% set cards = [
+  ('hex',       url_for('viz.bestagons', username=username),         '<span class="hex">⬡</span>',               vizHexagons,  vizHexagonsSub, vizPersonal),
+  ('community', url_for('bestagons_map'),                            '<i class="fa-solid fa-globe"></i>',         vizHexagons,  vizGlobalHexSub, vizCommunity),
+  ('calendar',  url_for('viz.calendar', username=username),          '<i class="fa-solid fa-calendar-days"></i>', vizCalendar,  vizCalendarSub),
+  ('arcs',      url_for('viz.arcs', username=username),              '<i class="fa-solid fa-bezier-curve"></i>',  vizArcs,      vizArcsSub),
+  ('heatmap',   url_for('viz.heatmap', username=username),           '<i class="fa-solid fa-fire"></i>',          vizHeatmap,   vizHeatmapSub),
+  ('stations',  url_for('station_map.stations_map', username=username), '<i class="fa-solid fa-location-dot"></i>', vizStations, vizStationsSub),
+  ('airports',  url_for('viz.airports_page', username=username),     '<i class="fa-solid fa-circle-nodes"></i>',  vizAirports,  vizAirportsSub),
+  ('rail',      url_for('viz.rail_page', username=username),         '<i class="fa-solid fa-train"></i>',         vizRail,      vizRailSub, none, true),
+  ('replay',    url_for('viz.trips_page', username=username),        '<i class="fa-solid fa-play"></i>',          vizReplay,    vizReplaySub),
+] %}
+
+{% macro card(kind, href, icon, title, sub, badge=none, is_beta=false) %}
+  <a class="viz-card" href="{{ href }}">
+    <span class="viz-preview" data-preview="{{ kind }}">{% if badge %}<span class="viz-badge">{{ badge }}</span>{% endif %}</span>
+    <span class="viz-body">
+      <span class="viz-title">{{ icon | safe }}<span>{{ title }}</span>{% if is_beta %}<span class="viz-beta">{{ beta }}</span>{% endif %}</span>
+      <span class="viz-sub">{{ sub }}</span>
+    </span>
+  </a>
+{% endmacro %}
+
+<div class="viz-index">
+  <header class="viz-header">
+    <a class="viz-brand" href="{{ url_for('landing') }}">
+      <img src="{{ url_for('static', filename='images/logo_square.png') }}" alt="">
+      <span class="viz-brand-name">Trainlog<span>.me</span></span>
+    </a>
+    <span class="viz-header-sep"></span>
+    <h1>{{ vizTitle }}</h1>
+  </header>
+  <div class="viz-grid">
+    {% for c in cards %}{{ card(*c) }}{% endfor %}
   </div>
 </div>
+
+<script>
+// Small drawn previews of each page (160×90), seeded so they look the same on every visit.
+function seeded(seed) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function ramp(stops, v) {
+  v = Math.max(0, Math.min(1, v)) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(v)), f = v - i;
+  const hex = s => [1, 3, 5].map(k => parseInt(s.slice(k, k + 2), 16));
+  const a = hex(stops[i]), b = hex(stops[i + 1]);
+  return `rgb(${a.map((x, k) => Math.round(x + (b[k] - x) * f)).join(',')})`;
+}
+
+const shade = (rgb, k) => rgb.replace(/\d+/g, x => Math.round(x * k));
+
+function hexes(blobs, stops, extrude) {
+  const r = 6.2, w = Math.sqrt(3) * r, rnd = seeded(7);
+  const cells = [];
+  for (let row = 0; row < 11; row++) {
+    for (let col = 0; col < 16; col++) {
+      const x = col * w + (row % 2) * w / 2 - 2, y = row * 1.5 * r + 6;
+      const v = blobs.reduce((s, [bx, by, wt, sd]) =>
+        s + wt * Math.exp(-((x - bx) ** 2 + (y - by) ** 2) / (2 * sd * sd)), 0) + rnd() * 0.08;
+      if (v > 0.14) cells.push({ x, y, v: Math.min(1, v) });
+    }
+  }
+  const corner = (x, y, k) => [x + r * Math.cos(Math.PI / 180 * (30 + 60 * k)), y + r * Math.sin(Math.PI / 180 * (30 + 60 * k))];
+  return cells.sort((a, b) => a.y - b.y).map(({ x, y, v }) => {
+    const h = extrude ? v * 18 : 0, color = ramp(stops, v);
+    const top = [0, 1, 2, 3, 4, 5].map(k => corner(x, y - h, k).join(',')).join(' ');
+    let side = '';
+    if (h) {
+      const pts = [0, 1, 2].map(k => corner(x, y - h, k)).concat([2, 1, 0].map(k => corner(x, y, k)));
+      side = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${shade(color, 0.55)}"/>`;
+    }
+    return side + `<polygon points="${top}" fill="${color}" stroke="#0b1622" stroke-width="0.4" opacity="${extrude ? 1 : 0.35 + v * 0.65}"/>`;
+  }).join('');
+}
+
+const PREVIEWS = {
+  hex: () => hexes([[55, 58, 1, 16], [112, 48, 0.8, 13], [88, 74, 0.45, 10]],
+                   ['#0e3d5c', '#1a85c2', '#52b0fe', '#d4ecff'], true),
+
+  community: () => hexes([[30, 40, 0.7, 12], [62, 52, 1, 18], [104, 38, 0.8, 15], [132, 66, 0.6, 12], [80, 80, 0.4, 14]],
+                         ['#123d22', '#2f8a3a', '#40b91f', '#c8f2a8'], false),
+
+  calendar: () => {
+    const rnd = seeded(11), palette = ['#182c40', '#0e3d5c', '#0e5c8a', '#1a85c2', '#52b0fe'];
+    let out = '';
+    for (const [year, top] of [[0, 12], [1, 50]]) {
+      for (let wk = 0; wk < 26; wk++) {
+        const summer = Math.exp(-((wk - 15 - year * 3) ** 2) / 18);
+        for (let d = 0; d < 7; d++) {
+          const p = 0.12 + 0.22 * (d >= 4) + 0.5 * summer;
+          const level = rnd() < p ? 1 + Math.floor(rnd() * (2 + 2 * summer)) : 0;
+          out += `<rect x="${5 + wk * 5.8}" y="${top + d * 4.4}" width="4.6" height="3.6" rx="0.8" fill="${palette[Math.min(4, level)]}"/>`;
+        }
+      }
+    }
+    return out;
+  },
+
+  arcs: () => {
+    const p = { a: [22, 62], b: [48, 34], c: [70, 70], d: [96, 28], e: [118, 58], f: [140, 36], g: [84, 50] };
+    const links = [['a', 'b', 4, '#52b0fe'], ['b', 'g', 6, '#52b0fe'], ['g', 'e', 3, '#52b0fe'], ['c', 'g', 2, '#52b0fe'],
+                   ['a', 'f', 2, '#40b91f'], ['b', 'd', 3, '#52b0fe'], ['c', 'e', 1, '#40b91f'], ['d', 'f', 2, '#52b0fe'],
+                   ['g', 'f', 4, '#40b91f'], ['a', 'c', 1, '#52b0fe']];
+    let out = '';
+    for (const [s, t, n, color] of links) {
+      const [x1, y1] = p[s], [x2, y2] = p[t];
+      const cy = Math.min(y1, y2) - Math.hypot(x2 - x1, y2 - y1) * 0.35;
+      out += `<path d="M${x1},${y1}Q${(x1 + x2) / 2},${cy} ${x2},${y2}" fill="none" stroke="${color}" stroke-width="${0.5 + n * 0.45}" stroke-opacity="0.75" stroke-linecap="round"/>`;
+    }
+    return out + Object.values(p).map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.6" fill="#e8edf3"/>`).join('');
+  },
+
+  heatmap: () => {
+    const lines = [
+      'M8,70 C30,66 44,52 64,50 S100,46 120,30 S146,18 154,16',
+      'M10,24 C32,30 48,46 64,50 S100,46 120,30',
+      'M64,50 S100,46 120,30 S140,52 152,74',
+      'M20,84 C40,76 52,58 64,50',
+      'M64,50 C70,62 84,74 104,82',
+    ];
+    const layer = (w, color, op, extra = '') => lines.map(d =>
+      `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-opacity="${op}" stroke-linecap="round" ${extra}/>`).join('');
+    return `<defs><filter id="hm-blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.4"/></filter></defs>`
+      + layer(8, '#ff4d1a', 0.28, 'filter="url(#hm-blur)"') + layer(3, '#ff9a3c', 0.55) + layer(1, '#ffe6a0', 0.9);
+  },
+
+  airports: () => {
+    const n = { LHR: [70, 42, 9], JFK: [38, 30, 7], DXB: [58, 18, 6], CDG: [112, 58, 8], SIN: [98, 30, 6],
+                HND: [84, 66, 5], x1: [22, 54, 3.5], x2: [138, 28, 3.5], x3: [140, 74, 3.5], x4: [44, 74, 3.5], x5: [120, 14, 3.5] };
+    const e = [['LHR', 'JFK', 3], ['LHR', 'DXB', 3], ['JFK', 'DXB', 4], ['LHR', 'CDG', 2], ['LHR', 'SIN', 2], ['SIN', 'CDG', 2],
+               ['LHR', 'HND', 1], ['HND', 'CDG', 1], ['JFK', 'x1', 1], ['SIN', 'x2', 1], ['CDG', 'x3', 1], ['HND', 'x4', 1],
+               ['SIN', 'x5', 1], ['JFK', 'SIN', 1]];
+    let out = e.map(([a, b, w]) => {
+      const [x1, y1] = n[a], [x2, y2] = n[b];
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#8fa6bd" stroke-width="${0.5 + w * 0.6}" stroke-opacity="${0.25 + w * 0.15}"/>`;
+    }).join('');
+    for (const [code, [x, y, r]] of Object.entries(n)) {
+      out += `<circle cx="${x}" cy="${y}" r="${r}" fill="#14202e" stroke="#40b91f" stroke-width="1"/>`;
+      if (r >= 6) out += `<text x="${x}" y="${y + 1.5}" font-size="${r * 0.55}" font-weight="bold" text-anchor="middle" fill="#e8edf3" font-family="sans-serif">${code}</text>`;
+    }
+    return out;
+  },
+
+  rail: () => {
+    const n = { Amsterdam: [66, 10], Brussels: [50, 22], Cologne: [82, 22], Paris: [32, 36], Frankfurt: [104, 32],
+                Strasbourg: [78, 46], Lyon: [44, 58], Zurich: [100, 58], Milan: [122, 74], Marseille: [56, 76] };
+    const e = [['Paris', 'Lyon', 5], ['Paris', 'Brussels', 4], ['Brussels', 'Amsterdam', 3], ['Brussels', 'Cologne', 2],
+               ['Cologne', 'Frankfurt', 3], ['Paris', 'Strasbourg', 3], ['Strasbourg', 'Frankfurt', 1], ['Strasbourg', 'Zurich', 1],
+               ['Zurich', 'Milan', 2], ['Lyon', 'Marseille', 3], ['Lyon', 'Zurich', 1], ['Amsterdam', 'Cologne', 1]];
+    const traffic = {};
+    e.forEach(([a, b, w]) => { traffic[a] = (traffic[a] || 0) + w; traffic[b] = (traffic[b] || 0) + w; });
+    let out = e.map(([a, b, w]) => {
+      const [x1, y1] = n[a], [x2, y2] = n[b];
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#8fa6bd" stroke-width="${0.5 + w * 0.5}" stroke-opacity="${0.3 + w * 0.12}"/>`;
+    }).join('');
+    for (const [name, [x, y]] of Object.entries(n)) {
+      const r = 2.2 + Math.sqrt(traffic[name]) * 1.1;
+      out += `<circle cx="${x}" cy="${y}" r="${r}" fill="#14202e" stroke="#52b0fe" stroke-width="1"/>`
+        + `<text x="${x}" y="${y + r + 4.2}" font-size="4.2" text-anchor="middle" fill="#dbe5ee" font-family="sans-serif">${name}</text>`;
+    }
+    return out;
+  },
+
+  stations: () => {
+    const rnd = seeded(3);
+    const colors = ['#52b0fe', '#52b0fe', '#52b0fe', '#a2d7ff', '#9f4bbb', '#40b91f'];
+    const lines = [[[10, 70], [60, 50], [100, 46], [150, 22]], [[30, 12], [64, 48], [90, 84]], [[20, 30], [80, 40], [140, 70]]];
+    let out = '';
+    for (const pts of lines) {
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+        for (let t = 0; t < 1; t += 0.2 + rnd() * 0.15) {
+          const uses = rnd() ** 3;
+          out += `<circle cx="${x1 + (x2 - x1) * t + (rnd() - 0.5) * 3}" cy="${y1 + (y2 - y1) * t + (rnd() - 0.5) * 3}" r="${1.4 + uses * 4.5}"
+            fill="${colors[Math.floor(rnd() * colors.length)]}" fill-opacity="0.85" stroke="#e8edf3" stroke-width="0.4"/>`;
+        }
+      }
+    }
+    return out;
+  },
+
+  replay: () => {
+    const faint = ['M12,60 C40,52 60,30 96,34 S140,20 150,14', 'M20,20 C50,30 70,60 110,62', 'M30,76 C60,66 90,70 140,52'];
+    let out = faint.map(d => `<path d="${d}" fill="none" stroke="#52b0fe" stroke-opacity="0.18" stroke-width="1.2"/>`).join('');
+    out += `<defs><linearGradient id="rp-trail" x1="0" x2="1"><stop offset="0" stop-color="#52b0fe" stop-opacity="0"/><stop offset="1" stop-color="#a8d8ff"/></linearGradient></defs>`
+      + `<path d="M12,60 C40,52 60,30 96,34" fill="none" stroke="url(#rp-trail)" stroke-width="2.4" stroke-linecap="round"/>`
+      + `<circle cx="96" cy="34" r="5" fill="#a8d8ff" opacity="0.25"/><circle cx="96" cy="34" r="2.4" fill="#ffffff"/>`
+      + `<rect x="14" y="80" width="132" height="2.4" rx="1.2" fill="#2a3a4d"/>`
+      + `<rect x="14" y="80" width="80" height="2.4" rx="1.2" fill="#52b0fe"/>`
+      + `<circle cx="94" cy="81.2" r="3" fill="#e8edf3"/>`;
+    return out;
+  },
+};
+
+document.querySelectorAll('[data-preview]').forEach(el => {
+  el.insertAdjacentHTML('beforeend', `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${PREVIEWS[el.dataset.preview]()}</svg>`);
+});
+</script>
 
 {% endblock %}

@@ -98,11 +98,11 @@
 <div id="page">
   <div id="header-row">
     <div class="toggle-group" id="by-toggle">
-      <button class="toggle-btn active" data-by="travel">Travel date</button>
-      <button class="toggle-btn" data-by="log">Log date</button>
+      <button class="toggle-btn active" data-by="travel">{{ vizTravelDate }}</button>
+      <button class="toggle-btn" data-by="log">{{ vizLogDate }}</button>
     </div>
     <div class="toggle-group" id="mode-toggle">
-      <button class="toggle-btn active" data-mode="trips">Trips</button>
+      <button class="toggle-btn active" data-mode="trips">{{ vizTripsMode }}</button>
       <button class="toggle-btn" data-mode="km">km</button>
     </div>
     <div id="summary"></div>
@@ -119,8 +119,17 @@ const TRIPS_URL = "{{ trips_url }}";
 
 // Blue-toned 5-level palette (0 = no travel, 4 = heaviest)
 const PALETTE = ['#0e1f30', '#0e3d5c', '#0e5c8a', '#1a85c2', '#52b0fe'];
-const DOW = ['Mon','','Wed','','Fri','','Sun'];
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const VIZ_TRIPS = {{ vizTrips | tojson }};
+const VIZ_LESS = {{ vizLess | tojson }};
+const VIZ_MORE = {{ vizMore | tojson }};
+
+// Day and month names in the page's language (1 Jan 2024 was a Monday).
+const LOCALE = document.documentElement.lang || 'en';
+const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
+const monthName = (m, month) => capitalize(new Date(2024, m, 1).toLocaleDateString(LOCALE, { month }));
+const dayName = (offset, weekday) => capitalize(new Date(2024, 0, 1 + offset).toLocaleDateString(LOCALE, { weekday }));
+const DOW = [0, 1, 2, 3, 4, 5, 6].map(i => i % 2 ? '' : dayName(i, 'short'));
+const MONTHS = [...Array(12).keys()].map(m => monthName(m, 'short'));
 
 let mode   = 'trips';
 let byMode = 'travel';
@@ -141,8 +150,8 @@ function isoDow(date) {
   return (date.getDay() + 6) % 7;
 }
 
-const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const MON_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DOW_NAMES = [0, 1, 2, 3, 4, 5, 6].map(i => dayName(i - 1, 'long'));  // Sunday first, as getDay()
+const MON_NAMES = [...Array(12).keys()].map(m => monthName(m, 'long'));
 
 function renderSummary(data) {
   // Totals always from travel data so log-date gaps don't affect them
@@ -171,12 +180,12 @@ function renderSummary(data) {
   const busyMon = Object.entries(byMon).sort((a, b) => b[1] - a[1])[0];
 
   document.getElementById('summary').innerHTML = [
-    { val: totalTrips.toLocaleString(),                   lbl: 'Total trips' },
-    { val: Math.round(totalKm).toLocaleString() + ' km',  lbl: 'Total distance' },
-    { val: activeDays.toLocaleString(),                   lbl: 'Days with travel' },
-    { val: busyYear || '—',                               lbl: 'Busiest year' },
-    { val: busyDow ? DOW_NAMES[+busyDow[0]] : '—',       lbl: 'Busiest weekday' },
-    { val: busyMon ? MON_NAMES[+busyMon[0]] : '—',       lbl: 'Busiest month' },
+    { val: totalTrips.toLocaleString(),                   lbl: {{ vizTotalTrips | tojson }} },
+    { val: Math.round(totalKm).toLocaleString() + ' km',  lbl: {{ vizTotalDistance | tojson }} },
+    { val: activeDays.toLocaleString(),                   lbl: {{ vizDaysWithTravel | tojson }} },
+    { val: busyYear || '—',                               lbl: {{ vizBusiestYear | tojson }} },
+    { val: busyDow ? DOW_NAMES[+busyDow[0]] : '—',       lbl: {{ vizBusiestWeekday | tojson }} },
+    { val: busyMon ? MON_NAMES[+busyMon[0]] : '—',       lbl: {{ vizBusiestMonth | tojson }} },
   ].map(s => `<div class="stat"><div class="val">${s.val}</div><div class="lbl">${s.lbl}</div></div>`).join('');
 }
 
@@ -295,8 +304,8 @@ function renderGrid() {
       const h2     = cells.slice(split * 7);
       const hasData = arr => arr.some(c => c && (c.trips > 0 || c.km > 0));
       // Jul–Dec first — matches newest-first year ordering
-      if (hasData(h2)) renderHalf(cal, `${year} · Jul–Dec`, h2, numWeeks - split, monthCols, split);
-      if (hasData(h1)) renderHalf(cal, `${year} · Jan–Jun`, h1, split, monthCols, 0);
+      if (hasData(h2)) renderHalf(cal, `${year} · ${MONTHS[6]}–${MONTHS[11]}`, h2, numWeeks - split, monthCols, split);
+      if (hasData(h1)) renderHalf(cal, `${year} · ${MONTHS[0]}–${MONTHS[5]}`, h1, split, monthCols, 0);
     } else {
       renderHalf(cal, String(year), cells, numWeeks, monthCols, 0);
     }
@@ -309,9 +318,9 @@ function renderLegend() {
   const labels = mode === 'trips'
     ? ['0', '1–2', '3–5', '6–9', '10+']
     : ['0', `1–${t[2]-1} km`, `${t[2]}–${t[3]-1} km`, `${t[3]}–${t[4]-1} km`, `${t[4]}+ km`];
-  leg.innerHTML = '<span>Less</span>' +
+  leg.innerHTML = `<span>${VIZ_LESS}</span>` +
     PALETTE.map((c, i) => `<div class="swatch" style="background:${c}" title="${labels[i]}"></div>`).join('') +
-    '<span>More</span>';
+    `<span>${VIZ_MORE}</span>`;
 }
 
 // Tooltip
@@ -327,7 +336,7 @@ document.addEventListener('mousemove', e => {
   if (!cell) { tip.style.display = 'none'; return; }
   const km = parseFloat(cell.dataset.km);
   tip.innerHTML = `<b>${cell.dataset.date}</b><br>
-    ${cell.dataset.trips} trip${cell.dataset.trips==1?'':'s'} · ${km.toLocaleString()} km`;
+    ${pluralize(VIZ_TRIPS, Number(cell.dataset.trips))} · ${km.toLocaleString()} km`;
   tip.style.display = 'block';
   const tipW = tip.offsetWidth;
   const left = e.clientX + 14 + tipW > window.innerWidth

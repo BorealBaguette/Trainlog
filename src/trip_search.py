@@ -15,6 +15,8 @@ from src.search_terms import comparison_condition, has_wildcard, like_pattern
 # the base CTE. Anything else is dropped: the names reach SQL, so the allowlist is
 # what keeps them safe.
 FILTER_FIELDS = {
+    "uid",
+    "ticket_ids",
     "type",
     "origin_station",
     "destination_station",
@@ -34,7 +36,7 @@ FILTER_FIELDS = {
 
 # Prices are not shown on a public listing, so they must not be filtered on there
 # either: a comparison would read a hidden value out one answer at a time.
-PUBLIC_HIDDEN_FIELDS = {"price"}
+PUBLIC_HIDDEN_FIELDS = {"price", "ticket_ids"}
 
 
 # Station names are stored with the country flag in front of them ("🇳🇴 Oslo S"), which
@@ -128,6 +130,8 @@ def _like(expression, param):
 
 def _empty_predicate(field):
     """`field:``` — the field carries no value, in whichever column holds it."""
+    if field == "ticket_ids":
+        return "COALESCE(cardinality(ticket_ids), 0) = 0"
     if field == "material_type":
         columns = _MATERIAL_COLUMNS
     elif field in _TEXT_FIELDS:
@@ -146,6 +150,29 @@ def _value_predicate(field, value, exact, param):
     """
     if exact and value == "":
         return _empty_predicate(field), {}
+
+    # Trip ids ("id:123|456", for links to a set of trips) are matched whole: as
+    # text, "id:12" would also find 123.
+    if field == "uid":
+        if not value.isdigit():
+            return "FALSE", {}
+        return f"uid = :{param}", {param: int(value)}
+
+    # Tickets by number ("ticket:864|865", what a ticket page links with: a group's
+    # trip ids would not fit in a URL) or by name.
+    if field == "ticket_ids":
+        if value.isdigit():
+            return f":{param} = ANY(ticket_ids)", {param: int(value)}
+        name = (
+            f"LOWER(tk.name) = LOWER(:{param})" if exact and not has_wildcard(value)
+            else _like("tk.name", param)
+        )
+        pattern = value if exact and not has_wildcard(value) else like_pattern(value)
+        return (
+            f"EXISTS (SELECT 1 FROM tickets tk"
+            f" WHERE tk.uid = ANY(FilteredTrips.ticket_ids) AND {name})",
+            {param: pattern},
+        )
 
     comparison = comparison_condition(field, value, param)
     if comparison:

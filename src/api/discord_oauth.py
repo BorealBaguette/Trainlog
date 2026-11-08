@@ -145,6 +145,8 @@ def unlink():
         # unlinking withdraws consent to it as well — otherwise the flag lingers
         # and quietly resumes if the account is ever relinked.
         user.discord_autopost = False
+        # Likewise the picture: relinking should not bring it back unasked.
+        user.discord_avatar = False
         authDb.session.commit()
 
     return redirect(url_for("user_settings", username=user.username))

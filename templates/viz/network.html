@@ -1,0 +1,643 @@
+{% extends "layout.html" %}
+{% block content %}
+{% import 'viz/_i18n.html' as i18n with context %}
+
+<style>
+  #graph { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; cursor: grab; }
+  #graph:active { cursor: grabbing; }
+  /* As the site's other beta pills (map background picker, settings). */
+  .viz-beta { margin-left: 4px; padding: 0.3em 0.55em 0.2em; border-radius: 1em; vertical-align: 1px;
+    background: #fd7e14; color: #fff; font-size: 0.68em; font-weight: 600; line-height: 1.2; text-transform: uppercase; }
+  #credit { position: fixed; left: 12px; bottom: 10px; z-index: 5; max-width: calc(100% - 24px);
+    color: #8fa6bd; font: 0.72em "Century Gothic", sans-serif; opacity: 0.85; }
+  #credit a { color: #c9d6e3; }
+  #info { position: fixed; top: 80px; left: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
+  #settings-btn { position: fixed; top: 80px; right: 12px; z-index: 6;
+    width: 34px; height: 34px; border: none; border-radius: 8px;
+    background: rgba(20,28,40,0.92); color: #e8edf3; cursor: pointer; }
+  #controls { position: fixed; top: 122px; right: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 220px;
+    max-height: calc(100vh - 140px); overflow-y: auto; display: none; }
+  #controls.open { display: block; }
+  #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
+  #controls input[type=range], #controls select { width: 100%; }
+  #controls select { background: #14202e; color: #e8edf3; border: 1px solid #2a3a4d; border-radius: 6px; padding: 3px; }
+  #controls .check { display: flex; align-items: center; gap: 7px; color: #e8edf3; cursor: pointer; }
+  #controls h6 { margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #2a3a4d;
+    color: #8fa6bd; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.04em; font-weight: bold; }
+  .seg { display: flex; border: 1px solid #2a3a4d; border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; background: transparent; color: #8fa6bd; border: none; padding: 5px 0; cursor: pointer; }
+  .seg button.on { background: #2a3a4d; color: #e8edf3; }
+  .downloads { display: flex; gap: 6px; margin-top: 10px; }
+  .downloads button { flex: 1; padding: 6px; border-radius: 6px; cursor: pointer;
+    background: #14202e; color: #e8edf3; border: 1px solid #2a3a4d; }
+  #tooltip { position: fixed; z-index: 10; pointer-events: none; display: none; max-width: 260px;
+    background: rgba(0,0,0,0.85); color: #fff; padding: 6px 9px; border-radius: 6px;
+    font-family: "Century Gothic", sans-serif; font-size: 0.82em; }
+  #tooltip .sub { color: #9fb0c3; }
+
+  .link { fill: #8fa6bd; stroke: none; pointer-events: none; }
+  .hit { fill: none; stroke: transparent; stroke-width: 10px; cursor: pointer; }
+  .link-label { fill: #e8edf3; font: bold 11px "Century Gothic", sans-serif; text-anchor: middle;
+    dominant-baseline: central; paint-order: stroke; stroke: #0d1b2a; stroke-width: 3px; pointer-events: none;
+    display: none; }
+  svg.counts .link-label, .link-label.hl { display: block; }
+  /* Air is green and rail blue, as on the map; on the svg so an export keeps it. */
+  svg.network { --accent: #40b91f; }
+  svg.network.rail { --accent: #52b0fe; }
+  .node circle { fill: #14202e; stroke: var(--accent); stroke-width: 2px; cursor: pointer; }
+  .node image.flag { pointer-events: none; }
+  .node .code { fill: #e8edf3; font: bold 11px "Century Gothic", sans-serif; text-anchor: middle;
+    dominant-baseline: central; pointer-events: none; }
+  .node .city { fill: #8fa6bd; font: 10px "Century Gothic", sans-serif; text-anchor: middle; pointer-events: none; }
+  svg.rail .node .city { fill: #dbe5ee; font-size: 11px; paint-order: stroke; stroke: #0d1b2a; stroke-width: 3px; }
+  svg.focus .link, svg.focus .link-label, svg.focus .node { opacity: 0.12; }
+  svg.focus .link.hl { opacity: 1; fill: var(--accent); fill-opacity: 0.95 !important; }
+  svg.focus .link-label.hl, svg.focus .node.hl { opacity: 1; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<svg id="graph" class="network{% if graph_mode == 'train' %} rail{% endif %}"></svg>
+<div id="tooltip"></div>
+{% if graph_mode == 'train' %}
+{# GHSL is CC BY 4.0: credit the source, link the licence, say it was changed. #}
+<div id="credit">
+  {{ i18n.slot(vizRailCredit, '<a href="https://human-settlement.emergency.copernicus.eu/" target="_blank" rel="noopener">GHSL</a> (European Commission, JRC)') }}
+  · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>
+</div>
+{% endif %}
+
+<div id="info">
+  <b>{{ vizRail if graph_mode == 'train' else vizAirports }}</b>{% if graph_mode == 'train' %}<span class="viz-beta">{{ beta }}</span>{% endif %}<br>
+  <span id="status">{{ vizLoading }}</span>
+</div>
+
+<button id="settings-btn" type="button" title="{{ vizSettings }}"><i class="fa-solid fa-sliders"></i></button>
+<div id="controls">
+  <div class="seg" id="direction">
+    <button type="button" data-v="0">{{ vizUndirected }}</button>
+    <button type="button" data-v="1" class="on">{{ vizDirected }}</button>
+  </div>
+  <label>{{ vizYear }}
+    <select id="year"><option value="all">{{ vizAllYears }}</option></select>
+  </label>
+  <label>{{ vizMinTrips if graph_mode == 'train' else vizMinFlights }}: <span id="min-val">1</span>
+    <input type="range" id="min" min="1" max="10" step="1" value="1">
+  </label>
+  {% if graph_mode == 'air' %}
+  <label class="check"><input type="checkbox" id="metro"> {{ vizGroupCities }}</label>
+  {% endif %}
+  <h6>{{ vizDisplay }}</h6>
+  <label class="check"><input type="checkbox" id="counts"> {{ vizAlwaysCounts }}</label>
+  {% if graph_mode == 'air' %}
+  <label class="check"><input type="checkbox" id="cities"> {{ vizCityNames }}</label>
+  {% endif %}
+  <label class="check"><input type="checkbox" id="sized" checked> {{ vizSizeByTraffic }}</label>
+  <h6>{{ vizLayout }}</h6>
+  <label class="check"><input type="checkbox" id="geo"{% if graph_mode == 'train' %} checked{% endif %}> {{ vizGeoPull }}</label>
+  <label>{{ vizEdgeLength }}: <span id="dist-val">120</span>
+    <input type="range" id="dist" min="40" max="300" step="10" value="120">
+  </label>
+  <label>{{ vizRepulsion }}: <span id="charge-val">300</span>
+    <input type="range" id="charge" min="50" max="1200" step="50" value="300">
+  </label>
+  <div class="downloads">
+    <button id="download-png" type="button"><i class="fa-solid fa-download"></i> {{ vizDownloadPng }}</button>
+    <button id="download-svg" type="button"><i class="fa-solid fa-download"></i> {{ vizDownloadSvg }}</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+
+<script>
+// One page for two graphs: airports linked by flights ("air"), and cities linked by train
+// trips ("train", where each bubble is a GHSL urban area or a station outside one).
+const MODE = {{ graph_mode | tojson }};
+const DATA_URL = {{ graph_url | tojson }};
+const FILE = MODE === 'train' ? 'rail-network' : 'airport-graph';
+// The rail graph's places come from GHSL (CC BY 4.0), so its images carry the credit too.
+const EXPORT_CREDIT = MODE === 'train'
+  ? {{ ((vizRailCredit | replace('{n}', 'GHSL (European Commission, JRC)')) ~ ' · CC BY 4.0') | tojson }} : '';
+const T = {
+  places: {{ (vizCityCount if graph_mode == 'train' else vizAirportCount) | tojson }}, edges: {{ vizEdgeCount | tojson }},
+  flights: {{ (vizTrips if graph_mode == 'train' else vizFlightCount) | tojson }}, connections: {{ vizConnectionCount | tojson }},
+};
+
+const svg = d3.select('#graph');
+// Flags fill a bubble as a circle; the box is the image's own, so one clip serves every size.
+svg.append('defs').append('clipPath').attr('id', 'flag-clip').attr('clipPathUnits', 'objectBoundingBox')
+  .append('circle').attr('cx', 0.5).attr('cy', 0.5).attr('r', 0.5);
+const root = svg.append('g');
+const linkLayer = root.append('g');
+const hitLayer = root.append('g');
+const labelLayer = root.append('g');
+const nodeLayer = root.append('g');
+const tooltip = document.getElementById('tooltip');
+
+// The view follows the graph (fitView) until the user pans, zooms or drags; a new filter hands it back.
+let userMoved = false;
+// Semantic zoom: zooming spreads the places by the full factor, but bubbles, lines and text
+// grow only by its (1 − SEMANTIC_ZOOM) power, so zooming into a tangled cluster opens it up
+// instead of just enlarging the tangle. Measured from the fitted view (fitK), which looks
+// exactly as drawn; zs is what every drawn size is multiplied by.
+const SEMANTIC_ZOOM = 0.6;
+// Resizing redraws every edge outline and re-rasterizes every flag, far too much for each of a
+// wheel's or a pinch's many events: while zooming the graph is only transformed, and its
+// sizes follow once, SIZE_SETTLE_MS after the zooming stops.
+const SIZE_SETTLE_MS = 150;
+let zoomK = 1, fitK = 1, zs = 1, sizeTimer = null;
+const zoom = d3.zoom().scaleExtent([0.1, 6]).on('zoom', e => {
+  root.attr('transform', e.transform);
+  zoomK = e.transform.k;
+  clearTimeout(sizeTimer);
+  sizeTimer = setTimeout(() => {
+    const nextZs = Math.pow(zoomK / fitK, -SEMANTIC_ZOOM);
+    if (Math.abs(nextZs - zs) > 1e-3) setSizeScale(nextZs); else fadeFlags();
+  }, SIZE_SETTLE_MS);
+  if (e.sourceEvent) userMoved = true;
+});
+svg.call(zoom);
+
+let airports = {}, metros = {}, rawEdges = [];
+let nodes = [], links = [];
+const nodeByCode = new Map();  // kept across rebuilds so bubbles stay where they floated to
+let directed = true;
+
+const sim = d3.forceSimulation()
+  .force('link', d3.forceLink().id(d => d.code))
+  .force('charge', d3.forceManyBody())
+  .force('collide', d3.forceCollide().radius(d => d.r + 6))
+  .force('x', d3.forceX())
+  .force('y', d3.forceY())
+  .on('tick', tick)
+  .on('end', () => { if (!userMoved) fitView(600); });
+
+function flag(country) {
+  return country && country.length === 2
+    ? String.fromCodePoint(...[...country.toUpperCase()].map(c => 0x1F1A5 + c.charCodeAt(0))) : '';
+}
+
+function val(id) { return document.getElementById(id).value; }
+function checked(id) { const el = document.getElementById(id); return !!el && el.checked; }
+// Rail bubbles are unlabelled inside (a city name doesn't fit), so their names always show.
+function showNames() { return MODE === 'train' || checked('cities'); }
+
+// A node's id: its airport code, or with "group by city" its IATA city ("city:PAR") when it has
+// one. Cities get their own ids so they never take over an airport's bubble (OSL is both).
+function groupOf(code) {
+  const metro = checked('metro') && airports[code] && airports[code].metro;
+  return metro ? 'city:' + metro : code;
+}
+
+// What a bubble shows: an airport as the API sent it, or a city as the airports of it visited.
+function nodeData(id) {
+  if (!id.startsWith('city:')) return { ...airports[id], code: id, label: airports[id].label || id };
+  const metro = id.slice(5), members = Object.values(airports).filter(a => a.metro === metro);
+  const located = members.filter(a => a.lat != null);
+  const mean = key => located.length ? d3.mean(located, a => a[key]) : null;
+  return {
+    code: id, label: metro, city: metros[metro] || '', country: members[0] ? members[0].country : '',
+    name: members.map(a => a.code).sort().join(' · '), lat: mean('lat'), lng: mean('lng'),
+  };
+}
+
+// A new bubble starts where its city, or the airports it groups, already floated to, so
+// toggling "group by city" merges and splits bubbles in place instead of scattering them.
+function placeNear(n) {
+  const related = [...nodeByCode.values()].filter(o => o.x != null &&
+    (n.code.startsWith('city:') ? o.metro === n.label : 'city:' + n.metro === o.code));
+  if (!related.length) return;
+  n.x = d3.mean(related, o => o.x) + (Math.random() - 0.5) * 10;
+  n.y = d3.mean(related, o => o.y) + (Math.random() - 0.5) * 10;
+}
+
+// One edge per node pair of the chosen year, both directions summed (ab / ba keep
+// the split for the arrowheads and tooltip); nodes are the airports or cities they touch.
+function aggregate() {
+  const year = val('year'), min = Number(val('min'));
+  const byKey = new Map();
+  for (const raw of rawEdges) {
+    const e = { ...raw, src: groupOf(raw.src), dst: groupOf(raw.dst) };
+    if (e.src === e.dst || (year !== 'all' && String(e.year) !== year)) continue;
+    const [a, b] = e.src < e.dst ? [e.src, e.dst] : [e.dst, e.src];
+    const key = a + '-' + b;
+    if (!byKey.has(key)) byKey.set(key, { key, a, b, count: 0, ab: 0, ba: 0 });
+    const l = byKey.get(key);
+    l.count += e.count;
+    if (e.src === a) l.ab += e.count; else l.ba += e.count;
+  }
+  // Light edges first, so the heavy ones are drawn on top.
+  const kept = [...byKey.values()].filter(l => l.count >= min).sort((x, y) => x.count - y.count);
+
+  const traffic = new Map(), degree = new Map();
+  kept.forEach(l => {
+    for (const c of [l.a, l.b]) {
+      traffic.set(c, (traffic.get(c) || 0) + l.count);
+      degree.set(c, (degree.get(c) || 0) + 1);
+    }
+  });
+  const maxTraffic = Math.max(1, ...traffic.values());
+  const sized = checked('sized');
+  const nextNodes = [...traffic.keys()].map(code => {
+    if (!nodeByCode.has(code)) {
+      const fresh = nodeData(code);
+      placeNear(fresh);
+      nodeByCode.set(code, fresh);
+    }
+    const n = nodeByCode.get(code);
+    n.traffic = traffic.get(code);
+    n.degree = degree.get(code);
+    const [base, grow, fixed] = MODE === 'train' ? [7, 12, 9] : [13, 13, 16];
+    n.r = sized ? base + grow * Math.sqrt(n.traffic / maxTraffic) : fixed;
+    return n;
+  });
+  return { nextNodes, kept };
+}
+
+function rebuild() {
+  const { nextNodes, kept } = aggregate();
+  nodes = nextNodes;
+  links = kept.map(l => ({ ...l, source: l.a, target: l.b }));
+  // Frequency is width and brightness, on a log scale that tops out at the busiest edge but
+  // never below WEIGHT_FLOOR flights, so a graph whose busiest edge is 2 flights doesn't turn
+  // its 2s into the widest lines there are. Without "Size by traffic" every edge is drawn
+  // alike, as every bubble is.
+  const WEIGHT_FLOOR = 8;
+  const top = Math.log(Math.max(WEIGHT_FLOOR, ...links.map(l => l.count)));
+  const sized = checked('sized');
+  const weight = d => !sized ? 0.15 : Math.log(d.count) / top;
+  linkLayer.selectAll('path').data(links, d => d.key).join('path')
+    .attr('class', 'link')
+    .each(d => { d.w = 1.4 + 5.4 * weight(d); })
+    .attr('fill-opacity', d => 0.4 + 0.5 * weight(d));
+
+  // Wide invisible twins, so thin edges can still be hovered.
+  hitLayer.selectAll('path').data(links, d => d.key).join('path')
+    .attr('class', 'hit')
+    .on('mouseenter', (e, d) => focusLink(d))
+    .on('mousemove', (e, d) => showTip(e, linkTip(d)))
+    .on('mouseleave', () => { unfocus(); hideTip(); });
+
+  svg.classed('counts', checked('counts'));
+  labelLayer.selectAll('text').data(links, d => d.key).join('text')
+    .attr('class', 'link-label').text(d => d.count);
+
+  const g = nodeLayer.selectAll('g.node').data(nodes, d => d.code).join(enter => {
+    const g = enter.append('g').attr('class', 'node');
+    g.append('circle');
+    g.append('image').attr('class', 'flag').attr('clip-path', 'url(#flag-clip)')
+      .attr('preserveAspectRatio', 'xMidYMid slice');
+    g.append('text').attr('class', 'code');
+    g.append('text').attr('class', 'city');
+    return g;
+  });
+  g.select('image.flag').attr('href', flagOf);
+  g.select('.code').text(d => MODE === 'train' ? '' : d.label);
+  g.select('.city').text(d => MODE === 'train' ? d.label : checked('cities') ? d.city : '');
+  applySizes();
+  g.on('mouseenter', (e, d) => focus(d))
+    .on('mousemove', (e, d) => showTip(e, nodeTip(d)))
+    .on('mouseleave', () => { unfocus(); hideTip(); })
+    .call(d3.drag()
+      .on('start', (e, d) => { userMoved = true; if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  sim.nodes(nodes);
+  sim.force('link').links(links);
+  applyForces();
+  userMoved = false;
+  sim.alpha(0.8).restart();
+
+  const flights = links.reduce((s, l) => s + l.count, 0);
+  document.getElementById('status').textContent =
+    `${pluralize(T.places, nodes.length)} · ${pluralize(T.edges, links.length)} · ${pluralize(T.flights, flights)}`;
+}
+
+// "Geographic pull" draws each bubble towards its airport on an equirectangular projection.
+function applyForces() {
+  const { width, height } = svg.node().getBoundingClientRect();
+  const geo = checked('geo');
+  const located = nodes.filter(n => n.lat != null);
+  const project = d3.geoEquirectangular().fitExtent(
+    [[60, 60], [width - 60, height - 60]],
+    { type: 'MultiPoint', coordinates: located.length ? located.map(n => [n.lng, n.lat]) : [[0, 0]] });
+  nodes.forEach(n => {
+    [n.gx, n.gy] = geo && n.lat != null ? project([n.lng, n.lat]) : [width / 2, height / 2];
+    if (n.x == null) { n.x = n.gx + (Math.random() - 0.5) * 50; n.y = n.gy + (Math.random() - 0.5) * 50; }
+  });
+  const strength = geo ? 0.25 : 0.04;
+  sim.force('x').x(d => d.gx).strength(strength);
+  sim.force('y').y(d => d.gy).strength(strength);
+  // Hubs push harder and sit further from each other, so their spokes fan out instead of
+  // knotting in the middle; leaves are held by their one link (d3's 1 / min degree).
+  const dist = Number(val('dist'));
+  sim.force('link')
+    .distance(l => dist * (0.6 + 0.2 * Math.sqrt(Math.min(l.source.degree, l.target.degree))))
+    .strength(l => geo ? 0.05 : 1 / Math.min(l.source.degree, l.target.degree));
+  sim.force('charge').strength(d => -Number(val('charge')) * (0.5 + 0.5 * Math.sqrt(d.degree)));
+  sim.force('collide').radius(d => d.r + (showNames() ? 14 : 8));
+}
+
+// A gently bowed edge from bubble rim to bubble rim, drawn as one filled outline: a shaft of
+// the edge's width along the curve, with (directed mode) a head sized to it on each end that
+// was flown into.
+const CURVE_STEPS = 12;
+
+// Every drawn size, at the current semantic-zoom scale zs.
+function applySizes() {
+  const g = nodeLayer.selectAll('g.node');
+  g.select('circle').attr('r', d => d.r * zs).style('stroke-width', 2 * zs + 'px');
+  // Inside the ring, so the accent colour still frames it.
+  g.select('image.flag')
+    .attr('x', d => zs - d.r * zs).attr('y', d => zs - d.r * zs)
+    .attr('width', d => 2 * (d.r - 1) * zs).attr('height', d => 2 * (d.r - 1) * zs);
+  g.select('.code').style('font-size', d => Math.max(10, d.r * 0.62) * zs + 'px');
+  g.select('.city').attr('y', d => (d.r + 12) * zs)
+    .style('font-size', (MODE === 'train' ? 11 : 10) * zs + 'px').style('stroke-width', 3 * zs + 'px');
+  labelLayer.selectAll('text').style('font-size', 11 * zs + 'px').style('stroke-width', 3 * zs + 'px');
+  hitLayer.selectAll('path').style('stroke-width', 10 * zs + 'px');
+  fadeFlags();
+}
+
+function setSizeScale(next) {
+  zs = next;
+  applySizes();
+  tick();
+}
+
+function geometry(l) {
+  const s = l.source, t = l.target;
+  const dx = t.x - s.x, dy = t.y - s.y, len = Math.hypot(dx, dy) || 1;
+  const bend = Math.min(40, len * 0.15);
+  const cx = (s.x + t.x) / 2 - dy / len * bend, cy = (s.y + t.y) / 2 + dx / len * bend;
+  const trim = (p, r) => { const d = Math.hypot(cx - p.x, cy - p.y) || 1; return [p.x + (cx - p.x) * r / d, p.y + (cy - p.y) * r / d]; };
+  const [x1, y1] = trim(s, (s.r + 1) * zs);
+  const [x2, y2] = trim(t, (t.r + 1) * zs);
+
+  // The quadratic Bézier P1 → C → P2, and its unit normal.
+  const at = u => [(1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2,
+                   (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2];
+  const normal = u => {
+    const tx = 2 * (1 - u) * (cx - x1) + 2 * u * (x2 - cx), ty = 2 * (1 - u) * (cy - y1) + 2 * u * (y2 - cy);
+    const n = Math.hypot(tx, ty) || 1;
+    return [-ty / n, tx / n];
+  };
+  const side = (u, k) => { const [px, py] = at(u), [nx, ny] = normal(u); return `${px + nx * k},${py + ny * k}`; };
+
+  const arc = Math.hypot(cx - x1, cy - y1) + Math.hypot(x2 - cx, y2 - cy);  // close enough for a gentle bow
+  const hw = l.w * zs / 2, hh = Math.max(5, l.w * 1.2) * zs;
+  const startHead = directed && l.ba > 0, endHead = directed && l.ab > 0;
+  const heads = (startHead ? 1 : 0) + (endHead ? 1 : 0);
+  const headLen = heads ? Math.min(hh * 1.7, Math.max(0, arc - 2) / heads) : 0;
+  const u0 = startHead ? headLen / arc : 0, u1 = endHead ? 1 - headLen / arc : 1;
+  const us = d3.range(CURVE_STEPS + 1).map(i => u0 + (u1 - u0) * i / CURVE_STEPS);
+
+  let d = startHead ? `M${x1},${y1}L${side(u0, hh)}` : `M${side(u0, hw)}`;
+  d += us.map(u => `L${side(u, hw)}`).join('');
+  if (endHead) d += `L${side(u1, hh)}L${x2},${y2}L${side(u1, -hh)}`;
+  d += us.reverse().map(u => `L${side(u, -hw)}`).join('');
+  d += startHead ? `L${side(u0, -hh)}Z` : 'Z';
+
+  const [lx, ly] = at(0.5);
+  return { d, line: `M${x1},${y1}Q${cx},${cy} ${x2},${y2}`, lx, ly };
+}
+
+// Zoom so every bubble (and its city label) is in view, below the navbar and info box.
+function fitView(duration) {
+  if (!nodes.length) return;
+  const { width, height } = svg.node().getBoundingClientRect();
+  const below = showNames() ? 16 : 0;
+  const x0 = d3.min(nodes, n => n.x - n.r), x1 = d3.max(nodes, n => n.x + n.r);
+  const y0 = d3.min(nodes, n => n.y - n.r), y1 = d3.max(nodes, n => n.y + n.r + below);
+  const top = 70, pad = 30;
+  const k = Math.min(2, (width - 2 * pad) / Math.max(1, x1 - x0), (height - top - 2 * pad) / Math.max(1, y1 - y0));
+  fitK = k;
+  const transform = d3.zoomIdentity
+    .translate(width / 2 - k * (x0 + x1) / 2, top + (height - top) / 2 - k * (y0 + y1) / 2)
+    .scale(k);
+  (duration ? svg.transition().duration(duration) : svg).call(zoom.transform, transform);
+}
+
+function tick() {
+  const geo = new Map(links.map(l => [l.key, geometry(l)]));
+  linkLayer.selectAll('path').attr('d', d => geo.get(d.key).d);
+  hitLayer.selectAll('path').attr('d', d => geo.get(d.key).line);
+  labelLayer.selectAll('text').attr('x', d => geo.get(d.key).lx).attr('y', d => geo.get(d.key).ly);
+  nodeLayer.selectAll('g.node').attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+// Highlight the edges `on` picks, their counts and both their airports; dim the rest.
+function highlight(on) {
+  const near = new Set();
+  svg.classed('focus', true);
+  linkLayer.selectAll('path').classed('hl', l => {
+    const hit = on(l);
+    if (hit) { near.add(l.source.code); near.add(l.target.code); }
+    return hit;
+  });
+  labelLayer.selectAll('text').classed('hl', on);
+  nodeLayer.selectAll('g.node').classed('hl', d => near.has(d.code));
+}
+
+function focus(n) { highlight(l => l.source === n || l.target === n); }
+function focusLink(link) { highlight(l => l === link); }
+
+function unfocus() {
+  svg.classed('focus', false);
+  linkLayer.selectAll('path').classed('hl', false);
+  labelLayer.selectAll('text').classed('hl', false);
+  nodeLayer.selectAll('g.node').classed('hl', false);
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function nodeTip(n) {
+  const mine = links.filter(l => l.source === n || l.target === n)
+    .map(l => ({ other: l.source === n ? l.target.label : l.source.label, count: l.count,
+                 out: l.source === n ? l.ab : l.ba, in: l.source === n ? l.ba : l.ab }))
+    .sort((a, b) => b.count - a.count);
+  const top = mine.slice(0, 6).map(m => `${esc(m.other)} <span class="sub">×${m.count}`
+    + (directed ? ` (${m.out} →, ${m.in} ←)` : '') + '</span>').join('<br>');
+  return `<b>${flag(n.country)} ${esc(n.label)}</b> ${esc(n.city)}<br><span class="sub">${esc(n.name)}</span><br>`
+    + `${pluralize(T.flights, n.traffic)} · ${pluralize(T.connections, mine.length)}<br>${top}${mine.length > 6 ? '<br>…' : ''}`;
+}
+
+function linkTip(l) {
+  const s = esc(l.source.label), t = esc(l.target.label);
+  return `<b>${s} ↔ ${t}</b> · ${pluralize(T.flights, l.count)}`
+    + `<br><span class="sub">${s} → ${t}: ${l.ab}<br>${t} → ${s}: ${l.ba}</span>`;
+}
+
+function showTip(e, html) {
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+  tooltip.style.left = Math.min(e.clientX + 14, window.innerWidth - tooltip.offsetWidth - 8) + 'px';
+  tooltip.style.top = Math.min(e.clientY + 14, window.innerHeight - tooltip.offsetHeight - 8) + 'px';
+}
+function hideTip() { tooltip.style.display = 'none'; }
+
+// The whole graph as a standalone SVG document, framed on the bubbles whatever the zoom on
+// screen, with its own styles and background. The style element must be an SVG one: an HTML
+// <style> is ignored once the file stands alone, and every edge then fills black.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function exportSvg() {
+  // Drawn at the fitted view's sizes, whatever the semantic zoom on screen.
+  const viewZs = zs;
+  if (viewZs !== 1) setSizeScale(1);
+  const clone = svg.node().cloneNode(true);
+  if (viewZs !== 1) setSizeScale(viewZs);
+  clone.querySelectorAll('.hit').forEach(el => el.remove());
+  // The export is the graph unzoomed, so its flags show as they would at 1×.
+  clone.querySelectorAll('image.flag').forEach(el =>
+    el.setAttribute('opacity', flagOpacity((Number(el.getAttribute('width')) + 2) / 2, 1)));
+  clone.classList.remove('focus');
+  clone.querySelector('g').removeAttribute('transform');
+
+  const pad = 30, below = showNames() ? 16 : 0;
+  let x = d3.min(nodes, n => n.x - n.r) - pad, width = Math.ceil(d3.max(nodes, n => n.x + n.r) + pad - x);
+  const y = d3.min(nodes, n => n.y - n.r) - pad;
+  const height = Math.ceil(d3.max(nodes, n => n.y + n.r + below) + pad - y);
+  // Room for the credit line on a narrow graph, the graph staying centred.
+  if (EXPORT_CREDIT && width < 380) { x -= (380 - width) / 2; width = 380; }
+  clone.setAttribute('xmlns', SVG_NS);
+  clone.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
+  clone.setAttribute('width', width);
+  clone.setAttribute('height', height);
+
+  const style = document.createElementNS(SVG_NS, 'style');
+  style.textContent = [...document.styleSheets].flatMap(sheet => {
+    try { return [...sheet.cssRules].map(r => r.cssText); } catch { return []; }
+  }).filter(css => /^(\.link|\.node|svg)/.test(css)).join('\n');
+  const background = document.createElementNS(SVG_NS, 'rect');
+  Object.entries({ x, y, width, height, fill: '#0d1b2a' }).forEach(([k, v]) => background.setAttribute(k, v));
+  clone.prepend(style, background);
+  if (EXPORT_CREDIT) {
+    const credit = document.createElementNS(SVG_NS, 'text');
+    Object.entries({ x: x + width - 10, y: y + height - 10, 'text-anchor': 'end', fill: '#8fa6bd',
+                     'font-size': 10, 'font-family': 'Century Gothic, sans-serif' }).forEach(([k, v]) => credit.setAttribute(k, v));
+    credit.textContent = EXPORT_CREDIT;
+    clone.append(credit);
+  }
+
+  const markup = new XMLSerializer().serializeToString(clone);
+  return { blob: new Blob([markup], { type: 'image/svg+xml' }), width, height };
+}
+
+function save(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'), { href: url, download: filename }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadSvg() { save(exportSvg().blob, FILE + '.svg'); }
+
+// The SVG export drawn onto a canvas at twice the screen size, so the PNG stays sharp.
+function downloadPng() {
+  const { blob, width, height } = exportSvg();
+  const scale = 2, url = URL.createObjectURL(blob), img = new Image();
+  img.onload = () => {
+    const canvas = Object.assign(document.createElement('canvas'), { width: width * scale, height: height * scale });
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(png => save(png, FILE + '.png'), 'image/png');
+  };
+  img.src = url;
+}
+
+document.getElementById('settings-btn').onclick = () => document.getElementById('controls').classList.toggle('open');
+document.querySelectorAll('#direction button').forEach(b => b.onclick = () => {
+  directed = b.dataset.v === '1';
+  document.querySelectorAll('#direction button').forEach(x => x.classList.toggle('on', x === b));
+  rebuild();
+});
+['year', 'metro', 'counts', 'cities', 'sized'].map(id => document.getElementById(id)).filter(Boolean)
+  .forEach(el => el.addEventListener('change', rebuild));
+document.getElementById('min').addEventListener('input', () => {
+  document.getElementById('min-val').textContent = val('min');
+  rebuild();
+});
+['dist', 'charge'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+  document.getElementById(id + '-val').textContent = val(id);
+  applyForces();
+  sim.alpha(0.5).restart();
+}));
+document.getElementById('geo').addEventListener('change', () => { userMoved = false; applyForces(); sim.alpha(0.8).restart(); });
+document.getElementById('download-svg').onclick = downloadSvg;
+document.getElementById('download-png').onclick = downloadPng;
+window.addEventListener('resize', () => { applyForces(); sim.alpha(0.3).restart(); if (!userMoved) fitView(0); });
+
+// Rail bubbles carry their country's flag: their inside is otherwise empty (the name is
+// below), and a network crossing borders reads by country. Airport bubbles hold their code.
+// The site's flag SVGs have a viewBox but no size, which Firefox won't draw as an image; stamp
+// the size on, and keep each as a data URI so an exported SVG or PNG carries it too.
+const FLAG_DIR = "{{ url_for('static', filename='images/flags') }}";
+// A flag fades in as its bubble grows on screen (radius × zoom), from nothing at FLAG_FADE[0] px
+// to full at FLAG_FADE[1]: too small to read, it would only be a speck of colour, but zooming
+// into a cluster brings them up rather than leaving its small bubbles bare.
+// A big network fits the screen only at about half size, putting most bubbles at 3.5–5 px:
+// still enough to tell a tricolour from a cross.
+const FLAG_FADE = [2, 4.5], FLAG_OPACITY = 0.8;
+const flags = new Map();
+
+function loadFlag(country) {
+  return fetch(FLAG_DIR + '/' + country.toLowerCase() + '.svg')
+    .then(res => res.ok ? res.text() : Promise.reject())
+    .then(svgText => {
+      const box = (svgText.match(/viewBox="([^"]+)"/) || [])[1];
+      const parts = box ? box.trim().split(/[\s,]+/).map(Number) : [];
+      if (parts.length === 4) svgText = svgText.replace('<svg', `<svg width="${parts[2]}" height="${parts[3]}"`);
+      flags.set(country, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgText));
+    })
+    .catch(() => {});
+}
+
+function flagOpacity(r, k) {
+  const t = Math.max(0, Math.min(1, (r * k - FLAG_FADE[0]) / (FLAG_FADE[1] - FLAG_FADE[0])));
+  return FLAG_OPACITY * t * t * (3 - 2 * t);
+}
+
+function fadeFlags() {
+  nodeLayer.selectAll('image.flag').attr('opacity', d => flagOpacity(d.r * zs, zoomK));
+}
+
+function flagOf(d) {
+  return MODE === 'train' && flags.get(d.country) || null;
+}
+
+fetch(DATA_URL).then(r => r.json()).then(async data => {
+  if (MODE === 'train') {
+    const countries = new Set(data.nodes.map(n => n.country).filter(c => /^[A-Z]{2}$/.test(c)));
+    await Promise.all([...countries].map(loadFlag));
+  }
+  airports = Object.fromEntries(data.nodes.map(n => [n.code, n]));
+  metros = data.metros || {};
+  rawEdges = data.edges;
+  const years = [...new Set(rawEdges.map(e => e.year).filter(y => y != null))].sort((a, b) => b - a);
+  const select = document.getElementById('year');
+  years.forEach(y => select.add(new Option(y, y)));
+  const maxEdge = Math.max(1, ...rawEdges.map(e => e.count));
+  document.getElementById('min').max = Math.max(2, Math.min(20, maxEdge));
+  rebuild();
+  sim.stop();
+  while (sim.alpha() > sim.alphaMin()) sim.tick();
+  tick();
+  fitView(0);
+  document.querySelector('.spinner-container').style.display = 'none';
+}).catch(() => {
+  document.getElementById('status').textContent = {{ vizFailed | tojson }};
+  document.querySelector('.spinner-container').style.display = 'none';
+});
+</script>
+
+{% endblock %}

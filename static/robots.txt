@@ -1,6 +1,6 @@
 User-agent: *
 
-Disallow: /u/
 Disallow: /admin/
 Disallow: /api/
-Disallow: /public/
+
+Sitemap: https://trainlog.me/sitemap.xml

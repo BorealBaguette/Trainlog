@@ -34,10 +34,9 @@ def filter_conditions(query):
     top speed (0 when uncapped)."""
     get = lambda key: query.get(key, [""])[0]
     conditions = []
-    # A capped train is a classic one: off high-speed lines too, or a capped LGV would
-    # still be its shortest way.
+    # max_speed only caps the train's speed; high-speed lines have their own toggle.
     max_speed = int(get("max_speed")) if get("max_speed").isdigit() else 0
-    if get("avoid_highspeed") == "1" or max_speed:
+    if get("avoid_highspeed") == "1":
         conditions.append("highspeed")
     power = [POWER_SYSTEMS[p] for p in get("power").split(",") if p in POWER_SYSTEMS]
     if get("electrified") == "yes" or power:
@@ -52,7 +51,9 @@ def filter_conditions(query):
     return conditions, max_speed
 
 
-def forward_routing_core(routingType, path, flask_request, extra_args=None):
+def forward_routing_core(routingType, path, flask_request, extra_args=None, use_new_router=None, public_fallback=True):
+    """use_new_router None reads it from the request. public_fallback False keeps bus
+    routing on its own router, answering NoRoute rather than asking a public one."""
     # GraphHopper profile matching the original (pre-normalization) trip type
     gh_profile = {"train": "train", "tram": "tram", "metro": "metro"}.get(routingType, "all")
 
@@ -63,13 +64,13 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
         routingType = "cycle"
 
     radiuses = None
-    use_new_router = False  # defined for all paths
 
     # Determine base URL + (optional) return_code for bus
     return_code = None
 
     if routingType == "train":
-        use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
+        if use_new_router is None:
+            use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
         base = "https://train-gh.srv.trainlog.me" if use_new_router else "https://train.srv.trainlog.me"
 
     elif routingType == "ferry":
@@ -200,6 +201,13 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
     TIMEOUT = (3, 8)
 
     # Behavior per type
+    if routingType == "bus" and not public_fallback:
+        try:
+            response = requests.get(build_url(base), timeout=TIMEOUT)
+            return make_response(response.json(), response.status_code)
+        except (requests.RequestException, ValueError) as e:
+            return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
+
     if routingType == "bus":
         routers_fallback_base = "https://routing.openstreetmap.de/routed-car"
         try:
@@ -221,7 +229,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
     if routingType == "train" and use_new_router:
         try:
-            if filters:
+            if filters or max_speed:
                 # A filter forcing a long detour takes seconds on the worldwide graph
                 gh_json = requests.post(f"{base}/route", json=build_gh_body(), timeout=(3, 25)).json()
             else:

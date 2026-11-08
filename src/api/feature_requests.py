@@ -92,8 +92,17 @@ def feature_requests(username=None):
             }
             request_list.append(request_dict)
 
+    if sort_by == "closed":
+        closed = sorted(
+            (r for r in request_list if r["closed_at"]),
+            key=lambda r: r["closed_at"],
+            reverse=True,
+        )
+        request_list = closed + [r for r in request_list if not r["closed_at"]]
+
     return render_template(
         "feature_requests.html",
+        title=lang.get(userinfo.get("lang", "en"), lang["en"])["feature_requests_title"],
         username=current_user,
         requests=request_list,
         current_sort=sort_by,
@@ -157,8 +166,9 @@ def single_feature_request(request_id):
 
     return render_template(
         "single_feature_request.html",
+        title=request_dict["title"],
         username=current_user,
-        request=request_dict,
+        feature_request=request_dict,
         **lang.get(userinfo.get("lang", "en"), {}),
         **userinfo,
         nav="bootstrap/navigation.html"
@@ -470,7 +480,11 @@ def _close_feature_request_and_notify(request_id, new_status, closure_reason=Non
         )
 
     # Send email if closed
-    if new_status in ("completed", "not_doing", "merged") and author_username:
+    author = (
+        User.query.filter_by(username=author_username).first() if author_username else None
+    )
+    # No author account (deleted, alias left behind): nobody to notify
+    if new_status in ("completed", "not_doing", "merged") and author:
         try:
             subject = f"Your feature request #{request_id} was closed"
             if new_status == "completed":
@@ -480,8 +494,7 @@ def _close_feature_request_and_notify(request_id, new_status, closure_reason=Non
             else:
                 msg_status = "won't be done"
 
-            user = User.query.filter_by(username=author_username).first()
-            user_lang = user.lang
+            user_lang = author.lang
             message = f"{lang[user_lang]['fr_email_greeting'].format(username=author_username)}<br><br>"
             message += f"{lang[user_lang]['fr_email_feature_closed'].format(request_id=request_id, status=msg_status, url=url_for('feature_requests.single_feature_request', request_id=request_id, _external=True))}<br><br>"
             if closure_reason:

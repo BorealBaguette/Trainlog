@@ -1,5 +1,9 @@
 {% extends "layout.html" %}
 {% block content %}
+{# Prices and CO₂ are decided server-side for trip pages (src/share_view.py); plan
+   views, rendered without these, keep the old ?price / ?carbon switches. #}
+{% set show_price = show_price if show_price is defined else ('price' in request.args) %}
+{% set show_carbon = show_carbon if show_carbon is defined else ('carbon' in request.args) %}
 {% include "includes/trainset_display.html" %}
 <style>
 /* Controls, not facts: at rest they sit at the meta line's own weight (the primary
@@ -7,13 +11,13 @@
    accent colour only on hover or once open, where it means "active". */
 .publicTsToggle {
   cursor: pointer;
-  color: #a8adb3;
+  color: light-dark(#a8adb3, var(--bs-secondary-color));
   margin-left: 7px;
   text-decoration: none;
   vertical-align: baseline;
 }
 .publicTsToggle:hover,
-.publicTsToggle.open { color: #0d6efd; }
+.publicTsToggle.open { color: light-dark(#0d6efd, #7aa8eb); }
 /* Poster, ride-along, tag Play and plan copy are all rarely used, so they live behind
    one more-actions button in the map control stack rather than a row of their own. */
 .tripActions { position: relative; }
@@ -25,7 +29,7 @@
   left: calc(100% + 6px);
   min-width: 170px;
   padding: 4px;
-  background: #fff;
+  background: light-dark(#fff, var(--bs-body-bg));
   border-radius: 4px;
   box-shadow: 0 1px 6px rgba(0,0,0,.35);
 }
@@ -44,12 +48,12 @@
   cursor: pointer;
   font-size: 14px;
   text-align: left;
-  color: #222;
+  color: light-dark(#222, var(--bs-emphasis-color));
   text-decoration: none;
   white-space: nowrap;
 }
-.tripActionBtn:hover { background: #f2f4f7; color: #222; }
-.tripActionBtn i { width: 14px; text-align: center; color: #8a8a8a; }
+.tripActionBtn:hover { background: light-dark(#f2f4f7, var(--bs-tertiary-bg)); color: light-dark(#222, var(--bs-emphasis-color)); }
+.tripActionBtn i { width: 14px; text-align: center; color: light-dark(#8a8a8a, var(--bs-secondary-color)); }
 /* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
    each source's px-per-metre cancels out and relative proportions are gently preserved;
    the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
@@ -70,7 +74,7 @@
 /* The vehicle/trainset panel is its own group — set it slightly further apart. */
 .events .publicVehicle,
 .events .publicTrainset { margin-top: 9px; }
-.events .duration { color: #8a8a8a; }
+.events .duration { color: light-dark(#8a8a8a, var(--bs-secondary-color)); }
 
 /* ── Leg facts: operators + line, then a meta line of icon/value pairs ───────
    Every one of these rows is built from spans, which the blanket `.events span`
@@ -88,17 +92,17 @@
 .events .legOperators > * { margin-left: 0; }
 
 .events .legMetaItem { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
-.legMetaIcon { color: #b6b6b6; font-size: 0.9em; }
-.legMetaSep { color: #d5d5d5; }
+.legMetaIcon { color: light-dark(#b6b6b6, var(--bs-tertiary-color)); font-size: 0.9em; }
+.legMetaSep { color: light-dark(#d5d5d5, var(--bs-tertiary-color)); }
 /* The icons keep their identity colours, desaturated so they read as a family and
    sit below the station names in the hierarchy rather than above them. */
-.legIconLine   { color: #8c9bb0; }
-.legIconTicket { color: #6f9e6f; }
-.legIconPrice  { color: #bfa055; }
+.legIconLine   { color: light-dark(#8c9bb0, var(--bs-secondary-color)); }
+.legIconTicket { color: light-dark(#6f9e6f, var(--bs-secondary-color)); }
+.legIconPrice  { color: light-dark(#bfa055, #ccbd99); }
 /* Line name: same icon+value shape as the measurements, but a shade darker and a
    touch heavier — it names the service rather than measuring it. */
 .events .legLine {
-  color: #5f5f5f;
+  color: light-dark(#5f5f5f, var(--bs-body-color));
   font-weight: 500;
   white-space: normal;
   max-width: 100%;
@@ -117,12 +121,12 @@
 .events .legMeta .carbon-icon { font-size: 1em; filter: saturate(0.7); }
 .legValue { display: none; }
 .events .itinerary-trip.active .legValue { display: inline; }
-.events .itinerary-trip.active .legMeta { color: #7a7a7a; }
+.events .itinerary-trip.active .legMeta { color: light-dark(#7a7a7a, var(--bs-body-color)); }
 
 .publicVehicle {
   font-size: 0.82em;
   line-height: 1.3;
-  color: #666;
+  color: light-dark(#666, var(--bs-body-color));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -139,13 +143,13 @@
 /* Re-assert the separator AFTER the blanket ::before reset above, which would
    otherwise blank it out too (it is a span inside .publicVehicle). */
 .events .publicVehicle .publicVehicleType + .publicVehicleReg::before {
-  content: "·"; color: #bbb; margin-right: 3px;
+  content: "·"; color: light-dark(#bbb, var(--bs-tertiary-color)); margin-right: 3px;
 }
 .publicVehicleReg { display: inline-flex; align-items: baseline; gap: 4px; }
 .publicVehicleRegText {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.02em;
-  color: #555;
+  color: light-dark(#555, var(--bs-body-color));
 }
 /* The global .flag rule jumps to 26px above 1500px — sized for table rows, far too
    big for this panel. Pin it to the panel's own text size. */
@@ -165,8 +169,8 @@
 .publicVehicleMedia.is-clickable { cursor: pointer; }
 .publicVehicleMedia.is-clickable:hover { opacity: 0.85; }
 .publicVehicleMedia.is-loading { opacity: 0.5; }
-.publicVehiclePhotoBtn { color: #a8adb3; text-decoration: none; font-size: 0.95em; }
-.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: #0d6efd; }
+.publicVehiclePhotoBtn { color: light-dark(#a8adb3, var(--bs-secondary-color)); text-decoration: none; font-size: 0.95em; }
+.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: light-dark(#0d6efd, #7aa8eb); }
 /* Third-party thumbnails vary wildly in size — cap and frame them so every leg
    looks the same regardless of what comes back. */
 .publicVehicle .vehiclePhotoContainer {
@@ -178,7 +182,7 @@
 .publicVehicle .vehiclePhotoContainer img { display: block; width: 100%; height: auto; }
 .publicVehicle .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
 </style>
-<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <style>
@@ -203,7 +207,7 @@
     right: -400px;
     width: 400px;
     height: 100%;
-    background: white;
+    background: light-dark(white, var(--bs-body-bg));
     box-shadow: -2px 0 5px rgba(0,0,0,0.1);
     transition: right 0.3s ease;
     z-index: 1000;
@@ -229,8 +233,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: white;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    background: light-dark(white, var(--bs-body-bg));
+    border: 1px solid light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.2));
     border-right: none;
     border-radius: 8px 0 0 8px;
     z-index: 1001;
@@ -250,7 +254,7 @@
 }
 
 .sidebar-tab i:hover {
-    background-color: #f0f0f0;
+    background-color: light-dark(#f0f0f0, var(--bs-tertiary-bg));
 }
 
 /* Map utility buttons: back + copy, top-left of map */
@@ -292,8 +296,8 @@
         right: 0;
         width: 44px;
         height: 44px;
-        background: white;
-        border: 1px solid rgba(0, 0, 0, 0.2);
+        background: light-dark(white, var(--bs-body-bg));
+        border: 1px solid light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.2));
         border-right: none;
         border-radius: 8px 0 0 8px;
         z-index: 999;
@@ -319,8 +323,8 @@
 
 
 .control-button {
-    background: white;
-    border: 2px solid rgba(0,0,0,0.1);
+    background: light-dark(white, var(--bs-body-bg));
+    border: 2px solid light-dark(rgba(0,0,0,0.1), rgba(255, 255, 255, 0.1));
     border-radius: 4px;
     padding: 8px;
     cursor: pointer;
@@ -335,13 +339,13 @@
 }
 
 .control-button:hover {
-    background-color: #f0f0f0;
+    background-color: light-dark(#f0f0f0, var(--bs-tertiary-bg));
 }
 
 /* Toggled-off state of a control button (markers hidden) */
 .control-button.off {
-    color: #9a9a9a;
-    background-color: #ececec;
+    color: light-dark(#9a9a9a, var(--bs-secondary-color));
+    background-color: light-dark(#ececec, var(--bs-secondary-bg));
 }
 
 /* The pins are DOM markers, so they hide with CSS rather than a layer */
@@ -381,7 +385,7 @@ body.markers-hidden .marker-numbered {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(255, 255, 255, 0.9);
+    background: light-dark(rgba(255, 255, 255, 0.9), rgba(var(--bs-body-bg-rgb), 0.9));
     display: flex;
     justify-content: center;
     align-items: center;
@@ -433,8 +437,8 @@ body.markers-hidden .marker-numbered {
     padding: 12px 16px;
     font-size: 28px;
     font-weight: bold;
-    color: #666;
-    background: white;
+    color: light-dark(#666, var(--bs-body-color));
+    background: light-dark(white, var(--bs-body-bg));
     z-index: 10;
     cursor: pointer;
     text-align: right;
@@ -446,7 +450,7 @@ body.markers-hidden .marker-numbered {
 }
 
 .carbon {
-  color: #28a745; /* Green color for sustainability */
+  color: light-dark(#28a745, #8fd69f); /* Green color for sustainability */
 }
 
 .carbon-icon {
@@ -461,11 +465,11 @@ body.markers-hidden .marker-numbered {
 }
 
 .delay-time {
-  color: #dc3545;
+  color: light-dark(#dc3545, #db8a92);
 }
 
 .early-time {
-  color: #28a745;
+  color: light-dark(#28a745, #8fd69f);
 }
 
 .events .delay-time,
@@ -514,7 +518,7 @@ body.markers-hidden .marker-numbered {
   margin: 0;
   background: #3887be;
   color: #fff;
-  border: 1.5px solid #fff;
+  border: 1.5px solid light-dark(#fff, var(--bs-body-bg));
   border-radius: 50%;
   font-size: 9px;
   font-weight: bold;
@@ -585,7 +589,7 @@ body.markers-hidden .marker-numbered {
 #itinerary { position: relative; }
 #trip-card {
   position: absolute;
-  background: #fff;
+  background: light-dark(#fff, var(--bs-body-bg));
   border-radius: 12px;
   box-shadow: 0 9px 24px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(0, 0, 0, 0.06);
   z-index: 0;
@@ -611,6 +615,7 @@ body.markers-hidden .marker-numbered {
       &times;
   </div>
   <div id="sidebar-content">
+    {% include "includes/made_with.html" %}
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
@@ -654,10 +659,10 @@ body.markers-hidden .marker-numbered {
   </div>
 </div>
 <div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+  <div style="background:light-dark(#fff, var(--bs-body-bg));border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
     <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
+      <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid light-dark(#ccc, var(--bs-border-color));border-radius:4px;background:light-dark(#fff, var(--bs-body-bg));cursor:pointer;">{{ cancel }}</button>
       <button id="rideAlongConfirmBtn" onclick="bulkCopyTrips()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
     </div>
   </div>
@@ -722,19 +727,19 @@ body.markers-hidden .marker-numbered {
   #plan-controls {
     position: fixed; top: 10px; left: 60px; z-index: 1001;
     display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
-    background: #fff; padding: 6px 10px; border-radius: 10px;
+    background: light-dark(#fff, var(--bs-body-bg)); padding: 6px 10px; border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-size: 14px;
   }
   #plan-controls .plan-title { font-weight: 700; margin-right: 4px; }
   #plan-controls form { margin: 0; display: inline; }
   #plan-controls select,
   #plan-controls .plan-btn {
-    font: inherit; padding: 5px 10px; border: 1px solid #d0d0d0;
-    border-radius: 7px; background: #f6f6f6; cursor: pointer;
-    color: #222; text-decoration: none; line-height: 1.25; box-sizing: border-box;
+    font: inherit; padding: 5px 10px; border: 1px solid light-dark(#d0d0d0, var(--bs-border-color));
+    border-radius: 7px; background: light-dark(#f6f6f6, var(--bs-tertiary-bg)); cursor: pointer;
+    color: light-dark(#222, var(--bs-emphasis-color)); text-decoration: none; line-height: 1.25; box-sizing: border-box;
   }
   #plan-controls .plan-btn:hover,
-  #plan-controls select:hover { background: #ececec; }
+  #plan-controls select:hover { background: light-dark(#ececec, var(--bs-secondary-bg)); }
   #plan-controls .plan-btn--primary { background: #3887be; border-color: #3887be; color: #fff; }
   #plan-controls .plan-btn--primary:hover { background: #2f76a6; }
   @media (max-width: 600px) { #plan-controls { left: 10px; right: 10px; top: 56px; } }
@@ -806,10 +811,11 @@ function planValidate() {
 
 <div id="snackbar">{{copyLink}}</div>
 
-<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
-<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/live_motion.js') }}"></script>
 <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
 
 <script>
@@ -1211,7 +1217,7 @@ async function initializeMapAndTrips() {
         response = await $.post({
             url: '{{url_for("getPublicTrips")}}',
             contentType: 'application/json',
-            data: JSON.stringify({ tripIds: tripIds })
+            data: JSON.stringify({ tripIds: tripIds, view: {{ share_view_token|default('')|tojson }} })
         });
     }
 
@@ -1244,7 +1250,7 @@ async function initializeMapAndTrips() {
     map.on('click', (e) => {
         if (highlightedTripUid == null) return;
         const onFeature = map.queryRenderedFeatures(e.point)
-            .some(f => ['trips', 'current-trips', 'current-future', 'numbered-markers'].includes(f.source));
+            .some(f => ['trips', 'current-trips', 'numbered-markers'].includes(f.source));
         if (!onFeature) clearHighlight();
     });
 
@@ -1270,14 +1276,14 @@ function buildItinerary(trips, prices) {
     var total_duration = 0;
     var total_carbon = 0; // Added
 
-{% if 'price' in request.args %}              
+{% if show_price %}              
     if (prices.total_price != 0) {
         $(".currencyContainer").show();
         $(".currency").text(formatCurrency("{{langId}}", prices.total_price, prices.user_currency));
     }
 {% endif %}
 
-{% if 'carbon' in request.args %} // Added
+{% if show_carbon %} // Added
     if (prices.total_carbon != 0) {
         $(".carbonContainer").show();
     }
@@ -1565,7 +1571,7 @@ function buildItinerary(trips, prices) {
             startTimeDisplay = startTimeContent;
         }
 
-{% if 'price' in request.args %}              
+{% if show_price %}              
         var formattedTripPrice = null;
         var formattedTicketPrice = null;
         var formattedTicketInfo = null;
@@ -1602,7 +1608,7 @@ function buildItinerary(trips, prices) {
         }
 {% endif %}
 
-{% if 'carbon' in request.args %} // Added
+{% if show_carbon %} // Added
         var formattedCarbon = createCarbonInfo(trip.trip.carbon_footprint, trip.trip.trip_length, "{{langId}}");
 {% endif %}
 
@@ -1648,11 +1654,11 @@ function buildItinerary(trips, prices) {
                         tsToggle ? $('<div>').addClass('legMeta').html(durationDisplay).append(tsToggle)
                                  : $('<div>').addClass('legMeta').html(durationDisplay))
                 ).append(tsContainer).append('<br>').append(
-                    {% if 'price' in request.args and 'carbon' in request.args %} // Modified conditional
+                    {% if show_price and show_carbon %} // Modified conditional
                         $("<div>").append($('<div>').addClass('legMeta').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? '<span class="legValue legMetaSep">·</span>' : '') + (formattedCarbon || '')))
-                    {% elif 'price' in request.args %} // Modified conditional
+                    {% elif show_price %} // Modified conditional
                         $("<div>").append($('<div>').addClass('legMeta').html(formattedPrice || ''))
-                    {% elif 'carbon' in request.args %} // Added conditional
+                    {% elif show_carbon %} // Added conditional
                         $("<div>").append($('<div>').addClass('legMeta').html(formattedCarbon || ''))
                     {% else %}
                         $("<div>").append($('<div>').html(''))
@@ -1776,25 +1782,63 @@ function liveCandidates(trips) {
     });
 }
 
-// Moving dashes on the part still to travel: cycles through dash-array phases, as on the
-// live map. Only the layers of the types in progress are touched.
-const DASH_SEQ = [
-    [0,4,3],[0.5,4,2.5],[1,4,2],[1.5,4,1.5],[2,4,1],
-    [2.5,4,0.5],[3,4,0],[0,0.5,3,3.5],[0,1,3,3],
-    [0,1.5,3,2.5],[0,2,3,2],[0,2.5,3,1.5],[0,3,3,1],
-    [0,3.5,3,0.5],[0,4,3,0]
-];
-let dashStep = 0;
+// Moving dashes on the part still to travel, with each type's own look and pace, as on the
+// live map: worked out every frame from where the pin is, so they grow into real trains
+// coming along when zoomed in (see LiveMotion.dashLines), and drawn on a canvas over the map
+// after each of its frames (LiveMotion.overlay).
+let futureLines = [], futureOverlay = null;
 function animateFutureDashes(ts) {
-    const step = Math.floor(ts / 50) % DASH_SEQ.length;
-    if (step !== dashStep) {
-        dashStep = step;
-        MapLibreUtils.MapConfig.transportTypes.forEach(type => {
-            const id = `current-${type.id}-future-overlay`;
-            try { if (map.getLayer(id)) map.setPaintProperty(id, 'line-dasharray', DASH_SEQ[step]); } catch (_) {}
-        });
-    }
+    moveCurrentPins(ts);
+    if (futureLines.length) map.triggerRepaint(); // drawFutureDashes runs after it
     requestAnimationFrame(animateFutureDashes);
+}
+function drawFutureDashes() {
+    const ts = performance.now();
+    const items = futureLines.map(f => {
+        const uid = f.properties.id.replace(/_future$/, '');
+        const entry = currentPositionMarkers[uid];
+        const coords = f.geometry.coordinates;
+        return {
+            key: uid, coords, from: { index: 0, point: coords[0] }, type: f.properties.type,
+            speed: entry && entry.coords ? TripProgress.averageSpeed(entry.trip, entry.coords) : null,
+            state: entry ? (entry.dashState = entry.dashState || {}) : {},
+            width: f.properties.type === 'air' ? 1 : 3
+        };
+    });
+    futureOverlay.draw(LiveMotion.dashLines(items, map, ts)
+        .map((geometry, n) => ({ geometry, width: items[n].width })));
+}
+
+// Between two re-splits of the line the pins carry on moving with the clock: as often as
+// the zoom makes it visible, every frame while one glides to a new live fix.
+// The line is re-split on its own every 5 s, and as soon as a pin has moved off where its
+// dashes start: only the trips in progress are in that source, so it's cheap.
+let lastPinMove = -Infinity, resplitCurrent = null;
+function currentPinTarget(entry, now) {
+    return entry.fixIndex !== null
+        ? TripProgress.extrapolate(entry.trip, entry.coords, entry.fixIndex, entry.fixAt, { now })
+        : TripProgress.position(entry.trip, entry.coords, { now });
+}
+function moveCurrentPins(ts) {
+    if (LiveMotion.reduced) return;
+    const entries = Object.values(currentPositionMarkers).filter(e => e.coords);
+    if (!entries.length) return;
+    const gliding = entries.some(e => e.glideFrom);
+    const fastest = Math.max(...entries.map(e => LiveMotion.speed(e.trip.type)));
+    if (!gliding && ts - lastPinMove < LiveMotion.moveInterval(map, fastest)) return;
+    lastPinMove = ts;
+    const now = Date.now();
+    let drift = 0;
+    entries.forEach(e => {
+        const pos = currentPinTarget(e, now);
+        if (!pos) return;
+        e.marker.setLngLat(LiveMotion.glide(e, pos.point));
+        if (e.cutPoint) {
+            const a = map.project(e.cutPoint), b = map.project(pos.point);
+            drift = Math.max(drift, Math.hypot(a.x - b.x, a.y - b.y));
+        }
+    });
+    if (resplitCurrent && drift > 0.5) resplitCurrent();
 }
 
 // The timetable stops of the trip in progress (only those with a name and a time), as small
@@ -1829,7 +1873,7 @@ function addCurrentStops(trips) {
         source: 'current-stops',
         paint: {
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3.4, 10, 4.3, 14, 5.5],
-            'circle-color': '#000000',
+            'circle-color': MapLibreUtils.tripShadowColor(map),
             'circle-opacity': 0.8,
             'circle-blur': 0.3
         }
@@ -1945,12 +1989,12 @@ function startGPSIndicator() {
 // The moving dashes sit on a source of their own holding only the parts still to travel:
 // every dash step re-tiles the source of the layer it changes, and on `current-trips`
 // that meant the full lines twenty times a second.
+// The dashes themselves are drawn from these by animateFutureDashes, every frame.
 const futureOnly = features => features.filter(f => f.properties.time === 'plannedFuture');
 function setCurrentTripData(features) {
     const current = map.getSource('current-trips');
     if (current) current.setData({ type: 'FeatureCollection', features });
-    const future = map.getSource('current-future');
-    if (future) future.setData({ type: 'FeatureCollection', features: futureOnly(features) });
+    futureLines = futureOnly(features);
 }
 
 function buildCurrentTripFeatures(trips) {
@@ -1965,6 +2009,8 @@ function buildCurrentTripFeatures(trips) {
         // Convert to [lng, lat] and expand air routes to geodesic before splitting
         let fullCoords = (isTracked ? trip.livePath : trip.path).map(c => [c[1], c[0]]);
         let splitIndex, splitPoint = null;
+        // What the pin needs to move on its own until the next re-split (moveCurrentPins)
+        let motion = { trip: trip.trip, coords: null, fixIndex: null, fixAt: null };
 
         if (isTracked && fullCoords.length >= 2) {
             // FR24's public track sometimes begins well into the climb-out rather than
@@ -1977,14 +2023,20 @@ function buildCurrentTripFeatures(trips) {
                 fullCoords = MapLibreUtils.createGeodesicLine(orig, fullCoords[0])
                     .concat(fullCoords);
             }
-            // livePath is the real flown-so-far track, so the split point is the
-            // aircraft's actual position rather than a guess from the timetable, and
-            // only the leftover leg to the destination has to be estimated.
-            splitIndex = fullCoords.length - 1;
+            // livePath is the real flown-so-far track, so it ends at the aircraft's
+            // actual position at the last fix rather than a guess from the timetable;
+            // only the leftover leg to the destination has to be estimated, and the
+            // aircraft carries on along it until the next fix.
+            const fixIndex = fullCoords.length - 1;
             const dest = [trip.liveDestination[1], trip.liveDestination[0]];
             fullCoords = fullCoords.concat(
-                MapLibreUtils.createGeodesicLine(fullCoords[splitIndex], dest)
+                MapLibreUtils.createGeodesicLine(fullCoords[fixIndex], dest)
             );
+            const fixAt = trip.liveUpdated ? trip.liveUpdated * 1000 : Date.now();
+            const pos = TripProgress.extrapolate(trip.trip, fullCoords, fixIndex, fixAt);
+            splitIndex = pos.index;
+            splitPoint = pos.point;
+            motion = { trip: trip.trip, coords: fullCoords, fixIndex, fixAt };
         } else {
             if (trip.trip.type === 'air' && fullCoords.length === 2) {
                 fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
@@ -1994,6 +2046,7 @@ function buildCurrentTripFeatures(trips) {
             if (pos) {
                 splitIndex = pos.index;
                 splitPoint = pos.point;
+                motion.coords = fullCoords;
             } else {
                 splitIndex = Math.floor(calculatePosition(trip) * fullCoords.length);
             }
@@ -2046,7 +2099,11 @@ function buildCurrentTripFeatures(trips) {
 
         const existing = currentPositionMarkers[trip.trip.uid];
         if (existing && existing.kind === kind) {
-            existing.marker.setLngLat(pegPosition);
+            // A new fix can put the aircraft elsewhere than where it was carried to: glide
+            if (isLive && existing.fixAt !== motion.fixAt) {
+                LiveMotion.startGlide(existing, existing.marker.getLngLat().toArray());
+            }
+            if (!existing.glideFrom) existing.marker.setLngLat(pegPosition);
             if (isLive) {
                 setMarkerHeading(existing.marker, heading);
                 existing.marker.setPopup(
@@ -2067,6 +2124,10 @@ function buildCurrentTripFeatures(trips) {
                 )
             };
         }
+        const entry = currentPositionMarkers[trip.trip.uid];
+        Object.assign(entry, motion, { cutPoint: pegPosition });
+        // Sub-pixel, or a slow pin moves in visible one-pixel steps
+        entry.marker.setSubpixelPositioning(true);
     });
     return features;
 }
@@ -2168,7 +2229,8 @@ function placePolylines(trips) {
     // the timetable position (stops, dwell times, delays) instead of only on load. It
     // stops at the destination once the trip is over (the position is clamped there).
     if (trips.some(t => t.time === 'current')) {
-        setInterval(() => setCurrentTripData(buildCurrentTripFeatures(trips)), 5000);
+        resplitCurrent = () => setCurrentTripData(buildCurrentTripFeatures(trips));
+        setInterval(resplitCurrent, 5000);
         requestAnimationFrame(animateFutureDashes);
         // The viewer's location is for the owner's own /current page only: a shared trip
         // link can be opened by anyone.
@@ -2423,13 +2485,11 @@ if (numberedMarkers.length > 0) {
                     features: currentTripFeatures
                 }
             });
-            map.addSource('current-future', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: futureOnly(currentTripFeatures)
-                }
-            });
+            futureLines = futureOnly(currentTripFeatures);
+            if (!futureOverlay) {
+                futureOverlay = LiveMotion.overlay(map);
+                map.on('render', drawFutureDashes);
+            }
 
             // Add layers for current trips. No beforeId: the pins are DOM markers
             // on top of the map canvas, so nothing added here can cover them.
@@ -2504,41 +2564,6 @@ if (numberedMarkers.length > 0) {
                     });
                 }
                 
-                // Current trip future overlay (white dotted)
-                const currentFutureOverlayId = `current-${type.id}-future-overlay`;
-                if (!map.getLayer(currentFutureOverlayId)) {
-                    map.addLayer({
-                        id: currentFutureOverlayId,
-                        type: 'line',
-                        source: 'current-future',
-                        filter: ['all',
-                            ['==', ['get', 'type'], type.id],
-                            ['==', ['get', 'time'], 'plannedFuture']
-                        ],
-                        layout: { 
-                            'line-join': 'round', 
-                            'line-cap': 'butt',
-                            'visibility': 'visible'
-                        },
-                        paint: {
-                            ...basePaint,
-                            'line-color': '#ffffff',
-                            'line-dasharray': DASH_SEQ[0]
-                        }
-                    });
-
-                    // Add interactions
-                    map.on('click', currentFutureOverlayId, (e) => {
-                        e.originalEvent.stopPropagation();
-                        showTripPopup(e);
-                    });
-                    map.on('mouseenter', currentFutureOverlayId, () => {
-                        map.getCanvas().style.cursor = 'pointer';
-                    });
-                    map.on('mouseleave', currentFutureOverlayId, () => {
-                        map.getCanvas().style.cursor = '';
-                    });
-                }
             });
             addCurrentStops(trips);
         }

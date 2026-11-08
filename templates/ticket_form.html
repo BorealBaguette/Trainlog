@@ -22,7 +22,7 @@
         gap: 3px;
         padding: 3px;
         margin-bottom: .75rem;
-        background: #e9ecef;
+        background: light-dark(#e9ecef, var(--bs-secondary-bg));
         border-radius: .6rem;
     }
     .ticket-kinds label {
@@ -33,17 +33,17 @@
         gap: .4rem;
         padding: .45rem .5rem;
         border-radius: .5rem;
-        color: #495057;
+        color: light-dark(#495057, var(--bs-body-color));
         font-size: .9rem;
         cursor: pointer;
         transition: background-color .15s, color .15s, box-shadow .15s;
     }
     .ticket-kinds label:hover {
-        color: #212529;
+        color: var(--bs-body-color);
     }
     .ticket-kinds .btn-check:checked + label {
-        background: #fff;
-        color: #0d6efd;
+        background: var(--bs-body-bg);
+        color: var(--bs-primary);
         font-weight: 500;
         box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
     }
@@ -53,17 +53,17 @@
     .ticket-kind-box {
         padding: .9rem;
         margin-bottom: 1rem;
-        background: #fafbfc;
-        border: 1px solid #e9ecef;
+        background: light-dark(#fafbfc, var(--bs-tertiary-bg));
+        border: 1px solid light-dark(#e9ecef, var(--bs-border-color));
         border-radius: .6rem;
     }
     .ticket-kind-box .form-label {
         margin-bottom: .25rem;
         font-size: .85rem;
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-secondary-color));
     }
     .ticket-table-card {
-        border: 1px solid #dee2e6;
+        border: 1px solid var(--bs-border-color);
         border-radius: .75rem;
         overflow: hidden;
     }
@@ -73,8 +73,8 @@
     }
     /* Not the blue headers every other table gets. */
     .ticket-table th {
-        background-color: #f8f9fa !important;
-        color: #6c757d;
+        background-color: light-dark(#f8f9fa, var(--bs-tertiary-bg)) !important;
+        color: light-dark(#6c757d, var(--bs-secondary-color));
         font-weight: 500;
         font-size: .75rem;
         text-transform: uppercase;
@@ -104,10 +104,10 @@
         min-width: 7.5em;
     }
     .ticket-actions .btn {
-        color: #6c757d;
+        color: light-dark(#6c757d, var(--bs-secondary-color));
         border: 0;
     }
-    .ticket-actions .btn:hover { color: var(--bs-body-color); background: #e9ecef; }
+    .ticket-actions .btn:hover { color: var(--bs-body-color); background: var(--bs-secondary-bg); }
     .ticket-actions .delete-button:hover { color: var(--bs-danger); }
     /* On a phone, each ticket a block of its dates and actions above its labelled figures. */
     @media (max-width: 767.98px) {
@@ -120,7 +120,7 @@
             align-items: center;
             gap: .4rem .9rem;
             padding: .75rem;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 1px solid var(--bs-border-color);
         }
         .ticket-table tbody tr:last-child {
             border-bottom: 0;
@@ -138,7 +138,15 @@
         .ticket-table .ticket-cell-validity {
             flex: 1 1 0;
             min-width: 0;
-            white-space: normal;
+            /* Beats the cell's text-nowrap (itself !important), or the dates run under
+               the actions instead of wrapping. */
+            white-space: normal !important;
+        }
+        .ticket-table .ticket-date {
+            white-space: nowrap;
+        }
+        .ticket-table .ticket-actions .btn {
+            padding-inline: .35rem;
         }
         /* Three figures a line, the same width from one ticket to the next. */
         .ticket-table .ticket-cell-stat {
@@ -152,7 +160,7 @@
             content: attr(data-label);
             display: block;
             font-size: .7rem;
-            color: #6c757d;
+            color: light-dark(#6c757d, var(--bs-secondary-color));
         }
         /* Bootstrap paints the hover cell by cell, which the cells as blocks turn into patches:
            the whole row instead. */
@@ -215,6 +223,10 @@
                         <input type="radio" class="btn-check" name="kind" id="ticketKind_{{ kind }}" value="{{ kind }}" autocomplete="off" {% if kind == 'single' %}checked{% endif %}>
                         <label for="ticketKind_{{ kind }}"><i class="bi bi-{{ icon }}"></i>{{ label }}</label>
                         {% endfor %}
+                    </div>
+                    <div class="ticket-kind ticket-kind-box" data-kind="single">
+                        <label for="ticketValidOn" class="form-label">{{ticketValidOn}} <span class="fst-italic">({{ticketOptional}})</span></label>
+                        <input type="date" class="form-control" id="ticketValidOn" name="valid_on">
                     </div>
                     <div class="ticket-kind ticket-kind-box" data-kind="pass">
                         <div class="row g-2 mb-1 align-items-end">
@@ -505,6 +517,7 @@ var openTicketForm = (function () {
         $('#ticketPurchasingDate').val(mode === 'edit' ? ticket.purchasing_date : today);
         $('#ticketValidFrom').val(validFrom);
         $('#ticketValidUntil').val(validUntil);
+        $('#ticketValidOn').val(mode === 'edit' ? (ticket.valid_on || '') : '');
         $('#ticketUses').val(ticket.uses || '');
         $('#ticketUseMinutes').val(ticket.use_minutes || '');
         $('#ticketCardUntil').val(ticket.uses ? (ticket.valid_until || '') : '');

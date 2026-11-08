@@ -9,17 +9,14 @@
 
 <div class="container mt-4" style="padding-bottom: 60px;"> <!-- Added padding-bottom -->
     <h2 class="mb-4">Edit Translations for {{ langid }}</h2>
-    <p class="text-muted">Changes saved in the previous session are highlighted in <span style="color: green;">green</span>.</p>
+    <p class="text-muted">Changes saved in the previous session are highlighted in <span class="text-success">green</span>.</p>
     <form id="translationForm" method="POST" action="{{ url_for('edit_translations', langid=langid) }}">
         <div class="row">
             {% for key, value in translations.items() %}
-                {% set color = "black" %}
-                {% if key in saved_keys %}
-                    {% set color = "green" %}
-                {% endif %}
+                {% set saved = " text-success" if key in saved_keys else "" %}
                 <div class="col-md-6 mb-3">
-                    <div class="card" style="border-color: {{ color }};">
-                        <div class="card-header" style="color: {{ color }};">
+                    <div class="card{{ ' border-success' if saved }}">
+                        <div class="card-header{{ saved }}">
                             <strong>{{ key }}</strong>
                         </div>
                         <div class="card-body">
@@ -28,10 +25,9 @@
                             {% endif %}
                             <div class="form-group">
                                 <input type="text" 
-                                       class="form-control" 
+                                       class="form-control{{ saved }}" 
                                        name="{{ key }}" 
                                        value="{{ value|e }}" 
-                                       style="color: {{ color }};"
                                        data-initial-value="{{ value|e }}" 
                                        data-key="{{ key }}" 
                                        oninput="checkChange(this)">
@@ -64,7 +60,7 @@
         </div>
 
         <!-- Sticky Save Button -->
-        <div class="sticky-footer bg-light py-2 text-center" style="position: fixed; bottom: 0; left: 0; width: 100%; border-top: 1px solid #ddd;">
+        <div class="sticky-footer bg-body-tertiary border-top py-2 text-center" style="position: fixed; bottom: 0; left: 0; width: 100%;">
             <button type="button" class="btn btn-primary" onclick="showConfirmModal()">Save Changes</button>
         </div>
     </form>
@@ -74,11 +70,7 @@
 <script>
     function checkChange(input) {
         // Compare current value with the initial value
-        if (input.value !== input.getAttribute('data-initial-value')) {
-            input.style.color = 'red';  // Highlight changed text in red
-        } else {
-            input.style.color = '';  // Revert to default if value matches initial
-        }
+        input.classList.toggle('text-danger', input.value !== input.getAttribute('data-initial-value'));
     }
 
     function showConfirmModal() {

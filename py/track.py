@@ -1,10 +1,36 @@
+import ipaddress
 import random
 import time
+from urllib.parse import urlsplit
 
-from flask import g, request, session
+from flask import g, request
 
 from py.flask_matomo import Matomo
 from py.utils import getIp
+
+
+def truncate_ip(ip):
+    """Anonymise an IP before it reaches Matomo: IPv4 to /24 (last byte zeroed),
+    IPv6 to /48. Anything unparseable is dropped rather than sent as-is."""
+    try:
+        addr = ipaddress.ip_address(str(ip).strip())
+    except ValueError:
+        return None
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    prefix = 24 if addr.version == 4 else 48
+    return str(ipaddress.ip_network(f"{addr}/{prefix}", strict=False).network_address)
+
+
+def external_referrer(referrer):
+    """Only the origin of an outside referrer: an internal one is the previous page's
+    full URL (username, tokens), and an outside one may carry its own query string."""
+    if not referrer:
+        return None
+    parts = urlsplit(referrer)
+    if not parts.scheme or not parts.netloc or parts.netloc == request.host:
+        return None
+    return f"{parts.scheme}://{parts.netloc}/"
 
 
 class CustomMatomo(Matomo):
@@ -24,7 +50,11 @@ class CustomMatomo(Matomo):
         if any(pattern.match(url_rule) for pattern in self.ignored_patterns):
             return
 
-        url = self.base_url + request.path if self.base_url else request.url
+        # The route pattern, not the real URL: /u/<username>/trips, never the username,
+        # a query string or a path token (password reset, GPS, MCP, BMC claim).
+        url = (self.base_url or request.host_url.rstrip("/")) + (
+            url_rule if request.url_rule else "/[unmatched]"
+        )
         # action_name = request.url_rule
         action_name = request.endpoint
         user_agent = request.user_agent
@@ -42,18 +72,19 @@ class CustomMatomo(Matomo):
             "ua": user_agent,
             "action_name": action_name,
             "url": url,
-            "uid": session.get("logged_in", "public"),
             "cvar": {
                 "http_status_code": None,
                 "http_method": str(request.method),
             },
-            "urlref": request.headers.get("Referer"),
+            "urlref": external_referrer(request.headers.get("Referer")),
             # random data
             "rand": random.getrandbits(32),
         }
         if self.token_auth:
             data["token_auth"] = self.token_auth
-            data["cip"] = ip_address
+            cip = truncate_ip(ip_address)
+            if cip:
+                data["cip"] = cip
 
         if request.accept_languages:
             data["lang"] = request.accept_languages[0][0]

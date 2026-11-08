@@ -1,0 +1,27 @@
+{# Possible missing trips, shared by the timeline tabs: `gaps` (from find_gaps)
+   and `gaps_text` saying which ones are listed. Each links to the trips table
+   filtered on the two trips around the gap. #}
+{% set trips_endpoint = 'public_trips' if request.endpoint.startswith('timeline.p_') else 'dynamic_trips' %}
+{% macro gap_item(gap) %}
+<li>
+  <a class="text-reset" href="{{ url_for(trips_endpoint, username=username, time='trips', search='id:' ~ gap.trip_ids | join('|')) }}">
+    {{ gap.arrived }} <span data-date="{{ gap.arrived_on }}">{{ gap.arrived_on }}</span>
+    → {{ gap.departed }} <span data-date="{{ gap.departed_on }}">{{ gap.departed_on }}</span>
+  </a>
+</li>
+{% endmacro %}
+<div class="alert alert-light tl-alert mb-4">
+  <div class="fw-semibold mb-1"><i class="bi bi-question-circle me-2"></i>{{ sch_gaps_title }} ({{ gaps | length }})</div>
+  <div class="small text-muted mb-2">{{ gaps_text }}</div>
+  <ul class="small mb-0">
+    {% for gap in gaps[:10] %}{{ gap_item(gap) }}{% endfor %}
+  </ul>
+  {% if gaps | length > 10 %}
+  <details class="small mt-1">
+    <summary class="text-muted">{{ showMore }}</summary>
+    <ul class="mb-0">
+      {% for gap in gaps[10:] %}{{ gap_item(gap) }}{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</div>

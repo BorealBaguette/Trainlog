@@ -4,6 +4,7 @@
 {% include "bootstrap/navigation.html" %}
 
 <style>
+{% include "includes/share_toggles_style.html" %}
   /* Small round colour swatch for the pending-invite rows */
   .tag-dot {
     display: inline-block;
@@ -61,6 +62,7 @@
   .ui-selectmenu-menu { z-index: 2000; }
   .tag-type-help { cursor: pointer; margin-left: 0.25rem; }
   .tag-type-popover { max-width: 340px; }
+  .tag-member-avatar { --avatar-size: 26px; }
 </style>
 
 <div class="container mt-4">
@@ -153,6 +155,9 @@
               {% if tag.is_owner %}
                 <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editTagModal{{ tag.uid }}"><i class="fa-regular fa-pen-to-square"></i></button>
                 <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#membersModal{{ tag.uid }}" title="{{ tag_members }}"><i class="bi bi-people"></i></button>
+                {% if not tag.is_shared %}
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#shareTagModal" data-url="{{ url_for('tag_share.share_tag', username=username, tag_id=tag.uid) }}" title="{{ shareCopyLink }}"><i class="fa-solid fa-link"></i></button>
+                {% endif %}
                 <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTagModal" data-tag-id="{{ tag.uid }}"><i class="fa-regular fa-trash-can"></i></button>
               {% else %}
                 <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#leaveTagModal" data-url="{{ url_for('leave_tag', username=username, tag_id=tag.uid) }}" title="{{ leave_tag }}"><i class="bi bi-box-arrow-right"></i></button>
@@ -216,14 +221,14 @@
             <div class="modal-body">
               <ul class="list-group list-group-flush">
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
-                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ username }}</span>
+                  <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ username }}"></span>{{ username }}</span>
                   <span class="badge bg-primary">{{ tag_owner_label }}</span>
                 </li>
                 {% set members = members_by_tag.get(tag.uid, []) %}
                 {% for m in members %}
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
                   <span>
-                    <i class="bi bi-person-fill text-muted me-1"></i> {{ m.username }}
+                    <span class="user-avatar tag-member-avatar me-2" data-username="{{ m.username }}"></span>{{ m.username }}
                     {% if m.status == 'pending' %}<span class="badge bg-secondary">{{ tag_invite_pending }}</span>{% endif %}
                   </span>
                   <form action="{{ url_for('remove_tag_member', username=username, tag_id=tag.uid) }}" method="post" class="mb-0" onsubmit="return confirm({{ remove_member_confirm | tojson }});">
@@ -242,7 +247,7 @@
                   <div class="tag-invite-friends list-group flex-grow-1">
                     {% for friend in invitable %}
                     <label class="list-group-item tag-invite-item d-flex justify-content-between align-items-center py-2">
-                      <span><i class="bi bi-person-fill text-muted me-1"></i> {{ friend }}</span>
+                      <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ friend }}"></span>{{ friend }}</span>
                       <input class="tag-invite-check d-none" type="checkbox" name="friend_username" value="{{ friend }}">
                       <i class="bi bi-check-lg tag-invite-tick"></i>
                     </label>
@@ -270,12 +275,12 @@
             <div class="modal-body">
               <ul class="list-group list-group-flush">
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
-                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ tag.username }}</span>
+                  <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ tag.username }}"></span>{{ tag.username }}</span>
                   <span class="badge bg-primary">{{ tag_owner_label }}</span>
                 </li>
                 {% for m in members_by_tag.get(tag.uid, []) | selectattr('status', 'equalto', 'accepted') %}
                 <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
-                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ m.username }}</span>
+                  <span><span class="user-avatar tag-member-avatar me-2" data-username="{{ m.username }}"></span>{{ m.username }}</span>
                 </li>
                 {% endfor %}
               </ul>
@@ -332,6 +337,26 @@
   </div>
 </div>
 
+<div class="modal fade" id="shareTagModal" tabindex="-1" aria-labelledby="shareTagModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="shareTagModalLabel">{{ shareLinkShows }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="shareToggles mb-3">
+          <input type="checkbox" class="btn-check" id="shareTagPrice" autocomplete="off">
+          <label class="shareToggle" for="shareTagPrice"><i class="fa-solid fa-coins fa-fw shareStateIcon"></i> {{ price }}</label>
+          <input type="checkbox" class="btn-check" id="shareTagCarbon" autocomplete="off">
+          <label class="shareToggle" for="shareTagCarbon"><i class="fa-solid fa-leaf fa-fw shareStateIcon"></i> {{ CO2 }}</label>
+        </div>
+        <button type="button" class="btn btn-primary w-100" id="shareTagCopy" data-bs-dismiss="modal"><i class="fa-solid fa-link"></i> {{ shareCopyLink }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteTagModal" tabindex="-1" aria-labelledby="deleteTagModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -374,8 +399,10 @@
   </div>
 </div>
 
+<script src="{{ static_autoversion(filename='js/share_link.js') }}"></script>
 <script>
   $(document).ready(function() {
+    paintUserAvatars(document, {{ url_for('user_avatars', username=username)|tojson }});
     var table = $('#tagsTable').DataTable({
       order: [],
       responsive: true,
@@ -416,14 +443,37 @@
       form.attr('action', actionUrl);
     });
 
+    var shareDefaults = {{ share_defaults|tojson }};
+    $('#shareTagModal').on('show.bs.modal', function (event) {
+      $(this).data('url', $(event.relatedTarget).data('url'));
+      $('#shareTagPrice').prop('checked', shareDefaults.price);
+      $('#shareTagCarbon').prop('checked', shareDefaults.carbon);
+    });
+    $('#shareTagCopy').on('click', function () {
+      var show = ($('#shareTagPrice').prop('checked') ? 'p' : '') + ($('#shareTagCarbon').prop('checked') ? 'c' : '');
+      copyShareLink($('#shareTagModal').data('url'), '', show || 'n', { copied: {{ copyLink|tojson }}, copy: {{ copy|tojson }} });
+    });
+
     $('#leaveTagModal').on('show.bs.modal', function (event) {
       $('#leaveTagForm').attr('action', $(event.relatedTarget).data('url'));
     });
 
+    // bootstrap-colorpicker 3.4 calls Popover#getTipElement(), which Bootstrap
+    // 5.2+ made private; without it the first picker throws and aborts this
+    // whole ready handler (tag-type popover, edit pickers...)
+    if (window.bootstrap && !bootstrap.Popover.prototype.getTipElement) {
+      bootstrap.Popover.prototype.getTipElement = function () { return this._getTipElement(); };
+    }
+
     function bindColorPicker(picker) {
       // autoInputFallback rewrites the input on every keystroke, which makes
       // typing a hex code impossible, so disable it
-      picker.colorpicker({ format: 'hex', autoInputFallback: false, autoHexInputFallback: false });
+      picker.colorpicker({
+        format: 'hex', autoInputFallback: false, autoHexInputFallback: false,
+        // Bootstrap 5.3 rebuilds the tip on every show, dropping the class the
+        // plugin adds once; customClass reapplies it each time
+        popover: { customClass: 'colorpicker-bs-popover' }
+      });
       picker.on('colorpickerChange colorpickerCreate', function (event) {
         var color = event.color;
         picker.css("color", getTextColor(color.toString())).css('background-color', color.toString());

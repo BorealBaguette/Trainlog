@@ -10,43 +10,43 @@
   #mapBgModal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center;
     justify-content: center; background: rgba(0,0,0,.45); font-family: inherit; }
   #mapBgModal.mbg-open { display: flex; }
-  #mapBgModal .mbg-box { background: #fff; color: #222; border-radius: 10px; width: min(480px, 94vw);
+  #mapBgModal .mbg-box { background: light-dark(#fff, var(--bs-body-bg)); color: light-dark(#222, var(--bs-emphasis-color)); border-radius: 10px; width: min(480px, 94vw);
     max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
   #mapBgModal .mbg-head, #mapBgModal .mbg-foot { display: flex; align-items: center;
     justify-content: space-between; padding: 12px 16px; }
   #mapBgModal .mbg-body { padding: 4px 16px 12px; }
   #mapBgModal .mbg-title { margin: 0; font-size: 1.1rem; font-weight: 600; }
-  #mapBgModal .mbg-x { border: 0; background: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #666; }
-  #mapBgModal .mbg-btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
+  #mapBgModal .mbg-x { border: 0; background: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: light-dark(#666, var(--bs-body-color)); }
+  #mapBgModal .mbg-btn { padding: 6px 14px; border: 1px solid light-dark(#ccc, var(--bs-border-color)); border-radius: 6px; background: light-dark(#fff, var(--bs-body-bg)); cursor: pointer; }
   /* After .mbg-btn: same specificity, so the later rule wins (white-on-white otherwise) */
   #mapBgModal .mbg-btn.mbg-primary { background: #0d6efd; border-color: #0d6efd; color: #fff; }
   #mapBgModal .nav-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; margin: 0 0 12px;
-    list-style: none; border-bottom: 1px solid #dee2e6; }
+    list-style: none; border-bottom: 1px solid light-dark(#dee2e6, var(--bs-border-color)); }
   #mapBgModal .nav-link { border: 1px solid transparent; border-bottom: 0; background: none;
-    padding: 6px 12px; border-radius: 6px 6px 0 0; cursor: pointer; color: #0d6efd; }
-  #mapBgModal .nav-link.active { border-color: #dee2e6; background: #fff; color: #495057; }
+    padding: 6px 12px; border-radius: 6px 6px 0 0; cursor: pointer; color: light-dark(#0d6efd, #7aa8eb); }
+  #mapBgModal .nav-link.active { border-color: light-dark(#dee2e6, var(--bs-border-color)); background: light-dark(#fff, var(--bs-body-bg)); color: light-dark(#495057, var(--bs-body-color)); }
   #mapBgModal .tab-pane { display: none; }
   #mapBgModal .tab-pane.active { display: block; }
   /* Options under the grid: one light section of rows with a switch on the right */
-  #mapBgModal .mbg-opts { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e9ecef; }
+  #mapBgModal .mbg-opts { margin-top: 14px; padding-top: 10px; border-top: 1px solid light-dark(#e9ecef, var(--bs-border-color)); }
   #mapBgModal .mbg-row { display: flex; align-items: center; gap: 12px; margin: 0; padding: 8px 10px;
-    border-radius: 8px; cursor: pointer; font-size: 0.9rem; color: #333; transition: background 0.15s; }
-  #mapBgModal .mbg-row:hover { background: #f5f7fa; }
+    border-radius: 8px; cursor: pointer; font-size: 0.9rem; color: light-dark(#333, var(--bs-emphasis-color)); transition: background 0.15s; }
+  #mapBgModal .mbg-row:hover { background: light-dark(#f5f7fa, var(--bs-tertiary-bg)); }
   #mapBgModal .mbg-ico { flex: none; display: flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border-radius: 8px; background: #f1f3f5; color: #666; font-size: 0.9rem; }
+    width: 30px; height: 30px; border-radius: 8px; background: light-dark(#f1f3f5, var(--bs-tertiary-bg)); color: light-dark(#666, var(--bs-body-color)); font-size: 0.9rem; }
   #mapBgModal .mbg-txt { flex: 1; display: flex; align-items: center; gap: 6px; }
-  #mapBgModal .mbg-gem { font-size: 0.65rem; color: #00ced1; }
+  #mapBgModal .mbg-gem { font-size: 0.65rem; color: light-dark(#00ced1, #79eaec); }
   #mapBgModal .mbg-switch { flex: none; appearance: none; -webkit-appearance: none; position: relative;
-    width: 36px; height: 20px; margin: 0; border-radius: 10px; background: #ced4da; cursor: pointer;
+    width: 36px; height: 20px; margin: 0; border-radius: 10px; background: light-dark(#ced4da, var(--bs-secondary-bg)); cursor: pointer;
     transition: background 0.15s; }
   #mapBgModal .mbg-switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-    border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform 0.15s; }
+    border-radius: 50%; background: light-dark(#fff, var(--bs-body-bg)); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform 0.15s; }
   #mapBgModal .mbg-switch:checked { background: #0d6efd; }
   #mapBgModal .mbg-switch:checked::before { transform: translateX(16px); }
   #mapBgModal .mbg-switch:focus-visible { outline: 2px solid #86b7fe; outline-offset: 2px; }
   /* Layer choice, indented under the overlay row (icon width + gap) */
   #mapBgModal .mbg-select { display: block; width: calc(100% - 52px); margin: 2px 0 4px 52px; padding: 6px 10px;
-    border: 1px solid #dee2e6; border-radius: 8px; background: #fff; color: #333; font-size: 0.85rem; }
+    border: 1px solid light-dark(#dee2e6, var(--bs-border-color)); border-radius: 8px; background: light-dark(#fff, var(--bs-body-bg)); color: light-dark(#333, var(--bs-emphasis-color)); font-size: 0.85rem; }
   #mapBgModal .mbg-select:focus { outline: none; border-color: #86b7fe; box-shadow: 0 0 0 3px rgba(13,110,253,.15); }
 </style>
 <div id="mapBgModal">

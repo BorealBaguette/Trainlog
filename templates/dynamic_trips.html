@@ -52,6 +52,17 @@
     #dataTable td.child tr.trip-stops-row table.trip-stops-table td { padding-right: 8px; }
     #dataTable td.child tr.trip-stops-row table.trip-stops-table td.ts-name { width: 100%; }
 
+    [data-bs-theme="dark"] #dataTable td.child details.trip-stops .ts-toggle { color: #8fb0f5; }
+    [data-bs-theme="dark"] #dataTable td.child table.trip-stops-table td.ts-time,
+    [data-bs-theme="dark"] #dataTable td.child table.trip-stops-table tr.ts-stop td.ts-name { color: var(--bs-body-color); }
+    [data-bs-theme="dark"] #dataTable td.child table.trip-stops-table td.ts-platform { color: var(--bs-secondary-color); }
+    [data-bs-theme="dark"] #dataTable td.child table.trip-stops-table tr.ts-end td.ts-name { color: var(--bs-emphasis-color); }
+    [data-bs-theme="dark"] #dataTable td.child table.trip-stops-table td.ts-mark::before { background: var(--bs-border-color); }
+    [data-bs-theme="dark"] #dataTable td.child table.trip-stops-table td.ts-mark > span { background: #5b7189; }
+    [data-bs-theme="dark"] #dataTable td.child table.trip-stops-table tr.ts-end td.ts-mark > span {
+        background: var(--bs-body-bg); border-color: #8fb0f5;
+    }
+
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
@@ -64,10 +75,10 @@
     /* Trainset picker in edit/new forms */
     .ts-pick-wrap { position: relative; display: inline-block; width: 100%; }
     .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
-                    background: #fff; border: 1px solid #aaa; border-radius: 4px;
+                    background: light-dark(#fff, var(--bs-body-bg)); border: 1px solid light-dark(#aaa, var(--bs-border-color)); border-radius: 4px;
                     max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
     .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
-    .ts-pick-item:hover { background: #f0f0f0; }
+    .ts-pick-item:hover { background: light-dark(#f0f0f0, var(--bs-tertiary-bg)); }
 
     th[data-sort-field] {
         position: relative;
@@ -79,7 +90,7 @@
     }
 
     th[data-sort-field]:hover {
-        background: rgba(0,0,0,0.05);
+        background: light-dark(rgba(0,0,0,0.05), rgba(var(--bs-emphasis-color-rgb), 0.07));
     }
 
     #selectPageCheckbox {
@@ -143,7 +154,7 @@
        In card layout the cards carry their own borders and this rule is overridden
        (see the `> td { border: 0 }` card rule below); the line is drawn in the gap
        above the card instead. */
-    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed #aab4c0; }
+    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed light-dark(#aab4c0, var(--card-seam)); }
 
     /* Expand arrow for the details row. Responsive draws this itself only for
        `details.type: 'inline'`, where the control is whichever column happens to be
@@ -231,10 +242,10 @@
             /* A hairline lighter than the old #dee2e6 plus a whisper of shadow: the
                border alone read as a wireframe, the shadow alone smudged on low-DPI
                screens; together each card sits just proud of the page. */
-            border: 1px solid #e3e7eb;
+            border: 1px solid light-dark(#e3e7eb, var(--card-border));
             border-radius: 10px;
-            background: #fff;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+            background: light-dark(#fff, var(--card-bg));
+            box-shadow: 0 1px 2px light-dark(rgba(15, 23, 42, 0.05), var(--card-shadow));
         }
 
         /* The now-boundary as a card: the cards are already separated, so the seam is
@@ -247,7 +258,7 @@
             left: 0;
             right: 0;
             top: -12px;
-            border-top: 1px dashed #aab4c0;
+            border-top: 1px dashed light-dark(#aab4c0, var(--card-seam));
         }
 
         /* An open detail row is part of the card above it, not a card of its own. */
@@ -267,7 +278,7 @@
             border-top-left-radius: 0;
             border-top-right-radius: 0;
             /* The open pair casts one shadow, from its true bottom edge. */
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+            box-shadow: 0 1px 2px light-dark(rgba(15, 23, 42, 0.05), var(--card-shadow));
         }
 
         .trip-card-host > #dataTable > tbody > tr > td {
@@ -287,9 +298,9 @@
            colour instead and the text keeps its own; the white plate behind logos is
            dropped too, since it exists for the solid-blue selection this replaces. */
         .trip-card-host > #dataTable > tbody > tr.selected {
-            background-color: #e7f0fb;
-            border-color: #0d6efd;
-            box-shadow: inset 0 0 0 1px #0d6efd;
+            background-color: light-dark(#e7f0fb, var(--card-sel-bg));
+            border-color: light-dark(#0d6efd, var(--card-sel-border));
+            box-shadow: inset 0 0 0 1px light-dark(#0d6efd, var(--card-sel-border));
         }
         .trip-card-host > #dataTable > tbody > tr.selected > * { color: inherit; }
         .trip-card-host > #dataTable > tbody > tr.selected td img {
@@ -348,7 +359,7 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-dest {
             font-weight: 700;
             font-size: 0.95rem;
-            color: #4b5563;
+            color: light-dark(#4b5563, var(--card-title));
             line-height: 1.35;
             padding: 1px 0;
         }
@@ -388,7 +399,7 @@
             flex: 0 0 auto;
             min-width: 0;
             margin-top: 3px;
-            color: #6c757d;
+            color: light-dark(#6c757d, var(--card-meta));
             font-size: 0.8rem;
             box-sizing: border-box;
             /* The one gap between slots. All the other spacing on the line is fixed, so
@@ -424,7 +435,7 @@
                font's. A pixel back up. */
             position: relative;
             top: -1px;
-            color: #adb5bd;
+            color: light-dark(#adb5bd, var(--card-icon));
             font-family: "Font Awesome 6 Free";
             font-weight: 900;
             font-size: 0.78em;
@@ -574,14 +585,14 @@
                above a reserved band, and the arrow sits in the band (see the ::before
                rule below), level with the actions pill across the card. */
             padding-bottom: 35px;
-            background: #f8f9fa;
-            border-right: 1px solid #eef1f4;
+            background: light-dark(#f8f9fa, var(--card-sunken));
+            border-right: 1px solid light-dark(#eef1f4, var(--card-gutter-border));
             border-radius: 9px 0 0 9px;
         }
         .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-type { border-bottom-left-radius: 0; }
         .trip-card-host > #dataTable > tbody > tr.selected > td.col-type {
-            background: #dbe7fa;
-            border-right-color: #c3d8f5;
+            background: light-dark(#dbe7fa, var(--card-sel-gutter));
+            border-right-color: light-dark(#c3d8f5, var(--card-accent-border));
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-type .operatorLogo {
             max-height: 24px;
@@ -620,18 +631,18 @@
             /* .btn-link underlines its content, and a FontAwesome glyph is text as far as
                that is concerned. */
             text-decoration: none;
-            color: #8a93a2;
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            color: light-dark(#8a93a2, var(--card-control-fg));
+            background: light-dark(#f8f9fa, var(--card-sunken));
+            border: 1px solid light-dark(#e9ecef, var(--card-sunken-border));
             border-radius: 999px;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-actions .modalButton:active {
-            background: #e9edf1;
-            color: #495057;
+            background: light-dark(#e9edf1, var(--card-pressed-bg));
+            color: light-dark(#495057, var(--card-pressed-fg));
         }
         .trip-card-host > #dataTable > tbody > tr.selected > td.col-actions .modalButton {
-            background: #eff5fd;
-            border-color: #c3d8f5;
+            background: light-dark(#eff5fd, var(--card-accent-bg));
+            border-color: light-dark(#c3d8f5, var(--card-accent-border));
         }
         /* Horizontal dots. A column of three under a wordmark echoed the tall left gutter;
            lying down they fill the pill. Rotated rather than swapped for fa-ellipsis,
@@ -656,9 +667,9 @@
             height: 32px;
             padding: 0 12px;
             margin: 0;
-            border: 1px solid #dee2e6;
+            border: 1px solid light-dark(#dee2e6, var(--card-input-border));
             border-radius: 8px;
-            background: #fff;
+            background: light-dark(#fff, var(--card-bg));
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
@@ -676,11 +687,11 @@
             font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", FontAwesome;
             font-weight: 900;
             font-size: 0.7rem;
-            color: #ced4da;
+            color: light-dark(#ced4da, var(--card-check-empty));
         }
         .mobile-select-page.checked {
-            background: #207cca;
-            border-color: #207cca;
+            background: light-dark(#207cca, var(--card-accent-solid));
+            border-color: light-dark(#207cca, var(--card-accent-solid));
             color: #fff;
         }
         .mobile-select-page.checked::before { color: #fff; }
@@ -719,13 +730,13 @@
             padding: 0 14px;
             /* 16px is the threshold below which iOS zooms the page on focus. */
             font-size: 16px;
-            border: 1px solid #dee2e6;
+            border: 1px solid light-dark(#dee2e6, var(--card-input-border));
             border-radius: 10px;
-            background: #fff;
+            background: light-dark(#fff, var(--card-bg));
         }
         .trips-cards .dt-controls .dt-search input:focus {
             outline: none;
-            border-color: #86b7fe;
+            border-color: light-dark(#86b7fe, var(--card-focus-border));
             box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
         }
         /* The help icon rides inside the search row; padding makes it a tappable
@@ -733,7 +744,7 @@
         .trips-cards .dt-controls .search-help-icon {
             padding: 10px 8px;
             font-size: 1.1rem;
-            color: #6c757d;
+            color: light-dark(#6c757d, var(--card-meta));
         }
         /* The second row's controls — length menu, sort, switches, select-page — are
            secondary to the search above them, so they share one quiet size. */
@@ -741,15 +752,15 @@
         .trips-cards .dt-controls .form-check-label,
         .trips-cards .dt-controls label {
             font-size: 0.85rem;
-            color: #495057;
+            color: light-dark(#495057, var(--card-label));
         }
         .trips-cards .dt-controls .dt-length select,
         .trips-cards .dt-controls .dt-sort-btn {
             height: 32px;
             font-size: 0.85rem;
-            border: 1px solid #dee2e6;
+            border: 1px solid light-dark(#dee2e6, var(--card-input-border));
             border-radius: 8px;
-            background-color: #fff;
+            background-color: light-dark(#fff, var(--card-bg));
         }
         .trips-cards .dt-controls .form-check { margin-bottom: 0; min-height: 0; }
 
@@ -786,8 +797,8 @@
             gap: 12px;
             margin-top: 2px;
             padding: 14px;
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background: light-dark(#f8f9fa, var(--card-sunken));
+            border: 1px solid light-dark(#e9ecef, var(--card-sunken-border));
             border-radius: 12px;
         }
         .trips-cards .dt-controls-secondary.show { display: flex; }
@@ -842,16 +853,16 @@
             flex: 0 0 auto;
             width: 40px;
             height: 40px;
-            border: 1px solid #dee2e6;
+            border: 1px solid light-dark(#dee2e6, var(--card-input-border));
             border-radius: 10px;
-            background: #fff;
-            color: #495057;
+            background: light-dark(#fff, var(--card-bg));
+            color: light-dark(#495057, var(--card-label));
             font-size: 1rem;
         }
         .trips-cards .dt-options-toggle.open {
-            background: #eff5fd;
-            border-color: #c3d8f5;
-            color: #207cca;
+            background: light-dark(#eff5fd, var(--card-accent-bg));
+            border-color: light-dark(#c3d8f5, var(--card-accent-border));
+            color: light-dark(#207cca, var(--card-accent-fg));
         }
 
         /* --- Pagination ---
@@ -878,12 +889,12 @@
             border: 1px solid transparent;
             border-radius: 10px;
             font-size: 0.9rem;
-            color: #374151 !important;
+            color: light-dark(#374151, var(--card-page-fg)) !important;
         }
         .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current,
         .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current:hover {
-            background: #207cca !important;
-            border-color: #207cca;
+            background: light-dark(#207cca, var(--card-accent-solid)) !important;
+            border-color: light-dark(#207cca, var(--card-accent-solid));
             color: #fff !important;
         }
         .trips-cards .dt-controls-bottom .dt-paging .page-jump-input {
@@ -897,7 +908,7 @@
         .trips-cards .dt-controls-bottom .dt-info {
             padding: 0;
             font-size: 0.8rem;
-            color: #6c757d;
+            color: light-dark(#6c757d, var(--card-meta));
             text-align: center;
         }
 
@@ -910,7 +921,7 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.03em;
-            color: #8a93a2;
+            color: light-dark(#8a93a2, var(--card-control-fg));
         }
         .trip-card-host > #dataTable td.child table tr td { font-size: 0.9rem; }
 
@@ -925,14 +936,14 @@
         .trip-card-host > #dataTable > tbody > tr > td.dt-empty {
             padding: 28px 16px;
             text-align: center;
-            color: #6c757d;
+            color: light-dark(#6c757d, var(--card-meta));
         }
 
         /* --- Touch feedback ---
            The expand gutter acknowledges the finger (the actions pill has its own
            :active above); rows already flash their selection colour through the
            select handler. */
-        .trip-card-host > #dataTable > tbody > tr > td.col-type:active { background: #e9edf1; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-type:active { background: light-dark(#e9edf1, var(--card-pressed-bg)); }
     }
 
     /* The gear and its collapsible group are a phone affordance only, but the two
@@ -953,11 +964,44 @@
        safe-area inset keeps it off iPhone home indicators. */
     @media screen and (max-width: 600px) {
         .multiLink {
-            border-top: 1px solid #e9ecef;
-            box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
+            border-top: 1px solid light-dark(#e9ecef, var(--card-sunken-border));
+            box-shadow: 0 -4px 16px light-dark(rgba(15, 23, 42, 0.08), var(--card-shadow));
             padding-top: 8px;
             padding-bottom: calc(5px + env(safe-area-inset-bottom));
         }
+    }
+
+    /* "View on map" stays on one line on a phone, however long the translation. */
+    button.multiTrip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* The "View on map" ▲ menu sits at the bar's right edge, whose narrow
+       btn-group squeezed it until long labels were cut: size it to its content. */
+    .multiLink .dropdown-menu { width: max-content; max-width: calc(100vw - 16px); }
+    .multiLink .dropdown-item { white-space: normal; }
+    /* The copy row: toggles for what the link shows (coin = prices, leaf = CO₂),
+       greyed and struck through when off, then the copy button. */
+    .shareCopyRow { padding: 6px 12px 8px; }
+    .shareCopyToggles { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--bs-secondary-color); }
+    .shareCopyToggles span { margin-right: auto; }
+    .shareToggle {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 6px;
+        background: none;
+        padding: 4px 7px;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .shareToggle[aria-pressed="true"] { background: var(--bs-tertiary-bg); }
+    .shareToggle[aria-pressed="true"] .fa-coins { color: light-dark(#bfa055, #ccbd99); }
+    .shareToggle[aria-pressed="true"] .fa-leaf { color: light-dark(#4f9d5d, #8fd69f); }
+    .shareToggle[aria-pressed="false"] .shareStateIcon { position: relative; color: light-dark(#b8bdc2, #6c757d); }
+    .shareToggle[aria-pressed="false"] .shareStateIcon::after {
+        content: "";
+        position: absolute;
+        left: -1px;
+        right: -1px;
+        top: 50%;
+        border-top: 2px solid light-dark(#dc3545, #ea868f);
+        transform: rotate(-45deg);
     }
 
     /* The row actions modal, on every screen — so it must sit outside the
@@ -1094,7 +1138,9 @@
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>visibility:</code></span> <span>{{smart_search_visibility}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>material:</code></span> <span>{{smart_search_material}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>reg:</code></span> <span>{{smart_search_reg}}</span></div>
-                            <div class="d-flex"><span style="width: 100px; flex-shrink: 0;"><code>notes:</code></span> <span>{{smart_search_notes}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>notes:</code></span> <span>{{smart_search_notes}}</span></div>
+                            {% if not isPublic %}<div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>ticket:</code></span> <span>{{smart_search_ticket}}</span></div>{% endif %}
+                            <div class="d-flex"><span style="width: 100px; flex-shrink: 0;"><code>id:</code></span> <span>{{smart_search_id}}</span></div>
                         </div>
                     </div>
                     <div class="col-md-5">
@@ -1167,24 +1213,39 @@
 
 <div class="multiLink">
     <button class="btn btn-secondary btn-lg multiCancel" onclick="deselectAll();">✕</button>
-    <button id="shareTripButton" type="button" class="btn btn-primary btn-lg multiTrip">{{ shareTrip }}</button>
+    <button id="shareTripButton" type="button" class="btn btn-primary btn-lg multiTrip" title="{{ viewOnMap }}">{{ viewOnMap }}</button>
     <div class="btn-group dropup">
         <button type="button" class="btn btn-lg dropdown-toggle btn-secondary multiDropdown" data-bs-toggle="dropdown" aria-expanded="false"></button>
         <ul class="dropdown-menu" style="min-width: 12rem;">
-            <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</li>
-            {% if not isPublic %}
-            <li class="dropdown-item" onclick="bulkTicketPicker.open();"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
-            <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot"></i>  {{ moveToPlan|default('Move to a plan') }}</li>
-            <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</li>
-            {% endif %}
-            <li class="dropdown-item" onclick="exportGpx();"><i class="fa-solid fa-route"></i>  {{exportGpx}}</li>
-            <li class="dropdown-item" onclick="exportGeojson();"><i class="fa-solid fa-draw-polygon"></i>  {{exportGeojson}}</li>
-            {% if not isPublic %}
-            <li class="dropdown-item" onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</li>
-            <li class="dropdown-item" onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</li>
-            <li class="dropdown-item" onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</li>
+            {% if not isPublic and share_defaults %}
+            {# Copy the link straight from here, without opening the page. The toggles
+               start as the settings each time the menu opens; a choice other than the
+               settings gets a share key of its own (src/share_view.py). Clicks in this
+               row keep the menu open, except the copy button's. #}
+            <li class="shareCopyRow" onclick="event.stopPropagation();">
+                <div class="shareCopyToggles">
+                    <span>{{ shareLinkShows }}</span>
+                    <button type="button" class="shareToggle" data-flag="price" aria-pressed="false" title="{{ price }}" aria-label="{{ price }}" onclick="toggleShareFlag(this);"><i class="fa-solid fa-coins fa-fw shareStateIcon"></i></button>
+                    <button type="button" class="shareToggle" data-flag="carbon" aria-pressed="false" title="{{ CO2 }}" aria-label="{{ CO2 }}" onclick="toggleShareFlag(this);"><i class="fa-solid fa-leaf fa-fw shareStateIcon"></i></button>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm w-100" onclick="copyChosenShare();"><i class="fa-solid fa-link"></i> {{ shareCopyLink }}</button>
+            </li>
             <hr class="dropdown-divider">
-            <li class="dropdown-item" onclick="multiDelete();"><i class="fa-solid fa-trash-can" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</li>
+            {% endif %}
+            <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export fa-fw"></i>  {{export}}</li>
+            {% if not isPublic %}
+            <li class="dropdown-item" onclick="bulkTicketPicker.open();"><i class="bi bi-ticket-perforated-fill fa-fw" style="display:inline-block"></i>  {{associate_ticket}}</li>
+            <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot fa-fw"></i>  {{ moveToPlan|default('Move to a plan') }}</li>
+            <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags fa-fw"></i>  {{manage_tags}}</li>
+            {% endif %}
+            <li class="dropdown-item" onclick="exportGpx();"><i class="fa-solid fa-route fa-fw"></i>  {{exportGpx}}</li>
+            <li class="dropdown-item" onclick="exportGeojson();"><i class="fa-solid fa-draw-polygon fa-fw"></i>  {{exportGeojson}}</li>
+            {% if not isPublic %}
+            <li class="dropdown-item" onclick="mergeTrips();"><i class="fa-solid fa-code-merge fa-fw"></i>  {{mergeTrips}}</li>
+            <li class="dropdown-item" onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye fa-fw"></i>  {{bulk_change_visibility}}</li>
+            <li class="dropdown-item" onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square fa-fw"></i>  {{massEdit}}</li>
+            <hr class="dropdown-divider">
+            <li class="dropdown-item" onclick="multiDelete();"><i class="fa-solid fa-trash-can fa-fw" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</li>
             {% endif %}
         </ul>
     </div>
@@ -1375,7 +1436,7 @@
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" style="background-color: #f8f9fa;">
+            <div class="modal-body" style="background-color: light-dark(#f8f9fa, var(--bs-tertiary-bg));">
                 <!-- Content injected via JS -->
             </div>
             <div class="modal-footer">
@@ -1455,7 +1516,7 @@
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openMassEditTsb()">
               <i class="fas fa-train"></i> {{tsbPickTrainset}}
             </button>
-            <span id="massEditTsbLabel" style="font-size:.875rem; color:#666;"></span>
+            <span id="massEditTsbLabel" style="font-size:.875rem; color:light-dark(#666, var(--bs-secondary-color));"></span>
           </div>
         </div>
         <div class="mb-3">
@@ -1534,6 +1595,7 @@
 
 {% include "includes/trainset_builder_modal.html" %}
 
+<script src="{{ static_autoversion(filename='js/share_link.js') }}"></script>
 <script type="text/javascript">
 const checkedTrips = [];
 const checkedTripData = {};
@@ -1943,7 +2005,7 @@ function processHiddenData(rowIdx, columns){
                     formatted = '';
                 } else {
                     // No images — show full text fallback
-                    formatted = rawAdv && rawMat ? rawMat + ' <span style="color:#888;font-size:.9em">' + _formatTrainsetStr(rawAdv) + '</span>'
+                    formatted = rawAdv && rawMat ? rawMat + ' <span style="color:light-dark(#888, var(--bs-secondary-color));font-size:.9em">' + _formatTrainsetStr(rawAdv) + '</span>'
                                                  : _formatTrainsetStr(primary);
                 }
                 if (isValid) {
@@ -2179,7 +2241,7 @@ function renderStops(data, type, row) {
 
     var lastFlag = labelFlag(row.origin_station);
     var rows = [line('end', escapeStopText(row.origin_station),
-        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform, null, row.type))];
+        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform_planned || row.departure_platform, row.departure_platform_planned ? row.departure_platform : null, row.type))];
     stops.forEach(function (st) {
         var flag = st.cc && st.cc !== 'UN' && typeof getFlagEmoji === 'function' ? getFlagEmoji(st.cc) : '';
         var showFlag = flag && flag !== lastFlag;
@@ -2193,7 +2255,7 @@ function renderStops(data, type, row) {
             escapeStopText(time) + badge(delay), stopPlatformHtml(st.platform, st.platform_rt, row.type)));
     });
     rows.push(line('end', escapeStopText(row.destination_station),
-        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform, null, row.type)));
+        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform_planned || row.arrival_platform, row.arrival_platform_planned ? row.arrival_platform : null, row.type)));
 
     var count = typeof pluralize === 'function' ? pluralize(STOPS_TEXT.count, stops.length) : String(stops.length);
     return '<details class="trip-stops"><summary><span class="ts-toggle">' + escapeStopText(count) + '</span></summary>' +
@@ -2267,7 +2329,7 @@ function renderLength(data, type, row) {
 
         if (row.type === 'air' || row.type === 'helicopter') {
             if (row.is_geodesic === false) {
-                kmText += ` <span style="font-size: 0.6rem; vertical-align: super; color: #888;" title="Flight path included">•</span>`;
+                kmText += ` <span style="font-size: 0.6rem; vertical-align: super; color: light-dark(#888, var(--bs-secondary-color));" title="Flight path included">•</span>`;
             }
         }
 
@@ -2491,7 +2553,8 @@ function renderPlainText(data, type, row) {
 }
 
 function renderNotes(data, type, row) {
-    if (type === 'display') return `<span style="white-space: pre-line">${sanitize(data || '')}</span>`;
+    // Empty, not an empty <span>: the detail row shows any column whose display isn't ""
+    if (type === 'display') return data ? `<span style="white-space: pre-line">${sanitize(data)}</span>` : '';
     return data;
 }
 
@@ -2509,7 +2572,7 @@ function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
         var mat = row.material_type || '';
-        if (adv && mat) return sanitize(mat) + ' <span style="color:#888;font-size:.9em">' + sanitize(_formatTrainsetStr(adv)) + '</span>';
+        if (adv && mat) return sanitize(mat) + ' <span style="color:light-dark(#888, var(--bs-secondary-color));font-size:.9em">' + sanitize(_formatTrainsetStr(adv)) + '</span>';
         if (adv) return sanitize(_formatTrainsetStr(adv));
         return sanitize(mat);
     }
@@ -2538,7 +2601,9 @@ var table = $('#tripRows');
         'visibility': 'visibility',
         'material': 'material_type',
         'reg': 'reg',
-        'notes': 'notes'
+        'notes': 'notes',
+        {% if not isPublic %}'ticket': 'ticket_ids',{% endif %}
+        'id': 'uid'
     };
 
     // Strip a wrapping pair of " (spaces) or ` (exact). Returns {value, isExact}.
@@ -3569,25 +3634,74 @@ function openTripShare(openInNewTab) {
 // The public/friend view sets isPublic=True; the owner's own page sets it False.
 const ownsTrips = "{{ isPublic }}" != "True";
 
-function shareTrips(openInNewTab) {
+// `copyShow`: copy the link instead of opening it, showing exactly that ('p', 'c',
+// 'pc' or 'n', see shareShowCode). Opening uses the plain link.
+function shareTrips(openInNewTab, copyShow) {
     const isAllPublic = Object.values(checkedTripData).every(trip => trip.visibility === 'public');
     if(isAllPublic || !ownsTrips) {
-        openTripShare(openInNewTab)
+        if (copyShow) copyTripShare(copyShow);
+        else openTripShare(openInNewTab);
         return;
     }
 
-    document.getElementById('shareTripsMakePublicModal').setAttribute('data-new-tab', openInNewTab ? 'true' : 'false')
+    const modal = document.getElementById('shareTripsMakePublicModal');
+    modal.setAttribute('data-new-tab', openInNewTab ? 'true' : 'false')
+    modal.setAttribute('data-copy-show', copyShow || '')
     $('#shareTripsMakePublicModal').modal('show');
 }
 
+function copyTripShare(show, before) {
+    copyShareLink("{{ url_for('create_trip_share') }}", checkedTrips.join(','), show,
+                  { copied: {{ copyLink|tojson }}, copy: {{ copy|tojson }} }, before);
+}
+
+{% if not isPublic and share_defaults %}
+// The ▲ menu's copy row: one toggle per thing a link can show, preset to the
+// settings every time the menu opens (so no choice lingers to the next share).
+const shareDefaults = {{ share_defaults|tojson }};
+const shareCodes = { price: 'p', carbon: 'c' };
+
+function resetShareToggles() {
+    document.querySelectorAll('.shareToggle').forEach(btn => {
+        btn.setAttribute('aria-pressed', shareDefaults[btn.dataset.flag] ? 'true' : 'false');
+    });
+}
+
+function toggleShareFlag(btn) {
+    btn.setAttribute('aria-pressed', btn.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+}
+
+function shareShowCode() {
+    let code = '';
+    document.querySelectorAll('.shareToggle[aria-pressed="true"]').forEach(btn => {
+        code += shareCodes[btn.dataset.flag];
+    });
+    return code || 'n';
+}
+
+function copyChosenShare() {
+    const toggle = document.querySelector('.multiDropdown');
+    if (window.bootstrap && toggle) bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+    shareTrips(false, shareShowCode());
+}
+
+document.querySelector('.multiDropdown').addEventListener('show.bs.dropdown', resetShareToggles);
+resetShareToggles();
+{% endif %}
+
 function shareTripsLeaveAsIs() {
-    const openInNewTab = document.getElementById('shareTripsMakePublicModal').getAttribute('data-new-tab') === 'true';
-    openTripShare(openInNewTab)
+    const modal = document.getElementById('shareTripsMakePublicModal');
+    const openInNewTab = modal.getAttribute('data-new-tab') === 'true';
+    const copyShow = modal.getAttribute('data-copy-show');
+    if (copyShow) copyTripShare(copyShow);
+    else openTripShare(openInNewTab);
     $('#shareTripsMakePublicModal').modal('hide');
 }
 
 function shareTripsMakePublic() {
-    const openInNewTab = document.getElementById('shareTripsMakePublicModal').getAttribute('data-new-tab') === 'true';
+    const modal = document.getElementById('shareTripsMakePublicModal');
+    const openInNewTab = modal.getAttribute('data-new-tab') === 'true';
+    const copyShow = modal.getAttribute('data-copy-show');
 
     document.getElementById('shareTripsMakePublicButtonLabel').style.display = 'none';
     document.getElementById('shareTripsMakePublicSpinner').style.display = ''
@@ -3598,9 +3712,13 @@ function shareTripsMakePublic() {
     urlParams.append('trips', checkedTrips);
     urlParams.append('visibility', 'public');
 
-    fetch(`${changeVisibilityUrl}?${urlParams.toString()}`).finally(() => {
+    const madePublic = fetch(`${changeVisibilityUrl}?${urlParams.toString()}`).catch(() => {});
+    // Copying starts in this click (see share_link.js), once the trips are public.
+    if (copyShow) copyTripShare(copyShow, madePublic);
+
+    madePublic.finally(() => {
         tableObject.ajax.reload();
-        openTripShare(openInNewTab)
+        if (!copyShow) openTripShare(openInNewTab)
         for (let trip of Object.values(checkedTripData)) {
             trip.visibility = 'public';
         }

@@ -1,0 +1,17 @@
+{#- Shared by the viz pages: translated trip type names for scripts, and a macro to put
+    markup (a live value) where a translated string says {n}. -#}
+{% macro slot(text, inner) -%}
+{%- set parts = text.split('{n}') -%}
+{{ parts[0] }}{{ inner | safe }}{{ parts[1:] | join('{n}') }}
+{%- endmacro %}
+
+{% macro type_labels() -%}
+<script>
+const TYPE_LABELS = {{ {
+  'train': train, 'tram': tram, 'metro': metro, 'bus': bus, 'car': car, 'cycle': cycle,
+  'walk': walk, 'air': air, 'ferry': ferry, 'aerialway': aerialway, 'scooter': scooter,
+  'funicular': funicular, 'rail': rail, 'ski': ski, 'other': other,
+} | tojson }};
+function typeLabel(type) { return TYPE_LABELS[type] || type; }
+</script>
+{%- endmacro %}

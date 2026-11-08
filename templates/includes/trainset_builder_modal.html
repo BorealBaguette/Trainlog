@@ -12,6 +12,15 @@
   .tsb-unit.tsb-drag-over-left  { border-left: 3px solid #0d6efd; }
   .tsb-unit.tsb-drag-over-right { border-right: 3px solid #0d6efd; }
   .tsb-unit.tsb-seat-car { background: #d1e7dd; border-color: #198754; }
+  .tsb-set-admin { background: #f0f4ff; }
+  .tsb-set-personal { background: #f5fff5; }
+  .tsb-ref-chip { display:inline-flex; align-items:center; gap:3px; background:#e7f1ff; border-radius:10px; padding:0 6px; }
+  [data-bs-theme="dark"] .tsb-unit { background: var(--bs-tertiary-bg); border-color: var(--bs-border-color); }
+  [data-bs-theme="dark"] .tsb-unit.tsb-seat-car { background: #1f3a2b; border-color: #2f7a52; }
+  [data-bs-theme="dark"] .tsb-set-admin { background: #262d3a; }
+  [data-bs-theme="dark"] .tsb-set-personal { background: #25322a; }
+  [data-bs-theme="dark"] .tsb-ref-chip { background: #2c3a55; }
+  [data-bs-theme="dark"] #tsb-ref-badge { color: #8fb0f5 !important; }
 </style>
 <script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
@@ -244,7 +253,7 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'list-group-item list-group-item-action py-1 px-2 d-flex align-items-center gap-2';
-        btn.style.background = ts.is_admin ? '#f0f4ff' : '#f5fff5';
+        btn.classList.add(ts.is_admin ? 'tsb-set-admin' : 'tsb-set-personal');
         var icon = document.createElement('i');
         icon.className = 'fas fa-train';
         icon.style.cssText = 'font-size:.75rem;color:#6c757d;flex-shrink:0';
@@ -432,7 +441,7 @@
           nameEl.appendChild(plus);
         }
         var chip = document.createElement('span');
-        chip.style.cssText = 'display:inline-flex; align-items:center; gap:3px; background:#e7f1ff; border-radius:10px; padding:0 6px';
+        chip.className = 'tsb-ref-chip';
         var lbl = document.createElement('span');
         lbl.textContent = name;
         chip.appendChild(lbl);

@@ -30,6 +30,7 @@ const MapConfig = {
         "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json',
         "dark-train":       '/getVectorStyle/{language}/trainlog-dark.json',
         "trainlog-rail":    '/getVectorStyle/{language}/trainlog-rail.json',
+        "trainlog-light":   '/getVectorStyle/{language}/trainlog-light.json',
         "ofm-liberty": 'https://tiles.openfreemap.org/styles/liberty',
         "ofm-bright": 'https://tiles.openfreemap.org/styles/bright',
         "ofm-positron": 'https://tiles.openfreemap.org/styles/positron'
@@ -67,6 +68,7 @@ async function resolveBackground(tileserver, { styleUrl = null, userLanguage = w
                 throw new Error(`Failed to load style: ${response.status}`);
             }
             mapStyle = await response.json();
+            absolutizeSprite(mapStyle);
 
             if (OFM_SOURCED_STYLES.includes(effectiveTileserver)) {
                 applyStyleLanguage(mapStyle, userLanguage);
@@ -129,7 +131,11 @@ async function initializeMapLibre(options = {}) {
     const addImage = map.addImage.bind(map);
     map.addImage = (id, ...rest) => { map._userImages.add(id); return addImage(id, ...rest); };
 
-    // Add a sentinel layer that trip layers will sit above
+    // Page lines (trips) go under the base's 3D buildings, which then hide them as they hide the ground
+    const addLayer = map.addLayer.bind(map);
+    map.addLayer = (layer, beforeId) => addLayer(layer, beforeId ?? (layer.type === 'line' ? baseBuildingsId(map) : undefined));
+
+    // Add a sentinel layer that page layers will sit above
     map.once('load', () => {
         map.addLayer({ id: 'orm-sentinel', type: 'background', paint: { 'background-opacity': 0 } });
     });
@@ -154,6 +160,20 @@ async function initializeMapLibre(options = {}) {
     }
 
     return map;
+}
+
+function baseBuildingsId(map) {
+    const base = new Set(map._baseIds.layers);
+    return map.getStyle().layers.find(l => l.type === 'fill-extrusion' && base.has(l.id))?.id;
+}
+
+// Where the overlay goes: under the base's first label, under its 3D buildings (drawn after them
+// the lines showed through), and under anything the page added. First label, not first symbol:
+// oneway arrow layers sit down among the tunnels and would bury it under the roads
+function ormAnchorId(map) {
+    const base = new Set(map._baseIds.layers);
+    return map.getStyle().layers.find(l => !base.has(l.id) || l.type === 'fill-extrusion'
+        || (l.type === 'symbol' && l.layout?.['text-field']))?.id;
 }
 
 // Adds the OpenRailwayMap vector overlay under the base map's labels. What it adds is
@@ -181,11 +201,7 @@ async function addOrmOverlay(map, ormVectorType) {
             maxzoom: 19,
             attribution: '© <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>'
         });
-        const baseLayers = [];
-        for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
-        const firstLabelId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
-        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstLabelId)?.id || firstLabelId;
-        map.addLayer({ id, type: 'raster', source: id }, anchorId);
+        map.addLayer({ id, type: 'raster', source: id }, ormAnchorId(map));
         ormIds.sources.push(id);
         ormIds.layers.push(id);
         return;
@@ -228,13 +244,7 @@ async function addOrmOverlay(map, ormVectorType) {
         // Skip symbol/background layers but the line labels — they cause gritty artifacts and CORS issues
         const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
         const skipTypes = new Set(['symbol', 'background', 'raster']);
-        // Only look below the sentinel: after a background change trip layers sit above it
-        const baseLayers = [];
-        for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
-        // First label, not first symbol: oneway arrow layers sit down among the tunnels and would bury it under the roads
-        const firstSymbolId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
-        // Under 3D buildings too, where the base has them: drawn after them the lines showed through
-        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstSymbolId)?.id || firstSymbolId;
+        const anchorId = ormAnchorId(map);
         // Labels along the lines ("25kV 50Hz", speeds, refs) need a font from the map's one glyph
         // source: raster bases have none, so they get OpenFreeMap's
         if (!map.getStyle().glyphs) map.setGlyphs(OFM_GLYPHS);
@@ -287,14 +297,14 @@ function describeOrmLine(p, type) {
 }
 
 // The overlay line under a point and what to tell about it, or null. Anything the page draws
-// above the sentinel (trips, stops) has its own click and cursor, so a hit on one of those wins
+// (trips, stops) has its own click and cursor, so a hit on one of those wins
 function ormLineAt(map, point) {
     const orm = map._ormIds;
     if (!orm?.layers.length) return null;
     // Lines are a few px wide: search around the point rather than under it
     const box = [[point.x - 6, point.y - 6], [point.x + 6, point.y + 6]];
-    const order = map.getLayersOrder();
-    const pageLayers = order.slice(order.indexOf('orm-sentinel') + 1);
+    const skip = new Set([...map._baseIds.layers, ...orm.layers, 'orm-sentinel']);
+    const pageLayers = map.getLayersOrder().filter(id => !skip.has(id));
     if (pageLayers.length && map.queryRenderedFeatures(box, { layers: pageLayers }).length) return null;
     for (const f of map.queryRenderedFeatures(box, { layers: orm.layers })) {
         if (!f.sourceLayer?.includes('railway_line')) continue;
@@ -354,13 +364,18 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
     const prev = map.getStyle();
     const keepSources = Object.entries(prev.sources).filter(([id]) => !baseSources.has(id) && !ormSources.has(id));
     const keepLayers = prev.layers.filter(l => !baseLayers.has(l.id) && !ormLayers.has(l.id));
+    const shadow = tripShadowColor(map);
+    for (const l of keepLayers) if (l.id.endsWith('-shadow')) l.paint[`${l.type}-color`] = shadow;
     const images = [...map._userImages].filter(id => map.hasImage(id)).map(id => [id, map.getImage(id)]);
 
     map._baseIds = { sources: Object.keys(mapStyle.sources || {}), layers: mapStyle.layers.map(l => l.id) };
     map._ormIds = null;
-    // Layers sit before the base's first symbol layer only for ORM; trip layers go on top.
+    // Page lines go under the new base's 3D buildings, as addLayer puts them; the rest on top
     for (const [id, src] of keepSources) mapStyle.sources[id] = src;
-    mapStyle.layers.push(...keepLayers);
+    const buildings = mapStyle.layers.findIndex(l => l.type === 'fill-extrusion');
+    const lines = buildings < 0 ? [] : keepLayers.filter(l => l.type === 'line');
+    mapStyle.layers.splice(buildings, 0, ...lines);
+    mapStyle.layers.push(...keepLayers.filter(l => !lines.includes(l)));
     map.setStyle(mapStyle, { diff: false });
 
     map.once('style.load', () => {
@@ -371,6 +386,15 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
     });
 }
 
+// Trip shadows are black, but on a dark map the darkest trip colours would vanish in one:
+// those get a light grey edge instead. Stop dots carry their trip's type as tripType
+const DARK_BACKGROUNDS = ['dark-train', 'trainlog-rail', 'jawg-dark'];
+const DARK_TRIP_TYPES = ['metro', 'cycle', 'ferry', 'other'];
+function tripShadowColor(map) {
+    if (!DARK_BACKGROUNDS.includes(map._currentTileserver?.split('.').pop())) return '#000000';
+    return ['match', ['coalesce', ['get', 'tripType'], ['get', 'type']], DARK_TRIP_TYPES, '#b0b0b0', '#000000'];
+}
+
 // Check if tileserver is a vector tile server
 function isVectorTileServer(tileserver) {
     const vectorServers = [
@@ -379,6 +403,7 @@ function isVectorTileServer(tileserver) {
         'trainlog-lagoon-v2',
         'dark-train',
         'trainlog-rail',
+        'trainlog-light',
         'ofm-liberty',
         'ofm-bright',
         'ofm-positron'
@@ -390,7 +415,7 @@ function isVectorTileServer(tileserver) {
 // labels be localised client-side (Jawg instead gets its language server-side).
 const OFM_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 
-const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
+const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'trainlog-light', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
 
 // "native" labels places as written locally (北京); "local" the same with the
 // Latin spelling below a non-Latin name (北京 / Beijing); "int" in Latin letters
@@ -414,6 +439,17 @@ function applyStyleLanguage(style, userLanguage) {
 }
 
 // Get vector style URL based on tileserver
+// /getVectorStyle serves its sprite paths relative (the server can't tell http
+// from https behind the proxy); MapLibre wants them absolute, on the page's origin
+function absolutizeSprite(style) {
+    const abs = url => new URL(url, window.location.href).href;
+    if (typeof style.sprite === 'string') {
+        style.sprite = abs(style.sprite);
+    } else if (Array.isArray(style.sprite)) {
+        style.sprite = style.sprite.map(s => ({ ...s, url: abs(s.url) }));
+    }
+}
+
 function getVectorStyleUrl(tileserver, userLanguage) {
     // Validate language for Jawg
     if (!MapConfig.jawgAllowedLangs.includes(userLanguage)) {
@@ -742,7 +778,7 @@ function buildTripLayers(map, trips, transportTypes, options = {}) {
                             'visibility': 'none'
                         },
                         paint: {
-                            'line-color': '#000000',
+                            'line-color': tripShadowColor(map),
                             'line-width': (type.id === 'air') ? 3 : 5,
                             'line-opacity': timeStatus === 'future' ? 0.3 : 0.8,
                             'line-blur': 0.5
@@ -844,9 +880,6 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
     const { onLayerClick = null } = options;
     const time = ['get', 'time'];
     const isAir = ['==', ['get', 'type'], 'air'];
-    const typeColor = ['match', ['get', 'type']];
-    transportTypes.forEach(type => typeColor.push(type.id, type.color));
-    typeColor.push('#888888');
 
     if (!map.getSource(sourceId)) {
         map.addSource(sourceId, {
@@ -861,7 +894,7 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
         {
             id: `${sourceId}-shadow`,
             paint: {
-                'line-color': '#000000',
+                'line-color': tripShadowColor(map),
                 'line-width': ['case', isAir, 3, 5],
                 'line-opacity': ['case', ['==', time, 'future'], 0.3, 0.8],
                 'line-blur': 0.5
@@ -871,11 +904,7 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
             id: `${sourceId}-line`,
             clickable: true,
             paint: {
-                'line-color': ['case',
-                    ['==', time, 'current'], '#ff0000',
-                    ['==', time, 'future'], '#ffffff',
-                    typeColor
-                ],
+                'line-color': tripLineColor(transportTypes),
                 'line-width': ['case', ['==', time, 'current'], 4, isAir, 1, 3],
                 'line-opacity': ['case',
                     ['==', time, 'current'],
@@ -909,6 +938,99 @@ function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
             map.on('mouseleave', layer.id, () => { map.getCanvas().style.cursor = ''; });
         }
     });
+}
+
+// Line colour of the slice layers: by transport type, or by year when given a
+// { year: colour } map. Current and future trips keep their own colours.
+function tripLineColor(transportTypes, yearColors = null) {
+    const pairs = yearColors
+        ? Object.entries(yearColors).flat()
+        : transportTypes.flatMap(type => [type.id, type.color]);
+    const color = pairs.length
+        ? ['match', ['get', yearColors ? 'year' : 'type'], ...pairs, '#888888']
+        : '#888888';
+    return ['case',
+        ['==', ['get', 'time'], 'current'], '#ff0000',
+        ['==', ['get', 'time'], 'future'], '#ffffff',
+        color
+    ];
+}
+
+// Oldest to newest. Changes hue all along, so neighbouring years stay apart,
+// and ends in magenta rather than the red of current trips.
+const YEAR_RAMP = ['#3b3eac', '#2f7fd8', '#17becf', '#2ca02c', '#c2b000', '#f28e2b', '#d6339b'];
+
+// How much a year's count weighs on its colour, from the viewer's slider: 1 spreads
+// the busy years over most of the ramp, 0 gives every year the same step
+function yearSpread() {
+    try {
+        const spread = parseFloat(localStorage.getItem('yearColorSpread'));
+        return spread >= 0 && spread <= 1 ? spread : 1;
+    } catch (e) {
+        return 1;
+    }
+}
+
+function setYearSpread(spread) {
+    try { localStorage.setItem('yearColorSpread', spread); } catch (e) {}
+}
+
+// { year: colour } from { year: count }. Each year sits on the ramp at the middle
+// of its share of the weighted count, so with a full spread the busy years spread
+// over most of it instead of a few sparse early ones
+function yearColors(counts) {
+    const years = Object.keys(counts).sort();
+    const spread = yearSpread();
+    const weights = years.map(year => counts[year] ** spread);
+    const total = weights.reduce((n, weight) => n + weight, 0);
+    let before = 0;
+    const positions = weights.map(weight => {
+        const position = (before + weight / 2) / total;
+        before += weight;
+        return position;
+    });
+    const first = positions[0], span = positions[positions.length - 1] - first;
+
+    const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+    const colors = {};
+    years.forEach((year, i) => {
+        const x = (span ? (positions[i] - first) / span : 0.5) * (YEAR_RAMP.length - 1);
+        const j = Math.min(Math.floor(x), YEAR_RAMP.length - 2);
+        const a = rgb(YEAR_RAMP[j]), b = rgb(YEAR_RAMP[j + 1]);
+        colors[year] = `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * (x - j))).join(',')})`;
+    });
+    return colors;
+}
+
+function toggleYearLegend(button) {
+    const asList = button.parentElement.classList.toggle('as-list');
+    try { localStorage.setItem('yearLegendAsList', asList); } catch (e) {}
+}
+
+// Legend of yearColors(): a row per year, newest first, or one bar, which a
+// button switches between; the bar by default when the rows would be too many
+function yearLegendHtml(colors) {
+    const entries = Object.entries(colors);
+    if (!entries.length) return '';
+    const labels = [entries[0], entries[Math.floor(entries.length / 2)], entries[entries.length - 1]];
+    let asList = entries.length <= 10;
+    try { asList = (localStorage.getItem('yearLegendAsList') ?? String(asList)) === 'true'; } catch (e) {}
+    return `
+        <div class="year-legend${asList ? ' as-list' : ''}">
+            <button type="button" class="year-legend-toggle" onclick="MapLibreUtils.toggleYearLegend(this)">
+                <i class="fa-solid fa-list-ul"></i><i class="fa-solid fa-grip-lines"></i>
+            </button>
+            <div class="year-list">${entries.slice().reverse().map(([year, color]) => `
+                <div class="legend-item">
+                    <div class="legend-line" style="background-color: ${color};"></div>
+                    <span>${year}</span>
+                </div>`).join('')}</div>
+            <div class="year-bar">
+                <div class="year-ramp">${entries.map(([year, color]) =>
+                    `<div title="${year}" style="background-color: ${color};"></div>`).join('')}</div>
+                <div class="year-ramp-labels">${labels.map(([year]) => `<span>${year}</span>`).join('')}</div>
+            </div>
+        </div>`;
 }
 
 // Update layer visibility based on filters
@@ -1402,6 +1524,7 @@ window.MapLibreUtils = {
     build3DFlightLayer,
     initializeMapLibre,
     changeBackground,
+    tripShadowColor,
     isVectorTileServer,
     getVectorStyleUrl,
     createRasterStyle,
@@ -1413,6 +1536,12 @@ window.MapLibreUtils = {
     tripToFeature,
     buildTripLayers,
     addTripSliceLayers,
+    tripLineColor,
+    yearColors,
+    yearSpread,
+    setYearSpread,
+    toggleYearLegend,
+    yearLegendHtml,
     updateLayerVisibility,
     fitBoundsToVisibleFeatures,
     modifyVectorStyle
