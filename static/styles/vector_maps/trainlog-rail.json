@@ -11230,112 +11230,6 @@
     },
     {
       "type": "symbol",
-      "id": "public-transport-label",
-      "source": "openmaptiles",
-      "source-layer": "transportation_name",
-      "filter": [
-        "all",
-        [
-          "any",
-          [
-            "!",
-            [
-              "has",
-              "rank"
-            ]
-          ],
-          [
-            "<=",
-            [
-              "get",
-              "rank"
-            ],
-            2
-          ]
-        ]
-      ],
-      "layout": {
-        "icon-anchor": "center",
-        "icon-image": [
-          "step",
-          [
-            "zoom"
-          ],
-          [
-            "concat",
-            [
-              "get",
-              "maki"
-            ],
-            "-sm"
-          ],
-          16,
-          [
-            "get",
-            "maki"
-          ]
-        ],
-        "icon-padding": 10.0,
-        "text-anchor": "top",
-        "text-field": [
-          "step",
-          [
-            "zoom"
-          ],
-          "",
-          17,
-          [
-            "case",
-            [
-              "has",
-              "name:nonlatin"
-            ],
-            [
-              "concat",
-              [
-                "get",
-                "name:latin"
-              ],
-              "\n",
-              [
-                "get",
-                "name:nonlatin"
-              ]
-            ],
-            [
-              "coalesce",
-              [
-                "get",
-                "name:en"
-              ],
-              [
-                "get",
-                "name"
-              ]
-            ]
-          ]
-        ],
-        "text-font": [
-          "Noto Sans Regular"
-        ],
-        "text-max-width": 8.0,
-        "text-offset": [
-          0.0,
-          0.75
-        ],
-        "text-padding": 1.0,
-        "text-rotation-alignment": "viewport",
-        "text-size": 10.0
-      },
-      "paint": {
-        "text-color": "#B5B5B5",
-        "text-halo-blur": 1.0,
-        "text-halo-color": "#000000",
-        "text-halo-width": 1.0
-      }
-    },
-    {
-      "type": "symbol",
       "id": "poi-label",
       "source": "openmaptiles",
       "source-layer": "poi",
@@ -11497,6 +11391,148 @@
         "text-halo-blur": 1.0,
         "text-halo-color": "#000000",
         "text-halo-width": 1.0
+      }
+    },
+    {
+      "id": "station-label",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "poi",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "class"
+          ],
+          "railway"
+        ],
+        [
+          "any",
+          [
+            "in",
+            [
+              "get",
+              "subclass"
+            ],
+            [
+              "literal",
+              [
+                "station",
+                "halt"
+              ]
+            ]
+          ],
+          [
+            ">=",
+            [
+              "zoom"
+            ],
+            14
+          ]
+        ]
+      ],
+      "layout": {
+        "icon-image": [
+          "case",
+          [
+            "in",
+            [
+              "get",
+              "subclass"
+            ],
+            [
+              "literal",
+              [
+                "station",
+                "halt"
+              ]
+            ]
+          ],
+          "rail",
+          "rail-light"
+        ],
+        "icon-padding": 2,
+        "text-field": [
+          "case",
+          [
+            "has",
+            "name:nonlatin"
+          ],
+          [
+            "concat",
+            [
+              "get",
+              "name:latin"
+            ],
+            "\n",
+            [
+              "get",
+              "name:nonlatin"
+            ]
+          ],
+          [
+            "coalesce",
+            [
+              "get",
+              "name:en"
+            ],
+            [
+              "get",
+              "name"
+            ]
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          12,
+          10,
+          16,
+          13
+        ],
+        "text-anchor": "top",
+        "text-offset": [
+          0,
+          0.9
+        ],
+        "text-max-width": 8,
+        "text-optional": true,
+        "symbol-sort-key": [
+          "case",
+          [
+            "in",
+            [
+              "get",
+              "subclass"
+            ],
+            [
+              "literal",
+              [
+                "station",
+                "halt"
+              ]
+            ]
+          ],
+          0,
+          1
+        ]
+      },
+      "paint": {
+        "text-color": "#D9D9D9",
+        "text-halo-color": "#000000",
+        "text-halo-width": 1,
+        "text-halo-blur": 1
       }
     },
     {
