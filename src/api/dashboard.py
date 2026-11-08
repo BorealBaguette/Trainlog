@@ -4,9 +4,9 @@ from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
 
-from src.currency import get_exchange_rate
 from src.api.motis import trip_runs
 from src.api.wrapped import get_wrapped_data
+from src.currency import get_exchange_rate
 from src.pg import pg_session
 from src.trips.utils import get_current_trip_id
 from src.users import Friendship, User
@@ -105,10 +105,20 @@ def dashboard_totals(username):
     )
 
 
+# Recent and upcoming trips on the dashboard: both panels show the same number
+# and fold the same number more behind "show more".
+DASHBOARD_TRIPS_SHOWN = 5
+DASHBOARD_TRIPS_MORE = 3
+DASHBOARD_TRIPS_FETCHED = DASHBOARD_TRIPS_SHOWN + DASHBOARD_TRIPS_MORE
+
+
 @dashboard_blueprint.route("/u/<username>/dashboard_trips")
 @login_required
 def dashboard_trips(username):
-    """Next 5 upcoming and last 7 recent trips, split cleanly at NOW()."""
+    """Next 8 upcoming and last 8 recent trips, split cleanly at NOW().
+
+    Each panel shows DASHBOARD_TRIPS_SHOWN and folds the rest behind "show
+    more" (templates/dashboard.html)."""
     user_id = get_user_id(username)
 
     def row_to_dict(r):
@@ -137,9 +147,9 @@ def dashboard_trips(username):
               AND is_project = false
               AND COALESCE(utc_start_datetime, start_datetime) > NOW()
             ORDER BY COALESCE(utc_start_datetime, start_datetime) ASC
-            LIMIT 5
+            LIMIT :limit
             """,
-            {"uid": user_id},
+            {"uid": user_id, "limit": DASHBOARD_TRIPS_FETCHED},
         ).fetchall()
 
         recent_rows = pg.execute(
@@ -153,15 +163,16 @@ def dashboard_trips(username):
               AND is_project = false
               AND COALESCE(utc_start_datetime, start_datetime) <= NOW()
             ORDER BY COALESCE(utc_start_datetime, start_datetime) DESC
-            LIMIT 7
+            LIMIT :limit
             """,
-            {"uid": user_id},
+            {"uid": user_id, "limit": DASHBOARD_TRIPS_FETCHED},
         ).fetchall()
 
     return jsonify(
         {
             "upcoming": [row_to_dict(r) for r in upcoming_rows],
             "recent": [row_to_dict(r) for r in recent_rows],
+            "shown": DASHBOARD_TRIPS_SHOWN,
         }
     )
 
