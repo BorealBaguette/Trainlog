@@ -1768,5 +1768,14 @@
     "shareCopyLink": "Kopiér link",
     "shareLinkShows": "Linket viser:",
     "viewOnMap": "Vis på kort",
-    "shareLinksHeading": "Delte links"
+    "shareLinksHeading": "Delte links",
+    "aircraftTypesTitle": "Flytyper",
+    "aircraftTypesIntro": "Alle flyfamilier, Trainlog kender. Dem, du endnu ikke har fløjet med, er sorte; åbn en familie for at se hver variant.",
+    "aircraftTypesSummary": "{flown} af {total} familier fløjet",
+    "aircraftFilterFlown": "Fløjet",
+    "aircraftFilterNotFlown": "Ikke fløjet",
+    "aircraftFlights": "Flyvninger",
+    "aircraftFirstFlown": "Første flyvning",
+    "aircraftLastFlown": "Seneste flyvning",
+    "aircraftVariantsFlown": "{flown} af {total} varianter fløjet"
 }

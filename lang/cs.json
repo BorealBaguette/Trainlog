@@ -1800,5 +1800,14 @@
     "shareCopyLink": "Kopírovat odkaz",
     "shareLinkShows": "Odkaz zobrazuje:",
     "viewOnMap": "Ukázat na mapě",
-    "shareLinksHeading": "Sdílené odkazy"
+    "shareLinksHeading": "Sdílené odkazy",
+    "aircraftTypesTitle": "Typy letadel",
+    "aircraftTypesIntro": "Všechny rodiny letadel, které Trainlog zná. Ty, kterými jste ještě neletěli, jsou začerněné; rozbalte rodinu a uvidíte jednotlivé varianty.",
+    "aircraftTypesSummary": "Vyzkoušeno {flown} z {total} rodin",
+    "aircraftFilterFlown": "Vyzkoušené",
+    "aircraftFilterNotFlown": "Nevyzkoušené",
+    "aircraftFlights": "Lety",
+    "aircraftFirstFlown": "První let",
+    "aircraftLastFlown": "Poslední let",
+    "aircraftVariantsFlown": "Vyzkoušeno {flown} z {total} variant"
 }

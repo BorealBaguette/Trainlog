@@ -1753,5 +1753,14 @@
     "shareCopyLink": "复制链接",
     "shareLinkShows": "链接显示：",
     "viewOnMap": "在地图上查看",
-    "shareLinksHeading": "共享链接"
+    "shareLinksHeading": "共享链接",
+    "aircraftTypesTitle": "机型",
+    "aircraftTypesIntro": "Trainlog 收录的所有机型系列。尚未乘坐过的会显示为黑色剪影；展开系列可查看各个子型号。",
+    "aircraftTypesSummary": "已乘坐 {flown}/{total} 个系列",
+    "aircraftFilterFlown": "已乘坐",
+    "aircraftFilterNotFlown": "未乘坐",
+    "aircraftFlights": "航班",
+    "aircraftFirstFlown": "首次乘坐",
+    "aircraftLastFlown": "最近乘坐",
+    "aircraftVariantsFlown": "已乘坐 {flown}/{total} 个子型号"
 }

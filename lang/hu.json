@@ -1753,5 +1753,14 @@
     "shareCopyLink": "Link másolása",
     "shareLinkShows": "A link mutatja:",
     "viewOnMap": "Mutasd térképen",
-    "shareLinksHeading": "Megosztott linkek"
+    "shareLinksHeading": "Megosztott linkek",
+    "aircraftTypesTitle": "Repülőgéptípusok",
+    "aircraftTypesIntro": "A Trainlog által ismert összes repülőgépcsalád. Azok, amelyekkel még nem repültél, feketék; nyiss ki egy családot az egyes változatokhoz.",
+    "aircraftTypesSummary": "{total} családból {flown} kipróbálva",
+    "aircraftFilterFlown": "Repült",
+    "aircraftFilterNotFlown": "Nem repült",
+    "aircraftFlights": "Repülések",
+    "aircraftFirstFlown": "Első repülés",
+    "aircraftLastFlown": "Utolsó repülés",
+    "aircraftVariantsFlown": "{total} változatból {flown} kipróbálva"
 }

@@ -1783,5 +1783,14 @@
     "shareCopyLink": "Копіювати посилання",
     "shareLinkShows": "Посилання показує:",
     "viewOnMap": "Відкрити мапу",
-    "shareLinksHeading": "Посилання, якими ви ділитеся"
+    "shareLinksHeading": "Посилання, якими ви ділитеся",
+    "aircraftTypesTitle": "Типи літаків",
+    "aircraftTypesIntro": "Усі сімейства літаків, відомі Trainlog. Ті, якими ви ще не літали, затемнені; розгорніть сімейство, щоб побачити кожну модифікацію.",
+    "aircraftTypesSummary": "Освоєно {flown} з {total} сімейств",
+    "aircraftFilterFlown": "Літав",
+    "aircraftFilterNotFlown": "Не літав",
+    "aircraftFlights": "Польоти",
+    "aircraftFirstFlown": "Перший політ",
+    "aircraftLastFlown": "Останній політ",
+    "aircraftVariantsFlown": "Освоєно {flown} з {total} модифікацій"
 }

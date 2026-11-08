@@ -1755,5 +1755,14 @@
     "shareCopyLink": "링크 복사",
     "shareLinkShows": "링크에 표시:",
     "viewOnMap": "지도에서 보기",
-    "shareLinksHeading": "공유 링크"
+    "shareLinksHeading": "공유 링크",
+    "aircraftTypesTitle": "항공기 기종",
+    "aircraftTypesIntro": "Trainlog가 아는 모든 항공기 계열입니다. 아직 탑승하지 않은 계열은 검게 표시됩니다. 계열을 펼치면 각 파생형을 볼 수 있습니다.",
+    "aircraftTypesSummary": "{total}개 계열 중 {flown}개 탑승",
+    "aircraftFilterFlown": "탑승함",
+    "aircraftFilterNotFlown": "탑승 안 함",
+    "aircraftFlights": "항공편",
+    "aircraftFirstFlown": "첫 탑승",
+    "aircraftLastFlown": "최근 탑승",
+    "aircraftVariantsFlown": "{total}개 파생형 중 {flown}개 탑승"
 }

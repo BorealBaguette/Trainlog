@@ -1783,5 +1783,14 @@
     "shareCopyLink": "Копировать ссылку",
     "shareLinkShows": "Ссылка показывает:",
     "viewOnMap": "Открыть карту",
-    "shareLinksHeading": "Ссылки, которыми вы делитесь"
+    "shareLinksHeading": "Ссылки, которыми вы делитесь",
+    "aircraftTypesTitle": "Типы самолётов",
+    "aircraftTypesIntro": "Все семейства самолётов, известные Trainlog. Те, на которых вы ещё не летали, затемнены; раскройте семейство, чтобы увидеть каждую модификацию.",
+    "aircraftTypesSummary": "Освоено {flown} из {total} семейств",
+    "aircraftFilterFlown": "Летал",
+    "aircraftFilterNotFlown": "Не летал",
+    "aircraftFlights": "Полёты",
+    "aircraftFirstFlown": "Первый полёт",
+    "aircraftLastFlown": "Последний полёт",
+    "aircraftVariantsFlown": "Освоено {flown} из {total} модификаций"
 }

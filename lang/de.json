@@ -1768,5 +1768,14 @@
     "shareCopyLink": "Link kopieren",
     "shareLinkShows": "Link zeigt:",
     "viewOnMap": "Auf Karte zeigen",
-    "shareLinksHeading": "Geteilte Links"
+    "shareLinksHeading": "Geteilte Links",
+    "aircraftTypesTitle": "Flugzeugtypen",
+    "aircraftTypesIntro": "Alle Flugzeugfamilien, die Trainlog kennt. Die, mit denen du noch nicht geflogen bist, sind geschwärzt; öffne eine Familie, um jede Variante zu sehen.",
+    "aircraftTypesSummary": "{flown} von {total} Familien geflogen",
+    "aircraftFilterFlown": "Geflogen",
+    "aircraftFilterNotFlown": "Nicht geflogen",
+    "aircraftFlights": "Flüge",
+    "aircraftFirstFlown": "Erster Flug",
+    "aircraftLastFlown": "Letzter Flug",
+    "aircraftVariantsFlown": "{flown} von {total} Varianten geflogen"
 }

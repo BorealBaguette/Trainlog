@@ -1753,5 +1753,14 @@
     "shareCopyLink": "Bağlantıyı kopyala",
     "shareLinkShows": "Bağlantı gösterir:",
     "viewOnMap": "Haritada göster",
-    "shareLinksHeading": "Paylaşılan bağlantılar"
+    "shareLinksHeading": "Paylaşılan bağlantılar",
+    "aircraftTypesTitle": "Uçak tipleri",
+    "aircraftTypesIntro": "Trainlog'un bildiği tüm uçak aileleri. Henüz uçmadıklarınız karartılmıştır; her varyantı görmek için bir aileyi açın.",
+    "aircraftTypesSummary": "{total} aileden {flown} tanesiyle uçuldu",
+    "aircraftFilterFlown": "Uçulan",
+    "aircraftFilterNotFlown": "Uçulmayan",
+    "aircraftFlights": "Uçuşlar",
+    "aircraftFirstFlown": "İlk uçuş",
+    "aircraftLastFlown": "Son uçuş",
+    "aircraftVariantsFlown": "{total} varyanttan {flown} tanesiyle uçuldu"
 }

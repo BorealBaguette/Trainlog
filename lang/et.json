@@ -1765,5 +1765,14 @@
     "shareCopyLink": "Kopeeri link",
     "shareLinkShows": "Link näitab:",
     "viewOnMap": "Vaata kaardil",
-    "shareLinksHeading": "Jagatud lingid"
+    "shareLinksHeading": "Jagatud lingid",
+    "aircraftTypesTitle": "Lennukitüübid",
+    "aircraftTypesIntro": "Kõik lennukiperekonnad, mida Trainlog tunneb. Need, millega sa pole veel lennanud, on mustaks tehtud; ava perekond, et näha iga varianti.",
+    "aircraftTypesSummary": "{flown}/{total} perekonda lennatud",
+    "aircraftFilterFlown": "Lennatud",
+    "aircraftFilterNotFlown": "Lendamata",
+    "aircraftFlights": "Lennud",
+    "aircraftFirstFlown": "Esimene lend",
+    "aircraftLastFlown": "Viimane lend",
+    "aircraftVariantsFlown": "{flown}/{total} varianti lennatud"
 }
