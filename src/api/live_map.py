@@ -50,7 +50,8 @@ def live_map_countries():
     points = (request.get_json(silent=True) or [])[:500]
     places = []
     for lat, lng in points:
-        lat, lng = float(lat), float(lng)
+        # Pins on a wrapped world copy arrive past ±180
+        lat, lng = float(lat), (float(lng) + 180) % 360 - 180
         code = getCountryFromCoordinates(lat, lng)["countryCode"]
         continent = _continents.search(lng=lng, lat=lat)
         places.append(
