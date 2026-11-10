@@ -9,7 +9,8 @@
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 
 <style>
-  #ua-map { height: calc(100vh - 70px); min-height: 480px; }
+  html, body { overflow: hidden; }
+  #ua-map { height: calc(100vh - 70px); }
   #ua-status { position: absolute; top: 80px; left: 12px; z-index: 2; background: var(--bs-body-bg);
     width: 320px; max-width: calc(100% - 24px); border-radius: 10px; padding: 10px 14px; font-size: .85rem;
     box-shadow: 0 4px 16px rgba(0,0,0,.18); }
@@ -49,6 +50,13 @@
 
 <script>
 (async function () {
+  // The navbar's height varies, so the map takes whatever the window has left below it.
+  const fit = () => {
+    const el = document.getElementById('ua-map');
+    el.style.height = `${innerHeight - el.getBoundingClientRect().top}px`;
+  };
+  fit();
+  addEventListener('resize', fit);
   const names = new Intl.DisplayNames(['{{ lang }}', 'en'], { type: 'region' });
   const map = await MapLibreUtils.initializeMapLibre({
     container: 'ua-map', tileserver: '{{ tileserver }}', useGlobe: true, center: [2.35, 48.85], zoom: 5,

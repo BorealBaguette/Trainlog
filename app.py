@@ -10564,19 +10564,17 @@ def public_trips(username, time=None):
 
 
 
-@app.route("/u/<username>/<edit_copy_type>/<tripId>")
+@app.route("/u/<username>/<any(edit, copy):edit_copy_type>/<tripId>")
 def edit_copy_trip(username, tripId, edit_copy_type):
     """
     Edit or copy trip details
     """
+    # Not <int:tripId>: templates build the link with a placeholder id and fill it in JS.
+    if not tripId.isdigit():
+        abort(404)
     user_obj = User.query.filter_by(username=username).first()
     colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
 
-    if "edit" in request.path:
-        edit_copy_type = "edit"
-    elif "copy" in request.path:
-        edit_copy_type = "copy"
-        
     from_app = request.args.get('fromApp') == 'true'
 
     trip = get_trip_pg(tripId)
