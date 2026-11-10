@@ -1537,6 +1537,7 @@
     "motisReplacementBusNote": "Korvaava bussi: reititetään teitä pitkin ja tallennetaan bussimatkaksi.",
     "ctNextStop": "Seuraava pysäkki",
     "ctAtStop": "Nyt",
+    "liveFollow": "Seuraa",
     "tripStops": "Pysähdykset",
     "stopArrival": "Saapuminen",
     "stopDeparture": "Lähtö",

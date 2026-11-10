@@ -1539,6 +1539,7 @@
     "motisReplacementBusNote": "Ersättningsbuss: dras längs vägar och sparas som en bussresa.",
     "ctNextStop": "Nästa hållplats",
     "ctAtStop": "Nu vid",
+    "liveFollow": "Följ",
     "tripStops": "Hållplatser",
     "stopArrival": "Ankomst",
     "stopDeparture": "Avgång",

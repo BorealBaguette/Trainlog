@@ -1536,6 +1536,7 @@
     "motisReplacementBusNote": "Asendusbuss: marsruut maanteel, salvestatakse bussisõiduna.",
     "ctNextStop": "Järgmine peatus",
     "ctAtStop": "Praegu",
+    "liveFollow": "Jälgi",
     "tripStops": "Peatused",
     "stopArrival": "Saabumine",
     "stopDeparture": "Väljumine",

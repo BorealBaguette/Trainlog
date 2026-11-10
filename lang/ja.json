@@ -1535,6 +1535,7 @@
     "motisReplacementBusNote": "代行バス：道路でルート検索し、バスの旅として保存します。",
     "ctNextStop": "次の停車駅",
     "ctAtStop": "現在停車中",
+    "liveFollow": "追跡",
     "tripStops": "停車駅",
     "stopArrival": "到着",
     "stopDeparture": "出発",

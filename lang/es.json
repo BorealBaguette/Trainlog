@@ -1539,6 +1539,7 @@
     "motisReplacementBusNote": "Autobús sustitutorio: se traza por carretera y se guarda como viaje en autobús.",
     "ctNextStop": "Próxima parada",
     "ctAtStop": "Ahora en",
+    "liveFollow": "Seguir",
     "tripStops": "Paradas",
     "stopArrival": "Llegada",
     "stopDeparture": "Salida",

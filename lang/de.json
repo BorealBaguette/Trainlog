@@ -1539,6 +1539,7 @@
     "motisReplacementBusNote": "Schienenersatzverkehr: wird über die Straße geführt und als Busfahrt gespeichert.",
     "ctNextStop": "Nächster Halt",
     "ctAtStop": "Aktuell in",
+    "liveFollow": "Folgen",
     "tripStops": "Halte",
     "stopArrival": "Ankunft",
     "stopDeparture": "Abfahrt",

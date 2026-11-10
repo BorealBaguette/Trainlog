@@ -62,11 +62,20 @@
     display: inline-flex; align-items: center; justify-content: center;
     width: 32px; height: 32px; border-radius: 50%; flex: none; color: var(--accent);
   }
+  .lp-follow {
+    display: inline-flex; align-items: center; gap: 6px; flex: none;
+    padding: 4px 10px; border-radius: 999px; font-size: .8rem; font-weight: 600;
+    border: 1px solid var(--bs-border-color); background: none; color: inherit;
+  }
+  .lp-follow:hover { border-color: var(--accent); }
+  .lp-follow.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .lp-type::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: .15; }
   .lp-operators { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
   .lp-operators img { max-height: 28px; max-width: 110px; object-fit: contain; }
-  .lp-route { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
-  .lp-route > div { min-width: 0; overflow-wrap: anywhere; }
+  /* Grid auto tracks grow evenly from nothing up to their text's width: a short name keeps
+     its line, and only the longer one wraps when both don't fit */
+  .lp-route { display: grid; grid-template-columns: auto auto; justify-content: space-between; gap: 12px; font-weight: 600; }
+  .lp-route > div, .lp-place, .lp-operators, .lp-timeline li { overflow-wrap: anywhere; }
   .lp-arrival { text-align: right; }
   .lp-time { color: var(--bs-secondary-color); font-weight: 400; font-size: .82rem; margin-top: 2px; }
   .lp-progress { height: 5px; margin-top: 8px; border-radius: 3px; background: var(--bs-secondary-bg); overflow: hidden; }
@@ -260,10 +269,10 @@
   .popup-media .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
 
   /* Keep popups within the viewport on narrow/mobile screens — the fixed
-     540px maxWidth passed to maplibregl.Popup otherwise overflows small
+     760px maxWidth passed to maplibregl.Popup otherwise overflows small
      screens and the popup content itself needs to shrink & scroll with it. */
   .maplibregl-popup {
-    max-width: calc(100vw - 20px) !important;
+    max-width: min(760px, calc(100vw - 20px)) !important;
     /* Over the zoom buttons, which would otherwise cover its edge */
     z-index: 3;
   }
@@ -321,6 +330,7 @@ var logosList   = {{ logosList | tojson }};
 var apiEndpoint = "{{ api_endpoint }}";
 var liveMapTitle = {{ live_map | tojson }};
 var stopLabels = {{ {'next': ctNextStop, 'at': ctAtStop} | tojson }};
+var followLabel = {{ liveFollow | tojson }};
 var statsLabels = {{ {
   'countries': crossedCountries, 'continents': liveContinents, 'delays': delaysToggle,
   'country': liveCountry, 'continent': liveContinent, 'delay': liveDelay, 'sea': internationalWaters,
@@ -865,6 +875,15 @@ let lastSignature = null;
 let firstLoad     = true;
 let activePopup   = null;
 let activePopupPin = null; // the pin the popup follows, if it was opened from one
+let followedPin   = null;  // the pin the map keeps centred on, until the map is clicked or dragged
+
+// Zooming around the cursor would pull the map off the pin until the next step
+function setFollow(pin) {
+  followedPin = pin;
+  [map.scrollZoom, map.touchZoomRotate].forEach(h => { h.disable(); h.enable(pin ? { around: 'center' } : undefined); });
+  document.querySelectorAll('.lp-follow').forEach(b => b.classList.toggle('active', !!pin && b.pin === pin));
+  if (pin) map.easeTo({ center: pin.marker.getLngLat() });
+}
 
 const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
 
@@ -874,7 +893,8 @@ const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
 // map dismiss it too; closeOnMove is disabled so panning doesn't close it.
 function openPopup(lngLat, tripObj, pin) {
   if (activePopup) activePopup.remove();
-  const popup = new maplibregl.Popup({ offset: 25, maxWidth: '540px', closeOnMove: false, focusAfterOpen: false })
+  if (followedPin && followedPin !== pin) setFollow(null);
+  const popup = new maplibregl.Popup({ offset: 25, maxWidth: '760px', closeOnMove: false, focusAfterOpen: false })
     .setLngLat(lngLat)
     .setHTML(getPopupContent(tripObj))
     .addTo(map);
@@ -889,6 +909,16 @@ function openPopup(lngLat, tripObj, pin) {
       normalizeStrip(strip, { target: 22, min: 15, max: 38 });
     });
     hydrateVehicle(popupEl);
+    const head = popupEl.querySelector('.lp-head');
+    if (pin && pin.coords.length >= 2 && head) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lp-follow' + (followedPin === pin ? ' active' : '');
+      btn.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i>${esc(followLabel)}`;
+      btn.pin = pin;
+      btn.addEventListener('click', () => setFollow(followedPin === pin ? null : pin));
+      head.querySelector('.lp-type').before(btn);
+    }
     const status = popupEl.querySelector('.lp-status');
     if (status) status.addEventListener('click', () => {
       const box = status.closest('.live-popup');
@@ -992,6 +1022,8 @@ function movePins() {
     }
   });
   if (activePopup && activePopupPin) activePopup.setLngLat(activePopupPin.marker.getLngLat());
+  // Recentring stops any camera move, a zoom under way included: it waits for the end
+  if (followedPin && !map.isMoving()) map.setCenter(followedPin.marker.getLngLat());
 }
 
 // The trips whose route crosses the view, if there are few enough to draw as geometry. A
@@ -1249,6 +1281,7 @@ function renderTrips(trips) {
     pin.marker.remove();
     pinsByTrip.delete(key);
     if (activePopupPin === pin) activePopupPin = null;
+    if (followedPin === pin) setFollow(null);
   });
   fastest = Math.max(1, ...[...pinsByTrip.values()].map(p => LiveMotion.speed(p.type)));
 
@@ -1377,6 +1410,9 @@ MapLibreUtils.initializeMapLibre({
     });
     map.on('mouseenter', 'live-static', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'live-static', () => { map.getCanvas().style.cursor = ''; });
+    // Pins' clicks don't reach the map, so these are clicks away from it (the popup's × keeps it)
+    map.on('click', () => { if (followedPin) setFollow(null); });
+    map.on('dragstart', () => { if (followedPin) setFollow(null); });
 
     requestAnimationFrame(animate);
     loadTrips();

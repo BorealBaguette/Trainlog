@@ -1539,6 +1539,7 @@
     "motisReplacementBusNote": "Buss for tog: rutes langs veien og lagres som en bussreise.",
     "ctNextStop": "Neste stopp",
     "ctAtStop": "Nå ved",
+    "liveFollow": "Følg",
     "tripStops": "Stopp",
     "stopArrival": "Ankomst",
     "stopDeparture": "Avgang",

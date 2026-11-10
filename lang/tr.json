@@ -1535,6 +1535,7 @@
     "motisReplacementBusNote": "Yerine otobüs: karayolundan yönlendirilir ve otobüs yolculuğu olarak kaydedilir.",
     "ctNextStop": "Sonraki durak",
     "ctAtStop": "Şu an",
+    "liveFollow": "Takip et",
     "tripStops": "Duraklar",
     "stopArrival": "Varış",
     "stopDeparture": "Kalkış",

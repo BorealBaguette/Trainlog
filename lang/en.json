@@ -1536,6 +1536,7 @@
     "motisReplacementBusNote": "Rail replacement bus: routed on roads and saved as a bus trip.",
     "ctNextStop": "Next stop",
     "ctAtStop": "Now at",
+    "liveFollow": "Follow",
     "tripStops": "Stops",
     "stopArrival": "Arrival",
     "stopDeparture": "Departure",

@@ -1535,6 +1535,7 @@
     "motisReplacementBusNote": "替代巴士：按公路规划路线，并保存为巴士行程。",
     "ctNextStop": "下一站",
     "ctAtStop": "当前停靠",
+    "liveFollow": "跟随",
     "tripStops": "停靠站",
     "stopArrival": "到达",
     "stopDeparture": "出发",

@@ -1543,6 +1543,7 @@
     "motisReplacementBusNote": "Замещающий автобус: маршрут по дорогам, сохраняется как поездка на автобусе.",
     "ctNextStop": "Следующая остановка",
     "ctAtStop": "Сейчас в",
+    "liveFollow": "Следить",
     "tripStops": "Остановки",
     "stopArrival": "Прибытие",
     "stopDeparture": "Отправление",

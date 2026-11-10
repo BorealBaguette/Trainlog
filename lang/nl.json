@@ -1539,6 +1539,7 @@
     "motisReplacementBusNote": "Vervangende bus: over de weg gerouteerd en opgeslagen als busrit.",
     "ctNextStop": "Volgende halte",
     "ctAtStop": "Nu in",
+    "liveFollow": "Volgen",
     "tripStops": "Haltes",
     "stopArrival": "Aankomst",
     "stopDeparture": "Vertrek",
