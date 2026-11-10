@@ -1,0 +1,145 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+{% import 'viz/_i18n.html' as i18n with context %}
+
+<link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<style>
+  #ua-map { height: calc(100vh - 70px); min-height: 480px; }
+  #ua-status { position: absolute; top: 80px; left: 12px; z-index: 2; background: var(--bs-body-bg);
+    width: 320px; max-width: calc(100% - 24px); border-radius: 10px; padding: 10px 14px; font-size: .85rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+  #ua-status h1 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
+  #ua-status p { margin: 0 0 6px; }
+  #ua-status .ua-credit { color: var(--bs-secondary-color); font-size: .75rem; }
+  #ua-loading { margin-top: 8px; color: var(--bs-secondary-color); font-size: .75rem; }
+  #ua-status .progress { height: 6px; margin-top: 4px; }
+  .ua-popup .maplibregl-popup-content { padding: 12px 16px 12px 14px; border-radius: 10px; color: #212529;
+    box-shadow: 0 6px 20px rgba(0,0,0,.18); min-width: 190px; font-size: .9rem; }
+  .ua-popup .maplibregl-popup-close-button { font-size: 18px; padding: 0 6px; color: #6c757d; }
+  .ua-head { display: flex; align-items: center; gap: 10px; }
+  .ua-head .flagPNG { width: 30px; height: auto; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.12); }
+  .ua-name { font-weight: 600; font-size: 1.05rem; line-height: 1.2; }
+  .ua-country { color: #6c757d; font-size: .8rem; }
+  .ua-pop { margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .ua-year { color: #6c757d; font-size: .8rem; }
+  .ua-pop i { color: #6c757d; width: 18px; }
+  .ua-others { margin-top: 8px; padding-top: 6px; border-top: 1px solid #e9ecef; color: #6c757d; font-size: .8rem; }
+  .ua-others .flagPNG { width: 16px; height: auto; margin-right: 4px; vertical-align: -1px; }
+</style>
+
+<div id="ua-status">
+  <h1>{{ vizUrbanAreas }}</h1>
+  <p>{{ vizUrbanAreasAbout }}</p>
+  {# GHSL is CC BY 4.0: credit the source, link the licence, say it was changed. #}
+  <div class="ua-credit">
+    {{ i18n.slot(vizRailCredit, '<a href="https://human-settlement.emergency.copernicus.eu/" target="_blank" rel="noopener">GHSL</a> (European Commission, JRC)') }}
+    · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>
+  </div>
+  <div id="ua-loading">
+    <div id="ua-label">Downloading urban areas…</div>
+    <div class="progress"><div id="ua-bar" class="progress-bar" style="width: 0%"></div></div>
+  </div>
+</div>
+<div id="ua-map"></div>
+
+<script>
+(async function () {
+  const names = new Intl.DisplayNames(['{{ lang }}', 'en'], { type: 'region' });
+  const map = await MapLibreUtils.initializeMapLibre({
+    container: 'ua-map', tileserver: '{{ tileserver }}', useGlobe: true, center: [2.35, 48.85], zoom: 5,
+  });
+
+  // A stable colour per area, so neighbours rarely share one.
+  const hue = code => [...code].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+  const country = code => { try { return names.of(code.split('-')[0]); } catch { return code; } };
+
+  const label = document.getElementById('ua-label');
+  const bar = document.getElementById('ua-bar');
+  const mb = bytes => (bytes / 1e6).toFixed(0);
+  // Parsing and drawing report no progress: a moving bar, and a frame to paint it before they block.
+  const busy = async text => {
+    label.textContent = text;
+    bar.style.width = '100%';
+    bar.classList.add('progress-bar-striped', 'progress-bar-animated');
+    await new Promise(r => requestAnimationFrame(() => setTimeout(r)));
+  };
+
+  const response = await fetch('{{ url_for("viz.urban_areas_geojson") }}');
+  const total = +response.headers.get('Content-Length');
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (let r; !(r = await reader.read()).done;) {
+    chunks.push(r.value);
+    received += r.value.length;
+    label.textContent = `Downloading urban areas… ${mb(received)}${total ? ` / ${mb(total)}` : ''} MB`;
+    if (total) bar.style.width = `${100 * received / total}%`;
+  }
+  await busy('Reading urban areas…');
+  const data = JSON.parse(await new Blob(chunks).text());
+  data.features.forEach(f => { f.properties.color = `hsl(${hue(String(f.id))}, 65%, 50%)`; });
+
+  const draw = async () => {
+    if (map.getSource('urban')) return;
+    // MapLibre tiles the shapes in a worker that reports nothing: a clock, so it doesn't look stuck.
+    await busy('Drawing urban areas…');
+    const started = Date.now();
+    const clock = setInterval(() => {
+      label.textContent = `Drawing urban areas… ${Math.round((Date.now() - started) / 1000)} s`;
+    }, 1000);
+    map.once('idle', () => {
+      clearInterval(clock);
+      document.getElementById('ua-loading').remove();
+    });
+    map.addSource('urban', { type: 'geojson', data });
+    map.addLayer({ id: 'urban-fill', type: 'fill', source: 'urban',
+      paint: { 'fill-color': ['get', 'color'],
+               'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.6, 0.3] } });
+    map.addLayer({ id: 'urban-line', type: 'line', source: 'urban',
+      paint: { 'line-color': ['get', 'color'], 'line-width': 1 } });
+  };
+  map.loaded() ? draw() : map.on('load', draw);
+
+  let hovered = null;
+  map.on('mousemove', 'urban-fill', e => {
+    if (hovered !== null) map.setFeatureState({ source: 'urban', id: hovered }, { hover: false });
+    hovered = e.features[0].id;
+    map.setFeatureState({ source: 'urban', id: hovered }, { hover: true });
+    map.getCanvas().style.cursor = 'pointer';
+  });
+  map.on('mouseleave', 'urban-fill', () => {
+    if (hovered !== null) map.setFeatureState({ source: 'urban', id: hovered }, { hover: false });
+    hovered = null;
+    map.getCanvas().style.cursor = '';
+  });
+
+  // Asks the server, so the most populous area comes first as in the rail graph.
+  // Populations are GHSL's 2025 figures (scripts/build_urban_areas.py).
+  map.on('click', async e => {
+    const { lat, lng } = e.lngLat;
+    const hits = await (await fetch(`{{ url_for("viz.urban_areas_at") }}?lat=${lat}&lng=${lng}`)).json();
+    if (!hits.length) return;
+    const flag = code => code ? getTooltipSVG(code) : '';
+    const people = n => n.toLocaleString('{{ lang }}');
+    const [main, ...others] = hits;
+    const rest = others.map(o => `<div>${flag(o.country)}${o.name || country(o.country)} · ${people(o.population)}</div>`);
+    new maplibregl.Popup({ className: 'ua-popup', maxWidth: '280px' })
+      .setLngLat(e.lngLat)
+      .setHTML(`
+        <div class="ua-head">${flag(main.country)}
+          <div><div class="ua-name">${main.name || country(main.country)}</div>
+               <div class="ua-country">${main.country ? country(main.country) : ''}</div></div>
+        </div>
+        <div class="ua-pop"><i class="fa-solid fa-users"></i> ${people(main.population)} <span class="ua-year">(2025)</span></div>
+        ${rest.length ? `<div class="ua-others">${rest.join('')}</div>` : ''}`)
+      .addTo(map);
+  });
+})();
+</script>
+
+{% endblock %}

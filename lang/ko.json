@@ -1622,6 +1622,8 @@
     "vizRail": "철도 네트워크",
     "vizRailSub": "기차로 연결한 도시들",
     "vizRailCredit": "도시 지역: {n} (수정됨)",
+    "vizUrbanAreas": "도시 지역 지도",
+    "vizUrbanAreasAbout": "인구 5만 명 이상의 연속된 시가지.",
     "vizMinTrips": "연결당 최소 여정",
     "vizCityCount": {
         "other": "{n}개 도시"

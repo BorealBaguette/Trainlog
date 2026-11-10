@@ -105,9 +105,10 @@
         ? ` · <a href="https://www.openstreetmap.org/${id_2}" target="_blank" rel="noopener">${id_2}</a>` : '';
       return `<div class="cs-row">${getTooltipSVG(countryCode)} <b>${countryCode}</b> ${country(countryCode)}${osm}</div>`;
     });
+    if (!hits.length) return;
     new maplibregl.Popup()
       .setLngLat(e.lngLat)
-      .setHTML((rows.join('') || '<div><b>UN</b> no country</div>')
+      .setHTML(rows.join('')
         + `<div class="text-muted small">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>`)
       .addTo(map);
   });

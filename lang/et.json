@@ -1622,6 +1622,8 @@
     "vizRail": "Raudteevõrk",
     "vizRailSub": "Linnad, mida sa rongiga ühendad",
     "vizRailCredit": "Linnapiirkonnad: {n}, kohandatud",
+    "vizUrbanAreas": "Linnapiirkondade kaart",
+    "vizUrbanAreasAbout": "Katkematud hoonestatud alad, kus elab vähemalt 50 000 inimest.",
     "vizMinTrips": "Min reise ühenduse kohta",
     "vizCityCount": {
         "one": "{n} linn",

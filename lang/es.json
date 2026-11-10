@@ -1625,6 +1625,8 @@
     "vizRail": "Red ferroviaria",
     "vizRailSub": "Las ciudades que unes en tren",
     "vizRailCredit": "Áreas urbanas: {n}, adaptado",
+    "vizUrbanAreas": "Mapa de áreas urbanas",
+    "vizUrbanAreasAbout": "Zonas edificadas continuas de al menos 50 000 habitantes.",
     "vizMinTrips": "Viajes mín. por arista",
     "vizCityCount": {
         "one": "{n} ciudad",

@@ -1645,6 +1645,8 @@
     "vizRail": "Sieć kolejowa",
     "vizRailSub": "Miasta, które łączysz pociągiem",
     "vizRailCredit": "Obszary miejskie: {n}, dostosowane",
+    "vizUrbanAreas": "Mapa obszarów miejskich",
+    "vizUrbanAreasAbout": "Obszary o ciągłej zabudowie zamieszkane przez co najmniej 50 000 osób.",
     "vizMinTrips": "Min. podróży na połączenie",
     "vizCityCount": {
         "one": "{n} miasto",

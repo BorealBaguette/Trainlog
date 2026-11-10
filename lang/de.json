@@ -1625,6 +1625,8 @@
     "vizRail": "Bahnnetz",
     "vizRailSub": "Die Städte, die Sie mit dem Zug verbinden",
     "vizRailCredit": "Stadtgebiete: {n}, angepasst",
+    "vizUrbanAreas": "Karte der Stadtgebiete",
+    "vizUrbanAreasAbout": "Zusammenhängend bebaute Gebiete mit mindestens 50.000 Einwohnern.",
     "vizMinTrips": "Min. Reisen pro Kante",
     "vizCityCount": {
         "one": "{n} Stadt",

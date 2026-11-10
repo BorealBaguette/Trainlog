@@ -1625,6 +1625,8 @@
     "vizRail": "Spoornetwerk",
     "vizRailSub": "De steden die je per trein verbindt",
     "vizRailCredit": "Stedelijke gebieden: {n}, aangepast",
+    "vizUrbanAreas": "Kaart van stedelijke gebieden",
+    "vizUrbanAreasAbout": "Aaneengesloten bebouwde gebieden met minstens 50.000 inwoners.",
     "vizMinTrips": "Min. ritten per verbinding",
     "vizCityCount": {
         "one": "{n} stad",

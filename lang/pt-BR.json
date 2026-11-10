@@ -1625,6 +1625,8 @@
     "vizRail": "Rede ferroviária",
     "vizRailSub": "As cidades que você liga de trem",
     "vizRailCredit": "Áreas urbanas: {n}, adaptado",
+    "vizUrbanAreas": "Mapa das áreas urbanas",
+    "vizUrbanAreasAbout": "Áreas construídas contínuas com pelo menos 50.000 habitantes.",
     "vizMinTrips": "Viagens mín. por ligação",
     "vizCityCount": {
         "one": "{n} cidade",

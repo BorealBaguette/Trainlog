@@ -1620,6 +1620,8 @@
     "vizRail": "鉄道ネットワーク",
     "vizRailSub": "列車で結んだ都市",
     "vizRailCredit": "都市域：{n}（改変あり）",
+    "vizUrbanAreas": "都市域の地図",
+    "vizUrbanAreasAbout": "人口5万人以上の連続した市街地。",
     "vizMinTrips": "1路線あたりの最小移動数",
     "vizCityCount": {
         "other": "{n}都市"

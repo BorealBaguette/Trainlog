@@ -1620,6 +1620,8 @@
     "vizRail": "铁路网络",
     "vizRailSub": "你乘火车连接的城市",
     "vizRailCredit": "城市区域：{n}（经修改）",
+    "vizUrbanAreas": "城市区域地图",
+    "vizUrbanAreasAbout": "人口至少 5 万的连续建成区。",
     "vizMinTrips": "每条连线最少行程数",
     "vizCityCount": {
         "other": "{n} 座城市"

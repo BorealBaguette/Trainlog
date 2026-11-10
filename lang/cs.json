@@ -1647,6 +1647,8 @@
     "vizRail": "Železniční síť",
     "vizRailSub": "Města, která spojujete vlakem",
     "vizRailCredit": "Městské oblasti: {n}, upraveno",
+    "vizUrbanAreas": "Mapa městských oblastí",
+    "vizUrbanAreasAbout": "Souvisle zastavěná území s nejméně 50 000 obyvateli.",
     "vizMinTrips": "Min. cest na spojení",
     "vizCityCount": {
         "one": "{n} město",

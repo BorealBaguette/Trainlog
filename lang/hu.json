@@ -1620,6 +1620,8 @@
     "vizRail": "Vasúthálózat",
     "vizRailSub": "A vonattal összekötött városok",
     "vizRailCredit": "Városi területek: {n}, módosítva",
+    "vizUrbanAreas": "Városi területek térképe",
+    "vizUrbanAreasAbout": "Legalább 50 000 lakosú, összefüggően beépített területek.",
     "vizMinTrips": "Min. utazás élenként",
     "vizCityCount": {
         "other": "{n} város"

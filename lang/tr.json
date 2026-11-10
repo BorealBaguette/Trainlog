@@ -1620,6 +1620,8 @@
     "vizRail": "Demiryolu ağı",
     "vizRailSub": "Trenle bağladığınız şehirler",
     "vizRailCredit": "Kentsel alanlar: {n}, uyarlanmıştır",
+    "vizUrbanAreas": "Kentsel alanlar haritası",
+    "vizUrbanAreasAbout": "En az 50.000 kişinin yaşadığı kesintisiz yapılaşmış alanlar.",
     "vizMinTrips": "Bağlantı başına min. yolculuk",
     "vizCityCount": {
         "other": "{n} şehir"

@@ -1625,6 +1625,8 @@
     "vizRail": "Järnvägsnät",
     "vizRailSub": "Städerna du förbinder med tåg",
     "vizRailCredit": "Tätortsområden: {n}, anpassade",
+    "vizUrbanAreas": "Karta över tätortsområden",
+    "vizUrbanAreasAbout": "Sammanhängande bebyggda områden med minst 50 000 invånare.",
     "vizMinTrips": "Min. resor per förbindelse",
     "vizCityCount": {
         "one": "{n} stad",

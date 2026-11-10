@@ -1623,6 +1623,8 @@
     "vizRail": "Rautatieverkko",
     "vizRailSub": "Kaupungit, joita yhdistät junalla",
     "vizRailCredit": "Kaupunkialueet: {n}, muokattu",
+    "vizUrbanAreas": "Kaupunkialueiden kartta",
+    "vizUrbanAreasAbout": "Yhtenäisiä rakennettuja alueita, joilla on vähintään 50 000 asukasta.",
     "vizMinTrips": "Väh. matkoja yhteyttä kohden",
     "vizCityCount": {
         "one": "{n} kaupunki",

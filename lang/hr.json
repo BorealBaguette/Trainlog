@@ -1630,6 +1630,8 @@
     "vizRail": "Željeznička mreža",
     "vizRailSub": "Gradovi koje povezujete vlakom",
     "vizRailCredit": "Urbana područja: {n}, prilagođeno",
+    "vizUrbanAreas": "Karta urbanih područja",
+    "vizUrbanAreasAbout": "Neprekinuto izgrađena područja s najmanje 50 000 stanovnika.",
     "vizMinTrips": "Min. putovanja po vezi",
     "vizCityCount": {
         "one": "{n} grad",

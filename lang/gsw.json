@@ -1623,6 +1623,8 @@
     "vizRail": "Bahnnetz",
     "vizRailSub": "D Städt, wo Sie mit em Zug verbinded",
     "vizRailCredit": "Stadtgebiet: {n}, aapasst",
+    "vizUrbanAreas": "Charte vo de Stadtgebiet",
+    "vizUrbanAreasAbout": "Zämehängend bebauti Gebiet mit mindestens 50'000 Iiwohner.",
     "vizMinTrips": "Min. Reise pro Kante",
     "vizCityCount": {
         "one": "{n} Stadt",

@@ -1625,6 +1625,8 @@
     "vizRail": "Jernbanenett",
     "vizRailSub": "Byene du knytter sammen med tog",
     "vizRailCredit": "Byområder: {n}, tilpasset",
+    "vizUrbanAreas": "Kart over byområder",
+    "vizUrbanAreasAbout": "Sammenhengende bebygde områder med minst 50 000 innbyggere.",
     "vizMinTrips": "Min. reiser per forbindelse",
     "vizCityCount": {
         "one": "{n} by",

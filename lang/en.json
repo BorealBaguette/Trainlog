@@ -1622,6 +1622,8 @@
     "vizRail": "Rail network",
     "vizRailSub": "The cities you connect by train",
     "vizRailCredit": "City areas: {n}, adapted",
+    "vizUrbanAreas": "City areas map",
+    "vizUrbanAreasAbout": "Continuous built-up areas of at least 50,000 people.",
     "vizMinTrips": "Min. trips per edge",
     "vizCityCount": {
         "one": "{n} city",
