@@ -10610,9 +10610,10 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     return render_template("edit_copy.html", **context)
 
 
-def _export_trips_csv_text(username, requested_trip_ids=None):
+def _export_trips_csv_text(username, requested_trip_ids=None, *, with_ticket_ids):
     """The trips CSV shared by /export and /export_all. Kept in app.py because
-    it depends on adapt_pg_trip_row's legacy row shaping."""
+    it depends on adapt_pg_trip_row's legacy row shaping. /export_all includes
+    ticket_ids, since it also ships tickets.csv; /export does not."""
     si = StringIO()
     cw = csv.writer(si)
     user_id = get_user_id(username)
@@ -10637,12 +10638,17 @@ def _export_trips_csv_text(username, requested_trip_ids=None):
             ).fetchall():
                 paths[path["trip_id"]] = path["path"]
 
-    columns = [k for k in trips[0].keys() if k != "ticket_ids"] if trips else []
+    columns = (
+        [k for k in trips[0].keys() if with_ticket_ids or k != "ticket_ids"]
+        if trips
+        else []
+    )
     cw.writerow(columns + ["path"])
     processedRows = []
     for trip in trips:
         rowP = [
-            json.dumps(trip[k]) if k == "waypoints" else trip[k] for k in columns
+            json.dumps(trip[k]) if k in ("waypoints", "ticket_ids") else trip[k]
+            for k in columns
         ]
         encoded = (
             polyline.encode(json.loads(paths[trip["uid"]]))
@@ -10661,7 +10667,7 @@ def export(username):
     requestedTrips = request.args.get("trips", default=None)
     ids = [int(t) for t in requestedTrips.split(",")] if requestedTrips else None
 
-    csv_text = _export_trips_csv_text(username, ids)
+    csv_text = _export_trips_csv_text(username, ids, with_ticket_ids=False)
     response = make_response(csv_text)
     response.headers["Content-Disposition"] = (
         "attachment; filename=trainlog_{}_{}.csv".format(
@@ -10685,7 +10691,9 @@ def export_all(username):
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("trips.csv", _export_trips_csv_text(username))
+        zf.writestr(
+            "trips.csv", _export_trips_csv_text(username, with_ticket_ids=True)
+        )
         for filename, csv_text in build_account_data_csvs(user).items():
             zf.writestr(filename, csv_text)
         zf.writestr(
