@@ -1,0 +1,117 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<style>
+  #cs-map { height: calc(100vh - 70px); min-height: 480px; }
+  #cs-status { position: absolute; top: 80px; left: 12px; z-index: 2; background: var(--bs-body-bg); width: 260px;
+    border-radius: 6px; padding: 6px 10px; font-size: .85rem; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+  #cs-status .progress { height: 6px; margin-top: 4px; }
+  .cs-row { display: flex; align-items: center; gap: 4px; }
+</style>
+
+<div id="cs-status">
+  <div id="cs-label">Downloading shapes…</div>
+  <div class="progress"><div id="cs-bar" class="progress-bar" style="width: 0%"></div></div>
+</div>
+<div id="cs-map"></div>
+
+<script>
+(async function () {
+  const names = new Intl.DisplayNames([navigator.language, 'en'], { type: 'region' });
+  const map = await MapLibreUtils.initializeMapLibre({
+    container: 'cs-map', tileserver: '{{ tileserver }}', useGlobe: true, center: [0, -20], zoom: 1.5,
+  });
+
+  // A stable colour per code, so neighbours rarely share one.
+  const hue = code => [...code].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+  const country = code => { try { return names.of(code.split('-')[0]); } catch { return code; } };
+
+  const label = document.getElementById('cs-label');
+  const bar = document.getElementById('cs-bar');
+  const mb = bytes => (bytes / 1e6).toFixed(0);
+  // Parsing and drawing report no progress: a moving bar, and a frame to paint it before they block.
+  const busy = async text => {
+    label.textContent = text;
+    bar.style.width = '100%';
+    bar.classList.add('progress-bar-striped', 'progress-bar-animated');
+    await new Promise(r => requestAnimationFrame(() => setTimeout(r)));
+  };
+
+  const response = await fetch('{{ url_for("admin.country_shapes_data") }}');
+  const total = +response.headers.get('Content-Length');
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (let r; !(r = await reader.read()).done;) {
+    chunks.push(r.value);
+    received += r.value.length;
+    label.textContent = `Downloading shapes… ${mb(received)}${total ? ` / ${mb(total)}` : ''} MB`;
+    if (total) bar.style.width = `${100 * received / total}%`;
+  }
+  await busy('Reading shapes…');
+  const data = JSON.parse(await new Blob(chunks).text());
+  data.features.forEach((f, i) => {
+    f.id = i;
+    f.properties.color = `hsl(${hue(f.properties.countryCode)}, 65%, 50%)`;
+  });
+
+  const draw = async () => {
+    if (map.getSource('countries')) return;
+    // MapLibre tiles the shapes in a worker that reports nothing: a clock, so it doesn't look stuck.
+    await busy('Drawing shapes…');
+    const started = Date.now();
+    const clock = setInterval(() => {
+      label.textContent = `Drawing shapes… ${Math.round((Date.now() - started) / 1000)} s`;
+    }, 1000);
+    map.once('idle', () => {
+      clearInterval(clock);
+      label.textContent = `${data.features.length} shapes`;
+      bar.parentElement.remove();
+    });
+    map.addSource('countries', { type: 'geojson', data });
+    map.addLayer({ id: 'countries-fill', type: 'fill', source: 'countries',
+      paint: { 'fill-color': ['get', 'color'],
+               'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.6, 0.3] } });
+    map.addLayer({ id: 'countries-line', type: 'line', source: 'countries',
+      paint: { 'line-color': ['get', 'color'], 'line-width': 1 } });
+  };
+  map.loaded() ? draw() : map.on('load', draw);
+
+  let hovered = null;
+  map.on('mousemove', 'countries-fill', e => {
+    if (hovered !== null) map.setFeatureState({ source: 'countries', id: hovered }, { hover: false });
+    hovered = e.features[0].id;
+    map.setFeatureState({ source: 'countries', id: hovered }, { hover: true });
+    map.getCanvas().style.cursor = 'pointer';
+  });
+  map.on('mouseleave', 'countries-fill', () => {
+    if (hovered !== null) map.setFeatureState({ source: 'countries', id: hovered }, { hover: false });
+    hovered = null;
+    map.getCanvas().style.cursor = '';
+  });
+
+  // Asks the server's lookup, not MapLibre: its tiles stop at 85°, so it has nothing nearer the poles.
+  map.on('click', async e => {
+    const { lat, lng } = e.lngLat;
+    const hits = await (await fetch(`{{ url_for("admin.country_shapes_lookup") }}?lat=${lat}&lng=${lng}`)).json();
+    const rows = hits.map(({ countryCode, id_2 }) => {
+      const osm = id_2
+        ? ` · <a href="https://www.openstreetmap.org/${id_2}" target="_blank" rel="noopener">${id_2}</a>` : '';
+      return `<div class="cs-row">${getTooltipSVG(countryCode)} <b>${countryCode}</b> ${country(countryCode)}${osm}</div>`;
+    });
+    new maplibregl.Popup()
+      .setLngLat(e.lngLat)
+      .setHTML((rows.join('') || '<div><b>UN</b> no country</div>')
+        + `<div class="text-muted small">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>`)
+      .addTo(map);
+  });
+})();
+</script>
+
+{% endblock %}
