@@ -160,6 +160,14 @@ def build_account_data_csvs(user: User) -> dict[str, str]:
                 {"username": username},
             )
         )
+        files["manual_stations.csv"] = _csv_text(
+            _rows(
+                pg,
+                "SELECT uid, name, lat, lng, station_type "
+                "FROM manual_stations WHERE creator = :username",
+                {"username": username},
+            )
+        )
         files["discord_webhooks.csv"] = _csv_text(
             _rows(
                 pg,
