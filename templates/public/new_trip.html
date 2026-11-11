@@ -1828,6 +1828,8 @@ const LIVE_GRACE_HOURS = 6;
 // How far ahead a flight is already watched: a page opened at the gate has to pick the
 // flight up once it is airborne, not only after a reload.
 const LIVE_LEAD_HOURS = 12;
+// How far past its last fix a live aircraft is carried on along its heading, at most
+const DEAD_RECKONING_S = 120;
 
 // Flights that are, or may soon be, airborne.
 //
@@ -1912,7 +1914,10 @@ function moveCurrentPins(ts) {
                 const h = bearingBetween(a, b);
                 if (Math.abs(((h - (e.heading || 0)) + 540) % 360 - 180) > 0.5) setMarkerHeading(e.marker, e.heading = h);
             }
-            aircraft[e.trip.uid] = { position: e.marker.getLngLat().toArray(), angle: e.heading || 0 };
+            // Its height carried on too, at its climb or descent rate, for the 3D view
+            const since = e.fixAt ? Math.min(Math.max(0, (now - e.fixAt) / 1000), DEAD_RECKONING_S) : 0;
+            aircraft[e.trip.uid] = { position: e.marker.getLngLat().toArray(), angle: e.heading || 0,
+                                     dz: (e.vspeed || 0) * since };
         }
         if (e.cutPoint) {
             const a = map.project(e.cutPoint), b = map.project(pos.point);
@@ -2037,13 +2042,16 @@ function updateStopProgress(trips) {
     trips.forEach(t => {
         const ol = document.querySelector('#itinerary .itinerary-trip[data-trip-uid="' + t.trip.uid + '"] ol.ts-list');
         if (!ol) return;
-        const start = utc(t.trip.utc_filtered_start_datetime, t.trip.departure_delay);
         const end = utc(t.trip.utc_filtered_end_datetime, t.trip.arrival_delay);
+        // A flight's "in the air" row is where it is now: the progress stands on it
+        const items = Array.from(ol.querySelectorAll('li[data-wp], li.ts-airborne'));
+        // Under way from its first row, a milestone before the departure (check-in, boarding)
+        // included: at the gate, what is done shows as done
+        const firstAt = Math.min(...items.map(li => parseFloat(li.dataset.arr)).filter(v => !isNaN(v)));
+        const start = Math.min(utc(t.trip.utc_filtered_start_datetime, t.trip.departure_delay), firstAt);
         const on = now >= start && now < end;
         ol.classList.toggle('ts-progress', on);
         ol.querySelectorAll('.ts-here').forEach(e => e.remove());
-        // A flight's "in the air" row is where it is now: the progress stands on it
-        const items = Array.from(ol.querySelectorAll('li[data-wp], li.ts-airborne'));
         if (!on) {
             items.forEach(li => li.classList.remove('ts-past', 'ts-current'));
             return;
@@ -2325,23 +2333,33 @@ function buildCurrentTripFeatures(trips) {
                 fullCoords = MapLibreUtils.createGeodesicLine(orig, fullCoords[0])
                     .concat(fullCoords);
             }
-            // livePath is the real flown-so-far track, so it ends at the aircraft's
-            // actual position at the last fix rather than a guess from the timetable;
-            // only the leftover leg to the destination has to be estimated, and the
-            // aircraft carries on along it until the next fix.
+            // livePath is the real flown-so-far track, ending at the aircraft's last fix.
+            // From there it carries on as FR24 shows it: straight on along its heading at
+            // its measured speed (dead reckoning), for up to two minutes, never drawn ahead
+            // of it, rather than along a line to the destination airport's point (which on
+            // the approach aims at the middle of the airport, not its runway).
             const fixIndex = fullCoords.length - 1;
-            // Landed and taxiing in: none, the track ends at the aircraft
-            if (trip.liveDestination) {
+            // Far from its destination: on along the leg to it, drawn as still to come
+            if (MapLibreUtils.liveRemainderShown(trip)) {
                 const dest = [trip.liveDestination[1], trip.liveDestination[0]];
-                fullCoords = fullCoords.concat(
-                    MapLibreUtils.createGeodesicLine(fullCoords[fixIndex], dest)
-                );
+                fullCoords = fullCoords.concat(MapLibreUtils.createGeodesicLine(fullCoords[fixIndex], dest));
+            } else if (trip.liveDestination) {   // on the approach (not once landed: it is where it is)
+                const last = fullCoords[fixIndex];
+                const back = recentPoint(fullCoords, fixIndex);
+                // Not on the ground (taxiing turns, and its fixes come every few seconds), nor
+                // without a measured speed: a guessed one sent a taxiing aircraft off for miles
+                const ahead = trip.liveOnGround || !trip.liveSpeed ? 0 : trip.liveSpeed * DEAD_RECKONING_S;
+                if (back !== last && ahead > 0) {
+                    const b = bearingBetween(back, last) * Math.PI / 180, k = Math.cos(last[1] * Math.PI / 180);
+                    fullCoords = fullCoords.concat([[last[0] + ahead * Math.sin(b) / (111320 * k),
+                                                     last[1] + ahead * Math.cos(b) / 111320]]);
+                }
             }
             const fixAt = trip.liveUpdated ? trip.liveUpdated * 1000 : Date.now();
             const pos = TripProgress.extrapolate(trip.trip, fullCoords, fixIndex, fixAt, { speed: trip.liveSpeed });
             splitIndex = pos.index;
             splitPoint = pos.point;
-            motion = { trip: trip.trip, coords: fullCoords, fixIndex, fixAt, speed: trip.liveSpeed };
+            motion = { trip: trip.trip, coords: fullCoords, fixIndex, fixAt, speed: trip.liveSpeed, vspeed: trip.liveVspeed };
         } else {
             if (trip.trip.type === 'air' && fullCoords.length === 2) {
                 fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
@@ -2374,8 +2392,10 @@ function buildCurrentTripFeatures(trips) {
         });
 
         // Future path feature (styled as plannedFuture), pushed first so the full
-        // trip line draws over it.
-        if (futureCoords.length > 1) {
+        // trip line draws over it. A live flight on its approach has none: only what it has
+        // flown is drawn, not its dead reckoning ahead.
+        const remainder = !isTracked || MapLibreUtils.liveRemainderShown(trip);
+        if (futureCoords.length > 1 && remainder) {
             features.push({
                 type: 'Feature',
                 geometry: { type: 'LineString', coordinates: futureCoords },
@@ -2385,7 +2405,8 @@ function buildCurrentTripFeatures(trips) {
         // Full trip feature (styled as past)
         features.push({
             type: 'Feature',
-            geometry: { type: 'LineString', coordinates: fullCoords },
+            // A live flight's: up to the aircraft (its dead reckoning ahead is not drawn)
+            geometry: { type: 'LineString', coordinates: remainder ? fullCoords : pastCoords },
             properties: props('_full', 'past')
         });
 
@@ -2399,8 +2420,7 @@ function buildCurrentTripFeatures(trips) {
         // be metres apart, and a bearing taken across that jitters the aircraft around
         // wildly on every refresh.
         const heading = isLive && pastCoords.length >= 2
-            ? bearingBetween(
-                pastCoords[Math.max(0, pastCoords.length - 6)], pegPosition)
+            ? bearingBetween(recentPoint(pastCoords, pastCoords.length - 1), pegPosition)
             : 0;
 
         const existing = currentPositionMarkers[trip.trip.uid];
@@ -2441,6 +2461,17 @@ function buildCurrentTripFeatures(trips) {
         delete currentPositionMarkers[uid];
     });
     return features;
+}
+
+// The point a heading is taken from, for coords[i] ([lng, lat] each): the latest one 100 m
+// or more before it. Its heading now, over its latest movement: a fixed number of points
+// back is minutes of track when they are far apart, and a turn is missed; points metres
+// apart (on the ground) jitter it around.
+function recentPoint(coords, i) {
+    const at = coords[i], k = Math.cos(at[1] * Math.PI / 180);
+    let j = i - 1;
+    while (j > 0 && Math.hypot((at[0] - coords[j][0]) * k, at[1] - coords[j][1]) * 111320 < 100) j--;
+    return coords[Math.max(0, j)];
 }
 
 // Initial compass bearing from a to b, both [lng, lat].
@@ -2489,7 +2520,7 @@ function livePositionLabel(trip) {
     if (alt != null) label += ' · ' + Math.round(alt).toLocaleString() + ' m';
     // Until the next position: counted down while the popup is open (liveCountdown)
     if (trip.liveNextUpdate) {
-        const left = Math.round(trip.liveNextUpdate - Date.now() / 1000) + 2;
+        const left = Math.round(trip.liveNextUpdate - Date.now() / 1000) + 1;
         label += '\n' + (left > 0
             ? {{ liveNextUpdate|tojson }}.replace('{time}', Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'))
             : {{ liveUpdating|tojson }});
@@ -2559,12 +2590,13 @@ function startLiveTracking(trips, features) {
         .finally(() => { if (refreshDone) refreshDone(); });
     };
 
-    // Asked again just after the server's next update is due (a position every few tens
-    // of seconds, the whole track every few minutes), within 10 s and a minute.
+    // Asked again just after the server's next update is due (a position every few seconds
+    // near the ground, every minute at cruise, the whole track every few minutes), within
+    // 4 s and a minute.
     const schedule = () => {
         const next = Math.min(...trips.map(t => t.liveNextUpdate || Infinity)) * 1000;
-        const wait = isFinite(next) ? next - Date.now() + 2000 : 60000;
-        setTimeout(() => { refresh(); }, Math.min(Math.max(wait, 10000), 60000));
+        const wait = isFinite(next) ? next - Date.now() + 1000 : 60000;
+        setTimeout(() => { refresh(); }, Math.min(Math.max(wait, 4000), 60000));
     };
     refreshDone = schedule;
     refresh();
