@@ -145,14 +145,33 @@ function tripStopsHtml(data, row, compact) {
         timeline.push({ at: Date.parse(at), wall: stopWall(at, tz), side: side, html: html, n: timeline.length });
     }
 
+    // A row's clock time, with the day it is on when not the trip's first, as the arrival
+    // reads: "08:15(+1)" (breakfast before landing the next morning, a night train's stops
+    // past midnight), "23:40(-1)" (checked in the evening before a flight after midnight)
+    var startDay = row.start_date || (typeof row.start_datetime === 'string' ? row.start_datetime.slice(0, 10) : null);
+    var startDayMs = /^\d{4}-\d\d-\d\d$/.test(startDay || '') ? Date.UTC(+startDay.slice(0, 4), startDay.slice(5, 7) - 1, +startDay.slice(8, 10)) : NaN;
+    function clock(iso, tz) {
+        var text = stopClock(iso, tz);
+        if (!text || isNaN(startDayMs)) return text;
+        var w = stopWall(iso, tz);
+        if (isNaN(w)) return text;
+        var days = Math.floor(w / 864e5) - Math.floor(startDayMs / 864e5);
+        return days ? text + '(' + (days > 0 ? '+' : '') + days + ')' : text;
+    }
+
     var lastFlag = labelFlag(row.origin_station);
-    var rows = compact ? [] : [line('end', escapeStopText(row.origin_station),
+    // A flight's timeline (its runway times and milestones) goes without the two ends: the
+    // row it unfolds from shows them, and with boarding before the departure and the bags
+    // after the arrival they would stand in the middle of it. A train's stops keep them.
+    var flightTimeline = stops.every(function (st) { return st.kind === 'takeoff' || st.kind === 'landing' || st.kind === 'milestone'; });
+    var withEnds = !compact && !flightTimeline;
+    var rows = !withEnds ? [] : [line('end', escapeStopText(row.origin_station),
         endTime(row.start_time, row.departure_delay), stopPlatformHtml(row.departure_platform_planned || row.departure_platform, row.departure_platform_planned ? row.departure_platform : null, row.type))];
     stops.forEach(function (st) {
         var flag = st.cc && st.cc !== 'UN' && typeof getFlagEmoji === 'function' ? getFlagEmoji(st.cc) : '';
         var showFlag = flag && flag !== lastFlag;
         if (flag) lastFlag = flag;
-        var arr = stopClock(st.arr, st.tz), dep = stopClock(st.dep, st.tz);
+        var arr = clock(st.arr, st.tz), dep = clock(st.dep, st.tz);
         var time = arr && dep && arr !== dep ? arr + '–' + dep : (dep || arr);
         var name = escapeStopText((showFlag ? flag + ' ' : '') + (st.name || ''));
         // A runway stop has no timetable: the time it happened, with when the transponder
@@ -164,7 +183,7 @@ function tripStopsHtml(data, row, compact) {
         }
         // A milestone the user typed in: when it happened (from–to, for a span), and how long
         if (st.kind === 'milestone') {
-            var from = stopClock(st.arr_rt, st.tz), to = stopClock(st.dep_rt, st.tz);
+            var from = clock(st.arr_rt, st.tz), to = clock(st.dep_rt, st.tz);
             var span = st.arr_rt && st.dep_rt ? (Date.parse(st.dep_rt) - Date.parse(st.arr_rt)) / 1000 : 0;
             var html = line('stop ts-milestone', '<i class="fa-regular ts-runway-icon fa-clock"></i>' + escapeStopText(st.name || '') +
                 (span > 0 ? '<span class="ts-seen"><span class="ts-sep">· </span>' + escapeStopText(secondsToDhm(span, STOPS_TEXT.lang)) + '</span>' : ''),
@@ -178,19 +197,14 @@ function tripStopsHtml(data, row, compact) {
         rows.push(line('stop', name,
             escapeStopText(time) + badge(delay), stopPlatformHtml(st.platform, st.platform_rt, row.type), st));
     });
-    if (flying) {
-        // Where it is now: after the take-off, before what is still to come
-        onTimeline(new Date().toISOString(), line('stop ts-airborne', '<i class="fa-solid ts-runway-icon fa-plane"></i>' +
-            escapeStopText(STOPS_TEXT.airborne + ' ' + secondsToDhm(since, STOPS_TEXT.lang)), '', ''), null, null);
-    }
     timeline.sort(function (a, b) {
         return isNaN(a.at) || isNaN(b.at) || a.at === b.at ? a.n - b.n : a.at - b.at;
     }).forEach(function (x) {
-        if (!compact && x.side === 'dep' && x.wall < startWall) before.push(x.html);
-        else if (!compact && x.side === 'arr' && x.wall > endWall) after.push(x.html);
+        if (withEnds && x.side === 'dep' && x.wall < startWall) before.push(x.html);
+        else if (withEnds && x.side === 'arr' && x.wall > endWall) after.push(x.html);
         else rows.push(x.html);
     });
-    if (!compact) rows.push(line(flying ? 'end ts-pending' : 'end', escapeStopText(row.destination_station),
+    if (withEnds) rows.push(line(flying ? 'end ts-pending' : 'end', escapeStopText(row.destination_station),
         endTime(row.end_time, row.arrival_delay), stopPlatformHtml(row.arrival_platform_planned || row.arrival_platform, row.arrival_platform_planned ? row.arrival_platform : null, row.type)));
     rows = before.concat(rows, after);
 
@@ -204,13 +218,16 @@ function tripStopsHtml(data, row, compact) {
             var at = Object.assign({}, st, { arr_rt: when, dep_rt: when });
             return line('stop', icon + escapeStopText(label) +
                 (note ? '<span class="ts-seen"><span class="ts-sep">· </span>' + escapeStopText(note) + '</span>' : ''),
-                (estimated ? '~' : '') + escapeStopText(stopClock(when, st.tz)) +
+                (estimated ? '~' : '') + escapeStopText(clock(when, st.tz)) +
                     (planned && when ? badge((Date.parse(when) - Date.parse(planned)) / 1000) : ''), '', at);
         }
         var other = runwayStops(data)[takeoff ? 'landing' : 'takeoff'];
         var main = stop('<i class="fa-solid ts-runway-icon ' + (takeoff ? 'fa-plane-departure' : 'fa-plane-arrival') + '"></i>',
             STOPS_TEXT[st.kind], runway,
-            takeoff ? (seen ? STOPS_TEXT.taxi + ' ' + mins(seen, runway) : '')
+            // The take-off says how long it taxied, and while it flies, how long it has been in
+            // the air (as the landing does once it is down)
+            takeoff ? [seen ? STOPS_TEXT.taxi + ' ' + mins(seen, runway) : '',
+                       flying ? STOPS_TEXT.airborne + ' ' + secondsToDhm(since, STOPS_TEXT.lang) : ''].filter(Boolean).join(' · ')
                     : (other && other.dep_rt ? STOPS_TEXT.airborne + ' ' + mins(other.dep_rt, runway) : ''),
             takeoff ? st.dep : st.arr, st.estimated);
         main = { at: runway, html: main };

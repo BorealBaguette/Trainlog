@@ -341,16 +341,20 @@
   function startGlide(pin, from, ms) {
     if (reduced || !from) return;
     pin.glideFrom = from;
+    pin.glideOffset = null;
     pin.glideAt = Date.now();
     pin.glideMs = ms || GLIDE_MS;
   }
+  // What glides is the gap between where the pin was drawn and where it now belongs, not
+  // the pin from a standing start: the pin goes on at the pace of its target while the gap
+  // closes, rather than nearly stopping at the start of every correction.
   function glide(pin, target) {
     if (!pin.glideFrom) return target;
+    if (!pin.glideOffset) pin.glideOffset = [pin.glideFrom[0] - target[0], pin.glideFrom[1] - target[1]];
     var k = (Date.now() - pin.glideAt) / (pin.glideMs || GLIDE_MS);
-    if (k >= 1) { pin.glideFrom = null; return target; }
-    k = k * k * (3 - 2 * k);
-    var a = pin.glideFrom;
-    return [a[0] + (target[0] - a[0]) * k, a[1] + (target[1] - a[1]) * k];
+    if (k >= 1) { pin.glideFrom = pin.glideOffset = null; return target; }
+    var left = 1 - k * k * (3 - 2 * k), o = pin.glideOffset;
+    return [target[0] + o[0] * left, target[1] + o[1] * left];
   }
 
   root.LiveMotion = {

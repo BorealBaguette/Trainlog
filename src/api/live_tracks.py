@@ -28,7 +28,7 @@ from geopy.distance import geodesic
 from py.utils import getDistanceFromPath, interpolate_track_if_gaps
 from src.paths import coords_to_ewkt, geom_geojson_to_coords
 from src.pg import pg_session
-from src.runway_stops import delay_fields, has_runway_stop, track_stops, with_stops
+from src.runway_stops import airport_elevation, delay_fields, has_runway_stop, track_stops, with_stops
 from src.users import User
 from src.utils import check_and_increment_fr24_usage, current_user_is_friend_with, load_config, owner as site_owner
 
@@ -43,7 +43,21 @@ live_tracks_blueprint = Blueprint("live_tracks", __name__)
 # tracked flight costs per hour is 3600 / each.
 _FR24_CONFIG = load_config().get("FR24") or {}
 LIVE_POLL_INTERVAL = timedelta(seconds=int(_FR24_CONFIG.get("live_track_seconds", 300)))
-LIVE_POSITION_INTERVAL = timedelta(seconds=int(_FR24_CONFIG.get("live_position_seconds", 30)))
+# By the last altitude: close to the ground (climbing out, on the approach) the position
+# changes the most, at cruise the least. Below LOW_ALT_M every live_position_low_seconds,
+# up to HIGH_ALT_M every live_position_seconds, above every live_position_high_seconds.
+# (FR24's Explorer plan allows 10 requests a minute in all: 5 s is 12 for one flight.)
+LIVE_POSITION_INTERVAL = timedelta(seconds=int(_FR24_CONFIG.get("live_position_seconds", 10)))
+LIVE_POSITION_LOW = timedelta(seconds=int(_FR24_CONFIG.get("live_position_low_seconds", 5)))
+LIVE_POSITION_HIGH = timedelta(seconds=int(_FR24_CONFIG.get("live_position_high_seconds", 60)))
+LOW_ALT_M, HIGH_ALT_M = 1000, 2000
+# The interval for the trail's last altitude, in SQL (live_flight_tracks columns)
+_POSITION_EVERY_SQL = """
+    CASE WHEN COALESCE(CAST(altitude->>-1 AS double precision), 0) < :low_alt THEN :every_low
+         WHEN CAST(altitude->>-1 AS double precision) > :high_alt THEN :every_high
+         ELSE :every END"""
+_POSITION_EVERY_PARAMS = {"every": LIVE_POSITION_INTERVAL, "every_low": LIVE_POSITION_LOW,
+                          "every_high": LIVE_POSITION_HIGH, "low_alt": LOW_ALT_M, "high_alt": HIGH_ALT_M}
 
 # Polling window, relative to the trip's own times so that a long-haul leg is never cut
 # off mid-flight. The grace period covers delays; the hard ceiling catches an arrival
@@ -81,7 +95,7 @@ PARKED_SILENCE = timedelta(minutes=10)
 # ...or it has been on the ground this long, for a transponder left on at the stand. Long,
 # because transponders go off as the passengers leave: one still heard is most likely
 # waiting for its stand, and that wait is part of its arrival.
-PARKED_AFTER = timedelta(minutes=90)
+PARKED_AFTER = timedelta(minutes=30)
 
 
 def _fr24_headers():
@@ -146,6 +160,8 @@ _ELIGIBLE_SQL = """
            t.arrival_delay,
            t.waypoints,
            COALESCE(t.route_source, 'router') = 'fr24' AS landed,
+           ST_Y(ST_StartPoint(p.geom)) AS orig_lat,
+           ST_X(ST_StartPoint(p.geom)) AS orig_lng,
            ST_Y(ST_EndPoint(p.geom)) AS dest_lat,
            ST_X(ST_EndPoint(p.geom)) AS dest_lng,
            t.utc_end_datetime + COALESCE(t.arrival_delay, 0) * interval '1 second' AS arr
@@ -438,11 +454,11 @@ def _claim_due_positions(pg, trips):
         SET position_polled = NOW()
         WHERE trip_id = ANY(CAST(:ids AS integer[]))
           AND status = 'live' AND fr24_id IS NOT NULL AND GeometryType(geom) = 'LINESTRING'
-          AND NOW() - position_polled >= :every
-          AND NOW() - last_polled >= :every
+          AND NOW() - position_polled >= """ + _POSITION_EVERY_SQL + """
+          AND NOW() - last_polled >= """ + _POSITION_EVERY_SQL + """
         RETURNING trip_id, fr24_id
         """,
-        {"ids": list(by_id), "every": LIVE_POSITION_INTERVAL},
+        {"ids": list(by_id), "ground": GROUND_ALT_M, **_POSITION_EVERY_PARAMS},
     ).fetchall()
     return [(by_id[row["trip_id"]], row["fr24_id"]) for row in rows]
 
@@ -455,13 +471,17 @@ def _store_position(pg, trip_id, fix):
         UPDATE live_flight_tracks
         SET geom = ST_AddPoint(geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)),
             altitude = altitude || to_jsonb(CAST(:alt AS double precision)),
-            timestamps = timestamps || to_jsonb(CAST(:ts AS bigint))
+            timestamps = timestamps || to_jsonb(CAST(:ts AS bigint)),
+            -- Touched down (up at the last position, down now): the whole track at once, for
+            -- the real approach, touchdown and landing time rather than 30 s jumps to the stand
+            last_polled = CASE WHEN :alt <= :ground AND CAST(altitude->>-1 AS double precision) > :ground
+                               THEN to_timestamp(0) ELSE last_polled END
         WHERE trip_id = :trip_id AND status = 'live'
           AND GeometryType(geom) = 'LINESTRING'
           AND jsonb_typeof(altitude) = 'array' AND jsonb_typeof(timestamps) = 'array'
           AND COALESCE(CAST(timestamps->>-1 AS double precision), 0) < :ts
         """,
-        {"trip_id": trip_id, "lat": lat, "lng": lng, "alt": alt, "ts": int(when)},
+        {"trip_id": trip_id, "lat": lat, "lng": lng, "alt": alt, "ts": int(when), "ground": GROUND_ALT_M},
     )
 
 
@@ -587,6 +607,63 @@ def _promote_to_paths(pg, trip, update):
     logger.info("Promoted live track for trip %s into paths", trip["trip_id"])
 
 
+def _keep_newer_positions(pg, trip_id, update):
+    """FR24's whole track lags behind its live positions: the positions stored since past
+    its end are kept on after it (in `update`), so a track never cuts the trail back."""
+    if not update.get("timestamps") or not update["timestamps"][-1]:
+        return
+    row = pg.execute(
+        "SELECT ST_AsGeoJSON(geom) AS g, altitude, timestamps FROM live_flight_tracks WHERE trip_id = :t",
+        {"t": trip_id},
+    ).fetchone()
+    if not row or not row["g"] or not isinstance(row["timestamps"], list) or not isinstance(row["altitude"], list):
+        return
+    coords = geom_geojson_to_coords(row["g"])
+    if len(coords) != len(row["timestamps"]) or len(coords) != len(row["altitude"]):
+        return
+    end = update["timestamps"][-1]
+    for c, a, t in zip(coords, row["altitude"], row["timestamps"]):
+        if t and t > end:
+            update["coords"].append(c)
+            update["altitude"].append(a)
+            update["timestamps"].append(t)
+
+
+def _trail(pg, trip_id):
+    """(coords, altitude, timestamps) of a live row, or None."""
+    row = pg.execute(
+        "SELECT ST_AsGeoJSON(geom) AS g, altitude, timestamps FROM live_flight_tracks WHERE trip_id = :t",
+        {"t": trip_id},
+    ).fetchone()
+    if not row or not row["g"] or not isinstance(row["altitude"], list) or not isinstance(row["timestamps"], list):
+        return None
+    coords = geom_geojson_to_coords(row["g"])
+    return (coords, row["altitude"], row["timestamps"]) if len(coords) == len(row["timestamps"]) else None
+
+
+def _arrived(coords, altitude, timestamps):
+    """Landed and stood still: up before, on the ground now, and barely moving over its
+    last minute (or not heard from for two). Taxiing in, it is not yet: it is still drawn
+    moving, and its positions still asked for."""
+    if not altitude or max(a or 0 for a in altitude) <= GROUND_ALT_M:
+        return False
+    if not all(a is not None and a <= GROUND_ALT_M for a in altitude[-2:]):
+        return False
+    last = timestamps[-1] if timestamps else None
+    if not last:
+        return False
+    # FR24 has had nothing newer for two minutes, though asked all along (it stops being
+    # asked only once this says so): its transponder is off at the stand
+    if datetime.now(timezone.utc).timestamp() - last > 120:
+        return True
+    # Stood still for a minute: its fixes of the last 60 s all within 15 m of the last one.
+    # Not two fixes alike: FR24 repeats a ground position while the aircraft creeps along.
+    recent = [i for i, t in enumerate(timestamps) if t and last - t <= 60]
+    if not recent or last - timestamps[recent[0]] < 50:
+        return False
+    return all(geodesic(coords[i], coords[-1]).meters < 15 for i in recent)
+
+
 def _store_update(pg, trip, update):
     """Persist one refresh result."""
     status = update["status"]
@@ -604,6 +681,7 @@ def _store_update(pg, trip, update):
     _store_aircraft(pg, trip, update)
     if status == "pending":
         return
+    _keep_newer_positions(pg, trip["trip_id"], update)
     pg.execute(
         """
         UPDATE live_flight_tracks
@@ -622,20 +700,17 @@ def _store_update(pg, trip, update):
         },
     )
     if status == "live":
-        _store_takeoff(pg, trip, update)
+        _store_runway_stops(pg, trip, update)
 
 
-def _store_takeoff(pg, trip, update):
-    """The take-off and the taxi before it, written once, as soon as the track shows them
-    rather than at the landing: the timeline and the connection before the flight have
-    them while it flies. The landing replaces it with the final one."""
-    if has_runway_stop(trip["waypoints"], "takeoff"):
-        return
-    stops = [
-        stop for stop in track_stops(update["coords"], update["altitude"], update["timestamps"])
-        if stop["stop"]["kind"] == "takeoff"
-    ]
-    if not stops:
+def _store_runway_stops(pg, trip, update):
+    """The take-off and the taxi before it, then the landing, each written as soon as the
+    track shows it rather than when the flight is finalised: the timeline has the take-off
+    while it flies, the landing while it taxies in. Finalising writes the final ones."""
+    stops = track_stops(update["coords"], update["altitude"], update["timestamps"])
+    kinds = {stop["stop"]["kind"] for stop in stops}
+    new = [k for k in ("takeoff", "landing") if k in kinds and not has_runway_stop(trip["waypoints"], k)]
+    if not new:
         return
     fields = {"waypoints": with_stops(
         trip["waypoints"], stops, trip["scheduled_dep"], trip["scheduled_arr"],
@@ -656,7 +731,7 @@ def _store_takeoff(pg, trip, update):
 def _store_aircraft(pg, trip, update):
     """Cache the resolved instance and, for owners who asked for it, record the aircraft
     FR24 sees flying it: it is known as soon as the flight is, and cannot change after.
-    Times come with the track (_store_takeoff, _promote_to_paths)."""
+    Times come with the track (_store_runway_stops, _promote_to_paths)."""
     pg.execute(
         "UPDATE live_flight_tracks SET fr24_id = :fr24_id WHERE trip_id = :trip_id",
         {"trip_id": trip["trip_id"], "fr24_id": update["fr24_id"]},
@@ -690,10 +765,35 @@ def _recent_speed(coords, timestamps):
         first -= 1
     span = timestamps[last] - timestamps[first] if first < last else 0
     if span < 20:
-        return None
+        # Too few fixes for a minute's average (just after a gap): its last two, if they
+        # are a few seconds apart at least
+        prev = timestamps[last - 1]
+        if not prev or timestamps[last] - prev < 3:
+            return None
+        speed = geodesic(coords[last - 1], coords[last]).meters / (timestamps[last] - prev)
+        return round(speed, 1) if speed <= 350 else None
     metres = sum(geodesic(a, b).meters for a, b in zip(coords[first:last], coords[first + 1:last + 1]))
     speed = metres / span
     return round(speed, 1) if 0 <= speed <= 350 else None
+
+
+def _recent_vspeed(altitude, timestamps):
+    """Climb (+) or descent (-) rate, m/s, over about the last 40 s of fixes, or None: what
+    the trip page carries the 3D aircraft's height on at between two of them."""
+    if not isinstance(altitude, list) or not isinstance(timestamps, list) or len(altitude) != len(timestamps):
+        return None
+    last = len(altitude) - 1
+    if last < 1 or not timestamps[last] or altitude[last] is None:
+        return None
+    first = last
+    while first > 0 and timestamps[first - 1] and altitude[first - 1] is not None \
+            and timestamps[last] - timestamps[first - 1] <= 45:
+        first -= 1
+    span = timestamps[last] - timestamps[first] if first < last else 0
+    if span < 8:
+        return None
+    rate = (altitude[last] - altitude[first]) / span
+    return round(rate, 2) if abs(rate) <= 60 else None
 
 
 def _load_payloads(pg, trip_ids):
@@ -709,7 +809,7 @@ def _load_payloads(pg, trip_ids):
                         EXTRACT(EPOCH FROM last_polled)) AS updated,
                -- When a request will next bring something new: the position or the track
                EXTRACT(EPOCH FROM LEAST(last_polled + :track_every,
-                                        GREATEST(position_polled, last_polled) + :position_every)) AS next_update
+                                        GREATEST(position_polled, last_polled) + """ + _POSITION_EVERY_SQL + """)) AS next_update
         FROM live_flight_tracks
         WHERE trip_id = ANY(CAST(:ids AS integer[]))
           AND status = 'live' AND geom IS NOT NULL
@@ -719,8 +819,7 @@ def _load_payloads(pg, trip_ids):
         JOIN trips t ON t.trip_id = p.trip_id
         WHERE p.trip_id = ANY(CAST(:ids AS integer[])) AND t.route_source = 'fr24'
         """,
-        {"ids": [int(t) for t in trip_ids], "track_every": LIVE_POLL_INTERVAL,
-         "position_every": LIVE_POSITION_INTERVAL},
+        {"ids": [int(t) for t in trip_ids], "track_every": LIVE_POLL_INTERVAL, **_POSITION_EVERY_PARAMS},
     ).fetchall()
     payloads = {}
     for row in rows:
@@ -734,8 +833,10 @@ def _load_payloads(pg, trip_ids):
             # Up, and back on the ground: landed and taxiing in, nothing left to fly. Told
             # apart here, before the altitude is withheld from viewers (flight_3d), so the
             # maps stop drawing a remainder to the airport's point from the gate.
-            "arrived": bool(row["status"] == "live" and altitude and max(altitude) > GROUND_ALT_M
-                            and all(a <= GROUND_ALT_M for a in altitude[-2:])),
+            "arrived": row["status"] == "live" and bool(altitude) and _arrived(coords, altitude, row["timestamps"]),
+            # On the ground now (taxiing): not carried on ahead of its fixes, it turns
+            "on_ground": bool(row["status"] == "live" and altitude and altitude[-1] is not None
+                              and altitude[-1] <= GROUND_ALT_M),
             "path": coords,
             "altitude": row["altitude"],
             "timestamps": row["timestamps"],
@@ -743,6 +844,7 @@ def _load_payloads(pg, trip_ids):
             "next_update": int(row["next_update"]) if row["next_update"] else None,
             # Measured here, as the timestamps may be withheld from the viewer (flight_3d)
             "speed": _recent_speed(coords, row["timestamps"]) if row["status"] == "live" else None,
+            "vspeed": _recent_vspeed(row["altitude"], row["timestamps"]) if row["status"] == "live" else None,
         }
     return payloads
 
@@ -789,6 +891,10 @@ def get_live_tracks(trip_ids, positions=False):
             due = _claim_due_positions(pg, [t for t in trips if not t["landed"]])
     for trip, fr24_id in due:
         try:
+            with pg_session() as pg:
+                trail = _trail(pg, trip["trip_id"])
+            if trail and _arrived(*trail):
+                continue   # at its stand: the whole tracks finish it
             fix = _fetch_position(trip, fr24_id)
             if fix:
                 with pg_session() as pg:
@@ -798,6 +904,13 @@ def get_live_tracks(trip_ids, positions=False):
 
     with pg_session() as pg:
         payloads = _load_payloads(pg, [t["trip_id"] for t in trips])
+        # Its two airports' elevations, for heights above its runways in the 3D view
+        for trip in trips:
+            if trip["trip_id"] in payloads:
+                payloads[trip["trip_id"]]["elevations"] = [
+                    airport_elevation(trip.get("orig_lat"), trip.get("orig_lng"), pg=pg),
+                    airport_elevation(trip.get("dest_lat"), trip.get("dest_lng"), pg=pg),
+                ]
 
     # The 3D altitude profile is separately opt-in per owner (see the show_3d gate on the
     # trip page): live tracking must not become a side door that exposes it.

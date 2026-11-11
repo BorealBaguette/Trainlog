@@ -220,7 +220,7 @@ from src.api.trips import trips_blueprint
 from src.api.live_tracks import ARRIVAL_GRACE, get_live_tracks, live_tracks_blueprint
 from src.api.live_map import live_map_blueprint, live_travellers_count
 from src.runway_stops import (
-    apply_to_trip as apply_runway_stops, airport_position, is_milestone, is_runway_stop, land_short_track,
+    apply_to_trip as apply_runway_stops, airport_elevation, airport_position, is_milestone, is_runway_stop, land_short_track,
     shift_milestone, track_stops, with_seen,
 )
 from src.utils import _timezone_finder as tz_finder
@@ -9132,6 +9132,11 @@ def processPublicTrips(tripIds):
         # Use stored carbon from PG if available, otherwise recalculate (legacy trips)
         stored_carbon = pg_carbon.get(trip["uid"])
         path_data = json.loads(paths[trip["uid"]]) if trip["uid"] in paths else []
+        # A flight's two airports' elevations: its 3D heights are measured from its runways
+        if trip.get("type") in ("air", "helicopter") and len(path_data) >= 2:
+            with pg_session() as pg:
+                trip["elevations"] = [airport_elevation(*path_data[0][:2], pg=pg),
+                                      airport_elevation(*path_data[-1][:2], pg=pg)]
         if stored_carbon is not None:
             trip_carbon = float(stored_carbon)
         else:

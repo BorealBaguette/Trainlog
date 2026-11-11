@@ -272,6 +272,28 @@ def airport_position(icao):
     return list(airport) if airport else None
 
 
+def airport_elevation(lat, lng, pg=None):
+    """Elevation (m) of the airport nearest [lat, lng], within a few km, or None: what a
+    flight's heights near that end are measured from (the 3D view)."""
+    if lat is None or lng is None:
+        return None
+    sql = """
+        SELECT elevation_m FROM airports
+        WHERE elevation_m IS NOT NULL
+          AND latitude BETWEEN :lat - 0.05 AND :lat + 0.05
+          AND longitude BETWEEN :lng - 0.1 AND :lng + 0.1
+        ORDER BY power(latitude - :lat, 2) + power((longitude - :lng) * cos(radians(:lat)), 2)
+        LIMIT 1
+    """
+    params = {"lat": float(lat), "lng": float(lng)}
+    if pg is not None:
+        row = pg.execute(sql, params).fetchone()
+    else:
+        with pg_session() as session:
+            row = session.execute(sql, params).fetchone()
+    return float(row[0]) if row else None
+
+
 def land_short_track(coords, altitude, timestamps, dest, landed_at):
     """A track that stops short of the runway, finished in place at `dest` ([lat, lng]) on
     the ground at `landed_at`, when and where FR24's summary says it landed."""

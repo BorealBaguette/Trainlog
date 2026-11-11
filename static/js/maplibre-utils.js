@@ -678,6 +678,12 @@ function applyLiveTracks(trips, liveTracks, features) {
         trip.liveNextUpdate = live.next_update || null;
         // Its ground speed over the last minute (m/s), to carry it on at between two fixes
         trip.liveSpeed = live.speed || null;
+        // And its climb or descent rate (m/s), for the 3D view's height between two fixes
+        trip.liveVspeed = live.vspeed || null;
+        trip.liveOnGround = !!live.on_ground;
+        trip.liveElevations = live.elevations || null;
+        // The logged arrival airport, kept even once landed (liveDestination is then null)
+        trip.liveDestinationPoint = destination;
         if (live.altitude) trip.altitude = live.altitude;
         if (live.timestamps) trip.timestamps = live.timestamps;
 
@@ -693,7 +699,10 @@ function applyLiveTracks(trips, liveTracks, features) {
                     [trip.liveOrigin[1], trip.liveOrigin[0]], coords[0]
                 ).concat(coords);
             }
-            if (trip.liveDestination) {
+            // On to the destination airport while far from it; on the approach not (the
+            // airport's point is not its runway): the line is what it has flown, and the
+            // aircraft carries on from its end (the trip page's dead reckoning)
+            if (liveRemainderShown(trip)) {
                 coords = coords.concat(
                     createGeodesicLine(coords[coords.length - 1],
                                        [destination[1], destination[0]])
@@ -708,7 +717,7 @@ function applyLiveTracks(trips, liveTracks, features) {
 // Back to an ordinary trip: it landed, with its final track in `live`, or the server
 // stopped tracking it and it keeps the route it was logged with.
 function endLiveTrack(trip, live, feature) {
-    ['livePath', 'liveTracked', 'liveOrigin', 'liveDestination', 'liveUpdated', 'liveNextUpdate', 'liveSpeed']
+    ['livePath', 'liveTracked', 'liveOrigin', 'liveDestination', 'liveUpdated', 'liveNextUpdate', 'liveSpeed', 'liveVspeed', 'liveOnGround', 'liveElevations', 'liveDestinationPoint']
         .forEach(key => delete trip[key]);
     // Only flights without a recorded track are tracked, so any altitude came from the
     // live feed and no longer matches the path.
@@ -1438,23 +1447,114 @@ function _setGroundAircraftVisible(map, visible) {
 // by the one, blending into the other along the flight. Only from readings taken right at
 // the transition (within a minute of being on the ground): a sparse track would otherwise
 // sink the whole climb.
-function _aboveAirports(altitude, timestamps, waypoints) {
-    const runway = timestamps && _runwayTimes(waypoints);
-    if (runway) return _aboveRunwayTimes(altitude, timestamps, runway[0], runway[1]);
+// `ends` (optional): { elevations: [departure m, arrival m] (the airports' own, from the
+// airports table), coords: the track's [lat, lng], dest: the arrival airport's [lat, lng] }.
+// They fill in what was not seen: an arrival not landed at yet is its departure's reading
+// plus the difference in the two airports' elevations (a barometric offset seen there
+// carries over), and along a flight not down yet the blend goes by how far it has come.
+function _aboveAirports(altitude, timestamps, waypoints, ends) {
+    let runway = timestamps && _runwayTimes(waypoints);
+    // A take-off or landing the track shows but that has no runway time (yet): at its
+    // first fix on the ground (off it), when that is close to the reading in the air
+    if (timestamps) {
+        const seen = _groundTransitions(altitude, timestamps);
+        // Already braking at its first fix on the ground: it touched down at (about) its
+        // last in the air, whose reading is then the runway's (FR24 flags the ground late)
+        const touch = _touchdown(altitude, timestamps, ends && ends.coords);
+        if (touch) {
+            seen[1] = touch.at;
+            ends = Object.assign({}, ends, { field1: touch.reading });
+        }
+        if (seen[0] != null || seen[1] != null) {
+            runway = [runway && runway[0] != null ? runway[0] : seen[0], runway && runway[1] != null ? runway[1] : seen[1]];
+        }
+    }
+    if (runway && (runway[0] != null || runway[1] != null)) {
+        return _aboveRunwayTimes(altitude, timestamps, runway[0], runway[1], ends);
+    }
     const air = [];
     altitude.forEach((a, i) => { if (a > 50) air.push(i); });
     if (!air.length) return altitude;
     const first = air[0], last = air[air.length - 1];
     const near = (i, j) => timestamps && timestamps[i] && timestamps[j] && Math.abs(timestamps[i] - timestamps[j]) <= 60;
-    const e0 = first > 0 && near(first, first - 1) ? altitude[first] : null;
-    const e1 = last < altitude.length - 1 && near(last, last + 1) ? altitude[last] : null;
+    let e0 = first > 0 && near(first, first - 1) ? altitude[first] : null;
+    let e1 = last < altitude.length - 1 && near(last, last + 1) ? altitude[last] : null;
+    [e0, e1] = _withElevations(e0, e1, ends);
     if (e0 == null && e1 == null) return altitude;
     const a0 = e0 ?? e1, a1 = e1 ?? e0;
+    const along = _alongRoute(ends);
     return altitude.map((a, i) => {
         if (!(a > 50)) return 0;
-        const f = last > first ? (i - first) / (last - first) : 0;
+        const f = along ? along(i) : last > first ? (i - first) / (last - first) : 0;
         return Math.max(0, a - (a0 + (a1 - a0) * f));
     });
+}
+
+// [take-off, landing] epoch seconds as the readings show them, each null if not seen: the
+// last fix on the ground before the first in the air, the first on the ground after the last
+// in the air, each within a minute of it
+function _groundTransitions(altitude, timestamps) {
+    let first = -1, last = -1;
+    altitude.forEach((a, i) => { if (a > 50) { if (first < 0) first = i; last = i; } });
+    if (first < 0) return [null, null];
+    const near = (i, j) => timestamps[i] && timestamps[j] && Math.abs(timestamps[i] - timestamps[j]) <= 60;
+    const up = first > 0 && !(altitude[first - 1] > 50) && near(first, first - 1) ? timestamps[first - 1] : null;
+    const down = last < altitude.length - 1 && !(altitude[last + 1] > 50) && near(last, last + 1) ? timestamps[last + 1] : null;
+    return [up, down];
+}
+
+// Where the readings say it touched down, when the ground speed shows it: { at, reading } at
+// its last fix in the air, when by its first on the ground it is already 15 % slower than
+// on its approach (braking: on the runway before FR24 says so), else null.
+function _touchdown(altitude, timestamps, coords) {
+    if (!coords || coords.length !== altitude.length) return null;
+    let last = -1;
+    altitude.forEach((a, i) => { if (a > 50) last = i; });
+    if (last < 1 || last >= altitude.length - 1 || altitude[last + 1] > 50) return null;
+    const speed = (i, j) => {
+        const dt = timestamps[j] - timestamps[i];
+        if (!(dt > 0)) return null;
+        const a = coords[i], b = coords[j], k = Math.cos(a[0] * Math.PI / 180);
+        return Math.hypot((b[1] - a[1]) * k, b[0] - a[0]) * 111320 / dt;
+    };
+    const approach = [];
+    for (let i = last; i > 0 && timestamps[last] - timestamps[i - 1] <= 60; i--) {
+        const v = speed(i - 1, i);
+        if (v) approach.push(v);
+    }
+    if (approach.length < 2) return null;
+    approach.sort((x, y) => x - y);
+    const v0 = approach[approach.length >> 1], v1 = speed(last, last + 1);
+    return v1 != null && v1 < 0.85 * v0 ? { at: timestamps[last], reading: altitude[last] } : null;
+}
+
+// The two ends' readings with what the airports' elevations say about the missing one(s)
+function _withElevations(r0, r1, ends) {
+    const el = ends && ends.elevations;
+    if (!el || el[0] == null || el[1] == null) return [r0, r1];
+    if (r0 == null && r1 == null) return [el[0], el[1]];
+    if (r1 == null) return [r0, r0 + el[1] - el[0]];
+    if (r0 == null) return [r1 - (el[1] - el[0]), r1];
+    // Both read off the track: the one that disagrees with the other by far more than the
+    // airports' elevations do (a line carried to its runway time off a steep last descent)
+    // gives way to what the other and the elevations say
+    const off = (r1 - r0) - (el[1] - el[0]);
+    // (the wrong one is the one further from its own airport's elevation)
+    if (Math.abs(off) > 150) return Math.abs(r1 - el[1]) > Math.abs(r0 - el[0])
+        ? [r0, r0 + el[1] - el[0]] : [r1 - (el[1] - el[0]), r1];
+    return [r0, r1];
+}
+
+// How far along (0 at its departure, 1 at its arrival) track point i is, by its distances
+// to the two airports, or null without them
+function _alongRoute(ends) {
+    const c = ends && ends.coords, dest = ends && ends.dest;
+    if (!c || !c.length || !dest) return null;
+    const o = c[0], d = (a, b) => Math.hypot((a[1] - b[1]) * Math.cos(a[0] * Math.PI / 180), a[0] - b[0]);
+    return i => {
+        const p = c[i] || c[c.length - 1], d0 = d(p, o), d1 = d(p, dest);
+        return d0 + d1 > 0 ? d0 / (d0 + d1) : 0;
+    };
 }
 
 // A flight's take-off and landing times (its runway stops, src/runway_stops.py), in epoch
@@ -1475,7 +1575,7 @@ function _runwayTimes(waypoints) {
 // low-pressure day the barometric altitude reads 0 well short of the runway. What the
 // aircraft would have read on each runway is its climb (descent) carried on to the take-off
 // (landing) time; the readings stuck at 0 before touchdown follow that line too.
-function _aboveRunwayTimes(altitude, timestamps, t0, t1) {
+function _aboveRunwayTimes(altitude, timestamps, t0, t1, ends) {
     const start = t0 ?? -Infinity, end = t1 ?? Infinity;
     const clean = [];
     altitude.forEach((a, i) => {
@@ -1495,10 +1595,14 @@ function _aboveRunwayTimes(altitude, timestamps, t0, t1) {
     }
     const climb = line(clean.slice(0, 4), t0);
     const descent = line(clean.slice(-4).reverse(), t1);
-    const r0 = climb ? climb(t0) : null, r1 = descent ? descent(t1) : null;
+    let r0 = climb ? climb(t0) : null, r1 = descent ? descent(t1) : null;
+    if (ends && ends.field1 != null) r1 = ends.field1;   // read on the runway (_touchdown)
+    [r0, r1] = _withElevations(r0, r1, ends);
     const base0 = r0 ?? r1 ?? 0, base1 = r1 ?? r0 ?? 0;
+    // Not landed yet (no landing time): along the route by distance, not time
+    const along = !isFinite(end) ? _alongRoute(ends) : null;
     const tFirst = timestamps[clean[0]], tLast = timestamps[clean[clean.length - 1]];
-    return altitude.map((a, i) => {
+    const heights = altitude.map((a, i) => {
         const t = timestamps[i];
         if (!t || t <= start || t >= end) return 0;
         let reading = a;
@@ -1506,9 +1610,42 @@ function _aboveRunwayTimes(altitude, timestamps, t0, t1) {
             if (t < tFirst && climb) reading = climb(t);
             else if (t > tLast && descent) reading = descent(t);
         }
-        const f = isFinite(start) && isFinite(end) ? (t - start) / (end - start) : (isFinite(start) ? 0 : 1);
+        const f = along ? along(i)
+            : isFinite(start) && isFinite(end) ? (t - start) / (end - start) : (isFinite(start) ? 0 : 1);
         return Math.max(0, reading - (base0 + (base1 - base0) * f));
     });
+    return _smoothRunwayEnds(heights, timestamps, t0, t1);
+}
+
+// The first and last minute and a half off and onto the runway as one smooth climb (descent)
+// rather than FR24's first readings: in 25 ft steps and late, they rise in lumps (82 m in
+// 7 s, then flat). h(x) = a·x + b·x², x the seconds from the runway time, 0 there, fitted
+// to the heights of that stretch, then blended back into them by its end.
+const RUNWAY_SMOOTH_S = 90;
+function _smoothRunwayEnds(heights, timestamps, t0, t1) {
+    const out = heights.slice();
+    [[t0, 1], [t1, -1]].forEach(([T, dir]) => {
+        if (T == null || !isFinite(T)) return;
+        const idx = [];
+        heights.forEach((h, i) => {
+            const x = timestamps[i] ? (timestamps[i] - T) * dir : NaN;
+            if (x > 0 && x <= RUNWAY_SMOOTH_S && h > 0) idx.push([i, x]);
+        });
+        if (idx.length < 3) return;
+        // Least squares through the origin: [Σx² Σx³; Σx³ Σx⁴]·[a b] = [Σxh Σx²h]
+        let s2 = 0, s3 = 0, s4 = 0, sh1 = 0, sh2 = 0;
+        idx.forEach(([i, x]) => { const h = heights[i]; s2 += x * x; s3 += x ** 3; s4 += x ** 4; sh1 += x * h; sh2 += x * x * h; });
+        const det = s2 * s4 - s3 * s3;
+        let a = det ? (sh1 * s4 - sh2 * s3) / det : sh1 / s2, b = det ? (s2 * sh2 - s3 * sh1) / det : 0;
+        // Climbing (descending) all the way, never back: else a straight line
+        if (a < 0 || a + 2 * b * RUNWAY_SMOOTH_S < 0) { a = sh1 / s2; b = 0; }
+        if (a <= 0) return;
+        idx.forEach(([i, x]) => {
+            const w = x / RUNWAY_SMOOTH_S, fit = a * x + b * x * x;
+            out[i] = Math.max(0, fit * (1 - w) + heights[i] * w);
+        });
+    });
+    return out;
 }
 
 async function build3DFlightLayer(map, trips, options = {}) {
@@ -1538,12 +1675,22 @@ async function build3DFlightLayer(map, trips, options = {}) {
         const path = _coerceArray(trip.livePath || trip.path);   // [[lat, lng], ...]
         let altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
         if (!path || !altitude || altitude.length < 2) return;
-        altitude = _aboveAirports(altitude, _coerceArray(trip.timestamps), trip.trip.waypoints);
+        altitude = _aboveAirports(altitude, _coerceArray(trip.timestamps), trip.trip.waypoints, {
+            elevations: trip.liveElevations || trip.trip.elevations,
+            coords: path,
+            // Where it is going: the logged arrival while it flies, its track's end once down
+            dest: trip.liveTracked && trip.liveDestinationPoint ? trip.liveDestinationPoint
+                : (_coerceArray(trip.path) || [])[(_coerceArray(trip.path) || []).length - 1]
+        });
         const n = Math.min(path.length, altitude.length);
         const coords = [];
         for (let i = 0; i < n; i++) {
             const lng = path[i][1], lat = path[i][0];
             const z = (altitude[i] || 0) * exaggeration;
+            // A point repeating the one before (an aircraft parked at its stand) is left out:
+            // a zero-length segment makes deck's joints blow up into a wedge along the line.
+            const prev = coords[coords.length - 1];
+            if (prev && prev[0] === lng && prev[1] === lat && prev[2] === z) continue;
             coords.push([lng, lat, z]);
             if (i % dropStep === 0 && z > 0) {
                 dropLines.push({ source: [lng, lat, z], target: [lng, lat, 0] });
@@ -1573,7 +1720,7 @@ async function build3DFlightLayer(map, trips, options = {}) {
         (MapConfig.transportTypes.find(t => t.id === 'air') || {}).color
     );
 
-    let overlay = null, render = null, lastMoved = {};
+    let overlay = null, render = null, lastMoved = {}, heights = {};
     async function buildOverlay() {
         if (overlay) return;
         const deck = await loadDeckGL();  // only loaded when the viewer wants 3D
@@ -1647,14 +1794,30 @@ async function build3DFlightLayer(map, trips, options = {}) {
         // the last of them is where it was last seen.
         // Drawn where the flat markers last were (`lastMoved`), so a refresh carries the
         // aircraft on from there rather than back to its fix.
+        // Its height: the last fix's, carried on at its climb or descent rate (`dz`, from the
+        // trip page), never below the ground; a new fix's difference glides out over 8 s.
         render = () => {
+            const t = Date.now();
             const data = shown = aircraft.map(a => {
                 const m = lastMoved[a.uid];
-                return m ? { ...a, position: [m.position[0], m.position[1], a.position[2]], angle: m.angle } : a;
+                if (!m) return a;
+                const target = Math.max(0, a.position[2] + (m.dz || 0));
+                let z = heights[a.uid];
+                if (!z) z = heights[a.uid] = { tip: a.position[2], shown: target, offset: 0, at: t };
+                if (z.tip !== a.position[2]) Object.assign(z, { tip: a.position[2], offset: z.shown - target, at: t });
+                const k = Math.min(1, (t - z.at) / 8000), left = 1 - k * k * (3 - 2 * k);
+                z.shown = Math.max(0, target + z.offset * left);
+                return { ...a, position: [m.position[0], m.position[1], z.shown], angle: m.angle };
             });
             const now = {};
             data.forEach(a => { now[a.uid] = a.position; });
-            const paths = flights.map(f => now[f.uid] ? { ...f, coords: f.coords.concat([now[f.uid]]) } : f);
+            // Extended to the aircraft only when it is somewhere else than its last fix: the
+            // same point twice (stood still, landed) is a zero-length segment, drawn as a wedge
+            const paths = flights.map(f => {
+                const to = now[f.uid], last = f.coords[f.coords.length - 1];
+                const apart = to && last && _metresBetween(last, to) > 1;
+                return apart ? { ...f, coords: f.coords.concat([to]) } : f;
+            });
             overlay.setProps({ layers: [dropLayer(dropLines), pathLayer(paths), aircraftLayer(data)] });
         };
         render();
@@ -1725,6 +1888,27 @@ async function build3DFlightLayer(map, trips, options = {}) {
 function setFlight3DAircraft(map, moved) {
     if (map._flight3dSetAircraft) map._flight3dSetAircraft(moved);
 }
+// How near its destination a live flight stops being drawn on to it (on the approach):
+// the airport's point is its middle, not the runway it is landing on. As the server's
+// APPROACH_KM.
+const LIVE_REMAINDER_NEAR_KM = 30;
+// Whether a live flight's remaining leg to its destination is drawn: far from it, yes;
+// on the approach, landed, or with nowhere logged, no.
+function liveRemainderShown(trip) {
+    const path = trip.livePath, dest = trip.liveDestination;
+    if (!trip.liveTracked || !dest || !path || !path.length) return false;
+    const last = path[path.length - 1];   // [lat, lng]
+    const k = Math.cos(last[0] * Math.PI / 180);
+    const km = Math.hypot((dest[1] - last[1]) * k, dest[0] - last[0]) * 111.32;
+    return km > LIVE_REMAINDER_NEAR_KM;
+}
+
+// Ground distance between two [lng, lat(, z)] points, metres (flat: they are close)
+function _metresBetween(a, b) {
+    const k = Math.cos(a[1] * Math.PI / 180);
+    return Math.hypot((b[0] - a[0]) * k, b[1] - a[1]) * 111320;
+}
+
 // The height the 3D view draws the aircraft `uid` at (m), or null without a 3D view.
 function flight3DAltitude(map, uid) {
     return map._flight3dAltitude ? map._flight3dAltitude(uid) : null;
@@ -1738,6 +1922,7 @@ window.MapLibreUtils = {
     MapConfig,
     build3DFlightLayer,
     setFlight3DAircraft,
+    liveRemainderShown,
     flight3DScreenPoint,
     flight3DAltitude,
     planeSvg,
