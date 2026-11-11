@@ -808,6 +808,8 @@
     "via": "Via",
     "nearbyStops": "Stoppesteder i nærheten",
     "nameThisPlace": "Gi dette stedet et navn",
+    "manualVia": "Manuelt via-punkt",
+    "manualMapHint": "Eller klikk på kartet for å plassere det",
     "direction": "Retning",
     "coordinates": "Koordinater",
     "location": "Plassering",

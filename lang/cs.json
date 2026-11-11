@@ -813,6 +813,8 @@
     "via": "Via",
     "nearbyStops": "Zastávky v okolí",
     "nameThisPlace": "Pojmenovat toto místo",
+    "manualVia": "Ručně zadaný průjezd",
+    "manualMapHint": "Nebo klikněte do mapy a umístěte jej",
     "direction": "Směr",
     "coordinates": "Souřadnice",
     "location": "Umístění",

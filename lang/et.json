@@ -805,6 +805,8 @@
     "via": "Via",
     "nearbyStops": "Lähedal asuvad peatused",
     "nameThisPlace": "Anna sellele kohale nimi",
+    "manualVia": "Manuaalne vahepunkt",
+    "manualMapHint": "Või klõpsa kaardil, et see paigutada",
     "direction": "Suund",
     "coordinates": "Koordinaadid",
     "location": "Asukoht",

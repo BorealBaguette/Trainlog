@@ -838,6 +838,8 @@
     "via": "Via",
     "nearbyStops": "Stops nearby",
     "nameThisPlace": "Name this place",
+    "manualVia": "Manual via",
+    "manualMapHint": "Or click the map to place it",
     "direction": "Direction",
     "coordinates": "Coordinates",
     "location": "Location",

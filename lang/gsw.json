@@ -806,6 +806,8 @@
     "via": "Via",
     "nearbyStops": "Haltstelle i de Nöchi",
     "nameThisPlace": "Dää Ort benänne",
+    "manualVia": "Manuelle Zwüschehalt",
+    "manualMapHint": "Oder uf d Charte klicke, zum en setze",
     "direction": "Richtig",
     "coordinates": "Koordinate",
     "location": "Standort",

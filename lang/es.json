@@ -808,6 +808,8 @@
     "via": "Via",
     "nearbyStops": "Paradas cercanas",
     "nameThisPlace": "Dar nombre a este lugar",
+    "manualVia": "Vía manual",
+    "manualMapHint": "O haz clic en el mapa para situarlo",
     "direction": "Dirección",
     "coordinates": "Coordenadas",
     "location": "Ubicación",

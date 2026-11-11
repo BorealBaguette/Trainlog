@@ -805,6 +805,8 @@
     "via": "経由",
     "nearbyStops": "近くの停留所",
     "nameThisPlace": "この場所に名前を付ける",
+    "manualVia": "手動経由地",
+    "manualMapHint": "または地図をクリックして配置",
     "direction": "方向",
     "coordinates": "座標",
     "location": "場所",

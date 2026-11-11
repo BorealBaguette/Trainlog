@@ -808,6 +808,8 @@
     "via": "Via",
     "nearbyStops": "Haltes in de buurt",
     "nameThisPlace": "Deze plek een naam geven",
+    "manualVia": "Handmatig via-punt",
+    "manualMapHint": "Of klik op de kaart om het te plaatsen",
     "direction": "Richting",
     "coordinates": "Coördinaten",
     "location": "Locatie",
