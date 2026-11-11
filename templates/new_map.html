@@ -405,7 +405,7 @@ const DETAIL_ZOOM = 12;
 
 // The displayed trips go to the map as consecutive slices in time, each on
 // its own source with its own shadow + line layers, stacked oldest at the
-// bottom: a newer trip is drawn over older ones with its outline intact, and
+// bottom (newest at the bottom when coloured by year): a newer trip is drawn over older ones with its outline intact, and
 // inside a slice lines are drawn in time order too. Slices hold equal shares
 // of the points, so MapLibre processes each once (in parallel across its
 // workers) and the map fills in slice after slice, oldest first. One source
@@ -452,7 +452,10 @@ function applyColorMode() {
 }
 
 function updateColorMode() {
-    if (layersBuilt) applyColorMode();
+    if (layersBuilt) {
+        applyColorMode();
+        if (trips.length) refreshDisplayed();  // the stacking order follows the colour mode
+    }
     savePreferences();
 }
 
@@ -646,11 +649,14 @@ async function refreshDisplayed(beforeDraw) {
         if (seq !== refreshSeq) return null;
     }
 
-    const key = lod + list.map(t => t.trip.uid + ':' + t.v).join(',');
+    // Coloured by year, newest trips go at the bottom so the older years
+    // (often fewer, sparser lines) stay visible on top of them
+    const newestFirst = document.getElementById('colorMode').value === 'year';
+    const key = lod + (newestFirst ? '-desc' : '') + list.map(t => t.trip.uid + ':' + t.v).join(',');
     if (key === drawnKey) return null;
     drawnKey = key;
     drawnLod = lod;
-    displayedFeatures = [...list].sort(byTime)
+    displayedFeatures = [...list].sort(newestFirst ? (a, b) => byTime(b, a) : byTime)
         .map(t => tripLoader[lod].featureFor(t)).filter(f => f !== null);
     return drawSlices(displayedFeatures, seq);
 }
