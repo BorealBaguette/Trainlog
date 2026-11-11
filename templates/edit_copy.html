@@ -60,6 +60,9 @@
         line-height: 32px; font-size: .875rem; color: light-dark(#1f2733, var(--bs-emphasis-color)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     #stopsModal .stop-row.plain .stop-name { color: light-dark(#6b7280, var(--bs-body-color)); }
+    /* A flight's milestone: where it happened, small after its name */
+    #stopsModal .stop-milestone-place { margin-left: 6px; color: light-dark(#6b7280, var(--bs-secondary-color)); font-size: .75rem; }
+    #stopsModal .milestone-fields select.form-select { width: auto; height: 32px; padding-top: 2px; padding-bottom: 2px; font-size: .875rem; }
     #stopsModal .stop-value { padding-left: 8px; font-variant-numeric: tabular-nums; }
     #stopsModal .stop-text .stop-sched { padding-left: 8px; }
     /* The opened row: name and buttons, then scheduled | delay | actual per time */
@@ -925,7 +928,7 @@
             {# Flights: their take-off and landing (src/runway_stops.py), not stops of their own. #}
             {% if tripType not in ('accommodation', 'poi', 'restaurant') and not (tripType in ('air', 'helicopter') and plan_uuid) %}
             <span class="btn btn-labeled btn-secondary" id="stopsModalButton" role="button">
-                <span class="btn-label"><i class="fa-solid fa-signs-post"></i></span><span class="btn-label-label">{{editStops}}</span>
+                <span class="btn-label"><i class="fa-solid fa-signs-post"></i></span><span class="btn-label-label">{{ editTimeline if tripType in ('air', 'helicopter') else editStops }}</span>
                 <span class="badge rounded-pill bg-light text-dark ms-1" id="stopsCount"></span>
             </span>
             {% endif %}
@@ -978,7 +981,7 @@
     <div class="modal-dialog modal-lg modal-fullscreen-sm-down modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="stopsModalTitle">{{tripStops}}</h5>
+                <h5 class="modal-title" id="stopsModalTitle">{{ runwayTimeline if tripType in ('air', 'helicopter') else tripStops }}</h5>
                 <button type="button" class="btn btn-sm btn-link text-secondary ms-auto me-1 p-1" id="stopsOther" style="display:none"></button>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{cancel}}"></button>
             </div>
@@ -998,7 +1001,7 @@
                 </div>
                 <div class="stops-actions">
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="stopsAdd">
-                        <i class="fa-solid fa-plus"></i> {{addStop}}
+                        <i class="fa-solid fa-plus"></i> <span class="stops-add-label">{{addStop}}</span>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="stopsRefresh" style="display:none">
                         <i class="fa-solid fa-rotate"></i> {{stopsRefresh}}
@@ -1261,6 +1264,63 @@
             return { source: null, label: runwayNames[kind], lat: at.lat, lng: at.lng, moved: false,
                      stop: { kind: kind, name: runwayNames[kind], lat: at.lat, lng: at.lng, tz: at.tz } };
         }
+        // A flight's milestones (src/runway_stops.py): the user's own timeline beside the
+        // take-off and landing (boarding, pushback, holding…), a name and when it started
+        // (arr_rt) and ended (dep_rt, for a span), at an airport or in flight.
+        function isMilestone(row) { return !!(row && row.stop && row.stop.kind === 'milestone'); }
+        var milestonePlaces = { departure: {{ milestoneAtDeparture|tojson }}, in_flight: {{ milestoneInFlight|tojson }},
+                                arrival: {{ milestoneAtArrival|tojson }} };
+        // Its times are typed at the arrival airport for one there, else at the departure's.
+        function milestoneTz(place) { return runwayAirports[place === 'arrival' ? 'landing' : 'takeoff'].tz; }
+        function milestoneRow() {
+            var at = runwayAirports.takeoff;
+            return { source: null, label: '', lat: at.lat, lng: at.lng, moved: false,
+                     stop: { kind: 'milestone', name: '', place: 'departure', lat: at.lat, lng: at.lng, tz: at.tz } };
+        }
+        // When a flight's stop happened, for its place in the list (as in_time_order)
+        function stopMs(st) {
+            if (!st) return NaN;
+            var fields = st.kind === 'takeoff' ? ['dep_rt', 'arr_rt'] : ['arr_rt', 'dep_rt', 'arr', 'dep'];
+            for (var k = 0; k < fields.length; k++) if (st[fields[k]]) return Date.parse(st[fields[k]]);
+            return NaN;
+        }
+        // The timed items in time order, each in a place one of them held
+        function inTimeOrder(list, stopOf) {
+            var slots = [], items = [];
+            list.forEach(function (x, i) { if (!isNaN(stopMs(stopOf(x)))) { slots.push(i); items.push(x); } });
+            items.sort(function (a, b) { return stopMs(stopOf(a)) - stopMs(stopOf(b)); });
+            var out = list.slice();
+            slots.forEach(function (i, k) { out[i] = items[k]; });
+            return out;
+        }
+        // Where a milestone goes: its airport, or in flight as far along as its time is
+        // between the take-off (else the start) and the landing (else the end).
+        function placeMilestone(row) {
+            var st = row.stop, a = runwayAirports.takeoff, b = runwayAirports.landing, at = st.place === 'arrival' ? b : a;
+            if (st.place === 'in_flight') {
+                var t0 = NaN, t1 = NaN;
+                rows.forEach(function (r) {
+                    if (runwayKind(r) === 'takeoff') t0 = Date.parse(r.stop.dep_rt);
+                    if (runwayKind(r) === 'landing') t1 = Date.parse(r.stop.arr_rt);
+                });
+                if (isNaN(t0) && ends.origin.date && ends.origin.time) t0 = Date.parse(toUtc(ends.origin.date, ends.origin.time, a.tz));
+                if (isNaN(t1) && ends.destination.date && ends.destination.time) t1 = Date.parse(toUtc(ends.destination.date, ends.destination.time, b.tz));
+                var k = t1 > t0 ? (Date.parse(st.arr_rt) - t0) / (t1 - t0) : 0.5;
+                at = greatCircle(a, b, Math.min(Math.max(isNaN(k) ? 0.5 : k, 0.02), 0.98));
+            }
+            row.lat = st.lat = at.lat; row.lng = st.lng = at.lng;
+        }
+        function greatCircle(a, b, f) {
+            var r = Math.PI / 180, la1 = a.lat * r, lo1 = a.lng * r, la2 = b.lat * r, lo2 = b.lng * r;
+            var d = 2 * Math.asin(Math.sqrt(Math.pow(Math.sin((la2 - la1) / 2), 2) +
+                Math.cos(la1) * Math.cos(la2) * Math.pow(Math.sin((lo2 - lo1) / 2), 2)));
+            if (!d) return { lat: a.lat, lng: a.lng };
+            var A = Math.sin((1 - f) * d) / Math.sin(d), B = Math.sin(f * d) / Math.sin(d);
+            var x = A * Math.cos(la1) * Math.cos(lo1) + B * Math.cos(la2) * Math.cos(lo2);
+            var y = A * Math.cos(la1) * Math.sin(lo1) + B * Math.cos(la2) * Math.sin(lo2);
+            var z = A * Math.sin(la1) + B * Math.sin(la2);
+            return { lat: Math.atan2(z, Math.sqrt(x * x + y * y)) / r, lng: Math.atan2(y, x) / r };
+        }
 
         // ---- the dialog: a working copy, applied on Update
         function rowFor(wp) {
@@ -1298,7 +1358,7 @@
         // The rows' order is the route's, and a timed stop's place is its time's: it isn't
         // moved (a time typed wrong would reroute the trip), but a time before the one above
         // it shows in red, as it is typed.
-        function timed(row) { return !!(runwayKind(row) || row.stop && (row.stop.arr || row.stop.dep)); }
+        function timed(row) { return !!(runwayKind(row) || isMilestone(row) || row.stop && (row.stop.arr || row.stop.dep)); }
         function checkOrder() {
             if (!ends) return;
             var wrong = [], precise = $('#radioPreciseDates').is(':checked');
@@ -1320,7 +1380,8 @@
                 if (precise && o.date && o.time) see(end(o, tzNear(0)), 'origin');
                 rows.forEach(function (r) {
                     var st = r.stop;
-                    if (!st) return;
+                    // A milestone goes where its time puts it, boarding before the start and all
+                    if (!st || isMilestone(r)) return;
                     ['arr', 'dep'].forEach(function (f) {
                         // Not a flight's first or last seen: a transponder on early at the
                         // gate is no wrong time.
@@ -1360,6 +1421,18 @@
             rows.forEach(function (r) {
                 var st = r.stop;
                 if (!st) return;
+                // The user's own real times: kept when the logged time is only put right, moved
+                // with the flight to another day (as _shift_trip_stops)
+                if (isMilestone(r)) {
+                    if (Math.abs(m) >= 720) ['arr_rt', 'dep_rt'].forEach(function (f) { if (st[f]) st[f] = plusMinutes(st[f], m); });
+                    return;
+                }
+                // A take-off or landing stays what really happened when the logged time is
+                // only put right; on another day it was another flight's (as _shift_trip_stops)
+                if (runwayKind(r)) {
+                    if (Math.abs(m) >= 720) { delete st.arr_rt; delete st.dep_rt; }
+                    return;
+                }
                 ['arr', 'dep'].forEach(function (f) {
                     var l = st[f] && toLocal(st[f], st.tz);
                     if (!l) return;
@@ -1370,7 +1443,11 @@
                 delete st.arr_rt; delete st.dep_rt; delete st.platform_rt; delete st.trip;
             });
         }
-        function openRow(which) { open = which; render(); }
+        function openRow(which) {
+            open = which;
+            if (runwayAirports) rows = inTimeOrder(rows, function (r) { return r.stop; });
+            render();
+        }
 
         // A read cell: the value as it was, what was planned struck under it when it differs
         function textCell(value) {
@@ -1547,6 +1624,67 @@
             });
         }
 
+        // A milestone's row: read, its name, where and when (a span from–to); opened, the
+        // name, the place and the two times, each with its day.
+        function milestoneRowHtml(row, $row, $actions, $move, $remove) {
+            var st = row.stop;
+            $row.addClass('stop-milestone');
+            if (open !== row) {
+                var from = st.arr_rt && toLocal(st.arr_rt, st.tz), to = st.dep_rt && toLocal(st.dep_rt, st.tz);
+                var where = milestonePlaces[st.place] || '';
+                $('<span class="stop-name">').append(document.createTextNode(row.label || '—'),
+                    $('<small class="stop-milestone-place">').text(where)).attr('title', row.label).appendTo($row);
+                $row.append(textCell(from ? from.time + (to ? '–' + to.time : '') : ''))
+                    .attr('data-at', Date.parse(st.arr_rt));
+                if (!flightLayout) $row.append(textCell(''));
+                $row.append(textCell(''));
+                $actions.append($move, editButton(row), $remove).appendTo($row);
+                $rows.append(opens($row, row));
+                return;
+            }
+            $row.addClass('stop-open');
+            var $editor = $('<div class="stop-editor">').appendTo($row);
+            var $name = $('<input type="text" class="stop-station" maxlength="60">').val(row.label)
+                .attr({ placeholder: {{ milestoneName|tojson }}, 'aria-label': {{ milestoneName|tojson }} })
+                .on('input', function () { row.label = st.name = this.value.trim(); });
+            $('<div class="stop-editor-top">').append($name, $actions.append($remove, closeButton())).appendTo($editor);
+            var $g = $('<div class="stop-fields milestone-fields">').toggleClass('no-delays', noDelays).appendTo($editor);
+            var $place = $('<select class="form-select form-select-sm">').attr('aria-label', {{ milestonePlace|tojson }});
+            Object.keys(milestonePlaces).forEach(function (k) { $('<option>').val(k).text(milestonePlaces[k]).appendTo($place); });
+            $place.val(st.place || 'departure').on('change', function () {
+                // The same wall-clock times, now at the other airport's
+                var tz = milestoneTz(this.value);
+                ['arr_rt', 'dep_rt'].forEach(function (f) {
+                    var l = st[f] && toLocal(st[f], st.tz);
+                    if (l) st[f] = toUtc(l.date, l.time, tz);
+                });
+                st.place = this.value; st.tz = tz;
+                render();
+            });
+            function cells($a) { $g.append($a); if (!noDelays) $g.append('<span>'); $g.append('<span>'); }
+            $g.append($('<span class="stop-label">').text({{ milestonePlace|tojson }}));
+            cells($('<span class="stop-when">').append($place));
+            [['arr_rt', {{ milestoneStart|tojson }}], ['dep_rt', {{ milestoneEnd|tojson }}]].forEach(function (f) {
+                var field = f[0], label = f[1], at = st[field] && toLocal(st[field], st.tz);
+                var other = st[field === 'arr_rt' ? 'dep_rt' : 'arr_rt'], near = other && toLocal(other, st.tz);
+                var date0 = at ? at.date : near ? near.date
+                    : st.place === 'arrival' ? (ends.destination.date || baseDate(0)) : (ends.origin.date || baseDate(0));
+                var $time = $('<input type="time">').val(at ? at.time : '').attr('aria-label', label);
+                var $day = $('<select class="stop-day">').attr('aria-label', label);
+                [-1, 0, 1].forEach(function (k) {
+                    var date = addDays(date0, k);
+                    $('<option>').val(date).text(dayText(date)).appendTo($day);
+                });
+                $day.val(date0);
+                $time.add($day).on('change', function () {
+                    if ($time.val()) st[field] = toUtc($day.val(), $time.val(), st.tz); else delete st[field];
+                });
+                $g.append($('<span class="stop-label">').text(label));
+                cells($('<span class="stop-when">').append($time, $day));
+            });
+            $rows.append($row);
+        }
+
         function render() {
             var linked = runIds().length > 0;
             $('#stopsLinked').toggle(linked);
@@ -1608,16 +1746,22 @@
                             : [own === 'arr' ? $cell : textCell(''), own === 'dep' ? $cell : textCell('')], textCell(''));
                     };
                     runwayLine($row, row.label, own);
+                    $row.attr('data-at', Date.parse(row.stop[own + '_rt'] || row.stop[own]));
                     $actions.append($move, editButton(row), $remove).appendTo($row);
                     var $seen = null;
                     if (row.stop[seenField + '_rt'] || row.stop[seenField]) {
                         $seen = $('<div class="stop-row">').data('row', row)
                             .append('<span class="stop-track"><span class="stop-dot"></span></span>');
                         runwayLine($seen, seenLabel(runwayKind(row)), seenField).append('<span class="stop-actions">');
+                        $seen.attr('data-at', Date.parse(row.stop[seenField + '_rt'] || row.stop[seenField]));
                         opens($seen, row);
                     }
                     if (own === 'dep') $rows.append($seen, opens($row, row));
                     else $rows.append(opens($row, row), $seen);
+                    return;
+                }
+                if (isMilestone(row)) {
+                    milestoneRowHtml(row, $row, $actions, $move, $remove);
                     return;
                 }
                 if (open !== row) {
@@ -1726,7 +1870,38 @@
             });
             if (ends.destination.date) dayBreak({ dep: ends.destination.date + 'T12:00:00Z', tz: 'UTC' });
             $rows.append(endRow('destination'));
+            if (runwayAirports) placeMilestoneRows();
             refreshNote();
+        }
+        // A flight's rows where they happened: before its departure (boarding) above it, after
+        // its arrival below it, the rest between, in time order.
+        function placeMilestoneRows() {
+            function endMs(kind) {
+                var e = ends[kind], tz = runwayAirports[kind === 'origin' ? 'takeoff' : 'landing'].tz;
+                if (!$('#radioPreciseDates').is(':checked') || !e.date || !e.time) return NaN;
+                return Date.parse(toUtc(e.date, e.time, tz)) + (e.delay || 0) * 60000;
+            }
+            // The rows as drawn (a take-off's transponder row apart from it) in time order,
+            // each in the place one of them held: a milestone between the transponder going
+            // on and the take-off shows between them.
+            var els = $rows.children('[data-at]').toArray().filter(function (e) { return !isNaN(+e.getAttribute('data-at')); });
+            var sorted = els.slice().sort(function (a, b) {
+                return (+a.getAttribute('data-at') - +b.getAttribute('data-at')) || (els.indexOf(a) - els.indexOf(b));
+            });
+            els.map(function (e) {
+                var mark = document.createComment('');
+                e.parentNode.insertBefore(mark, e);
+                return mark;
+            }).forEach(function (mark, k) { mark.parentNode.replaceChild(sorted[k], mark); });
+
+            var t0 = endMs('origin'), t1 = endMs('destination');
+            var $origin = $rows.children('.stop-origin'), $after = $rows.children('.stop-destination');
+            // Any of them, the transponder going on at the gate before the departure included
+            $rows.children('[data-at]').each(function () {
+                var t = +this.getAttribute('data-at');
+                if (t < t0) $(this).insertBefore($origin);
+                else if (t > t1) { $(this).insertAfter($after); $after = $(this); }
+            });
         }
 
         // ---- origin / destination rows
@@ -1885,7 +2060,8 @@
                 if (!rows.some(function (r) { return runwayKind(r) === 'takeoff'; })) rows.unshift(runwayRow('takeoff'));
                 if (!rows.some(function (r) { return runwayKind(r) === 'landing'; })) rows.push(runwayRow('landing'));
             }
-            $('#stopsAdd').toggle(!runwayAirports);
+            // A flight's stops are its take-off and landing; what is added is a milestone
+            $('#stopsAdd').find('.stops-add-label').text(runwayAirports ? {{ addMilestone|tojson }} : {{ addStop|tojson }});
             showPlain = false;
             open = null;
             ends = readEnds();
@@ -2239,8 +2415,10 @@
         $('#stopsOther').on('click', function () { showPlain = !showPlain; render(); });
 
         $('#stopsAdd').on('click', function () {
-            var row = rowFor(null);
-            rows.push(row);
+            var row = runwayAirports ? milestoneRow() : rowFor(null);
+            // Before the landing, if there is one: where it most likely goes, until its time says
+            var landing = rows.findIndex(function (r) { return runwayKind(r) === 'landing'; });
+            if (runwayAirports && landing >= 0) rows.splice(landing, 0, row); else rows.push(row);
             openRow(row);
             $rows.find('.stop-open .stop-station').focus();
         });
@@ -2248,13 +2426,24 @@
         $('#stopsSave').on('click', function () {
             var route = structural();
             // Rows without a place (an added one with no station picked) are dropped.
+            if (runwayAirports) rows = inTimeOrder(rows, function (r) { return r.stop; });
             var next = rows.filter(function (r) {
                 var kind = runwayKind(r);   // a take-off or landing left without its time is none
                 if (kind) return !!r.stop[kind === 'takeoff' ? 'dep_rt' : 'arr_rt'];
+                // a milestone, without a name or a start
+                if (isMilestone(r)) {
+                    if (!r.label || !r.stop.arr_rt) return false;
+                    if (r.stop.dep_rt && Date.parse(r.stop.dep_rt) <= Date.parse(r.stop.arr_rt)) delete r.stop.dep_rt;
+                    placeMilestone(r);
+                    return true;
+                }
                 return r.lat != null && r.lng != null;
             }).map(function (r) {
                 var wp = $.extend({}, r.source || {}, { lat: r.lat, lng: r.lng });
-                if (r.label) wp.name = r.label; else delete wp.name;
+                // A take-off or landing keeps its stored name: the label shown is translated
+                // (and its stop as src/runway_stops.py names it)
+                if (runwayKind(r)) wp.name = r.stop.name = { takeoff: 'Take-off', landing: 'Landing' }[runwayKind(r)];
+                else if (r.label) wp.name = r.label; else delete wp.name;
                 var st = r.stop;
                 if (st && (st.arr || st.dep || st.arr_rt || st.dep_rt || st.platform || st.platform_rt)) wp.stop = st;
                 else delete wp.stop;   // no times or platform left: a plain point
@@ -2308,6 +2497,8 @@
             });
             stored = stored.filter(function (wp) { return !runwayKind({ stop: wp && wp.stop }); });
             stops.forEach(function (wp) { if (wp.stop.kind === 'takeoff') stored.unshift(wp); else stored.push(wp); });
+            // The milestones typed in where their times put them (boarding before the take-off)
+            stored = inTimeOrder(stored, function (wp) { return wp && wp.stop; });
             editedStopsWaypoints = JSON.stringify(stored);
             count();
             runwayDelays(stops);
@@ -3435,7 +3626,7 @@
         try {
             // Fetch the detailed path data from FR24
             const pathData = await $.get(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${flight.fr24_id}`,
-                { dest: flight.destination_icao_actual || flight.dest_icao || '', landed: flight.datetime_landed || '' });
+                { dest: flight.dest_icao_actual || flight.destination_icao_actual || flight.dest_icao || '', landed: flight.datetime_landed || '' });
             const coordinates = pathData.coordinates;
 
             updateFr24PathProgressBar(40);
@@ -3454,13 +3645,14 @@
             }));
             updatedAltitude = pathData.altitude || null;
             updatedTimestamps = pathData.timestamps || null;
-            if (window.setRunwayStops) window.setRunwayStops(pathData.runway_stops || []);
 
             if (updatedPath.length < 2) {
                 showFr24PathError('{{insufficientPathData}}');
                 updateFr24PathProgressBar(0);
                 return;
             }
+            // Only a usable track replaces the trip's take-off and landing (and its delays)
+            if (window.setRunwayStops) window.setRunwayStops(pathData.runway_stops || []);
 
             updateFr24PathProgressBar(60);
 
@@ -3809,10 +4001,6 @@
                 ...formData,
                 ...newTrip
             };
-            // An FR24 import's take-off and landing, as the stops dialog shows them
-            if (typeof lastImportType !== 'undefined' && lastImportType === 'fr24' && editedStopsWaypoints != null) {
-                formData["waypoints"] = editedStopsWaypoints;
-            }
         }
         // Stops edited after the route was last confirmed (or with it untouched): newTrip's
         // waypoints were taken at that confirm, without these edits.

@@ -181,6 +181,17 @@
 }
 .publicVehicle .vehiclePhotoContainer img { display: block; width: 100%; height: auto; }
 .publicVehicle .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
+/* "Follow" (setFollow): a pill at the top of the map while a trip is in progress */
+.trip-follow-btn {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 400;
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border: 1px solid light-dark(#d0d7de, #444c56); border-radius: 999px;
+    background: light-dark(#fff, #22272e); color: light-dark(#1f2328, #e6edf3);
+    font-size: 13px; font-weight: 600; box-shadow: 0 1px 5px rgba(0,0,0,.25); cursor: pointer;
+}
+.trip-follow-btn:hover { border-color: #2b7a12; }
+.trip-follow-btn.active { background: #2b7a12; border-color: #2b7a12; color: #fff; }
+.live-position-popup .maplibregl-popup-content { white-space: pre-line; }
 </style>
 <link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
@@ -812,7 +823,7 @@ function planValidate() {
 <div id="snackbar">{{copyLink}}</div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/live_motion.js') }}"></script>
@@ -1643,7 +1654,8 @@ function buildItinerary(trips, prices) {
         }
         var durationDisplay = metaParts.join('<span class="legMetaSep">·</span>');
         // A flight's take-off and landing, under its duration; other stops fold below
-        var runwayLine = runwayMetaLine(trip.trip);
+        // With milestones of the user's, the whole timeline rather than the runway times alone
+        var runwayLine = hasMilestones(trip.trip.waypoints) ? null : runwayMetaLine(trip.trip);
 
         // Badge numbers matching the map's numbered markers (hidden in collection mode)
         var originBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].originNumber != null)
@@ -1827,6 +1839,8 @@ function liveCandidates(trips) {
     const now = moment.utc();
     return trips.filter(t => {
         if (!t.trip || (t.trip.type !== 'air' && t.trip.type !== 'helicopter')) return false;
+        // Landed: its final track is its route now, nothing more to ask for
+        if (t.liveLandedSeen) return false;
         const start = t.trip.utc_filtered_start_datetime;
         const end = t.trip.utc_filtered_end_datetime;
         if (typeof start !== 'string' || typeof end !== 'string') return false;
@@ -1871,7 +1885,7 @@ function drawFutureDashes() {
 let lastPinMove = -Infinity, resplitCurrent = null;
 function currentPinTarget(entry, now) {
     return entry.fixIndex !== null
-        ? TripProgress.extrapolate(entry.trip, entry.coords, entry.fixIndex, entry.fixAt, { now })
+        ? TripProgress.extrapolate(entry.trip, entry.coords, entry.fixIndex, entry.fixAt, { now, speed: entry.speed })
         : TripProgress.position(entry.trip, entry.coords, { now });
 }
 function moveCurrentPins(ts) {
@@ -1880,20 +1894,112 @@ function moveCurrentPins(ts) {
     if (!entries.length) return;
     const gliding = entries.some(e => e.glideFrom);
     const fastest = Math.max(...entries.map(e => LiveMotion.speed(e.trip.type)));
-    if (!gliding && ts - lastPinMove < LiveMotion.moveInterval(map, fastest)) return;
+    // Followed, the map moves with the pin: every frame, or it would move in steps
+    if (!gliding && !followedEntry && ts - lastPinMove < LiveMotion.moveInterval(map, fastest)) return;
     lastPinMove = ts;
     const now = Date.now();
     let drift = 0;
+    const aircraft = {};
     entries.forEach(e => {
         const pos = currentPinTarget(e, now);
         if (!pos) return;
         e.marker.setLngLat(LiveMotion.glide(e, pos.point));
+        if (e.kind === 'live') {
+            // Past its last fix it flies the route still to go: it points along it
+            const i = Math.min(Math.max(pos.index, 0), e.coords.length - 2);
+            const a = e.coords[i], b = e.coords[i + 1];
+            if (e.fixIndex != null && pos.index >= e.fixIndex && a && b && (a[0] !== b[0] || a[1] !== b[1])) {
+                const h = bearingBetween(a, b);
+                if (Math.abs(((h - (e.heading || 0)) + 540) % 360 - 180) > 0.5) setMarkerHeading(e.marker, e.heading = h);
+            }
+            aircraft[e.trip.uid] = { position: e.marker.getLngLat().toArray(), angle: e.heading || 0 };
+        }
         if (e.cutPoint) {
             const a = map.project(e.cutPoint), b = map.project(pos.point);
             drift = Math.max(drift, Math.hypot(a.x - b.x, a.y - b.y));
         }
     });
+    MapLibreUtils.setFlight3DAircraft(map, aircraft);
+    // Recentring stops a camera move under way (a zoom): it waits for its end
+    // Drawn at once (map.redraw), so the map, its markers and the 3D view all move in this
+    // same frame: one a frame behind the others, the aircraft shakes on the map.
+    // In the 3D view the centre is the aircraft itself, up at its altitude, not the ground
+    // under it: tilted, that is far below what is being followed.
+    if (followedEntry && currentPositionMarkers[followedEntry.trip.uid] === followedEntry && !map.isMoving()) {
+        followCamera(followedEntry);
+        map.redraw();
+    }
     if (resplitCurrent && drift > 0.5) resplitCurrent();
+}
+
+// "Follow", as on the live map: the map keeps the vehicle in its centre (zooming around
+// it) until it is dragged or clicked. The button shows while a trip is in progress.
+let followedEntry = null, followButton = null;
+// The camera on the followed vehicle: in the 3D view on the aircraft up at its altitude,
+// not the ground under it (tilted, far below it). The line of sight through the middle of
+// the screen goes down at the map's tilt: to pass through an aircraft h up, it meets the
+// ground h·tan(tilt) beyond it, the way the camera faces, and that is the map's centre.
+// (Not MapLibre's centre elevation: deck's view knows nothing of it, and the 3D view
+// would part from the map.)
+function followCamera(entry) {
+    const at = entry.marker.getLngLat();
+    const h = entry.kind === 'live' ? MapLibreUtils.flight3DAltitude(map, entry.trip.uid) : null;
+    const beyond = h ? h * Math.tan(map.getPitch() * Math.PI / 180) : 0;
+    if (beyond < 1) { map.setCenter(at); return; }
+    const b = map.getBearing() * Math.PI / 180;
+    map.setCenter([at.lng + beyond * Math.sin(b) / (111320 * Math.cos(at.lat * Math.PI / 180)),
+                   at.lat + beyond * Math.cos(b) / 111320]);
+}
+function setFollow(entry) {
+    followedEntry = entry;
+    [map.scrollZoom, map.touchZoomRotate].forEach(h => { h.disable(); h.enable(entry ? { around: 'center' } : undefined); });
+    if (followButton) followButton.classList.toggle('active', !!entry);
+    // Kept in the middle of what the sidebar leaves of the map (opened at load, it set no padding)
+    const right = sidebarOpen && window.innerWidth > 600 ? 400 : 0;
+    if (entry) {
+        map.easeTo({ padding: { ...map.getPadding(), right }, duration: 0 });
+        followCamera(entry);
+    }
+}
+function addFollowControl() {
+    if (followButton) return;
+    followButton = document.createElement('button');
+    followButton.type = 'button';
+    followButton.className = 'trip-follow-btn';
+    followButton.title = {{ liveFollow|tojson }};
+    followButton.setAttribute('aria-label', {{ liveFollow|tojson }});
+    followButton.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i><span>' +
+        $('<span>').text({{ liveFollow|tojson }}).html() + '</span>';
+    followButton.addEventListener('click', e => {
+        e.stopPropagation();
+        // The first in progress: a live flight before an estimated one
+        const entries = Object.values(currentPositionMarkers).filter(x => x.coords);
+        const next = entries.find(x => x.kind === 'live') || entries[0];
+        setFollow(followedEntry ? null : next || null);
+    });
+    map.getContainer().appendChild(followButton);
+    map.on('render', pinLivePopups);
+    map.on('dragstart', () => { if (followedEntry) setFollow(null); });
+    // A click on the followed aircraft (its popup) is no reason to stop following it
+    map.on('click', e => {
+        if (!followedEntry) return;
+        const uid = followedEntry.trip.uid;
+        const sky = MapLibreUtils.flight3DScreenPoint(map, uid);
+        const at = sky ? { x: sky[0], y: sky[1] } : map.project(followedEntry.marker.getLngLat());
+        if (Math.hypot(e.point.x - at.x, e.point.y - at.y) < 24) return;
+        setFollow(null);
+    });
+    // The open popups' countdown to the next position, every second
+    setInterval(() => Object.values(currentPositionMarkers).forEach(e => {
+        const popup = e.kind === 'live' && e.marker.getPopup();
+        if (popup && popup.isOpen() && e.outer) popup.setText(livePositionLabel(e.outer));
+    }), 1000);
+    // Shown only while something moves on the map
+    setInterval(() => {
+        const any = Object.values(currentPositionMarkers).some(x => x.coords);
+        followButton.style.display = any ? '' : 'none';
+        if (!any && followedEntry) setFollow(null);
+    }, 1000);
 }
 
 // The timetable stops of the trip in progress (only those with a name and a time), as small
@@ -1936,15 +2042,21 @@ function updateStopProgress(trips) {
         const on = now >= start && now < end;
         ol.classList.toggle('ts-progress', on);
         ol.querySelectorAll('.ts-here').forEach(e => e.remove());
-        const items = Array.from(ol.querySelectorAll('li[data-wp]'));
+        // A flight's "in the air" row is where it is now: the progress stands on it
+        const items = Array.from(ol.querySelectorAll('li[data-wp], li.ts-airborne'));
         if (!on) {
             items.forEach(li => li.classList.remove('ts-past', 'ts-current'));
             return;
         }
         const pts = [{ arr: start, dep: start }];
+        // A flight's rows before its departure (boarding, the transponder going on at the
+        // gate) are passed already when it sets off, those after its arrival still to come
+        // until it is in: in the trip's own window, so the progress only ever goes forward.
+        const clamp = v => isNaN(v) ? v : Math.min(Math.max(v, start), end);
         items.forEach(li => {
+            if (li.classList.contains('ts-airborne')) { pts.push({ arr: now, dep: now + 1 }); return; }
             const a = parseFloat(li.dataset.arr), d = parseFloat(li.dataset.dep);
-            pts.push({ arr: isNaN(a) ? d : a, dep: isNaN(d) ? a : d });
+            pts.push({ arr: clamp(isNaN(a) ? d : a), dep: clamp(isNaN(d) ? a : d) });
         });
         pts.push({ arr: end, dep: end });
         // A stop without a time is where the one before it left it
@@ -2006,10 +2118,10 @@ function addTripStops(trips) {
     let data = build();
     if (!data.features.length || map.getSource('current-stops')) return;
     map.addSource('current-stops', { type: 'geojson', data });
-    // A flight's take-off and landing: the 3D profile shows them already. Only when picked,
-    // though still there to be picked.
+    // A flight's take-off and landing: the 3D profile shows them already; its milestones
+    // are mostly at the airports. Only when picked, though still there to be picked.
     const shown = ['any', ['boolean', ['feature-state', 'selected'], false],
-                   ['!', ['in', ['get', 'kind'], ['literal', ['takeoff', 'landing']]]]];
+                   ['!', ['in', ['get', 'kind'], ['literal', ['takeoff', 'landing', 'milestone']]]]];
     // While a trip is under way its rounds turn as it passes them
     if (trips.some(t => t.time === 'current' || t.liveTracked)) {
         setInterval(() => map.getSource('current-stops').setData(data = build()), 30000);
@@ -2190,9 +2302,12 @@ function buildCurrentTripFeatures(trips) {
         // aircraft is provably still flying, whatever computeTimeStatus decided from the
         // scheduled arrival time.
         if (trip.time !== 'current' && !trip.liveTracked) return;
-        drawn.add(String(trip.trip.uid));
 
-        const isTracked = !!(trip.liveTracked && trip.liveDestination && trip.livePath);
+        const isTracked = !!(trip.liveTracked && trip.livePath);   // liveDestination null: arrived
+        // Landed and at (or taxiing to) its stand: its line is drawn to there, the end pin is
+        // on it, and there is no aircraft any more, nothing left in progress.
+        const arrived = isTracked && !trip.liveDestination;
+        if (!arrived) drawn.add(String(trip.trip.uid));
         // Convert to [lng, lat] and expand air routes to geodesic before splitting
         let fullCoords = (isTracked ? trip.livePath : trip.path).map(c => [c[1], c[0]]);
         let splitIndex, splitPoint = null;
@@ -2215,15 +2330,18 @@ function buildCurrentTripFeatures(trips) {
             // only the leftover leg to the destination has to be estimated, and the
             // aircraft carries on along it until the next fix.
             const fixIndex = fullCoords.length - 1;
-            const dest = [trip.liveDestination[1], trip.liveDestination[0]];
-            fullCoords = fullCoords.concat(
-                MapLibreUtils.createGeodesicLine(fullCoords[fixIndex], dest)
-            );
+            // Landed and taxiing in: none, the track ends at the aircraft
+            if (trip.liveDestination) {
+                const dest = [trip.liveDestination[1], trip.liveDestination[0]];
+                fullCoords = fullCoords.concat(
+                    MapLibreUtils.createGeodesicLine(fullCoords[fixIndex], dest)
+                );
+            }
             const fixAt = trip.liveUpdated ? trip.liveUpdated * 1000 : Date.now();
-            const pos = TripProgress.extrapolate(trip.trip, fullCoords, fixIndex, fixAt);
+            const pos = TripProgress.extrapolate(trip.trip, fullCoords, fixIndex, fixAt, { speed: trip.liveSpeed });
             splitIndex = pos.index;
             splitPoint = pos.point;
-            motion = { trip: trip.trip, coords: fullCoords, fixIndex, fixAt };
+            motion = { trip: trip.trip, coords: fullCoords, fixIndex, fixAt, speed: trip.liveSpeed };
         } else {
             if (trip.trip.type === 'air' && fullCoords.length === 2) {
                 fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
@@ -2271,6 +2389,7 @@ function buildCurrentTripFeatures(trips) {
             properties: props('_full', 'past')
         });
 
+        if (arrived) return;
         // Marker at the current position. Reused rather than recreated, otherwise every
         // live refresh would stack another pin on the map.
         const pegPosition = pastCoords[pastCoords.length - 1]; // already [lng, lat]
@@ -2288,7 +2407,7 @@ function buildCurrentTripFeatures(trips) {
         if (existing && existing.kind === kind) {
             // A new fix can put the aircraft elsewhere than where it was carried to: glide
             if (isLive && existing.fixAt !== motion.fixAt) {
-                LiveMotion.startGlide(existing, existing.marker.getLngLat().toArray());
+                LiveMotion.startGlide(existing, existing.marker.getLngLat().toArray(), 8000);
             }
             if (!existing.glideFrom) existing.marker.setLngLat(pegPosition);
             if (isLive) {
@@ -2311,7 +2430,7 @@ function buildCurrentTripFeatures(trips) {
             };
         }
         const entry = currentPositionMarkers[trip.trip.uid];
-        Object.assign(entry, motion, { cutPoint: pegPosition });
+        Object.assign(entry, motion, { cutPoint: pegPosition, heading: heading, outer: trip });
         // Sub-pixel, or a slow pin moves in visible one-pixel steps
         entry.marker.setSubpixelPositioning(true);
     });
@@ -2338,7 +2457,20 @@ function bearingBetween(a, b) {
 // it opens that marker's popup.
 function toggleLivePopup(uid) {
     const entry = currentPositionMarkers[uid];
-    if (entry) entry.marker.togglePopup();
+    if (entry) { entry.marker.togglePopup(); pinLivePopups(); }
+}
+// An aircraft's popup points at the aircraft: up at its altitude in the 3D view (an offset
+// from the ground point the marker is at), on the marker otherwise. Every frame, so it
+// stays on it as the camera tilts or turns and the aircraft moves.
+function pinLivePopups() {
+    Object.entries(currentPositionMarkers).forEach(([uid, e]) => {
+        const popup = e.kind === 'live' && e.marker.getPopup();
+        if (!popup || !popup.isOpen()) return;
+        const sky = MapLibreUtils.flight3DScreenPoint(map, uid);
+        if (!sky) { popup.setOffset(25); return; }
+        const ground = map.project(e.marker.getLngLat());
+        popup.setOffset([sky[0] - ground.x, sky[1] - ground.y - 18]);
+    });
 }
 
 // "Live position · 09:42" — the clock time of the fix rather than "x minutes ago",
@@ -2355,6 +2487,13 @@ function livePositionLabel(trip) {
     // The fix's altitude, when the owner shows it (the 3D profile's gate, server-side)
     const alt = Array.isArray(trip.altitude) ? trip.altitude[trip.altitude.length - 1] : null;
     if (alt != null) label += ' · ' + Math.round(alt).toLocaleString() + ' m';
+    // Until the next position: counted down while the popup is open (liveCountdown)
+    if (trip.liveNextUpdate) {
+        const left = Math.round(trip.liveNextUpdate - Date.now() / 1000) + 2;
+        label += '\n' + (left > 0
+            ? {{ liveNextUpdate|tojson }}.replace('{time}', Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'))
+            : {{ liveUpdating|tojson }});
+    }
     return label;
 }
 
@@ -2381,16 +2520,23 @@ function startLiveTracking(trips, features) {
             : Promise.resolve({});
         ask.then(liveTracks => {
             if (!liveTracks) return;
-            if (!MapLibreUtils.applyLiveTracks(trips, liveTracks, features)) return;
+            const applied = MapLibreUtils.applyLiveTracks(trips, liveTracks, features);
+            candidates.forEach(t => {
+                if ((liveTracks[t.trip.uid] || {}).status === 'landed') t.liveLandedSeen = true;
+            });
+            if (!applied) return;
             // The start pin where the line drawn starts: a flight's track begins at its gate,
             // not at the airport's logged point (unless it begins in the air, bridged to it).
             if (tripStartPin) {
                 const first = trips[0], p0 = first.livePath && !first.liveOrigin ? first.livePath[0] : first.path[0];
                 tripStartPin.setLngLat([p0[1], p0[0]]);
             }
-            // Landed, its route is its track, which ends at the gate
+            // Landed, its route is its track, which ends at the gate; arrived and taxiing in
+            // (no remainder left: applyLiveTracks), its live track does already
             if (tripEndPin) {
-                const path = trips[trips.length - 1].path, end = path[path.length - 1];
+                const last = trips[trips.length - 1];
+                const path = last.liveTracked && !last.liveDestination && last.livePath ? last.livePath : last.path;
+                const end = path[path.length - 1];
                 tripEndPin.setLngLat([end[1], end[0]]);
             }
             // Updates the main source (and its shadow) to follow the real track...
@@ -2408,12 +2554,22 @@ function startLiveTracking(trips, features) {
             }).catch(err => console.warn('3D flight layer failed:', err));
         })
         // A live overlay is decoration; never let it break the map it sits on.
-        .catch(err => console.warn('Live track refresh failed:', err));
+        .catch(err => console.warn('Live track refresh failed:', err))
+        // Only now: the next request is timed from what this one brought (next_update)
+        .finally(() => { if (refreshDone) refreshDone(); });
     };
 
+    // Asked again just after the server's next update is due (a position every few tens
+    // of seconds, the whole track every few minutes), within 10 s and a minute.
+    const schedule = () => {
+        const next = Math.min(...trips.map(t => t.liveNextUpdate || Infinity)) * 1000;
+        const wait = isFinite(next) ? next - Date.now() + 2000 : 60000;
+        setTimeout(() => { refresh(); }, Math.min(Math.max(wait, 10000), 60000));
+    };
+    refreshDone = schedule;
     refresh();
-    setInterval(refresh, 60000);
 }
+let refreshDone = null;
 
 // Place polylines using MapLibre
 function placePolylines(trips) {
@@ -2459,6 +2615,7 @@ function placePolylines(trips) {
         setInterval(resplitCurrent, 5000);
         updateStopProgress(trips);
         requestAnimationFrame(animateFutureDashes);
+        addFollowControl();
         // The viewer's location is for the owner's own /current page only: a shared trip
         // link can be opened by anyone.
         if ({{ 'true' if current_page else 'false' }}) startGPSIndicator();
@@ -3055,8 +3212,9 @@ const colorblindMode = {{ 'true' if colorblind else 'false' }};
 // map, so the aircraft stays glued to its heading however the map is turned.
 //
 // The Font Awesome plane glyph points east, hence the -90.
+// The aircraft points north (MapLibreUtils.planeSvg): its rotation is the heading itself.
 function setMarkerHeading(marker, bearing) {
-    marker.setRotation((bearing || 0) - 90);
+    marker.setRotation(bearing || 0);
 }
 
 function createCustomMarker(coordinates, type, popupText, rotation) {
@@ -3105,18 +3263,16 @@ function createCustomMarker(coordinates, type, popupText, rotation) {
         // this out from the timetable", which would be actively misleading here, so an
         // aircraft pointed along its actual heading is used instead.
         case 'live':
-            el.innerHTML = '<i class="fa-solid fa-plane"></i>';
-            el.style.width = '28px';
-            el.style.height = '28px';
+            // The same airliner the 3D view draws, as an SVG: sharp at any pixel ratio.
+            // Its white outline keeps it legible over land, sea and a dark map; the soft
+            // shadow lifts it off the line it flies along.
+            el.innerHTML = MapLibreUtils.planeSvg(30);
+            el.style.width = '30px';
+            el.style.height = '30px';
             el.style.display = 'flex';
-            el.style.alignItems = 'center';
-            el.style.justifyContent = 'center';
-            el.style.fontSize = '18px';
-            // A darker shade of the air green: same family as the route it sits on,
-            // dark enough not to disappear into it.
-            el.style.color = '#2b7a12';
-            // Outline so the aircraft stays legible over both land and sea.
-            el.style.textShadow = '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff';
+            el.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,.45))';
+            // Up at its altitude in the 3D view already: not twice (see build3DFlightLayer)
+            if (map._flight3dAircraftUp) el.style.visibility = 'hidden';
             break;
     }
     
@@ -3134,13 +3290,14 @@ function createCustomMarker(coordinates, type, popupText, rotation) {
         // stays viewport-aligned so the silhouette doesn't flatten away when tilted.
         rotationAlignment: isLive ? 'map' : 'auto',
         pitchAlignment: isLive ? 'viewport' : 'auto',
-        rotation: isLive ? (rotation || 0) - 90 : 0
+        rotation: isLive ? (rotation || 0) : 0
     })
         .setLngLat(coordinates)
         .addTo(map);
     
     if (popupText) {
-        marker.setPopup(new maplibregl.Popup({ offset: 25 }).setText(popupText));
+        // A live position's popup has a second line: the countdown to the next one
+        marker.setPopup(new maplibregl.Popup({ offset: 25, className: isLive ? 'live-position-popup' : '' }).setText(popupText));
     }
     // The aircraft sits on its own line: a click left to reach the map also lands on the
     // line's layer and closes the popup it opens. So it opens its popup itself.

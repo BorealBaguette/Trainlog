@@ -336,14 +336,17 @@
   // Fresh data can put a vehicle somewhere else than where the clock had it (a live fix, a
   // new delay): it slides there rather than jumps.
   var GLIDE_MS = 1500;
-  function startGlide(pin, from) {
+  // `ms`: how long the slide lasts (GLIDE_MS unless said): a live aircraft corrected onto a
+  // new fix takes longer, so the correction reads as a drift rather than a jump.
+  function startGlide(pin, from, ms) {
     if (reduced || !from) return;
     pin.glideFrom = from;
     pin.glideAt = Date.now();
+    pin.glideMs = ms || GLIDE_MS;
   }
   function glide(pin, target) {
     if (!pin.glideFrom) return target;
-    var k = (Date.now() - pin.glideAt) / GLIDE_MS;
+    var k = (Date.now() - pin.glideAt) / (pin.glideMs || GLIDE_MS);
     if (k >= 1) { pin.glideFrom = null; return target; }
     k = k * k * (3 - 2 * k);
     var a = pin.glideFrom;

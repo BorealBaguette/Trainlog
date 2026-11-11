@@ -645,7 +645,7 @@ body { background: #e9e9ec; }
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
 
 <script>
 // Export resolution: the on-screen card is CSS-sized (comfortable to preview),

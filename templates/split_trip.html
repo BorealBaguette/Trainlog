@@ -3,7 +3,7 @@
 {% block content %}
 <link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
 
 <style>
   #split-wrap { max-width: 1100px; margin: 0 auto; padding: 12px; }

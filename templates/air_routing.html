@@ -58,6 +58,11 @@ if (!newTrip) {
     throw new Error('No trip data');
 }
 var fromApp = !!getGetParams().get("fromApp");
+// An FR24 flight still in the air (FR24 hasn't seen it land): its track so far is not its
+// route. Saved as a straight line, which live tracking draws over as it flies (an FR24
+// route would read as landed, and it would never be tracked), and no track fetched for it.
+const fr24InFlight = !!newTrip.fr24_id && !newTrip.fr24_landed && !newTrip.fr24_last_seen;
+if (fr24InFlight) useFR24 = false;
 var type = getGetParams().get("type") || newTrip.type;
 
 console.log(newTrip);
@@ -164,7 +169,7 @@ function updateSidebar(isFr24Active) {
 
     if (isFr24Active && newTrip.fr24_id && fr24PathCache?.length >= 2) {
         kmRaw = getTotalDistanceFromPath(fr24PathCache);
-        durationRaw = newTrip.fr24_duration ?? newTrip.estimated_trip_duration;
+        durationRaw = Number(newTrip.fr24_duration) || newTrip.estimated_trip_duration;
     }else {
         kmRaw = newTrip.trip_length;
         durationRaw = newTrip.estimated_trip_duration;
@@ -194,7 +199,9 @@ function updateSidebar(isFr24Active) {
     flutterBridge.routeInfo(distanceAndTimeText, kmRaw, durationRaw);
     flutterBridge.loading(false);
 
-    if (newTrip.fr24_id) {
+    if (fr24InFlight) {
+        content += `<p class="text-muted small">${ {{ fr24InFlightNote|tojson }} }</p>`;
+    } else if (newTrip.fr24_id) {
         content += `<div class="submit-control"><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></div>`;
     }
 
@@ -248,7 +255,7 @@ async function saveTrip(continueTrip=false) {
         timeToSave = fr24TimeCache;
         console.log("Saving FR24 path", pathToSave);
         newTrip["trip_length"] = getTotalDistanceFromPath(fr24PathCache);
-        newTrip["estimated_trip_duration"] = newTrip.fr24_duration ?? newTrip.estimated_trip_duration;
+        newTrip["estimated_trip_duration"] = Number(newTrip.fr24_duration) || newTrip.estimated_trip_duration;
     } else {
         // Save Geodesic
         pathToSave = [

@@ -107,6 +107,13 @@
     border-radius: 50%; background: #b3bac4;
 }
 #itinerary details.trip-stops .ts-list .ts-name { min-width: 0; overflow-wrap: anywhere; }
+/* A flight's rows (runway times, transponder, milestones): a small icon before the name, and
+   what it adds (taxi, time in the air, how long) on a line of its own below it */
+#itinerary details.trip-stops .ts-list .ts-runway-icon { color: #8a93a2; font-size: 0.72rem; margin-right: 6px; width: 1em; text-align: center; display: inline-block; }
+#itinerary details.trip-stops .ts-list .ts-seen { display: block; color: #8a93a2; font-size: 0.75rem; font-weight: normal; margin-left: calc(1em + 6px); }
+#itinerary details.trip-stops .ts-list .ts-sep { display: none; }
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list .ts-runway-icon,
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list .ts-seen { color: var(--bs-secondary-color); }
 #itinerary details.trip-stops .ts-list .ts-time {
     margin-left: auto; white-space: nowrap; color: #8a93a2; font-variant-numeric: tabular-nums;
 }
@@ -122,7 +129,12 @@
 }
 #itinerary details.trip-stops ol.ts-progress li:last-child::before { display: block; bottom: -10px; }
 #itinerary details.trip-stops .ts-list li.ts-past::after { background: #3b63b8; }
-#itinerary details.trip-stops .ts-list li.ts-past > span, #itinerary details.trip-stops .ts-list li.ts-past > small { opacity: 0.6; }
+#itinerary details.trip-stops .ts-list li.ts-past > span, #itinerary details.trip-stops .ts-list li.ts-past > small { opacity: 0.75; }
+/* Where it is now, in the air: its row in the trip's colour of progress */
+#itinerary details.trip-stops .ts-list li.ts-airborne.ts-current .ts-name,
+#itinerary details.trip-stops .ts-list li.ts-airborne.ts-current .ts-runway-icon { color: #3b63b8; }
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list li.ts-airborne.ts-current .ts-name,
+[data-bs-theme="dark"] #itinerary details.trip-stops .ts-list li.ts-airborne.ts-current .ts-runway-icon { color: #8fb0f5; }
 #itinerary details.trip-stops .ts-list li.ts-current .ts-name { font-weight: 600; }
 #itinerary details.trip-stops .ts-here {
     position: absolute; left: 5px; width: 12px; height: 12px; margin: -6px 0 0 -6px; z-index: 1;

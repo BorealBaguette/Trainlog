@@ -319,7 +319,7 @@
 <div id="live-stats"></div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/live_motion.js') }}"></script>
@@ -938,7 +938,8 @@ function openPopup(lngLat, tripObj, pin) {
 function pinTarget(pin, now) {
   if (pin.coords.length === 1) return { index: 0, point: pin.coords[0], progress: 0 };
   const pos = pin.liveJunction !== null
-    ? TripProgress.extrapolate(pin.tripObj.trip, pin.coords, pin.liveJunction, pin.fixAt, { now })
+    ? TripProgress.extrapolate(pin.tripObj.trip, pin.coords, pin.liveJunction, pin.fixAt,
+                               { now, speed: pin.tripObj.trip.live_speed })
     : TripProgress.position(pin.tripObj.trip, pin.coords, { now });
   return pos || { index: 0, point: pin.coords[0], progress: 0 };
 }
@@ -1240,9 +1241,12 @@ function renderTrips(trips) {
       }
       const [destLat, destLng] = trip.live_destination;
       liveJunction = coords.length - 1;
-      coords = coords.concat(
-        MapLibreUtils.createGeodesicLine(coords[liveJunction], [destLng, destLat])
-      );
+      // Landed and taxiing in: its track ends where it is, nothing left to estimate
+      if (!trip.live_arrived) {
+        coords = coords.concat(
+          MapLibreUtils.createGeodesicLine(coords[liveJunction], [destLng, destLat])
+        );
+      }
     } else if (type === 'air' && coords.length === 2) {
       // Great-circle line for air routes
       coords = MapLibreUtils.createGeodesicLine(coords[0], coords[1]);

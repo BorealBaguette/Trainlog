@@ -30,6 +30,7 @@ from src.consts import TripTypes
 from src.currency import get_available_currencies
 from src.paths import geom_geojson_to_coords
 from src.pg import pg_session
+from src.runway_stops import in_time_order, milestone_waypoint, with_milestones
 from src.utils import get_default_trip_visibility, getLocalDatetime, getUtcDatetime
 
 
@@ -389,6 +390,49 @@ def delay_form(args, precision):
     return out
 
 
+# ── flight milestones ────────────────────────────────────────────────────────────
+
+MILESTONES_MAX = 20
+
+
+def milestones_form(trip_type, value, path, window_form=None):
+    """A flight's milestones (the stops dialog's "Add milestone" rows) as waypoints:
+    [{name, place, start, end?}], local times. `path` the trip's [{lat, lng}] points;
+    `window_form` its timing form (preciseDates), for where along the path one in flight
+    goes."""
+    if trip_type not in AIR_TYPES:
+        raise ValueError("Milestones are for flights (air, helicopter) only.")
+    if not isinstance(value, list):
+        raise ValueError("milestones must be a list of {name, place, start, end?}.")
+    if len(value) > MILESTONES_MAX:
+        raise ValueError(f"At most {MILESTONES_MAX} milestones.")
+    points = [[p["lat"], p["lng"]] for p in path]
+    window = None
+    if window_form and window_form.get("precision") == "preciseDates":
+        t0 = getUtcDatetime(dateTime=datetime.fromisoformat(window_form["newTripStart"]), **path[0])
+        t1 = getUtcDatetime(dateTime=datetime.fromisoformat(window_form["newTripEnd"]), **path[-1])
+        window = (t0.replace(tzinfo=ZoneInfo("UTC")).timestamp(), t1.replace(tzinfo=ZoneInfo("UTC")).timestamp())
+    out = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("Each milestone is {name, place, start, end?}.")
+
+        def when(key, required):
+            raw = item.get(key)
+            if raw in (None, ""):
+                if required:
+                    raise ValueError(f"Milestone {item.get('name')!r} needs a `{key}` (YYYY-MM-DDTHH:MM).")
+                return None
+            try:
+                return datetime.strptime(str(raw), "%Y-%m-%dT%H:%M")
+            except ValueError:
+                raise ValueError(f"Milestone {item.get('name')!r}: `{key}` must be YYYY-MM-DDTHH:MM (local).")
+
+        out.append(milestone_waypoint(item.get("name"), item.get("place") or "departure",
+                                      when("start", True), when("end", False), points, window))
+    return out
+
+
 # ── Transitous runs ──────────────────────────────────────────────────────────────
 
 
@@ -699,6 +743,11 @@ def new_trip_form(user, args, plan=False):
         form["details"] = routed["details"]
     if trip_type in POWER_TYPES:
         form["powerType"] = POWER_TYPES[trip_type][0]
+    if args.get("milestones") and plan:
+        raise ValueError("Milestones are for logged flights, not plan legs (the plan editor has none).")
+    if args.get("milestones"):
+        vias = in_time_order(list(vias or []) + milestones_form(
+            trip_type, args["milestones"], routed["path"], timing))
     if vias:
         form["waypoints"] = json.dumps(vias, ensure_ascii=False)
     if run:
@@ -909,6 +958,13 @@ def trip_patch(user, trip_id, args):
                 patch.update(delay_form({key: args[key]}, precision))
     if timing and precision != "preciseDates":
         patch["departure_delay"] = patch["arrival_delay"] = None
+
+    if "milestones" in args:
+        window = timing if timing else (
+            {"precision": "preciseDates", "newTripStart": start.strftime("%Y-%m-%dT%H:%M"),
+             "newTripEnd": (end or start).strftime("%Y-%m-%dT%H:%M")} if start and start.second != 1 else None)
+        milestones = milestones_form(trip_type, args["milestones"] or [], path, window)
+        patch["waypoints"] = with_milestones(patch.get("waypoints", stored.get("waypoints")), milestones) or "[]"
 
     current = {"material_type_advanced": stored.get("material_type_advanced"),
                "seat_car": stored.get("seat_car")}

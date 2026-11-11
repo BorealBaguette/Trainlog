@@ -52,7 +52,7 @@
 
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/maplibre-utils.js') }}"></script>
 
 {{ i18n.type_labels() }}
 <script>

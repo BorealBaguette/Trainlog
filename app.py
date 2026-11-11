@@ -219,7 +219,10 @@ from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import ARRIVAL_GRACE, get_live_tracks, live_tracks_blueprint
 from src.api.live_map import live_map_blueprint, live_travellers_count
-from src.runway_stops import apply_to_trip as apply_runway_stops, airport_position, is_runway_stop, land_short_track, track_stops, with_seen
+from src.runway_stops import (
+    apply_to_trip as apply_runway_stops, airport_position, is_milestone, is_runway_stop, land_short_track,
+    shift_milestone, track_stops, with_seen,
+)
 from src.utils import _timezone_finder as tz_finder
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.api.motis import motis_blueprint
@@ -552,6 +555,10 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
                 filtered.append(f)
             except Exception:
                 pass
+    # The flights this user may ask the events of (flight_events): the ones a lookup of
+    # theirs turned up, the latest few.
+    seen = [f["fr24_id"] for f in filtered if f.get("fr24_id")]
+    session["fr24_looked_up"] = (seen + [i for i in session.get("fr24_looked_up", []) if i not in seen])[:50]
     return {"data": filtered}, 200
 
 
@@ -692,7 +699,10 @@ def flight_events(username, fr24_id):
     """When the flight left and reached its gates, and which gates, from FR24's flight
     events, where it knows them (not every airport): {"departure": ..., "arrival": ...},
     each None or {"utc", "local" (at the airport), "gate"}. Part of the import that fetched
-    the flight's summary, so not counted against the user's monthly calls."""
+    the flight's summary, so not counted against the user's monthly calls: only for a
+    flight that lookup turned up (fetch_and_filter_flights), not any id one cares to send."""
+    if fr24_id not in session.get("fr24_looked_up", []):
+        return jsonify({"error": "Look the flight up first."}), 403
     config = load_config()
     try:
         response = requests.get(
@@ -7389,6 +7399,11 @@ def apply_trip_patch(trip_id, payload):
         for field in ROUTE_MEASUREMENTS:
             formData[field] = _as_form_value(trip[field])
 
+    # Stops given with the new start are for it already: not to be moved along with it.
+    start = patched.get("start_datetime")
+    if "waypoints" in patched and isinstance(start, str) and len(start) >= 16:
+        formData["stopsStart"] = start[:16]
+
     new_trip = update_trip_values_from_form_data(trip_id, formData)
     update_trip(trip_id, new_trip, formData)
 
@@ -7514,11 +7529,23 @@ def _shift_trip_stops(waypoints_json, old_start, new_start):
     if not isinstance(waypoints, list) or not any(isinstance(w, dict) and isinstance(w.get("stop"), dict) for w in waypoints):
         return waypoints_json
     delta = new_start - old_start
-    # A flight's take-off and landing were that day's alone.
-    waypoints = [wp for wp in waypoints if not is_runway_stop(wp)]
+    if abs(delta) < timedelta(minutes=1):   # a date-only trip's :01 seconds
+        return waypoints_json
+    # A flight's take-off and landing were that day's alone: moved to another day (a copy),
+    # they go. The logged time put right (the same flight, a few minutes or hours off),
+    # they stay as they are: they are what really happened.
+    another_day = abs(delta) >= timedelta(hours=12)
+    if another_day:
+        waypoints = [wp for wp in waypoints if not is_runway_stop(wp)]
     for wp in waypoints:
         stop = wp.get("stop") if isinstance(wp, dict) else None
-        if not isinstance(stop, dict):
+        if not isinstance(stop, dict) or is_runway_stop(wp):
+            continue
+        # Its milestones are the user's own record of it: real times, kept as typed when the
+        # logged time is put right, moved along with the flight to another day (a copy).
+        if is_milestone(wp):
+            if another_day:
+                shift_milestone(stop, delta)
             continue
         for field in ("arr", "dep"):
             try:
@@ -11111,7 +11138,7 @@ def _save_mfr24_trip(username, newTrip, newPath):
         trip.material_type = sanitize_param(newTrip["material_type"])
         trip.material_type_advanced = sanitize_param(newTrip.get("material_type_advanced"))
         trip.reg = sanitize_param(newTrip["reg"])
-        trip.waypoints = None
+        # trip.waypoints kept: a flight's take-off, landing and milestones are its own
         trip.notes = sanitize_param(newTrip["notes"])
         trip.price = sanitize_param(newTrip["price"])
         trip.currency = sanitize_param(newTrip["currency"])
@@ -14625,7 +14652,7 @@ LIVE_MAP_TRIP_FIELDS = (
     "departure_delay", "arrival_delay",
     "operator", "multi_operators", "logo_url", "line_name",
     "material_type", "manufacturer", "model", "reg", "vessel_name", "vessel_country",
-    "trainset", "live_tracked", "live_updated", "live_origin", "live_destination",
+    "trainset", "live_tracked", "live_updated", "live_origin", "live_destination", "live_arrived", "live_speed",
 )
 
 
@@ -14738,6 +14765,8 @@ def get_current_trips_data(public_only=True):
                 path = live["path"]
                 trip["live_tracked"] = True
                 trip["live_updated"] = live.get("updated")
+                trip["live_arrived"] = bool(live.get("arrived"))
+                trip["live_speed"] = live.get("speed")
             if trip.get("material_type_advanced"):
                 trip["trainset"] = public_trainset_info(
                     pg, trip["material_type_advanced"], trip["username"]
