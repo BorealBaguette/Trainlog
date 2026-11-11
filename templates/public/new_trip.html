@@ -914,7 +914,9 @@ function bulkCopyTrips() {
     contentType: 'application/json',
     data: JSON.stringify({ tripIds: "{{tripIds}}" }),
     success: function(data, status) {
-      location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}"
+      // Upcoming ride alongs land in projects, where the copies are listed
+      location.href = "{{ url_for('dynamic_trips', time='TIME', username=username) }}"
+        .replace('TIME', data.list === 'projects' ? 'projects' : 'trips')
     },
     error: function () {
       btn.disabled = false;
