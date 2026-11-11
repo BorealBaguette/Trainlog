@@ -1484,10 +1484,23 @@ function _aboveAirports(altitude, timestamps, waypoints, ends) {
     const a0 = e0 ?? e1, a1 = e1 ?? e0;
     const along = _alongRoute(ends);
     return altitude.map((a, i) => {
-        if (!(a > 50)) return 0;
+        if (i < first || i > last) return 0;
+        // A low reading between two in the air is FR24 noise near the ground, not a landing
+        const reading = a > 50 ? a : timestamps ? _between(altitude, timestamps, air, timestamps[i]) : a0;
         const f = along ? along(i) : last > first ? (i - first) / (last - first) : 0;
-        return Math.max(0, a - (a0 + (a1 - a0) * f));
+        return Math.max(0, reading - (a0 + (a1 - a0) * f));
     });
+}
+
+// The reading at time t from the readings in the air either side of it (`air`: their
+// indexes, in order), by time
+function _between(altitude, timestamps, air, t) {
+    let k = 0;
+    while (k < air.length - 1 && timestamps[air[k + 1]] <= t) k++;
+    const i = air[k], j = air[Math.min(k + 1, air.length - 1)];
+    const ti = timestamps[i], tj = timestamps[j];
+    if (i === j || !(tj > ti)) return altitude[i];
+    return altitude[i] + (altitude[j] - altitude[i]) * (t - ti) / (tj - ti);
 }
 
 // [take-off, landing] epoch seconds as the readings show them, each null if not seen: the
@@ -1609,6 +1622,9 @@ function _aboveRunwayTimes(altitude, timestamps, t0, t1, ends) {
         if (!(a > 50)) {
             if (t < tFirst && climb) reading = climb(t);
             else if (t > tLast && descent) reading = descent(t);
+            // Between two readings in the air: FR24 noise near the ground (a 38 m among 53s,
+            // 5 m above the sea at Copenhagen), not a touch-and-go
+            else if (t > tFirst && t < tLast) reading = _between(altitude, timestamps, clean, t);
         }
         const f = along ? along(i)
             : isFinite(start) && isFinite(end) ? (t - start) / (end - start) : (isFinite(start) ? 0 : 1);
