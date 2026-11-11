@@ -33,8 +33,16 @@ def external_referrer(referrer):
     return f"{parts.scheme}://{parts.netloc}/"
 
 
+# The mobile app's API client and WebViews put this token in their User-Agent.
+APP_UA_TOKEN = "TrainlogApp/"
+
+
 class CustomMatomo(Matomo):
     """A custom Matomo class that overrides the before_request method to include the client's IP address."""
+
+    # Id of a visit-scope custom dimension in Matomo that receives "app" or "web",
+    # so app traffic can be segmented from mobile browsers. None = not sent.
+    client_dimension_id = None
 
     def before_request(self):
         """Executed before every request, parses details about request"""
@@ -88,6 +96,10 @@ class CustomMatomo(Matomo):
 
         if request.accept_languages:
             data["lang"] = request.accept_languages[0][0]
+
+        if self.client_dimension_id:
+            is_app = APP_UA_TOKEN in str(user_agent)
+            data[f"dimension{self.client_dimension_id}"] = "app" if is_app else "web"
 
         # Overwrite action_name, if it was configured with details()
         if self.routes_details.get(action_name) and self.routes_details.get(

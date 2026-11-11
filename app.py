@@ -420,6 +420,7 @@ if matomo_config:
             token_auth=token_auth,
             ignored_routes=["/static/<path:filename>"],
         )
+        matomo.client_dimension_id = matomo_config.get("client_dimension_id")
 
 
 def getLoggedUserCurrency():

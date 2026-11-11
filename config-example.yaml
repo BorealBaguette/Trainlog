@@ -65,6 +65,8 @@ matomo:
   url: https://analytics.example.com
   id_site: 1
   token_auth: MATOMO_TOKEN
+  # Optional: id of a visit-scope custom dimension that gets "app" or "web"
+  # client_dimension_id: 1
 
 # API Ninjas (used for airlines data)
 api_ninjas:
