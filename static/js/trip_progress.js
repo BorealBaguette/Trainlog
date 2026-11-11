@@ -258,7 +258,9 @@
     var now = (opts && opts.now != null) ? opts.now : Date.now();
     var start = cum[fromIndex], left = cum[cum.length - 1] - start;
     var w = tripWindow(trip), due = w ? w.t1 - fixAt : 0;
-    var speed = due > 60000 ? left / (due / 1000) : CRUISE_MS;
+    // Its own measured speed when known (opts.speed, m/s), else the pace that makes the
+    // logged arrival
+    var speed = opts && opts.speed > 0 ? opts.speed : due > 60000 ? left / (due / 1000) : CRUISE_MS;
     var covered = Math.min(left, Math.max(0, speed * (now - fixAt) / 1000));
     return pointAt(coords, cum, start + covered, latFirst);
   }

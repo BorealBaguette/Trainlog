@@ -288,6 +288,30 @@ def _details_schema(plan=False):
     return props
 
 
+MILESTONES = {
+    "type": "array",
+    "description": (
+        "Flights (air/helicopter) only: the user's own timeline beside the take-off and "
+        "landing — boarding, pushback, de-icing, holding, at the gate… as the edit page's "
+        "stops dialog has them. Each {name, place, start, end?}: place 'departure' (at the "
+        "departure airport, default), 'in_flight' or 'arrival'; start/end local times "
+        "YYYY-MM-DDTHH:MM, at the arrival airport for 'arrival', else at the departure "
+        "airport; end only for a span (taxi, holding…). On update_trip the list replaces "
+        "the trip's milestones ([] removes them)."
+    ),
+    "items": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "What happened, as the user would say it (max 60 chars)."},
+            "place": {"type": "string", "enum": ["departure", "in_flight", "arrival"]},
+            "start": {"type": "string", "description": "YYYY-MM-DDTHH:MM, local."},
+            "end": {"type": "string", "description": "YYYY-MM-DDTHH:MM, local; for a span."},
+        },
+        "required": ["name", "start"],
+    },
+}
+
+
 def _trip_write_schema(plan=False, update=False):
     props = {
         "type": {"type": "string", "enum": form.form_types(),
@@ -308,6 +332,8 @@ def _trip_write_schema(plan=False, update=False):
         **_timing_schema(plan),
         **_details_schema(plan),
     }
+    if not plan:
+        props["milestones"] = MILESTONES
     if update:
         props["type"]["description"] = props["type"]["description"].replace(" (default train)", "")
         if plan:
@@ -379,8 +405,8 @@ def _build_tools() -> list:
             "description": (
                 "The trip types you can create, with what each one's form offers: its "
                 "default visibility, power types (first = default), whether it takes a "
-                "trainset, a CO2 override, timetable runs, vias, and whether it is a single "
-                "place (no destination)."
+                "trainset, a CO2 override, timetable runs, vias, flight milestones, and whether "
+                "it is a single place (no destination)."
             ),
             "inputSchema": {"type": "object", "properties": {}, "required": []},
         },
@@ -860,6 +886,8 @@ def _stops_out(waypoints_json):
         if not isinstance(wp, dict):
             continue
         stop = wp.get("stop") if isinstance(wp.get("stop"), dict) else None
+        if stop and stop.get("kind") == "milestone":
+            continue   # get_trip's `milestones`
         item = {"name": wp.get("name") or (stop or {}).get("name"), "lat": wp.get("lat"), "lng": wp.get("lng")}
         if wp.get("hard"):
             item["exact"] = True
@@ -880,6 +908,31 @@ def _stops_out(waypoints_json):
                 "platform": stop.get("platform"), "live_platform": stop.get("platform_rt"),
             })
         out.append(_clean(item))
+    return out
+
+
+def _milestones_out(waypoints_json):
+    """A flight's milestones in add_trip's terms (local times at their airport)."""
+    try:
+        waypoints = json.loads(waypoints_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    out = []
+    for wp in waypoints if isinstance(waypoints, list) else []:
+        stop = wp.get("stop") if isinstance(wp, dict) and isinstance(wp.get("stop"), dict) else None
+        if not stop or stop.get("kind") != "milestone":
+            continue
+        tz = ZoneInfo(stop.get("tz") or "UTC")
+
+        def local(value):
+            try:
+                return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+                    tzinfo=ZoneInfo("UTC")).astimezone(tz).strftime("%Y-%m-%dT%H:%M")
+            except (TypeError, ValueError):
+                return None
+
+        out.append(_clean({"name": stop.get("name"), "place": stop.get("place"),
+                           "start": local(stop.get("arr_rt")), "end": local(stop.get("dep_rt"))}))
     return out
 
 
@@ -910,6 +963,7 @@ def _trip_detail(d: dict, owner: bool) -> dict:
         "destination": _clean({"name": d["destination_station"], **ends[1],
                                "station_key": d.get("destination_station_key")}),
         "vias": _stops_out(d.get("waypoints")),
+        "milestones": _milestones_out(d.get("waypoints")) or None,
         **_timing_out(d.get("start_datetime"), d.get("end_datetime"),
                       d.get("manual_trip_duration"), d.get("is_project")),
         "utc_start": _iso(d.get("utc_start_datetime")),
@@ -1168,6 +1222,7 @@ def _trip_types(user) -> list[dict]:
             "vias": (t not in form.AIR_TYPES and t not in form.SINGLE_POINT_TYPES) or None,
             "single_place": t in form.SINGLE_POINT_TYPES or None,
             "places_by": "airport iata" if t == "air" else None,
+            "milestones": t in form.AIR_TYPES or None,
         }))
     return out
 

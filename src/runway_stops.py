@@ -9,11 +9,17 @@ times only (dep_rt / arr_rt): there is nothing scheduled about them.
 The arrival is when the aircraft was last heard at the gate, early or late; without that,
 and for the departure, the trip's times are only corrected where the runway times prove
 them wrong. Anything consistent is left as it was.
+
+Beside them, a flight can carry milestones the user types in (boarding, pushback, de-icing,
+holding…): stops of kind "milestone" with a free name, a start (arr_rt) and optional end
+(dep_rt), placed at the departure airport, in flight or at the arrival airport. They are
+the user's own record, so a new track keeps them, and they move with the flight's day.
 """
 
 import json
 import math
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from geopy.distance import geodesic
 
@@ -25,6 +31,11 @@ from src.utils import _timezone_finder
 GROUND_ALT_M = 50
 
 RUNWAY_KINDS = ("takeoff", "landing")
+MILESTONE = "milestone"
+# Where a milestone happened: its position, and the time zone its times are typed in (the
+# departure airport's in flight).
+MILESTONE_PLACES = ("departure", "in_flight", "arrival")
+MILESTONE_NAME_MAX = 60
 
 # How far past where the altitude puts a landing its braking is looked for.
 RUNWAY_SEARCH_S = 120
@@ -51,24 +62,35 @@ def runway_points(coords, altitude, timestamps):
     while takeoff and altitude[takeoff - 1] > 0 and timestamps[takeoff - 1]:
         takeoff -= 1
     if landing is not None:
-        speed = _speeds(coords, timestamps)
+        # Speeds only about the touchdown (the minute before it, the search after it): a
+        # long-haul's whole track would be thousands of geodesics for nothing.
+        t_land, lo, hi = timestamps[landing], landing, landing
+        while lo > 0 and timestamps[lo - 1] and t_land - timestamps[lo - 1] <= 60:
+            lo -= 1
+        while (hi + 1 < len(timestamps) and timestamps[hi + 1]
+               and timestamps[hi + 1] - t_land <= RUNWAY_SEARCH_S):
+            hi += 1
+        speed = _speeds(coords, timestamps, lo, hi + 2)
         approach = _approach_speed(speed, timestamps, landing)
         i = landing
         while (approach and i + 1 < len(speed) and speed[i] and speed[i] >= 0.85 * approach
-               and timestamps[i + 1] - timestamps[landing] <= RUNWAY_SEARCH_S):
+               and timestamps[i + 1] and timestamps[i + 1] - t_land <= RUNWAY_SEARCH_S):
             i += 1
         landing = i if approach and speed[i] and speed[i] < 0.85 * approach else landing
     return takeoff, landing
 
 
-def _speeds(coords, timestamps):
-    """m/s from each fix to the first one at least 5 s on (fixes a second apart are too
-    jittery to tell), None where there is none."""
-    out = []
-    for i, t in enumerate(timestamps):
+def _speeds(coords, timestamps, lo=0, hi=None):
+    """m/s from each fix (of lo…hi, the others None) to the first one at least 5 s on
+    (fixes a second apart are too jittery to tell), None where there is none."""
+    out = [None] * len(timestamps)
+    for i in range(lo, min(len(timestamps), len(timestamps) if hi is None else hi)):
+        t = timestamps[i]
+        if not t:
+            continue
         j = next((j for j in range(i + 1, len(timestamps))
-                  if t and timestamps[j] and timestamps[j] - t >= 5), None)
-        out.append(geodesic(coords[i], coords[j]).meters / (timestamps[j] - t) if j else None)
+                  if timestamps[j] and timestamps[j] - t >= 5), None)
+        out[i] = geodesic(coords[i], coords[j]).meters / (timestamps[j] - t) if j else None
     return out
 
 
@@ -122,6 +144,109 @@ def _waypoint(kind, lat, lng, epoch):
 
 def is_runway_stop(waypoint):
     return isinstance(waypoint, dict) and (waypoint.get("stop") or {}).get("kind") in RUNWAY_KINDS
+
+
+def is_milestone(waypoint):
+    return isinstance(waypoint, dict) and (waypoint.get("stop") or {}).get("kind") == MILESTONE
+
+
+def _stop_epoch(stop):
+    """When a stop happened, for ordering: a runway stop's runway time, else its first time."""
+    kind = stop.get("kind")
+    fields = ("dep_rt", "arr_rt") if kind == "takeoff" else ("arr_rt", "dep_rt", "arr", "dep")
+    when = next((stop[f] for f in fields if stop.get(f)), None)
+    try:
+        return _epoch(when.replace("T", " ").rstrip("Z")) if when else None
+    except ValueError:
+        return None
+
+
+def in_time_order(waypoints):
+    """The waypoints with their timed stops in time order, each in one of the places the
+    timed stops held (a point without a time stays where it was)."""
+    slots = [i for i, w in enumerate(waypoints)
+             if isinstance(w, dict) and isinstance(w.get("stop"), dict) and _stop_epoch(w["stop"]) is not None]
+    ordered = sorted((waypoints[i] for i in slots), key=lambda w: _stop_epoch(w["stop"]))
+    out = list(waypoints)
+    for i, w in zip(slots, ordered):
+        out[i] = w
+    return out
+
+
+def _interpolate(path, fraction):
+    """The [lat, lng] `fraction` of the way along `path` ([lat, lng] pairs), by distance."""
+    if len(path) < 2:
+        return list(path[0])
+
+    # Only relative lengths matter here: flat-earth legs, cheap on a long FR24 track
+    def leg(a, b):
+        dx = (b[1] - a[1] + 540) % 360 - 180
+        return math.hypot(b[0] - a[0], dx * math.cos(math.radians((a[0] + b[0]) / 2)))
+    legs = [leg(a, b) for a, b in zip(path, path[1:])]
+    target, run = sum(legs) * fraction, 0.0
+    for (a, b), leg in zip(zip(path, path[1:]), legs):
+        if leg and run + leg >= target:
+            k = (target - run) / leg
+            lng = a[1] + ((b[1] - a[1] + 540) % 360 - 180) * k   # the short way, past 180° too
+            return [a[0] + (b[0] - a[0]) * k, (lng + 540) % 360 - 180]
+        run += leg
+    return list(path[-1])
+
+
+def milestone_waypoint(name, place, start, end, path, window=None):
+    """A milestone as a waypoint. `start`/`end` are naive local datetimes (end optional),
+    in the departure airport's time zone unless `place` is "arrival"; `path` the flight's
+    [lat, lng] points; `window` (utc start, utc end epochs) the flight, for where along the
+    path one in flight goes. Raises ValueError for a bad milestone."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("A milestone needs a name.")
+    if len(name) > MILESTONE_NAME_MAX:
+        raise ValueError(f"A milestone's name is at most {MILESTONE_NAME_MAX} characters.")
+    if place not in MILESTONE_PLACES:
+        raise ValueError(f"A milestone's place is one of {list(MILESTONE_PLACES)}.")
+    anchor = path[-1] if place == "arrival" else path[0]
+    tz = _timezone_finder.timezone_at(lat=anchor[0], lng=anchor[1]) or "UTC"
+
+    def utc(local):
+        return local.replace(tzinfo=ZoneInfo(tz)).astimezone(timezone.utc)
+
+    start_utc = utc(start)
+    end_utc = utc(end) if end else None
+    if end_utc and end_utc < start_utc:
+        raise ValueError(f"Milestone {name!r} ends before it starts.")
+    if place == "in_flight":
+        t0, t1 = window or (None, None)
+        k = 0.5 if not (t0 and t1 and t1 > t0) else (start_utc.timestamp() - t0) / (t1 - t0)
+        lat, lng = _interpolate(path, min(max(k, 0.02), 0.98))
+    else:
+        lat, lng = anchor
+    stop = {
+        "kind": MILESTONE, "name": name, "place": place, "tz": tz,
+        "cc": getCountryFromCoordinates(lat, lng)["countryCode"],
+        "lat": lat, "lng": lng, "arr_rt": _iso(start_utc.timestamp()),
+    }
+    if end_utc and end_utc != start_utc:
+        stop["dep_rt"] = _iso(end_utc.timestamp())
+    return {"lat": lat, "lng": lng, "name": name, "stop": stop}
+
+
+def with_milestones(waypoints, milestones):
+    """The waypoints JSON with its milestones replaced by `milestones` (waypoints), in
+    time order with the runway stops."""
+    kept = [w for w in _load(waypoints) if not is_milestone(w)] + list(milestones)
+    kept = in_time_order(kept)
+    return json.dumps(kept, ensure_ascii=False) if kept else None
+
+
+def shift_milestone(stop, delta):
+    """A milestone moved by `delta` (timedelta) with its flight."""
+    for field in ("arr_rt", "dep_rt"):
+        try:
+            when = datetime.strptime(stop[field], "%Y-%m-%dT%H:%M:%SZ")
+            stop[field] = (when + delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except (KeyError, TypeError, ValueError):
+            pass
 
 
 def _load(waypoints):
@@ -205,6 +330,8 @@ def with_stops(waypoints, stops, utc_start, utc_end, departure_delay, arrival_de
             kept.insert(0, stop)
         else:
             kept.append(stop)
+    # The user's milestones (boarding before the take-off, …) where their times put them
+    kept = in_time_order(kept)
     return json.dumps(kept, ensure_ascii=False) if kept else None
 
 

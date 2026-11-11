@@ -22,7 +22,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import requests
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, session
 from geopy.distance import geodesic
 
 from py.utils import getDistanceFromPath, interpolate_track_if_gaps
@@ -30,15 +30,20 @@ from src.paths import coords_to_ewkt, geom_geojson_to_coords
 from src.pg import pg_session
 from src.runway_stops import delay_fields, has_runway_stop, track_stops, with_stops
 from src.users import User
-from src.utils import check_and_increment_fr24_usage, load_config
+from src.utils import check_and_increment_fr24_usage, current_user_is_friend_with, load_config, owner as site_owner
 
 logger = logging.getLogger(__name__)
 
 live_tracks_blueprint = Blueprint("live_tracks", __name__)
 
-# Refresh floor. Enforced in Postgres, not in memory: SimpleCache is per-gunicorn-worker,
-# so an in-process guard would let every worker poll independently.
-LIVE_POLL_INTERVAL = timedelta(minutes=5)
+# Refresh floors. Enforced in Postgres, not in memory: SimpleCache is per-gunicorn-worker,
+# so an in-process guard would let every worker poll independently. The whole track every
+# few minutes; between two, the latest position alone (a cheaper call), appended to it.
+# Both tunable in config.yaml (FR24.live_track_seconds, FR24.live_position_seconds): what a
+# tracked flight costs per hour is 3600 / each.
+_FR24_CONFIG = load_config().get("FR24") or {}
+LIVE_POLL_INTERVAL = timedelta(seconds=int(_FR24_CONFIG.get("live_track_seconds", 300)))
+LIVE_POSITION_INTERVAL = timedelta(seconds=int(_FR24_CONFIG.get("live_position_seconds", 30)))
 
 # Polling window, relative to the trip's own times so that a long-haul leg is never cut
 # off mid-flight. The grace period covers delays; the hard ceiling catches an arrival
@@ -67,6 +72,8 @@ SUMMARY_AFTER = timedelta(minutes=3)
 # Silent this long past its scheduled arrival, far from the destination: FR24 will not
 # hear from it again. Long enough to ride out an oceanic coverage gap.
 SIGNAL_GONE = timedelta(minutes=60)
+# How long past its (delay-adjusted) arrival a silent flight is still waited for.
+GIVE_UP_AFTER = timedelta(hours=3)
 
 # After touchdown the aircraft is followed to the gate, whose time the connection after
 # the flight counts from: until FR24 has not heard it for this long (transponder off)...
@@ -260,6 +267,33 @@ def _fetch_summary(fr24_id, username):
     return next((f for f in resp.json().get("data", []) if f.get("fr24_id") == fr24_id), None)
 
 
+def _fetch_position(trip, fr24_id):
+    """The aircraft's latest position from FR24's live feed: [lat, lng, altitude m, epoch]
+    or None. The feed is searched by flight number (registration), as when resolving the
+    flight, and the instance is told apart by its id."""
+    flight_number = _flight_number(trip)
+    registration = (trip.get("reg") or "").strip().upper()
+    if not flight_number and not registration:
+        return None
+    params = {"flights": flight_number} if flight_number else {"registrations": registration}
+    if not check_and_increment_fr24_usage(username=trip["username"]):
+        return None
+    try:
+        resp = requests.get(
+            f"{FR24_BASE}/api/live/flight-positions/light",
+            headers=_fr24_headers(), params=params, timeout=FR24_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        logger.warning("FR24 position failed for trip %s: %s", trip["trip_id"], exc)
+        return None
+    match = next((m for m in resp.json().get("data", []) if m.get("fr24_id") == fr24_id), None)
+    when = _fr24_epoch(match.get("timestamp")) if match else None
+    if not match or when is None or match.get("lat") is None or match.get("lon") is None:
+        return None
+    return [match["lat"], match["lon"], round((match.get("alt") or 0) * 0.3048, 1), when]
+
+
 def _fetch_track(fr24_id, username):
     """Fetch the whole trail so far. Returns (coords, altitude, timestamps) or None."""
     if not check_and_increment_fr24_usage(username=username):
@@ -337,7 +371,9 @@ def _flight_state(trip, coords, altitude, timestamps):
         return "landed" if silence >= PARKED_SILENCE or on_ground >= PARKED_AFTER else "live"
     if silence >= SIGNAL_LOST and _near_destination(trip, coords[-1], altitude[-1]):
         return "landed"
-    if silence >= SIGNAL_GONE and now > _as_utc(trip["arr"]):
+    # Given up for good (no longer polled): only well past even a late arrival, the
+    # delay not always being logged, and a long-haul's coverage gaps lasting an hour.
+    if silence >= SIGNAL_GONE and now > _as_utc(trip["arr"]) + GIVE_UP_AFTER:
         return "ended"
     return "live"
 
@@ -390,6 +426,45 @@ def _claim_due_trips(pg, trips):
     return [{**by_id[row["trip_id"]], "fr24_id": row["fr24_id"]} for row in rows]
 
 
+def _claim_due_positions(pg, trips):
+    """Claim the live flights due their latest position (not their whole track: one just
+    claimed for that is left out, the track brings it), as _claim_due_trips does."""
+    if not trips:
+        return []
+    by_id = {t["trip_id"]: t for t in trips}
+    rows = pg.execute(
+        """
+        UPDATE live_flight_tracks
+        SET position_polled = NOW()
+        WHERE trip_id = ANY(CAST(:ids AS integer[]))
+          AND status = 'live' AND fr24_id IS NOT NULL AND GeometryType(geom) = 'LINESTRING'
+          AND NOW() - position_polled >= :every
+          AND NOW() - last_polled >= :every
+        RETURNING trip_id, fr24_id
+        """,
+        {"ids": list(by_id), "every": LIVE_POSITION_INTERVAL},
+    ).fetchall()
+    return [(by_id[row["trip_id"]], row["fr24_id"]) for row in rows]
+
+
+def _store_position(pg, trip_id, fix):
+    """Append the latest position to the stored trail, if it is newer than its end."""
+    lat, lng, alt, when = fix
+    pg.execute(
+        """
+        UPDATE live_flight_tracks
+        SET geom = ST_AddPoint(geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)),
+            altitude = altitude || to_jsonb(CAST(:alt AS double precision)),
+            timestamps = timestamps || to_jsonb(CAST(:ts AS bigint))
+        WHERE trip_id = :trip_id AND status = 'live'
+          AND GeometryType(geom) = 'LINESTRING'
+          AND jsonb_typeof(altitude) = 'array' AND jsonb_typeof(timestamps) = 'array'
+          AND COALESCE(CAST(timestamps->>-1 AS double precision), 0) < :ts
+        """,
+        {"trip_id": trip_id, "lat": lat, "lng": lng, "alt": alt, "ts": int(when)},
+    )
+
+
 def _fetch_update(trip):
     """Do the network work for one claimed trip. Runs with no database session open, so
     no connection is pinned across two 25s HTTP calls."""
@@ -418,6 +493,10 @@ def _fetch_update(trip):
         if summary and summary.get("flight_ended"):
             status = "landed"
             landed_at = _fr24_epoch(summary.get("datetime_landed"))
+    # A trail never seen in the air (FR24 only heard it taxiing, at either end) shows
+    # nothing of the flight: the trip keeps the route it was logged with.
+    if status == "landed" and max(altitude) <= GROUND_ALT_M:
+        status = "ended"
     estimated = False
     if status == "landed" and altitude[-1] > GROUND_ALT_M:
         # Lost on the approach: finish the line at the airport it was landing at, when FR24
@@ -598,6 +677,25 @@ def _store_aircraft(pg, trip, update):
     )
 
 
+def _recent_speed(coords, timestamps):
+    """Ground speed (m/s) over about the last minute of fixes, or None: what the trip page
+    carries the aircraft on at between two of them, rather than the timetable's pace."""
+    if not isinstance(timestamps, list) or len(timestamps) != len(coords) or len(coords) < 2:
+        return None
+    last = len(coords) - 1
+    if not timestamps[last]:
+        return None
+    first = last
+    while first > 0 and timestamps[first - 1] and timestamps[last] - timestamps[first - 1] <= 75:
+        first -= 1
+    span = timestamps[last] - timestamps[first] if first < last else 0
+    if span < 20:
+        return None
+    metres = sum(geodesic(a, b).meters for a, b in zip(coords[first:last], coords[first + 1:last + 1]))
+    speed = metres / span
+    return round(speed, 1) if 0 <= speed <= 350 else None
+
+
 def _load_payloads(pg, trip_ids):
     """Read back what is stored for these trips, in client shape: the live trail of the
     ones in the air, and the final track of the ones that have landed."""
@@ -608,35 +706,48 @@ def _load_payloads(pg, trip_ids):
                -- When the last fix was taken, which the client shows: the stored row can
                -- be a whole refresh interval old, and its timestamps may be stripped.
                COALESCE(CAST(timestamps->>-1 AS double precision),
-                        EXTRACT(EPOCH FROM last_polled)) AS updated
+                        EXTRACT(EPOCH FROM last_polled)) AS updated,
+               -- When a request will next bring something new: the position or the track
+               EXTRACT(EPOCH FROM LEAST(last_polled + :track_every,
+                                        GREATEST(position_polled, last_polled) + :position_every)) AS next_update
         FROM live_flight_tracks
         WHERE trip_id = ANY(CAST(:ids AS integer[]))
           AND status = 'live' AND geom IS NOT NULL
         UNION ALL
-        SELECT p.trip_id, 'landed', ST_AsGeoJSON(p.geom), p.altitude, p.timestamps, NULL
+        SELECT p.trip_id, 'landed', ST_AsGeoJSON(p.geom), p.altitude, p.timestamps, NULL, NULL
         FROM paths p
         JOIN trips t ON t.trip_id = p.trip_id
         WHERE p.trip_id = ANY(CAST(:ids AS integer[])) AND t.route_source = 'fr24'
         """,
-        {"ids": [int(t) for t in trip_ids]},
+        {"ids": [int(t) for t in trip_ids], "track_every": LIVE_POLL_INTERVAL,
+         "position_every": LIVE_POSITION_INTERVAL},
     ).fetchall()
     payloads = {}
     for row in rows:
         coords = geom_geojson_to_coords(row["geojson"])
         if not coords or len(coords) < 2:
             continue
+        altitude = row["altitude"] if isinstance(row["altitude"], list) else None
         payloads[row["trip_id"]] = {
             "trip_id": row["trip_id"],
             "status": row["status"],
+            # Up, and back on the ground: landed and taxiing in, nothing left to fly. Told
+            # apart here, before the altitude is withheld from viewers (flight_3d), so the
+            # maps stop drawing a remainder to the airport's point from the gate.
+            "arrived": bool(row["status"] == "live" and altitude and max(altitude) > GROUND_ALT_M
+                            and all(a <= GROUND_ALT_M for a in altitude[-2:])),
             "path": coords,
             "altitude": row["altitude"],
             "timestamps": row["timestamps"],
             "updated": int(row["updated"]) if row["updated"] else None,
+            "next_update": int(row["next_update"]) if row["next_update"] else None,
+            # Measured here, as the timestamps may be withheld from the viewer (flight_3d)
+            "speed": _recent_speed(coords, row["timestamps"]) if row["status"] == "live" else None,
         }
     return payloads
 
 
-def get_live_tracks(trip_ids):
+def get_live_tracks(trip_ids, positions=False):
     """Return {trip_id: {status, path, altitude, timestamps, updated}} for whichever of
     trip_ids are opted-in flights in their tracking window. `status` is 'live' while in
     the air and 'landed' once the final track is in `paths`; a trip missing from the
@@ -669,6 +780,22 @@ def get_live_tracks(trip_ids):
         except Exception:
             logger.exception("Storing live track failed for trip %s", trip["trip_id"])
 
+    # Between two tracks, the latest position of the flights in the air: for a trip's own
+    # page only (`positions`), where someone follows that flight. The live map, with every
+    # flight in the air on it, makes do with the tracks (and any position those pages got).
+    due = []
+    if positions:
+        with pg_session() as pg:
+            due = _claim_due_positions(pg, [t for t in trips if not t["landed"]])
+    for trip, fr24_id in due:
+        try:
+            fix = _fetch_position(trip, fr24_id)
+            if fix:
+                with pg_session() as pg:
+                    _store_position(pg, trip["trip_id"], fix)
+        except Exception:
+            logger.exception("Live position refresh failed for trip %s", trip["trip_id"])
+
     with pg_session() as pg:
         payloads = _load_payloads(pg, [t["trip_id"] for t in trips])
 
@@ -696,4 +823,34 @@ def live_tracks(trip_ids):
         return jsonify({"error": "invalid trip ids"}), 400
     if not ids or len(ids) > 200:
         return jsonify({"error": "expected between 1 and 200 trip ids"}), 400
-    return jsonify(get_live_tracks(ids))
+    return jsonify(get_live_tracks(_viewable_ids(ids), positions=True))
+
+
+def _viewable_ids(ids):
+    """The trips of `ids` this viewer may see, by the trip page's rules
+    (processPublicTrips): the owner (and the site owner) sees everything; others only
+    the trips of users who share theirs, never a private one, a friends one to friends.
+    The endpoint takes any id, so it must not show the track of a trip whose page is shut."""
+    with pg_session() as pg:
+        rows = pg.execute(
+            "SELECT trip_id, user_id, visibility FROM trips WHERE trip_id = ANY(:ids)",
+            {"ids": ids},
+        ).fetchall()
+    if not rows:
+        return []
+    users = {u.uid: u for u in User.query.filter(User.uid.in_({r["user_id"] for r in rows})).all()}
+    friends, out = {}, []
+    for row in rows:
+        user = users.get(row["user_id"])
+        if not user:
+            continue
+        if not (session.get(user.username) or session.get(site_owner)):
+            if not user.is_public_trips() or row["visibility"] == "private":
+                continue
+            if row["visibility"] == "friends":
+                if user.username not in friends:
+                    friends[user.username] = current_user_is_friend_with(user.username)
+                if not friends[user.username]:
+                    continue
+        out.append(row["trip_id"])
+    return out
