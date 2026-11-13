@@ -10724,9 +10724,11 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     return render_template("edit_copy.html", **context)
 
 
-def _export_trips_csv_text(username, requested_trip_ids=None):
+def _export_trips_csv_text(username, requested_trip_ids=None, *, full_export):
     """The trips CSV shared by /export and /export_all. Kept in app.py because
-    it depends on adapt_pg_trip_row's legacy row shaping."""
+    it depends on adapt_pg_trip_row's legacy row shaping. full_export (set by
+    /export_all, not /export) adds ticket_ids, which point into the zip's
+    tickets.csv, and the paths' altitude, timestamps and raw GPX trace."""
     si = StringIO()
     cw = csv.writer(si)
     user_id = get_user_id(username)
@@ -10751,12 +10753,34 @@ def _export_trips_csv_text(username, requested_trip_ids=None):
             ).fetchall():
                 paths[path["trip_id"]] = path["path"]
 
-    columns = [k for k in trips[0].keys() if k != "ticket_ids"] if trips else []
-    cw.writerow(columns + ["path"])
+    gps = {}
+    if full_export and tripIds:
+        with pg_session() as pg:
+            for row in pg.execute(
+                """
+                SELECT trip_id, altitude, timestamps,
+                       (
+                           SELECT json_agg(json_build_array(ST_Y(dp.geom), ST_X(dp.geom)) ORDER BY dp.path)
+                           FROM ST_DumpPoints(raw_geom) AS dp
+                       )::text AS raw_path
+                FROM paths WHERE trip_id = ANY(:ids)
+                """,
+                {"ids": [int(i) for i in tripIds]},
+            ).fetchall():
+                gps[row["trip_id"]] = row
+
+    columns = (
+        [k for k in trips[0].keys() if full_export or k != "ticket_ids"]
+        if trips
+        else []
+    )
+    gps_columns = ["altitude", "timestamps", "raw_path"] if full_export else []
+    cw.writerow(columns + ["path"] + gps_columns)
     processedRows = []
     for trip in trips:
         rowP = [
-            json.dumps(trip[k]) if k == "waypoints" else trip[k] for k in columns
+            json.dumps(trip[k]) if k in ("waypoints", "ticket_ids") else trip[k]
+            for k in columns
         ]
         encoded = (
             polyline.encode(json.loads(paths[trip["uid"]]))
@@ -10764,6 +10788,13 @@ def _export_trips_csv_text(username, requested_trip_ids=None):
             else ""
         )
         rowP.append(encoded)
+        if full_export:
+            g = gps.get(trip["uid"])
+            rowP += [
+                json.dumps(g["altitude"]) if g and g["altitude"] is not None else "",
+                json.dumps(g["timestamps"]) if g and g["timestamps"] is not None else "",
+                polyline.encode(json.loads(g["raw_path"])) if g and g["raw_path"] else "",
+            ]
         processedRows.append(rowP)
     cw.writerows(processedRows)
     return si.getvalue()
@@ -10775,7 +10806,7 @@ def export(username):
     requestedTrips = request.args.get("trips", default=None)
     ids = [int(t) for t in requestedTrips.split(",")] if requestedTrips else None
 
-    csv_text = _export_trips_csv_text(username, ids)
+    csv_text = _export_trips_csv_text(username, ids, full_export=False)
     response = make_response(csv_text)
     response.headers["Content-Disposition"] = (
         "attachment; filename=trainlog_{}_{}.csv".format(
@@ -10799,7 +10830,9 @@ def export_all(username):
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("trips.csv", _export_trips_csv_text(username))
+        zf.writestr(
+            "trips.csv", _export_trips_csv_text(username, full_export=True)
+        )
         for filename, csv_text in build_account_data_csvs(user).items():
             zf.writestr(filename, csv_text)
         zf.writestr(
