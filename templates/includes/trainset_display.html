@@ -403,6 +403,8 @@ function _renderTrainset($modalBody, units, setName, seatInfo, opts) {
 function _renderTrainsetInline(rowId, units, labels, seatInfo) {
     var $container = $('#trainsetInline' + rowId);
     if (!$container.length) return;
+    // A redraw of the detail row while the units were loading leaves two pending renders on one container.
+    $container.empty();
     var strip = $('<div class="compo-strip ts-strip"></div>');
     var all = units || [];
     all.forEach(function(u, i) {
