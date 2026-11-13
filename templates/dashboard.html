@@ -1001,7 +1001,7 @@ function fmt(n) {
 function fmtDate(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString("{{ langId }}", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function fmtTime(iso) {
@@ -1635,8 +1635,10 @@ function renderYearCard(d) {
     if (distHtml) yearRows.push(statRow("{{ distanceComparison }}", distHtml));
     if (durHtml)  yearRows.push(statRow("{{ durationComparison }}", durHtml));
     if (d.busiest_month) {
-      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      yearRows.push(statRow("{{ busiestMonth }}", `${months[d.busiest_month.month - 1]} (${d.busiest_month.trips} {{ trips }})`));
+      const month = new Intl.DateTimeFormat("{{ langId }}", { month: "long", timeZone: "UTC" }).format(
+        new Date(Date.UTC(2024, d.busiest_month.month - 1, 1))
+      );
+      yearRows.push(statRow("{{ busiestMonth }}", `${month} (${d.busiest_month.trips} {{ trips }})`));
     }
   }
   yearEl.innerHTML = grid + yearRows.join("");
