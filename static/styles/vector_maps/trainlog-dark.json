@@ -6,6 +6,15 @@
     "openmaptiles": {
       "type": "vector",
       "url": "https://tiles.openfreemap.org/planet"
+    },
+    "orm_high": {
+      "type": "vector",
+      "tiles": [
+        "{{ormTilesUrl}}/railway_line_high,railway_text_km/{z}/{x}/{y}"
+      ],
+      "minzoom": 7,
+      "maxzoom": 14,
+      "attribution": "<a href=\"https://www.openrailwaymap.org/\" target=\"_blank\">© OpenRailwayMap</a>"
     }
   },
   "metadata": {
@@ -2065,119 +2074,6 @@
       }
     },
     {
-      "type": "line",
-      "id": "tunnel-rail-tracks",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "filter": [
-        "all",
-        [
-          "==",
-          "$type",
-          "LineString"
-        ],
-        [
-          "in",
-          "class",
-          "rail"
-        ],
-        [
-          "==",
-          "brunnel",
-          "tunnel"
-        ]
-      ],
-      "layout": {
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#888888",
-        "line-dasharray": [
-          0.1,
-          2.0
-        ],
-        "line-opacity": 0.6,
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
-          0,
-          0.3,
-          16,
-          0,
-          20,
-          10
-        ]
-      }
-    },
-    {
-      "type": "line",
-      "id": "tunnel-rail",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "filter": [
-        "all",
-        [
-          "==",
-          "$type",
-          "LineString"
-        ],
-        [
-          "in",
-          "class",
-          "rail"
-        ],
-        [
-          "==",
-          "brunnel",
-          "tunnel"
-        ]
-      ],
-      "layout": {
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#888888",
-        "line-opacity": 0.6,
-        "line-gap-width": [
-          "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
-          17,
-          0,
-          20,
-          4
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          0,
-          0.4,
-          8,
-          0.6,
-          14,
-          1.2,
-          16,
-          2
-        ]
-      }
-    },
-    {
       "type": "fill",
       "id": "road-pedestrian-zone",
       "minzoom": 14,
@@ -3991,133 +3887,6 @@
     },
     {
       "type": "line",
-      "id": "road-rail-tracks",
-      "metadata": {
-        "taxonomy:group": "railways"
-      },
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "filter": [
-        "all",
-        [
-          "==",
-          "$type",
-          "LineString"
-        ],
-        [
-          "in",
-          "class",
-          "rail"
-        ],
-        [
-          "!=",
-          "brunnel",
-          "tunnel"
-        ],
-        [
-          "!=",
-          "brunnel",
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#CCCCCC",
-        "line-dasharray": [
-          0.1,
-          2.0
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
-          0,
-          0.3,
-          16,
-          0,
-          20,
-          10
-        ]
-      }
-    },
-    {
-      "type": "line",
-      "id": "road-rail",
-      "metadata": {
-        "taxonomy:group": "railways"
-      },
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "filter": [
-        "all",
-        [
-          "==",
-          "$type",
-          "LineString"
-        ],
-        [
-          "in",
-          "class",
-          "rail"
-        ],
-        [
-          "!=",
-          "brunnel",
-          "tunnel"
-        ],
-        [
-          "!=",
-          "brunnel",
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#CCCCCC",
-        "line-gap-width": [
-          "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
-          17,
-          0,
-          20,
-          4
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          0,
-          0.4,
-          8,
-          0.6,
-          14,
-          1.2,
-          16,
-          2
-        ]
-      }
-    },
-    {
-      "type": "line",
       "id": "bridge-street-limited-case",
       "minzoom": 14,
       "source": "openmaptiles",
@@ -5449,120 +5218,6 @@
     },
     {
       "type": "line",
-      "id": "bridge-rail-tracks",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "filter": [
-        "all",
-        [
-          "==",
-          "$type",
-          "LineString"
-        ],
-        [
-          "in",
-          "class",
-          "rail"
-        ],
-        [
-          "==",
-          "brunnel",
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#CCCCCC",
-        "line-dasharray": [
-          0.1,
-          2.0
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
-          0,
-          0.3,
-          16,
-          0,
-          20,
-          10
-        ]
-      }
-    },
-    {
-      "type": "line",
-      "id": "bridge-rail",
-      "metadata": {
-        "taxonomy:group": "railways"
-      },
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "filter": [
-        "all",
-        [
-          "==",
-          "$type",
-          "LineString"
-        ],
-        [
-          "in",
-          "class",
-          "rail"
-        ],
-        [
-          "==",
-          "brunnel",
-          "bridge"
-        ]
-      ],
-      "layout": {
-        "line-join": "round"
-      },
-      "paint": {
-        "line-color": "#CCCCCC",
-        "line-gap-width": [
-          "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
-          17,
-          0,
-          20,
-          4
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          0,
-          0.4,
-          8,
-          0.6,
-          14,
-          1.2,
-          16,
-          2
-        ]
-      }
-    },
-    {
-      "type": "line",
       "id": "admin-2-glow",
       "metadata": {
         "taxonomy:group": "admin-boundaries"
@@ -5925,6 +5580,2367 @@
           20,
           1
         ]
+      }
+    },
+    {
+      "id": "tunnel-rail-urban-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "==",
+          [
+            "coalesce",
+            [
+              "get",
+              "tunnel"
+            ],
+            false
+          ],
+          true
+        ],
+        [
+          "!",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#888888",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-opacity": 0.42,
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ]
+      }
+    },
+    {
+      "id": "tunnel-rail-urban",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "==",
+          [
+            "coalesce",
+            [
+              "get",
+              "tunnel"
+            ],
+            false
+          ],
+          true
+        ],
+        [
+          "!",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#888888",
+        "line-opacity": 0.42,
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ]
+      }
+    },
+    {
+      "id": "road-rail-urban-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "bridge"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "!",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ],
+        "line-opacity": 0.7
+      }
+    },
+    {
+      "id": "road-rail-urban",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "bridge"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "!",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ],
+        "line-opacity": 0.7
+      }
+    },
+    {
+      "id": "bridge-rail-urban-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "bridge"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "!",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ],
+        "line-opacity": 0.7
+      }
+    },
+    {
+      "id": "bridge-rail-urban",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "bridge"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "!",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ],
+        "line-opacity": 0.7
+      }
+    },
+    {
+      "id": "tunnel-rail-minor-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "==",
+          [
+            "coalesce",
+            [
+              "get",
+              "tunnel"
+            ],
+            false
+          ],
+          true
+        ],
+        [
+          "all",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ],
+          [
+            "!",
+            [
+              "any",
+              [
+                "==",
+                [
+                  "coalesce",
+                  [
+                    "get",
+                    "highspeed"
+                  ],
+                  false
+                ],
+                true
+              ],
+              [
+                "all",
+                [
+                  "in",
+                  [
+                    "get",
+                    "feature"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "rail",
+                      "narrow_gauge"
+                    ]
+                  ]
+                ],
+                [
+                  "!",
+                  [
+                    "has",
+                    "service"
+                  ]
+                ],
+                [
+                  "in",
+                  [
+                    "get",
+                    "usage"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "main",
+                      "branch"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#888888",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-opacity": 0.6,
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ]
+      }
+    },
+    {
+      "id": "tunnel-rail-minor",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "==",
+          [
+            "coalesce",
+            [
+              "get",
+              "tunnel"
+            ],
+            false
+          ],
+          true
+        ],
+        [
+          "all",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ],
+          [
+            "!",
+            [
+              "any",
+              [
+                "==",
+                [
+                  "coalesce",
+                  [
+                    "get",
+                    "highspeed"
+                  ],
+                  false
+                ],
+                true
+              ],
+              [
+                "all",
+                [
+                  "in",
+                  [
+                    "get",
+                    "feature"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "rail",
+                      "narrow_gauge"
+                    ]
+                  ]
+                ],
+                [
+                  "!",
+                  [
+                    "has",
+                    "service"
+                  ]
+                ],
+                [
+                  "in",
+                  [
+                    "get",
+                    "usage"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "main",
+                      "branch"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#888888",
+        "line-opacity": 0.6,
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ]
+      }
+    },
+    {
+      "id": "road-rail-minor-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "bridge"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "all",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ],
+          [
+            "!",
+            [
+              "any",
+              [
+                "==",
+                [
+                  "coalesce",
+                  [
+                    "get",
+                    "highspeed"
+                  ],
+                  false
+                ],
+                true
+              ],
+              [
+                "all",
+                [
+                  "in",
+                  [
+                    "get",
+                    "feature"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "rail",
+                      "narrow_gauge"
+                    ]
+                  ]
+                ],
+                [
+                  "!",
+                  [
+                    "has",
+                    "service"
+                  ]
+                ],
+                [
+                  "in",
+                  [
+                    "get",
+                    "usage"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "main",
+                      "branch"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "road-rail-minor",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "bridge"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "all",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ],
+          [
+            "!",
+            [
+              "any",
+              [
+                "==",
+                [
+                  "coalesce",
+                  [
+                    "get",
+                    "highspeed"
+                  ],
+                  false
+                ],
+                true
+              ],
+              [
+                "all",
+                [
+                  "in",
+                  [
+                    "get",
+                    "feature"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "rail",
+                      "narrow_gauge"
+                    ]
+                  ]
+                ],
+                [
+                  "!",
+                  [
+                    "has",
+                    "service"
+                  ]
+                ],
+                [
+                  "in",
+                  [
+                    "get",
+                    "usage"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "main",
+                      "branch"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "bridge-rail-minor-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "bridge"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "all",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ],
+          [
+            "!",
+            [
+              "any",
+              [
+                "==",
+                [
+                  "coalesce",
+                  [
+                    "get",
+                    "highspeed"
+                  ],
+                  false
+                ],
+                true
+              ],
+              [
+                "all",
+                [
+                  "in",
+                  [
+                    "get",
+                    "feature"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "rail",
+                      "narrow_gauge"
+                    ]
+                  ]
+                ],
+                [
+                  "!",
+                  [
+                    "has",
+                    "service"
+                  ]
+                ],
+                [
+                  "in",
+                  [
+                    "get",
+                    "usage"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "main",
+                      "branch"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "bridge-rail-minor",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "bridge"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "all",
+          [
+            "in",
+            [
+              "get",
+              "feature"
+            ],
+            [
+              "literal",
+              [
+                "rail",
+                "narrow_gauge"
+              ]
+            ]
+          ],
+          [
+            "!",
+            [
+              "any",
+              [
+                "==",
+                [
+                  "coalesce",
+                  [
+                    "get",
+                    "highspeed"
+                  ],
+                  false
+                ],
+                true
+              ],
+              [
+                "all",
+                [
+                  "in",
+                  [
+                    "get",
+                    "feature"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "rail",
+                      "narrow_gauge"
+                    ]
+                  ]
+                ],
+                [
+                  "!",
+                  [
+                    "has",
+                    "service"
+                  ]
+                ],
+                [
+                  "in",
+                  [
+                    "get",
+                    "usage"
+                  ],
+                  [
+                    "literal",
+                    [
+                      "main",
+                      "branch"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "tunnel-rail-main-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "==",
+          [
+            "coalesce",
+            [
+              "get",
+              "tunnel"
+            ],
+            false
+          ],
+          true
+        ],
+        [
+          "any",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "highspeed"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "all",
+            [
+              "in",
+              [
+                "get",
+                "feature"
+              ],
+              [
+                "literal",
+                [
+                  "rail",
+                  "narrow_gauge"
+                ]
+              ]
+            ],
+            [
+              "!",
+              [
+                "has",
+                "service"
+              ]
+            ],
+            [
+              "in",
+              [
+                "get",
+                "usage"
+              ],
+              [
+                "literal",
+                [
+                  "main",
+                  "branch"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#888888",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-opacity": 0.6,
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ]
+      }
+    },
+    {
+      "id": "tunnel-rail-main",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "==",
+          [
+            "coalesce",
+            [
+              "get",
+              "tunnel"
+            ],
+            false
+          ],
+          true
+        ],
+        [
+          "any",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "highspeed"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "all",
+            [
+              "in",
+              [
+                "get",
+                "feature"
+              ],
+              [
+                "literal",
+                [
+                  "rail",
+                  "narrow_gauge"
+                ]
+              ]
+            ],
+            [
+              "!",
+              [
+                "has",
+                "service"
+              ]
+            ],
+            [
+              "in",
+              [
+                "get",
+                "usage"
+              ],
+              [
+                "literal",
+                [
+                  "main",
+                  "branch"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#888888",
+        "line-opacity": 0.6,
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ]
+      }
+    },
+    {
+      "id": "road-rail-main-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "bridge"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "any",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "highspeed"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "all",
+            [
+              "in",
+              [
+                "get",
+                "feature"
+              ],
+              [
+                "literal",
+                [
+                  "rail",
+                  "narrow_gauge"
+                ]
+              ]
+            ],
+            [
+              "!",
+              [
+                "has",
+                "service"
+              ]
+            ],
+            [
+              "in",
+              [
+                "get",
+                "usage"
+              ],
+              [
+                "literal",
+                [
+                  "main",
+                  "branch"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "road-rail-main",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "bridge"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "any",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "highspeed"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "all",
+            [
+              "in",
+              [
+                "get",
+                "feature"
+              ],
+              [
+                "literal",
+                [
+                  "rail",
+                  "narrow_gauge"
+                ]
+              ]
+            ],
+            [
+              "!",
+              [
+                "has",
+                "service"
+              ]
+            ],
+            [
+              "in",
+              [
+                "get",
+                "usage"
+              ],
+              [
+                "literal",
+                [
+                  "main",
+                  "branch"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "bridge-rail-main-tracks",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "bridge"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "any",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "highspeed"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "all",
+            [
+              "in",
+              [
+                "get",
+                "feature"
+              ],
+              [
+                "literal",
+                [
+                  "rail",
+                  "narrow_gauge"
+                ]
+              ]
+            ],
+            [
+              "!",
+              [
+                "has",
+                "service"
+              ]
+            ],
+            [
+              "in",
+              [
+                "get",
+                "usage"
+              ],
+              [
+                "literal",
+                [
+                  "main",
+                  "branch"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-dasharray": [
+          0.1,
+          2.0
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.3,
+          16,
+          0,
+          20,
+          10
+        ],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "bridge-rail-main",
+      "type": "line",
+      "source": "orm_high",
+      "source-layer": "railway_line_high",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        [
+          "!=",
+          [
+            "get",
+            "feature"
+          ],
+          "ferry"
+        ],
+        [
+          "==",
+          [
+            "get",
+            "state"
+          ],
+          "present"
+        ],
+        [
+          "all",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "bridge"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "!",
+            [
+              "==",
+              [
+                "coalesce",
+                [
+                  "get",
+                  "tunnel"
+                ],
+                false
+              ],
+              true
+            ]
+          ]
+        ],
+        [
+          "any",
+          [
+            "==",
+            [
+              "coalesce",
+              [
+                "get",
+                "highspeed"
+              ],
+              false
+            ],
+            true
+          ],
+          [
+            "all",
+            [
+              "in",
+              [
+                "get",
+                "feature"
+              ],
+              [
+                "literal",
+                [
+                  "rail",
+                  "narrow_gauge"
+                ]
+              ]
+            ],
+            [
+              "!",
+              [
+                "has",
+                "service"
+              ]
+            ],
+            [
+              "in",
+              [
+                "get",
+                "usage"
+              ],
+              [
+                "literal",
+                [
+                  "main",
+                  "branch"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#CCCCCC",
+        "line-gap-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          17,
+          0,
+          20,
+          4
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          0.4,
+          8,
+          0.6,
+          14,
+          1.2,
+          16,
+          2
+        ],
+        "line-opacity": 1
       }
     },
     {
