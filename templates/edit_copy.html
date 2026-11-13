@@ -3628,6 +3628,13 @@
         if (editedStopsWaypoints != null) formData["waypoints"] = editedStopsWaypoints;
 
         formData = processFormDates(formData);
+        // Delays unticked: send them empty so the stored ones are deleted. The minutes
+        // inputs keep their values while hidden (re-ticking brings them back), so this
+        // can't be left to the form.
+        if (!$('#delayToggle').is(':checked')) {
+            formData["departure_delay"] = "";
+            formData["arrival_delay"] = "";
+        }
         formData["trip_id"] = tripId;
         if ((
             formData["precision"] == "unknown"
@@ -4062,12 +4069,6 @@
         if ($('#arrActualGroup').is(':visible'))
           updateFromActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', 'arrivalDelayMinutes', true);
       });
-    });
-
-    // On submit: clear delay values if toggle is unchecked
-    $('form').not('#fr24PathForm').on('submit', function() {
-      if (!$('#delayToggle').is(':checked'))
-        $('#departureDelayMinutes, #arrivalDelayMinutes').val('');
     });
 
     // Hide delays when precision is not precise dates

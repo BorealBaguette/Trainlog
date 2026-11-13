@@ -1475,7 +1475,7 @@ fetch(`/u/${username}/dashboard_trips`)
         const ref = t.utc_start || t.start;
         return `<span class="countdown-badge">${countdown(ref)}</span>`
              + (t.trip_length ? `<div class="trip-km">${mToKm(t.trip_length)} km</div>` : "");
-      }, 3);
+      }, d.shown);
     }
 
     // Recent — determine "today" / "ongoing" client-side from utc timestamps
@@ -1499,7 +1499,7 @@ fetch(`/u/${username}/dashboard_trips`)
           badge = `<div class="trip-date">${fmtDate(t.start)}</div>`;
         }
         return badge + (t.trip_length ? `<div class="trip-km">${mToKm(t.trip_length)} km</div>` : "");
-      }, 5);
+      }, d.shown);
     }
   })
   .catch(() => {
