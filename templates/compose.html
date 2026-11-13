@@ -262,6 +262,23 @@
   .cp-station-dot.resolved { background: #22c55e; }
   .cp-station-wrap .form-control { padding-right: 1.8rem; }
 
+  /* A hand-placed end (compose_manual_station.html): a quiet toggle right of the field's
+     label, swapping the search field for a name and coordinates. */
+  .cp-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+  .cp-label-row label { min-width: 0; }
+  .cp-manual-toggle {
+    flex: 0 0 auto; border: 0; background: none; padding: 0; margin-bottom: .2rem; font-size: .75rem;
+    color: light-dark(#6b7280, var(--bs-secondary-color)); cursor: pointer;
+  }
+  .cp-manual-toggle:hover, .cp-manual-toggle[aria-pressed="true"] { color: light-dark(#0d6efd, var(--bs-link-color)); }
+  .cp-station-wrap[hidden] { display: none; }
+  .cp-manual { display: flex; flex-direction: column; gap: .35rem; }
+  .cp-manual[hidden] { display: none; }
+  .cp-manual-coords { display: flex; gap: .35rem; }
+  .cp-manual-coords .form-control { flex: 1 1 0; min-width: 0; }
+  .cp-manual-hint { font-size: .72rem; color: light-dark(#9ca3af, var(--bs-secondary-color)); }
+  .leaflet-container.cp-manual-picking { cursor: crosshair; }
+
   /* Via rows. A via is neither the origin nor the destination, and with three station
      fields stacked they read as one list — the signpost marks which of them are the
      stops along the way, and indenting the field keeps that reading at a glance. */
@@ -279,13 +296,21 @@
     border: 0; background: none; cursor: pointer; color: light-dark(#9ca3af, var(--bs-secondary-color)); font-size: 1.1rem;
     line-height: 1; padding: 0;
   }
+  /* A via's search box, its manual panel under it in its place, and the toggle after. */
+  .via-field { flex: 1 1 auto; min-width: 0; }
+  .via-search, .via-manual-name { position: relative; }
+  .via-search[hidden] { display: none; }
+  .via-manual-toggle { margin: 0; font-size: .9rem; line-height: 1; }
+  .via-compose-row.is-manual { align-items: flex-start; }
+  .via-compose-row.is-manual > .via-compose-icon,
+  .via-compose-row.is-manual > .via-manual-toggle { margin-top: .55rem; }
   .via-compose-remove:hover { color: light-dark(#374151, var(--bs-emphasis-color)); }
   /* A timetable stop's "07:22 – 07:23", display only (gone once the stop is edited) */
   .via-compose-time {
     position: absolute; right: 1.7rem; top: 50%; transform: translateY(-50%);
     font-size: .75rem; color: light-dark(#9ca3af, var(--bs-secondary-color)); font-variant-numeric: tabular-nums; pointer-events: none;
   }
-  .via-compose-row.has-time .form-control { padding-right: 10rem; }  /* "10:58 – 10:59 · Voie 4" */
+  .via-compose-row.has-time .via-search .form-control { padding-right: 10rem; }  /* "10:58 – 10:59 · Voie 4" */
   /* A station's tracks or lines (stop_slots.js), left of the dot or of a via's ×. Centred
      without a transform, which would trap its menu under the next field. */
   .cp-station-wrap .track-dropdown, .via-compose-row .track-dropdown {
@@ -294,7 +319,7 @@
   .cp-station-wrap .track-dropdown[hidden], .via-compose-row .track-dropdown[hidden] { display: none; }
   .cp-station-wrap .form-control.has-stops, .via-compose-row .form-control.has-stops { padding-right: 6.2rem; }
   .via-compose-row.has-stops .via-compose-time { right: 6rem; }
-  .via-compose-row.has-time.has-stops .form-control { padding-right: 13rem; }
+  .via-compose-row.has-time.has-stops .via-search .form-control { padding-right: 13rem; }
 
   /* Once there are vias, a summary row heads them and folds them away on click; under
      it the stops read as its children, indented on a guide line. */
@@ -747,13 +772,17 @@
       </div>
     </div>
 
+    {% import 'compose_manual_station.html' as manual_station %}
     <!-- Origin / Destination / Via -->
     <div class="cp-section">
       <div class="cp-section-title">{{ tOrigin|default('Route') }}</div>
 
       <!-- Origin -->
       <div class="cp-input-row">
-        <label>{{ originTerminal }}</label>
+        <div class="cp-label-row">
+          <label>{{ originTerminal }}</label>
+          {{ manual_station.toggle('origin', manualOrigin|default('Manual Origin')) }}
+        </div>
         <div class="cp-station-wrap">
           <input type="text" id="originStation" class="form-control stationSearch" placeholder="{{ originTerminal }}">
           <div class="dropdown track-dropdown" hidden>
@@ -762,6 +791,7 @@
           </div>
           <span class="cp-station-dot" id="dot-origin"></span>
         </div>
+        {{ manual_station.panel('origin', originTerminalName, manualMapHint|default('Or click the map to place it')) }}
       </div>
 
       <!-- Via container -->
@@ -784,7 +814,10 @@
       <!-- Destination -->
       {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
       <div class="cp-input-row">
-        <label>{{ destinationTerminal }}</label>
+        <div class="cp-label-row">
+          <label>{{ destinationTerminal }}</label>
+          {{ manual_station.toggle('dest', manDestination|default('Manual Destination')) }}
+        </div>
         <div class="cp-station-wrap">
           <input type="text" id="destinationStation" class="form-control stationSearch" placeholder="{{ destinationTerminal }}">
           <div class="dropdown track-dropdown" hidden>
@@ -793,6 +826,7 @@
           </div>
           <span class="cp-station-dot" id="dot-dest"></span>
         </div>
+        {{ manual_station.panel('dest', destinationTerminalName, manualMapHint|default('Or click the map to place it')) }}
       </div>
       {% endif %}
 
@@ -1927,7 +1961,10 @@ function moveEntry(role, latlng) {
   {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
   originEntry = destEntry = moved;   // one point, both ends
   {% endif %}
-  if (manualPoints[role]) { manualPoints[role].lat = latlng.lat; manualPoints[role].lng = latlng.lng; }
+  if (manualPoints[role]) {
+    manualPoints[role].lat = latlng.lat; manualPoints[role].lng = latlng.lng;
+    if (manualPanels[role]) manualPanels[role].refresh();
+  }
 }
 
 // Once the router owns the markers it is the one that moves them, so read the ends
@@ -2215,6 +2252,175 @@ $('#destinationStation').on('autocompleteselect', function(e, ui) {
 });
 {% endif %}
 
+// ── Manual stations ──
+//    A place with no stop to pick (a trailhead, a friend's door, a lay-by), named and
+//    placed by hand: from an end's "Manual" toggle, or from the stop picker's "Name this
+//    place". Same shape as any other entry, so nothing downstream has to know the
+//    difference; composeSave tells the server to file it as a manual station.
+function manualStationEntry(latlng, name) {
+  var entry = [[latlng.lat, latlng.lng], name];
+  globalStationDict[name] = entry;
+  // Offer it in this session's autocompletes too, like the ones loaded at startup.
+  if (!manualStationsList.some(function(s) { return s.value === name; })) {
+    manualStationsList.push({ label: name, value: name, manual: true });
+  }
+  return entry;
+}
+
+// The manual panel opened or focused last: the one a click on the map places.
+var manualPicking = null;
+
+function syncManualPicking() {
+  if (manualPicking && (manualPicking.panel.hidden || !manualPicking.panel.isConnected)) manualPicking = null;
+  if (!manualPicking) {
+    var open = Array.prototype.find.call(document.querySelectorAll('.cp-manual:not([hidden])'),
+      function(p) { return p.manualStation; });
+    manualPicking = open ? open.manualStation : null;
+  }
+  map.getContainer().classList.toggle('cp-manual-picking', !!manualPicking);
+}
+
+// One place named and placed by hand (compose_manual_station.html's panel): an end's or
+// a via's. While it is open, `field` (the search box, in `hide`) gives way to its name.
+// opts: commit(entry) makes the entry that stop's; point() is the hand-placed point it
+// already has, if any; resolved() whether the field holds a stop; icon its pin's;
+// opened(open), if given, hears it open and close.
+// Returns { panel, place(latlng), refresh(), close() }, also as panel.manualStation.
+function manualStationPanel(panel, toggle, field, hide, opts) {
+  var name = panel.querySelector('.cp-manual-name');
+  var lat = panel.querySelector('.cp-manual-lat');
+  var lng = panel.querySelector('.cp-manual-lng');
+
+  function coords() {
+    var both = bothInLat(lat.value);   // both typed into Lat
+    if (both) { lat.value = both[0]; lng.value = both[1]; }
+    var a = parseFloat(String(lat.value).replace(',', '.'));
+    var b = parseFloat(String(lng.value).replace(',', '.'));
+    return isFinite(a) && isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180 ? L.latLng(a, b) : null;
+  }
+  function showPoint(latlng) {
+    lat.value = latlng.lat.toFixed(6);
+    lng.value = latlng.lng.toFixed(6);
+  }
+  // Where it is goes on the map at once, as a pin of its own until it has a name too:
+  // a stop needs one, so only then is it the stop's, the router's to place.
+  var previewPin = null;
+  function preview(at) {
+    if (!at) { clearPreview(); return; }
+    if (previewPin) { previewPin.setLatLng(at); return; }
+    previewPin = L.marker(at, Object.assign({ draggable: true, opacity: .6 }, opts.icon ? { icon: opts.icon } : {}))
+      .addTo(map);
+    previewPin.on('dragend', function(e) { showPoint(e.target.getLatLng()); commit(); });
+  }
+  function clearPreview() {
+    if (previewPin) { map.removeLayer(previewPin); previewPin = null; }
+  }
+  function commit() {
+    var at = coords(), label = name.value.trim();
+    if (!at || !label) { preview(at); return; }
+    clearPreview();
+    field.value = label;
+    opts.commit(manualStationEntry(at, label));
+  }
+  function setOpen(open) {
+    // The name takes the search field's place; the field is back once it is closed,
+    // showing the hand-placed name until another stop is picked.
+    panel.hidden = !open;
+    hide.hidden = open;
+    if (!open) clearPreview();
+    toggle.setAttribute('aria-pressed', open ? 'true' : 'false');
+    if (opts.opened) opts.opened(open);
+    if (open) {
+      var point = opts.point();
+      if (point) {
+        name.value = field.value;
+        showPoint(point);
+      } else if (!name.value && !opts.resolved()) {
+        // Typed but found nothing: that is probably the name it should have.
+        name.value = field.value.trim();
+      }
+      manualPicking = ctl;
+      name.focus();
+    }
+    syncManualPicking();
+  }
+
+  toggle.addEventListener('click', function() { setOpen(panel.hidden); });
+  [name, lat, lng].forEach(function(input) {
+    input.addEventListener('focus', function() { manualPicking = ctl; syncManualPicking(); });
+    input.addEventListener('change', commit);
+    // Enter commits through the change event a blur fires, so it never commits twice.
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    });
+  });
+  lat.addEventListener('paste', function(e) {
+    var both = bothInLat((e.clipboardData || window.clipboardData).getData('text'));
+    if (!both) return;
+    e.preventDefault();
+    lat.value = both[0];
+    lng.value = both[1];
+    commit();
+  });
+  // A real stop picked from the list replaces the hand-placed one.
+  $(field).on('autocompleteselect', function() { ctl.close(); });
+
+  var ctl = {
+    panel: panel,
+    place: function(latlng) {
+      showPoint(latlng);
+      commit();
+      if (!name.value.trim()) name.focus();
+    },
+    // Moved by its pin, or named again from the stop picker.
+    refresh: function() {
+      var point = opts.point();
+      if (panel.hidden || !point) return;
+      name.value = field.value;
+      showPoint(point);
+    },
+    close: function() {
+      name.value = lat.value = lng.value = '';
+      setOpen(false);
+    },
+  };
+  panel.manualStation = ctl;
+  return ctl;
+}
+
+// The two ends' panels, by role ('origin', 'dest').
+var manualPanels = {};
+
+function initManualStations() {
+  ['origin', 'dest'].forEach(function(role) {
+    var panel = document.getElementById(role + 'ManualPanel');
+    if (!panel) return;
+    var dotId = role === 'origin' ? 'dot-origin' : 'dot-dest';
+    var field = document.getElementById(role === 'origin' ? 'originStation' : 'destinationStation');
+    manualPanels[role] = manualStationPanel(panel,
+      document.querySelector('.cp-manual-toggle[data-role="' + role + '"]'),
+      field, field.closest('.cp-station-wrap'), {
+        icon: role === 'origin' ? window.markerIconStart : window.markerIconEnd,
+        point: function() { return manualPoints[role]; },
+        resolved: function() { return document.getElementById(dotId).classList.contains('resolved'); },
+        commit: function(entry) {
+          manualPoints[role] = { lat: entry[0][0], lng: entry[0][1] };
+          onStationSelected(role, entry, dotId);
+          {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+          destEntry = entry;   // one point, both ends
+          {% endif %}
+        },
+      });
+  });
+
+  map.on('click', function(e) {
+    if (!manualPicking) return;
+    if (typeof freehandActive !== 'undefined' && freehandActive) return;   // drawing
+    manualPicking.place(e.latlng);
+  });
+}
+initManualStations();
+
 // ── Focus follows the map ──
 //    With the map reduced to a card there is rarely room for the whole route, so the end
 //    being edited is the one worth showing. Panning only, never zooming: the zoom is the
@@ -2294,6 +2500,24 @@ $('#lineName').on('change', placeLinesByDirection);
 {% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
 var viaRows = [];   // the row elements, index-aligned with viaStations
 
+// The via panels' own markup (compose_manual_station.html), and their toggle's name.
+var viaManualPanelHtml = {{ manual_station.panel('via', nameThisPlace|default('Name this place'), manualMapHint|default('Or click the map to place it'))|string|tojson }};
+var viaManualLabel = {{ (manualVia|default('Manual via'))|tojson }};
+
+// A via that was one stop and is now another: its waypoint moved where the new one is,
+// in its place in the route (else the new one goes before the destination).
+function replaceViaWaypoint(was, entry) {
+  if (!was || !routingStarted || !window.currentPlan) return insertViaWaypoint(entry);
+  var wps = window.currentPlan.getWaypoints(), from = L.latLng(was[0][0], was[0][1]);
+  var at = wps.findIndex(function(wp, k) {
+    return k > 0 && k < wps.length - 1 && wp.latLng && wp.latLng.distanceTo(from) < 100;
+  });
+  if (at < 0) return insertViaWaypoint(entry);
+  pendingRouteFit = true;
+  freehandSegments.clear();   // indexed by waypoint
+  window.currentPlan.spliceWaypoints(at, 1, viaWaypoint(entry));
+}
+
 // A via goes into the live route just before the destination.
 function insertViaWaypoint(entry) {
   if (!routingStarted || !window.currentPlan) return;
@@ -2339,7 +2563,11 @@ function updateViaSummary() {
 // through them in one go, rather than once per stop. Waypoints the user had placed on
 // the map go too: the run's stops say where it went.
 function setViaStops(stops, collapse) {
-  viaRows.forEach(function (r) { r.remove(); });
+  viaRows.forEach(function (r) {
+    var manual = r.querySelector('.cp-manual');
+    if (manual && manual.manualStation) manual.manualStation.close();   // and its pin
+    r.remove();
+  });
   viaRows.length = 0; viaStations.length = 0;
   stops.forEach(function (stop) { addViaRow(stop.entry, stop.label, stop.time, true, stop.track); });
   setViaCollapsed(!!collapse && stops.length > 0);
@@ -2362,12 +2590,26 @@ function addViaRow(entry, label, time, batch, track) {
   var row = document.createElement('div');
   row.className = 'via-compose-row';
   row.innerHTML = '<i class="bi bi-signpost-2 via-compose-icon" aria-hidden="true"></i>' +
-    '<input type="text" class="form-control stationSearch viaStation" placeholder="{{ via|default("Via") }}">' +
-    '<div class="dropdown track-dropdown" hidden>' +
-      '<button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>' +
-      '<div class="dropdown-menu dropdown-menu-end track-menu"></div>' +
-    '</div>' +
-    '<button type="button" class="via-compose-remove">&times;</button>';
+    '<div class="via-field"><div class="via-search">' +
+      '<input type="text" class="form-control stationSearch viaStation" placeholder="{{ via|default("Via") }}">' +
+      '<div class="dropdown track-dropdown" hidden>' +
+        '<button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>' +
+        '<div class="dropdown-menu dropdown-menu-end track-menu"></div>' +
+      '</div>' +
+      '<button type="button" class="via-compose-remove">&times;</button>' +
+    '</div>' + viaManualPanelHtml + '</div>' +
+    '<button type="button" class="cp-manual-toggle via-manual-toggle" aria-pressed="false"' +
+      ' title="' + viaManualLabel + '" aria-label="' + viaManualLabel + '"><i class="bi bi-geo-alt"></i></button>';
+  var search = row.querySelector('.via-search');
+  var manualPanel = row.querySelector('.cp-manual');
+  manualPanel.removeAttribute('id');
+  // While it is hand-placed the search box is hidden, × and all: the name gets its own.
+  var nameWrap = document.createElement('div');
+  nameWrap.className = 'via-manual-name';
+  var manualName = manualPanel.querySelector('.cp-manual-name');
+  manualName.parentNode.insertBefore(nameWrap, manualName);
+  nameWrap.appendChild(manualName);
+  nameWrap.insertAdjacentHTML('beforeend', '<button type="button" class="via-compose-remove">&times;</button>');
   var badge = null;
   function showTime() {
     if (badge) badge.textContent = row.classList.contains('has-stops') || !track ? time : time + ' · ' + track;
@@ -2376,7 +2618,7 @@ function addViaRow(entry, label, time, batch, track) {
     row.classList.add('has-time');
     badge = document.createElement('span');
     badge.className = 'via-compose-time';
-    row.insertBefore(badge, row.querySelector('.track-dropdown'));
+    search.insertBefore(badge, search.querySelector('.track-dropdown'));
     showTime();
   }
   document.getElementById('viaContainer').appendChild(row);
@@ -2442,7 +2684,33 @@ function addViaRow(entry, label, time, batch, track) {
     window.currentPlan.spliceWaypoints(at, 1, viaWaypoint(own));
   });
 
-  row.querySelector('.via-compose-remove').addEventListener('click', function() {
+  // Named and placed by hand: the same panel as the ends'.
+  var manualCtl = manualStationPanel(manualPanel, row.querySelector('.via-manual-toggle'), input, search, {
+    // Its point, if what it holds is a hand-placed one (here, or saved before).
+    point: function() {
+      var own = viaStations[idx()];
+      return own && globalStationDict[own[1]] === own &&
+        manualStationsList.some(function(s) { return s.value === own[1]; })
+        ? L.latLng(own[0][0], own[0][1]) : null;
+    },
+    resolved: function() { return !!viaStations[idx()]; },
+    opened: function(open) { row.classList.toggle('is-manual', open); },
+    commit: function(own) {
+      var i = idx(), was = viaStations[i];
+      viaStations[i] = own;
+      $(input).data('stationEntry', own);
+      row.classList.remove('has-time');
+      if (badge) badge.remove();
+      badge = null;
+      forgetStop(slot);
+      hideStops(slot);
+      replaceViaWaypoint(was, own);
+      updateViaSummary();
+    },
+  });
+
+  row.querySelectorAll('.via-compose-remove').forEach(function(remove) { remove.addEventListener('click', function() {
+    manualCtl.close();   // its unnamed pin, if any, goes with it
     var i = idx();
     var was = viaStations[i];
     viaStations.splice(i, 1); viaRows.splice(i, 1); row.remove();
@@ -2458,7 +2726,7 @@ function addViaRow(entry, label, time, batch, track) {
       }
     }
     updateViaSummary();
-  });
+  }); });
 
   if (entry) {
     input.value = label || entry[1];
@@ -2997,14 +3265,7 @@ function stopPickerEntry(feature) {
 // difference; the server is told to remember it as a manual station on save, exactly
 // as the classic form's manual-origin toggle does.
 function stopPickerManualEntry(latlng, name) {
-  var entry = [[latlng.lat, latlng.lng], name];
-  globalStationDict[name] = entry;
-  // Offer it in this session's autocompletes too, like the ones loaded at startup.
-  if (typeof manualStationsList !== 'undefined' &&
-      !manualStationsList.some(function(s) { return s.value === name; })) {
-    manualStationsList.push({ label: name, value: name, manual: true });
-  }
-  return { entry: entry, displayLabel: name, manual: true };
+  return { entry: manualStationEntry(latlng, name), displayLabel: name, manual: true };
 }
 
 function stopPickerUse(role, found) {
@@ -3014,6 +3275,7 @@ function stopPickerUse(role, found) {
     var input = document.getElementById(role === 'origin' ? 'originStation' : 'destinationStation');
     if (input) input.value = found.displayLabel;
     manualPoints[role] = found.manual ? { lat: found.entry[0][0], lng: found.entry[0][1] } : null;
+    if (manualPanels[role]) manualPanels[role][found.manual ? 'refresh' : 'close']();
     onStationSelected(role, found.entry, role === 'origin' ? 'dot-origin' : 'dot-dest');
     {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
     destEntry = found.entry;   // single-point types reuse the origin

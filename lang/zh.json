@@ -805,6 +805,8 @@
     "via": "途经",
     "nearbyStops": "附近的站点",
     "nameThisPlace": "为此地点命名",
+    "manualVia": "手动途经点",
+    "manualMapHint": "或点击地图放置",
     "direction": "方向",
     "coordinates": "坐标",
     "location": "位置",

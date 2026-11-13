@@ -47,6 +47,19 @@
         flex: 0 0 32px; height: 32px; border: 0; background: transparent; cursor: pointer;
         color: light-dark(#999, var(--bs-secondary-color)); font-size: 1.2rem; line-height: 1; padding: 0;
     }
+    /* A via placed by hand: its name and coordinates where its field was. */
+    #form .via-row [hidden] { display: none !important; }
+    #form .via-row .via-manual-fields { flex: 1 1 auto; min-width: 0; display: flex; gap: 4px; }
+    #form .via-row .via-manual-fields input {
+        flex: 1 1 0; min-width: 0; margin: 0; background: transparent;
+    }
+    #form .via-row .via-manual-fields .via-manual-name { flex-grow: 2; }
+    #form .via-row .via-manual-toggle {
+        flex: 0 0 28px; height: 32px; border: 0; background: transparent; cursor: pointer; padding: 0;
+        color: light-dark(#999, var(--bs-secondary-color)); font-size: .9rem; line-height: 1;
+    }
+    #form .via-row .via-manual-toggle:hover,
+    #form .via-row .via-manual-toggle[aria-pressed="true"] { color: light-dark(#0d6efd, var(--bs-link-color)); }
     #form .via-row .via-remove:hover { color: light-dark(#333, var(--bs-emphasis-color)); }
 
     /* More than a few vias (a timetable service's stops): fold them into one summary row */
@@ -1115,6 +1128,10 @@
 
   // ---------- Via (intermediate waypoint) stations ----------
   var viaPlaceholder = "{{via}}";
+  // A via can be placed by hand, like the ends: a name and its coordinates in place of
+  // the search field (util.js reads them, manualViaEntry). Saved by its point alone.
+  var viaManualLabel = {{ (manualVia|default('Manual via'))|tojson }};
+  var viaManualName = {{ (nameThisPlace|default('Name this place'))|tojson }};
   // `time` is an optional "07:22 – 07:23" shown at the end of the row (timetable
   // stops), followed by `track` ("Voie 4") unless the track dropdown shows it. Display only:
   // both go once the station is changed. Returns the row.
@@ -1130,9 +1147,17 @@
             '<div class="dropdown-menu dropdown-menu-end track-menu"></div>' +
           '</div>' +
         '</span>' +
+        '<span class="via-manual-fields" hidden>' +
+          '<input type="text" class="via-manual-name" placeholder="' + viaManualName + '" maxlength="200" autocomplete="off" />' +
+          '<input type="text" inputmode="decimal" class="via-manual-lat" placeholder="Lat" autocomplete="off" />' +
+          '<input type="text" inputmode="decimal" class="via-manual-lng" placeholder="Lng" autocomplete="off" />' +
+        '</span>' +
+        '<button type="button" class="via-manual-toggle" aria-pressed="false" title="' + viaManualLabel + '"' +
+          ' aria-label="' + viaManualLabel + '"><i class="fas fa-location-dot"></i></button>' +
         '<button type="button" class="via-remove" title="{{remove}}">&times;</button>' +
       '</div>'
     );
+    splitCoordinatesInto($row.find('.via-manual-lat')[0], $row.find('.via-manual-lng')[0]);
     $('#viaContainer').append($row);
     // Initialise autocomplete on the newly added input
     stationSearchAutocomplete($row.find('.viaStation'), visitedStations, stationSearchUrl, "{{manual}}");
@@ -1187,7 +1212,9 @@
     $('#viaSummaryChevron').toggleClass('fa-chevron-down', collapsed).toggleClass('fa-chevron-up', !collapsed);
   }
   function updateViaSummary() {
-    var names = $('#viaContainer .viaStation').map(function() { return $(this).val().trim(); }).get().filter(Boolean);
+    var names = $('#viaContainer .via-row').map(function() {
+      return $(this).find($(this).hasClass('is-manual') ? '.via-manual-name' : '.viaStation').val().trim();
+    }).get().filter(Boolean);
     var count = $('#viaContainer .via-row').length;
     if (count <= VIA_FOLD_AFTER) {
       $('#viaSummary').hide();
@@ -1202,6 +1229,23 @@
     $('#viaSummary').css('display', 'flex');
   }
   $('#addViaBtn').on('click', function() { addViaRow(); });
+  $('#viaContainer').on('click', '.via-manual-toggle', function() {
+    var $row = $(this).closest('.via-row'), on = !$row.hasClass('is-manual');
+    $row.toggleClass('is-manual', on);
+    $(this).attr('aria-pressed', String(on));
+    $row.find('.viaStation, .via-tail').prop('hidden', on);
+    $row.find('.via-manual-fields').prop('hidden', !on);
+    if (on) {
+      // Typed but found nothing: that is probably the name it should have.
+      var typed = $row.find('.viaStation').val().trim();
+      var $name = $row.find('.via-manual-name');
+      if (!$name.val() && typed && !globalStationDict[typed]) $name.val(typed);
+      $row.removeClass('has-time').find('.via-time').empty();
+      $name.trigger('focus');
+    }
+    setTimeout(updateViaSummary);
+  });
+  $('#viaContainer').on('change', '.via-manual-name', function() { setTimeout(updateViaSummary); });
   $('#viaContainer').on('click', '.via-remove', function() {
     $(this).closest('.via-row').remove();
     updateViaSummary();

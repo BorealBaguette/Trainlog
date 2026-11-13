@@ -806,6 +806,8 @@
     "via": "Kautta",
     "nearbyStops": "Lähellä olevat pysäkit",
     "nameThisPlace": "Nimeä tämä paikka",
+    "manualVia": "Manuaalinen välipiste",
+    "manualMapHint": "Tai napsauta karttaa sijoittaaksesi sen",
     "direction": "Suunta",
     "coordinates": "Koordinaatit",
     "location": "Sijainti",

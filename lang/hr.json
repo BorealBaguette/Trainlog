@@ -811,6 +811,8 @@
     "via": "Via",
     "nearbyStops": "Stanice u blizini",
     "nameThisPlace": "Imenuj ovo mjesto",
+    "manualVia": "Ručna usputna točka",
+    "manualMapHint": "Ili kliknite na kartu da biste je postavili",
     "direction": "Smjer",
     "coordinates": "Koordinate",
     "location": "Lokacija",

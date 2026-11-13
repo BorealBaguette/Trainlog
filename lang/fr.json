@@ -838,6 +838,8 @@
     "via": "Via",
     "nearbyStops": "Arrêts à proximité",
     "nameThisPlace": "Nommer ce lieu",
+    "manualVia": "Étape manuelle",
+    "manualMapHint": "Ou cliquez sur la carte pour le placer",
     "direction": "Direction",
     "coordinates": "Coordonnées",
     "location": "Lieu",

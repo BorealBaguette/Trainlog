@@ -811,6 +811,8 @@
     "via": "Via",
     "nearbyStops": "Przystanki w pobliżu",
     "nameThisPlace": "Nazwij to miejsce",
+    "manualVia": "Wprowadź punkt pośredni",
+    "manualMapHint": "Albo kliknij na mapie, aby go umieścić",
     "direction": "Kierunek",
     "coordinates": "Współrzędne",
     "location": "Lokalizacja",

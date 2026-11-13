@@ -808,6 +808,8 @@
     "via": "Via",
     "nearbyStops": "Haltestellen in der Nähe",
     "nameThisPlace": "Diesen Ort benennen",
+    "manualVia": "Manueller Zwischenhalt",
+    "manualMapHint": "Oder auf die Karte klicken, um ihn zu setzen",
     "direction": "Richtung",
     "coordinates": "Koordinaten",
     "location": "Standort",

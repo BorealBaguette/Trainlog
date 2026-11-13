@@ -805,6 +805,8 @@
     "via": "Via",
     "nearbyStops": "Közeli megállók",
     "nameThisPlace": "Hely elnevezése",
+    "manualVia": "Kézi bevitelű köztes pont",
+    "manualMapHint": "Vagy kattints a térképre az elhelyezéshez",
     "direction": "Irány",
     "coordinates": "Koordináták",
     "location": "Helyszín",

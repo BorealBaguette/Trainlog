@@ -805,6 +805,8 @@
     "via": "Via",
     "nearbyStops": "Yakındaki duraklar",
     "nameThisPlace": "Bu yere ad ver",
+    "manualVia": "Ara noktayı elle gir",
+    "manualMapHint": "Ya da yerleştirmek için haritaya tıkla",
     "direction": "Yön",
     "coordinates": "Koordinatlar",
     "location": "Konum",
