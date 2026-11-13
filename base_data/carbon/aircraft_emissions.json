@@ -146,6 +146,11 @@
       "short_haul": 0.0697,
       "all": 0.075
     },
+    "B73X": {
+      "regional": 0.0803,
+      "short_haul": 0.0697,
+      "all": 0.075
+    },
     "B37M": {
       "regional": 0.0721,
       "short_haul": 0.0565,
@@ -207,6 +212,10 @@
     "E75L": {
       "regional": 0.1002,
       "all": 0.1002
+    },
+    "E175": {
+      "regional": 0.0938,
+      "all": 0.0938
     },
     "E190": {
       "regional": 0.0895,

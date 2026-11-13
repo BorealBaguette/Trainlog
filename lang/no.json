@@ -1771,5 +1771,17 @@
     "shareCopyLink": "Kopier lenke",
     "shareLinkShows": "Lenken viser:",
     "viewOnMap": "Vis på kart",
-    "shareLinksHeading": "Delte lenker"
+    "shareLinksHeading": "Delte lenker",
+    "aircraftTypesTitle": "Flytyper",
+    "aircraftTypesIntro": "Alle flyfamilier Trainlog kjenner. De du ennå ikke har fløyet med, er svarte; åpne en familie for å se hver variant.",
+    "aircraftTypesSummary": "{flown} av {total} familier fløyet",
+    "aircraftFilterFlown": "Fløyet",
+    "aircraftFilterNotFlown": "Ikke fløyet",
+    "aircraftFlights": "Flyvninger",
+    "aircraftFirstFlown": "Første flyvning",
+    "aircraftLastFlown": "Siste flyvning",
+    "aircraftVariantsFlown": "{flown} av {total} varianter fløyet",
+    "aircraftLbIntro": "Hver flyvariant man har fløyet med, gir ett poeng: 777-200, 777-200LR, 777-300 og 777-300ER gir fire.",
+    "aircraftLbVariants": "Fløyne varianter",
+    "aircraftLbFamilies": "Fløyne familier"
 }

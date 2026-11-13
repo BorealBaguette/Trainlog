@@ -1,0 +1,215 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include nav %}
+
+{# Every aircraft family Trainlog has outlines for, as a grid of tiles: flown ones
+   show the picture, the rest are blacked out. A family with several variants
+   opens a row underneath listing them, each blacked out or not on its own. #}
+
+{% macro outline(image, flown) -%}
+<div class="ac-outline">
+  {%- if image -%}
+  <img src="{{ url_for('static', filename=image) }}" alt=""{% if not flown %} class="ac-blackout"{% endif %} loading="lazy">
+  {%- else -%}
+  {#- No picture uploaded for this type yet: a plain plane stands in. -#}
+  <i class="fa-solid fa-plane ac-no-image{% if not flown %} is-unflown{% endif %}" aria-hidden="true"></i>
+  {%- endif -%}
+</div>
+{%- endmacro %}
+
+{% macro stats(item) -%}
+<div class="ac-stats">
+  {%- if item.flights %}
+  <span title="{{ aircraftFlights }}"><i class="fa-solid fa-plane-departure" aria-hidden="true"></i> {{ item.flights }}</span>
+  <span class="ac-dot" aria-hidden="true">·</span>
+  <span>{{ "{:,}".format(item.distance_km) }} km</span>
+  {%- else %}
+  <span class="text-body-secondary">{{ aircraftFilterNotFlown }}</span>
+  {%- endif %}
+</div>
+{%- if item.first_flown %}
+<div class="ac-dates text-body-secondary" title="{{ aircraftFirstFlown }} – {{ aircraftLastFlown }}">
+  <span data-date="{{ item.first_flown }}">{{ item.first_flown }}</span>
+  {%- if item.last_flown != item.first_flown %} – <span data-date="{{ item.last_flown }}">{{ item.last_flown }}</span>{% endif %}
+</div>
+{%- endif %}
+{%- endmacro %}
+
+<div class="container mt-3 mb-5">
+  <h1>{{ aircraftTypesTitle }}</h1>
+  <p class="text-body-secondary mb-3">{{ aircraftTypesIntro }}</p>
+
+  <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
+    <div class="flex-grow-1" style="min-width: 220px; max-width: 420px;">
+      <div class="fw-semibold mb-1">
+        {{ aircraftTypesSummary.replace('{flown}', flown_count|string).replace('{total}', families|length|string) }}
+      </div>
+      <div class="progress" role="progressbar" style="height: 8px;"
+           aria-valuenow="{{ flown_count }}" aria-valuemin="0" aria-valuemax="{{ families|length }}">
+        <div class="progress-bar" style="width: {{ (100 * flown_count / families|length) if families else 0 }}%"></div>
+      </div>
+    </div>
+    <div class="flex-grow-1" style="min-width: 220px; max-width: 420px;">
+      <div class="fw-semibold mb-1">
+        {{ aircraftVariantsFlown.replace('{flown}', variants_flown|string).replace('{total}', variants_total|string) }}
+      </div>
+      <div class="progress" role="progressbar" style="height: 8px;"
+           aria-valuenow="{{ variants_flown }}" aria-valuemin="0" aria-valuemax="{{ variants_total }}">
+        <div class="progress-bar bg-info" style="width: {{ (100 * variants_flown / variants_total) if variants_total else 0 }}%"></div>
+      </div>
+    </div>
+    <div class="btn-group btn-group-sm" role="group" id="acFilter">
+      <button type="button" class="btn btn-outline-secondary active" data-filter="all">{{ all }}</button>
+      <button type="button" class="btn btn-outline-secondary" data-filter="flown">{{ aircraftFilterFlown }}</button>
+      <button type="button" class="btn btn-outline-secondary" data-filter="unflown">{{ aircraftFilterNotFlown }}</button>
+    </div>
+  </div>
+
+  <div class="ac-grid" id="acGrid">
+    {% for family in families %}
+    {% set expandable = family.variants|length > 1 %}
+    <div class="ac-tile{% if family.flights %} is-flown{% endif %}{% if expandable %} ac-expandable{% endif %}"
+         {% if expandable %}role="button" tabindex="0" aria-expanded="false" aria-controls="ac-variants-{{ loop.index }}"{% endif %}>
+      {{ outline(family.image, family.flights) }}
+      <div class="ac-name">{{ family.name }}</div>
+      {{ stats(family) }}
+      <div class="ac-foot text-body-secondary">
+        {% if expandable %}
+        <span>{{ aircraftVariantsFlown.replace('{flown}', family.variants_flown|string).replace('{total}', family.variants|length|string) }}</span>
+        <i class="bi bi-chevron-down ac-chevron" aria-hidden="true"></i>
+        {% else %}
+        <span class="font-monospace">{{ family.variants[0].code }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if expandable %}
+    <div class="ac-panel{% if family.flights %} is-flown{% endif %}" id="ac-variants-{{ loop.index }}" hidden>
+      <div class="ac-panel-title">{{ family.name }}</div>
+      <div class="ac-grid ac-grid-sm">
+        {% for variant in family.variants %}
+        <div class="ac-tile ac-tile-sm{% if variant.flights %} is-flown{% endif %}">
+          {{ outline(variant.image, variant.flights) }}
+          <div class="ac-name">{{ variant.name }}</div>
+          {{ stats(variant) }}
+          <div class="ac-foot text-body-secondary"><span class="font-monospace">{{ variant.code }}</span></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<style>
+  .ac-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 0.75rem;
+    /* An opened family's variants take a full-width row; dense packing lets
+       the tiles after it fill the rest of the row it was opened from, so the
+       variants always sit directly under that row. */
+    grid-auto-flow: dense;
+  }
+  .ac-grid-sm { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem; }
+  .ac-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius-lg);
+    background-color: var(--bs-body-bg);
+    min-width: 0;
+  }
+  .ac-tile-sm { padding: 0.6rem; font-size: 0.925rem; }
+  .ac-outline {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.4rem;
+  }
+  .ac-tile-sm .ac-outline { height: 50px; }
+  .ac-outline img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .ac-no-image { font-size: 2.25rem; color: var(--bs-secondary-color); }
+  .ac-no-image.is-unflown { color: #000; }
+  [data-bs-theme="dark"] .ac-no-image.is-unflown { filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.5)); }
+  .ac-tile-sm .ac-no-image { font-size: 1.75rem; }
+  /* Blacked out: every visible pixel of the picture turns black, while its
+     transparent background stays clear, leaving the aircraft's silhouette. */
+  .ac-blackout { filter: brightness(0); }
+  /* Black on a dark page needs a faint rim to read as a shape at all. */
+  [data-bs-theme="dark"] .ac-blackout { filter: brightness(0) drop-shadow(0 0 1px rgba(255, 255, 255, 0.5)); }
+  .ac-name { font-weight: 600; line-height: 1.25; }
+  .ac-tile-sm .ac-name { font-weight: 500; }
+  .ac-stats { font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+  .ac-dot { margin: 0 0.2rem; opacity: 0.6; }
+  .ac-dates { font-size: 0.8rem; }
+  .ac-foot {
+    margin-top: auto;
+    padding-top: 0.35rem;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .ac-expandable { cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .ac-expandable:hover { border-color: var(--bs-secondary-color); }
+  .ac-expandable:focus-visible { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+  .ac-expandable[aria-expanded="true"] { border-color: var(--bs-primary); box-shadow: 0 0 0 1px var(--bs-primary); }
+  .ac-chevron { transition: transform 0.15s ease; }
+  .ac-expandable[aria-expanded="true"] .ac-chevron { transform: rotate(180deg); }
+  .ac-panel {
+    grid-column: 1 / -1;
+    padding: 0.75rem;
+    border: 1px solid var(--bs-primary);
+    border-radius: var(--bs-border-radius-lg);
+    background-color: var(--bs-tertiary-bg);
+  }
+  .ac-panel[hidden] { display: none; }
+  .ac-panel-title { font-weight: 600; margin-bottom: 0.5rem; }
+  @media (max-width: 575.98px) {
+    .ac-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    .ac-tile { padding: 0.6rem; }
+    .ac-outline { height: 48px; }
+    .ac-tile-sm .ac-outline { height: 40px; }
+  }
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const opts = { day: "numeric", month: "short", year: "numeric" };
+  document.querySelectorAll("[data-date]").forEach(el => {
+    const [y, m, d] = el.dataset.date.split("-").map(Number);
+    el.textContent = new Date(y, m - 1, d).toLocaleDateString("{{ langId }}", opts);
+  });
+
+  function toggle(tile) {
+    const panel = document.getElementById(tile.getAttribute("aria-controls"));
+    const open = tile.getAttribute("aria-expanded") !== "true";
+    tile.setAttribute("aria-expanded", open);
+    panel.hidden = !open;
+  }
+  document.querySelectorAll(".ac-expandable").forEach(tile => {
+    tile.addEventListener("click", () => toggle(tile));
+    tile.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(tile); }
+    });
+  });
+
+  // All / flown / not flown, applied per family: an opened family's variants
+  // go with it (each variant still shows its own state).
+  const buttons = document.querySelectorAll("#acFilter [data-filter]");
+  buttons.forEach(btn => btn.addEventListener("click", () => {
+    buttons.forEach(b => b.classList.toggle("active", b === btn));
+    const filter = btn.dataset.filter;
+    document.querySelectorAll("#acGrid > .ac-tile, #acGrid > .ac-panel").forEach(el => {
+      const flown = el.classList.contains("is-flown");
+      el.style.display = filter === "all" || (filter === "flown") === flown ? "" : "none";
+    });
+  }));
+});
+</script>
+{% endblock %}

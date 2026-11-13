@@ -1756,5 +1756,17 @@
     "shareCopyLink": "リンクをコピー",
     "shareLinkShows": "リンクに表示：",
     "viewOnMap": "地図で見る",
-    "shareLinksHeading": "共有リンク"
+    "shareLinksHeading": "共有リンク",
+    "aircraftTypesTitle": "機種",
+    "aircraftTypesIntro": "Trainlogが知っているすべての機種ファミリー。まだ搭乗していないものは黒く塗りつぶされています。ファミリーを開くと各派生型が表示されます。",
+    "aircraftTypesSummary": "{total}ファミリー中{flown}に搭乗",
+    "aircraftFilterFlown": "搭乗済み",
+    "aircraftFilterNotFlown": "未搭乗",
+    "aircraftFlights": "フライト",
+    "aircraftFirstFlown": "初搭乗",
+    "aircraftLastFlown": "最終搭乗",
+    "aircraftVariantsFlown": "{total}派生型中{flown}に搭乗",
+    "aircraftLbIntro": "搭乗した派生型ごとに1ポイント：777-200、777-200LR、777-300、777-300ERで4ポイントです。",
+    "aircraftLbVariants": "搭乗した派生型",
+    "aircraftLbFamilies": "搭乗したファミリー"
 }

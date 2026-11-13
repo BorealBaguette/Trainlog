@@ -1769,5 +1769,17 @@
     "shareCopyLink": "Link kopiere",
     "shareLinkShows": "Link zeigt:",
     "viewOnMap": "Uf Charte zeige",
-    "shareLinksHeading": "Teilti Links"
+    "shareLinksHeading": "Teilti Links",
+    "aircraftTypesTitle": "Flugzügtype",
+    "aircraftTypesIntro": "Alli Flugzügfamilie, wo Trainlog kennt. Die, mit dene du no nöd gfloge bisch, sind gschwärzt; tue e Familie uf, zum jedi Variante gseh.",
+    "aircraftTypesSummary": "{flown} vo {total} Familie gfloge",
+    "aircraftFilterFlown": "Gfloge",
+    "aircraftFilterNotFlown": "Nöd gfloge",
+    "aircraftFlights": "Flüg",
+    "aircraftFirstFlown": "Erschte Flug",
+    "aircraftLastFlown": "Letschte Flug",
+    "aircraftVariantsFlown": "{flown} vo {total} Variante gfloge",
+    "aircraftLbIntro": "Jedi gflogeni Flugzügvariante git en Punkt: 777-200, 777-200LR, 777-300 und 777-300ER gänd vier.",
+    "aircraftLbVariants": "Gflogeni Variante",
+    "aircraftLbFamilies": "Gflogeni Familie"
 }

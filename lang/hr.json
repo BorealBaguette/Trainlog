@@ -1786,5 +1786,17 @@
     "shareCopyLink": "Kopiraj poveznicu",
     "shareLinkShows": "Poveznica prikazuje:",
     "viewOnMap": "Prikaži na karti",
-    "shareLinksHeading": "Dijeljene poveznice"
+    "shareLinksHeading": "Dijeljene poveznice",
+    "aircraftTypesTitle": "Tipovi zrakoplova",
+    "aircraftTypesIntro": "Sve obitelji zrakoplova koje Trainlog poznaje. One kojima još niste letjeli zacrnjene su; otvorite obitelj da vidite svaku inačicu.",
+    "aircraftTypesSummary": "Letjeli ste na {flown} od {total} obitelji",
+    "aircraftFilterFlown": "Letjeli",
+    "aircraftFilterNotFlown": "Niste letjeli",
+    "aircraftFlights": "Letovi",
+    "aircraftFirstFlown": "Prvi let",
+    "aircraftLastFlown": "Zadnji let",
+    "aircraftVariantsFlown": "Letjeli ste na {flown} od {total} inačica",
+    "aircraftLbIntro": "Svaka inačica zrakoplova kojom ste letjeli donosi bod: 777-200, 777-200LR, 777-300 i 777-300ER su četiri.",
+    "aircraftLbVariants": "Inačice kojima ste letjeli",
+    "aircraftLbFamilies": "Obitelji kojima ste letjeli"
 }

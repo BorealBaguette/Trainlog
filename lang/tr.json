@@ -1756,5 +1756,17 @@
     "shareCopyLink": "Bağlantıyı kopyala",
     "shareLinkShows": "Bağlantı gösterir:",
     "viewOnMap": "Haritada göster",
-    "shareLinksHeading": "Paylaşılan bağlantılar"
+    "shareLinksHeading": "Paylaşılan bağlantılar",
+    "aircraftTypesTitle": "Uçak tipleri",
+    "aircraftTypesIntro": "Trainlog'un bildiği tüm uçak aileleri. Henüz uçmadıklarınız karartılmıştır; her varyantı görmek için bir aileyi açın.",
+    "aircraftTypesSummary": "{total} aileden {flown} tanesiyle uçuldu",
+    "aircraftFilterFlown": "Uçulan",
+    "aircraftFilterNotFlown": "Uçulmayan",
+    "aircraftFlights": "Uçuşlar",
+    "aircraftFirstFlown": "İlk uçuş",
+    "aircraftLastFlown": "Son uçuş",
+    "aircraftVariantsFlown": "{total} varyanttan {flown} tanesiyle uçuldu",
+    "aircraftLbIntro": "Uçulan her uçak varyantı bir puan değerindedir: 777-200, 777-200LR, 777-300 ve 777-300ER dört eder.",
+    "aircraftLbVariants": "Uçulan varyantlar",
+    "aircraftLbFamilies": "Uçulan aileler"
 }

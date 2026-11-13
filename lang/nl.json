@@ -1771,5 +1771,17 @@
     "shareCopyLink": "Link kopiëren",
     "shareLinkShows": "Link toont:",
     "viewOnMap": "Bekijk op kaart",
-    "shareLinksHeading": "Gedeelde links"
+    "shareLinksHeading": "Gedeelde links",
+    "aircraftTypesTitle": "Vliegtuigtypes",
+    "aircraftTypesIntro": "Alle vliegtuigfamilies die Trainlog kent. Degene waarmee je nog niet hebt gevlogen zijn zwart gemaakt; open een familie om elke variant te zien.",
+    "aircraftTypesSummary": "{flown} van {total} families gevlogen",
+    "aircraftFilterFlown": "Gevlogen",
+    "aircraftFilterNotFlown": "Niet gevlogen",
+    "aircraftFlights": "Vluchten",
+    "aircraftFirstFlown": "Eerste vlucht",
+    "aircraftLastFlown": "Laatste vlucht",
+    "aircraftVariantsFlown": "{flown} van {total} varianten gevlogen",
+    "aircraftLbIntro": "Elke gevlogen vliegtuigvariant telt voor één punt: een 777-200, 777-200LR, 777-300 en 777-300ER zijn er vier.",
+    "aircraftLbVariants": "Gevlogen varianten",
+    "aircraftLbFamilies": "Gevlogen families"
 }
