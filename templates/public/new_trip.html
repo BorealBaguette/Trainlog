@@ -914,7 +914,12 @@ function bulkCopyTrips() {
     contentType: 'application/json',
     data: JSON.stringify({ tripIds: "{{tripIds}}" }),
     success: function(data, status) {
-      location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}"
+      // Upcoming ride alongs land in projects, where the copies are listed — unless
+      // the trips list's "Show upcoming trips" switch is on (its cookie), which lists
+      // them there too.
+      var tripsShowUpcoming = /(?:^|;\s*)includeFutureSwitch=true(?:;|$)/.test(document.cookie);
+      location.href = "{{ url_for('dynamic_trips', time='TIME', username=username) }}"
+        .replace('TIME', data.list === 'projects' && !tripsShowUpcoming ? 'projects' : 'trips')
     },
     error: function () {
       btn.disabled = false;
