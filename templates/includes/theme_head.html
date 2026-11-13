@@ -1,8 +1,8 @@
 {# The light/dark theme for both layouts. Runs before any stylesheet or markup is
    parsed, so "auto" resolves to the OS setting without the page first painting in
    the wrong theme. The server can only guess light for "auto"; this corrects it in
-   the same frame. A page that must stay light (the poster, an exported image) sets
-   light_only before extending its layout. #}
+   the same frame. A page that must stay light sets light_only before extending its
+   layout. #}
 {% set page_theme = 'light' if light_only else request.args.get('theme') if request.args.get('theme') in ('light', 'dark') else theme %}
 <script>
   window.trainlogTheme = "{{ page_theme }}";
@@ -12,8 +12,10 @@
     var dark = pref === "dark" ||
       (pref === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.setAttribute("data-bs-theme", dark ? "dark" : "light");
-    {% if not dark_leaflet %}document.documentElement.setAttribute("data-light-leaflet", "");{% endif %}
+    {#- Darkened maps are their own setting, whatever the theme: dark maps in a light UI work too #}
+    {% if dark_leaflet and not light_only %}document.documentElement.setAttribute("data-dark-maps", "");{% endif %}
   })();
 </script>
 <link rel="stylesheet" href="{{ static_autoversion(filename='styles/theme.css') }}">
 <script src="{{ static_autoversion(filename='js/dark_logos.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/dark_maps.js') }}"></script>

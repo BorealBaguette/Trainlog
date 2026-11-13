@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ gpx.origin }} → {{ gpx.destination }} - Trainlog</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    {% include "includes/theme_head.html" %}
     <style>
         body {
             margin: 0;
@@ -117,6 +118,20 @@
             font-size: 0.875rem;
             font-weight: 500;
         }
+        /* Dark theme (theme_head; theme.css darkens the tiles and Leaflet's own chrome) */
+        [data-bs-theme="dark"] body { background-color: var(--bs-body-bg); color: var(--bs-body-color); }
+        [data-bs-theme="dark"] .header,
+        [data-bs-theme="dark"] .legend {
+            background: var(--bs-secondary-bg);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        [data-bs-theme="dark"] .route-title,
+        [data-bs-theme="dark"] .stat-value,
+        [data-bs-theme="dark"] .legend-title { color: var(--bs-emphasis-color); }
+        [data-bs-theme="dark"] .stats { color: var(--bs-secondary-color); }
+        [data-bs-theme="dark"] .error-message { background: #3a1c1f; border-color: #7f2a2f; color: #f19a9a; }
+        [data-bs-theme="dark"] .error-badge { background: #3a1c1f; color: #f19a9a; }
+        [data-bs-theme="dark"] .success-badge { background: #12352d; color: #5fd3a5; }
     </style>
 </head>
 <body>

@@ -39,7 +39,8 @@ const MapConfig = {
 
 // Resolves a tileserver value (incl. orm-vector-<type>.<base>) into a MapLibre style
 // Map labels default to the user's map language setting (window.MAP_LANG, set by the layouts)
-async function resolveBackground(tileserver, { styleUrl = null, userLanguage = window.MAP_LANG || 'en', useGlobe = false } = {}) {
+// darken: true or false overrides the user's "darken map backgrounds" setting (the poster's own switch)
+async function resolveBackground(tileserver, { styleUrl = null, userLanguage = window.MAP_LANG || 'en', useGlobe = false, darken } = {}) {
     let mapStyle;
 
     // Parse the OpenRailwayMap overlay. It is always the vector one, over raster and vector
@@ -88,6 +89,9 @@ async function resolveBackground(tileserver, { styleUrl = null, userLanguage = w
         mapStyle = createRasterStyle(effectiveTileserver, userLanguage, useGlobe);
     }
 
+    // "Darken map backgrounds": a light background is recoloured (dark_maps.js), as Leaflet's tiles are
+    if (darkensBackground(effectiveTileserver, darken)) window.trainlogDarkenMapStyle(mapStyle);
+
     return { mapStyle, ormVectorBase, ormVectorType };
 }
 
@@ -101,12 +105,13 @@ async function initializeMapLibre(options = {}) {
         zoom = 5,
         styleUrl = null,
         preserveDrawingBuffer = false,
-        pixelRatio = null
+        pixelRatio = null,
+        darken
     } = options;
 
     const tileserver = options.tileserver || 'osm';
     const { mapStyle, ormVectorBase, ormVectorType } =
-        await resolveBackground(tileserver, { styleUrl, userLanguage, useGlobe });
+        await resolveBackground(tileserver, { styleUrl, userLanguage, useGlobe, darken });
 
     // Create map
     // preserveDrawingBuffer/pixelRatio are only needed to export the canvas as an
@@ -122,7 +127,7 @@ async function initializeMapLibre(options = {}) {
         ...(pixelRatio ? { pixelRatio } : {})
     });
 
-    map._tlOptions = { styleUrl, userLanguage, useGlobe, tileserver };
+    map._tlOptions = { styleUrl, userLanguage, useGlobe, tileserver, darken };
     map._currentTileserver = tileserver;
     map._baseIds = { sources: Object.keys(mapStyle.sources || {}), layers: mapStyle.layers.map(l => l.id) };
 
@@ -390,8 +395,16 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
 // those get a light grey edge instead. Stop dots carry their trip's type as tripType
 const DARK_BACKGROUNDS = ['dark-train', 'trainlog-rail', 'jawg-dark'];
 const DARK_TRIP_TYPES = ['metro', 'cycle', 'ferry', 'other'];
+// Whether this background is darkened: a light one, with "darken map backgrounds" on
+// (or darken, when a page passes its own choice). dark_maps.js comes with the
+// layouts; a page without them never darkens.
+function darkensBackground(tileserver, darken) {
+    const on = darken ?? window.trainlogDarkMapsOn?.();
+    return !!on && !!window.trainlogDarkenMapStyle && !DARK_BACKGROUNDS.includes(tileserver);
+}
 function tripShadowColor(map) {
-    if (!DARK_BACKGROUNDS.includes(map._currentTileserver?.split('.').pop())) return '#000000';
+    const base = map._currentTileserver?.split('.').pop();
+    if (!DARK_BACKGROUNDS.includes(base) && !darkensBackground(base, map._tlOptions?.darken)) return '#000000';
     return ['match', ['coalesce', ['get', 'tripType'], ['get', 'type']], DARK_TRIP_TYPES, '#b0b0b0', '#000000'];
 }
 
