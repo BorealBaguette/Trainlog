@@ -930,9 +930,9 @@ function loadMaplibre() {
   if (!maplibreLoading) {
     var css = document.createElement('link');
     css.rel = 'stylesheet';
-    css.href = 'https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css';
+    css.href = 'https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css';
     document.head.appendChild(css);
-    maplibreLoading = loadScript('https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js').then(function () {
+    maplibreLoading = loadScript('https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js').then(function () {
       return loadScript('https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js');
     });
   }
