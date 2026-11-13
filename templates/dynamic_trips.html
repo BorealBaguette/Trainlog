@@ -4303,6 +4303,7 @@ if (planSearchModal) {
     });
 }
 
+{% if not isPublic %}
 const bulkTicketPicker = ticketPicker({
     url: {{ url_for("tickets.get_all_tickets", username=username)|tojson }},
     staticUrl: {{ url_for('static', filename='')|tojson }},
@@ -4311,6 +4312,7 @@ const bulkTicketPicker = ticketPicker({
     title: {{ associate_ticket|tojson }},
     onSubmit: attachSelectedTrips
 });
+{% endif %}
 
 let tags = [];
 // Fetch all tags once when the page loads

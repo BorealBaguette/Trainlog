@@ -3193,11 +3193,15 @@ def update_tag(username, tag_id):
 
 
 @app.route("/u/<username>/get_all_tags")
-@login_required
+@public_required
 def get_all_tags(username):
     with pg_session() as pg:
-        tags = pg.execute(get_tags_query(), {"username": username}).fetchall()
-    return jsonify(tags=[dict(tag._mapping) for tag in tags])
+        tags = [dict(tag._mapping) for tag in pg.execute(get_tags_query(), {"username": username})]
+    if not (session.get(username) or session.get(owner)):
+        # Visitors get the tags to label trips with, not every trip in them (private ones included).
+        for tag in tags:
+            del tag["trip_ids"]
+    return jsonify(tags=tags)
 
 
 @app.route("/u/<username>/bulkChangeVisibility")
