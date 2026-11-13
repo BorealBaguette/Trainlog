@@ -249,7 +249,7 @@ IATA_CITY_CODES = {
     "TPE": ("Taipei", ["TPE", "TSA"]),
     "BKK": ("Bangkok", ["BKK", "DMK"]),
     "JKT": ("Jakarta", ["CGK", "HLP"]),
-    "YMQ": ("Montreal", ["YUL", "YMX"]), 
+    "YMQ": ("Montreal", ["YUL", "YHU", "YMX"]), 
     "KUL": ("Kuala Lumpur", ["KUL", "SZB"]), 
     "SIN": ("Singapore", ["SIN", "XSP"]), 
     "IGU": ("Iguazu", ["IGU", "IGR"]), 
