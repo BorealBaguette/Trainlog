@@ -2492,25 +2492,58 @@ function renderButton(data, type, row){
     return button.prop("outerHTML")
 }
 
+const TICKET_ICON = '<i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i>';
+
+function ticketPriceText(name, inUserCurrency, price, currency, userCurrency) {
+    if (Math.abs(inUserCurrency) == 0) {
+        return name + ' - {{free}}';
+    }
+    let text = name + " - " + formatCurrency("{{langId}}", inUserCurrency, userCurrency);
+    if (userCurrency != currency) {
+        text += ` (${formatCurrency("{{langId}}", price, currency)})`;
+    }
+    return text;
+}
+
+function ticketLink(ticket, title, iconHtml) {
+    return $('<a>')
+        .attr('href', {{ url_for('tickets.ticket_page', username=username, ticket_id=0)|tojson }}.replace(/0$/, ticket.uid) + '?only=1')
+        .attr('onclick', 'event.stopPropagation()')
+        .attr('data-toggle', 'tooltip').attr('data-placement', 'top').attr('title', title)
+        .html(iconHtml);
+}
+
+// Replaces a trip's ticket icon with one per ticket; inline, as the row's cells are also
+// cloned into Responsive's detail rows.
+function expandTickets(event, el) {
+    event.stopPropagation();
+    bootstrap.Tooltip.getInstance(el)?.hide();
+    $(el).hide().next('.ticketDetail').show();
+}
+
 function renderPrices(data, type, row) {
         let formattedTicketInfo = null;
         let formattedPrice = null;
 
         if (typeof row.ticket_price_in_user_currency !== 'undefined') {
-            let formattedTicketPrice = row.ticket;
-            if(Math.abs(row.ticket_price_in_user_currency) == 0){
-                formattedTicketPrice += ' - {{free}}'
-            }
-            else{
-                formattedTicketPrice += " - " + formatCurrency("{{langId}}", row.ticket_price_in_user_currency, row.user_currency);
-                if (row.user_currency != row.ticket_currency) {
-                    let originalCurrency = formatCurrency("{{langId}}", row.ticket_price, row.ticket_currency);
-                    formattedTicketPrice += ` (${originalCurrency})`;
-                }
-            }
+            let formattedTicketPrice = ticketPriceText(row.ticket, row.ticket_price_in_user_currency,
+                row.ticket_price, row.ticket_currency, row.user_currency);
             formattedTicketInfo =  $('<span>')
-            .append($('<span>').attr("style", "display:none;").text(row.ticket_price_in_user_currency))
-            .append(`<span data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${formattedTicketPrice}">${ticketIcon('<i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i>', row.ticket_count)}</span>`);
+            .append($('<span>').attr("style", "display:none;").text(row.ticket_price_in_user_currency));
+            if (row.tickets.length == 1) {
+                formattedTicketInfo.append(ticketLink(row.tickets[0], formattedTicketPrice, TICKET_ICON));
+            } else {
+                formattedTicketInfo
+                .append($('<span>').attr('onclick', 'expandTickets(event, this)').css('cursor', 'pointer')
+                    .attr('data-toggle', 'tooltip').attr('data-placement', 'top').attr('title', formattedTicketPrice)
+                    .html(ticketIcon(TICKET_ICON, row.ticket_count)))
+                .append($('<span>').addClass('ticketDetail').css('display', 'none').append(
+                    row.tickets.flatMap((ticket, i) => [i ? ' ' : '', ticketLink(ticket,
+                        ticketPriceText(ticket.name, ticket.price_in_user_currency,
+                            ticket.price, ticket.currency, row.user_currency),
+                        TICKET_ICON)])
+                ));
+            }
         }
         if (isNumber(row.price)) {
             let formattedPriceText = formatCurrency("{{langId}}", row.price_in_user_currency, row.user_currency);
