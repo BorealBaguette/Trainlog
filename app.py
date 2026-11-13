@@ -5075,11 +5075,8 @@ def create_trip_share():
     # else's prices.
     share_flags = None
     show = request.form.get("show")
-    # The ticket page's map: a ticket group's trips, with their prices (the rest as
-    # the settings say), baked into the key so whoever gets the link sees them too.
-    ticket_map = request.form.get("price") and show is None
-    if target == "public_trip" and (show is not None or ticket_map):
-        if show is not None and (not show or set(show) - {"p", "c", "n"}):
+    if target == "public_trip" and show is not None:
+        if not show or set(show) - {"p", "c", "n"}:
             abort(400)
         user = User.query.filter_by(username=getUser()).first()
         if user is None:
@@ -5091,9 +5088,8 @@ def create_trip_share():
             ).fetchone()["n"]
         if owned != len(set(ids)):
             abort(403)
-        defaults = share_view.owner_defaults([user])
-        wanted = dict(defaults, price=True) if ticket_map else share_view.decode(show)
-        if wanted != defaults:
+        wanted = share_view.decode(show)
+        if wanted != share_view.owner_defaults([user]):
             share_flags = share_view.encode(wanted)
 
     try:

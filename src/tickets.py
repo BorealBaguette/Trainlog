@@ -13,6 +13,7 @@ from dateutil.relativedelta import relativedelta
 from flask import Blueprint, abort, g, jsonify, render_template, request, session
 
 from py.utils import get_all_countries
+from src import share_view
 from src.currency import get_available_currencies, get_exchange_rate
 from src.operators import split_operators
 from src.pg import pg_session
@@ -21,6 +22,7 @@ from src.sql.tickets import (
     get_ticket_query,
     get_tickets_query,
 )
+from src.trip_selections import store_trip_ids
 from src.trips.edits import attach_ticket_to_trips, delete_ticket_from_db
 from src.trips.trip import ticket_id_list
 from src.users import User
@@ -534,8 +536,19 @@ def ticket_page(username, ticket_id):
         if year:
             group = _groups(year)[0]
             group["name"] = f"{group['name']} · {request.args['year']}"
+    # Stored now so the map button is a link that opens in a new tab. A ticket's
+    # map shows prices, baked into the key so whoever gets the link sees them too.
+    trip_ids = [i for t in group["tickets"] for i in t["trip_ids"]]
+    defaults = share_view.owner_defaults([User.query.filter_by(username=username).first()])
+    wanted = dict(defaults, price=True)
+    share_flags = share_view.encode(wanted) if wanted != defaults else None
     return _render(
-        "ticket.html", username, whole["tickets"], group=group, whole=whole if group is not whole else None
+        "ticket.html",
+        username,
+        whole["tickets"],
+        group=group,
+        whole=whole if group is not whole else None,
+        map_key=store_trip_ids(trip_ids, share_flags) if trip_ids else None,
     )
 
 

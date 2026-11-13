@@ -89,7 +89,6 @@
 
 {% set latest = group.latest %}
 {% set has_uses = group.tickets|selectattr('uses')|list %}
-{% set all_trip_ids = group.tickets|map(attribute='trip_ids')|sum(start=[]) %}
 {# A product or operator whose logo changed over the years: each ticket with the one of its day. #}
 {% set mixed_logos = group.tickets|map(attribute='logo')|unique|list|length > 1 %}
 {# Tickets valid in different countries (a Global pass, a One Country one): each with its own. #}
@@ -140,16 +139,10 @@
         </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            {% if all_trip_ids %}
-                {# Posted to the short-link store: a group's ids spelled out overflow the request line.
-                   `price` bakes the prices into the key, so the link shows them to anyone. #}
-                <form method="post" action="{{ url_for('create_trip_share') }}" class="d-inline">
-                    <input type="hidden" name="trips" value="{{ all_trip_ids|join(',') }}">
-                    <input type="hidden" name="price" value="1">
-                    <button type="submit" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-map"></i> {{map}}
-                    </button>
-                </form>
+            {% if map_key %}
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('public_trip', tripIds=map_key) }}">
+                    <i class="bi bi-map"></i> {{map}}
+                </a>
                 <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dynamic_trips', username=username, time='trips', search='ticket:' ~ group.tickets | map(attribute='uid') | join('|')) }}">
                     <i class="bi bi-list-ul"></i> {{trips}}
                 </a>
