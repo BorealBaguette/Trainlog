@@ -1756,5 +1756,17 @@
     "shareCopyLink": "Link másolása",
     "shareLinkShows": "A link mutatja:",
     "viewOnMap": "Mutasd térképen",
-    "shareLinksHeading": "Megosztott linkek"
+    "shareLinksHeading": "Megosztott linkek",
+    "aircraftTypesTitle": "Repülőgéptípusok",
+    "aircraftTypesIntro": "A Trainlog által ismert összes repülőgépcsalád. Azok, amelyekkel még nem repültél, feketék; nyiss ki egy családot az egyes változatokhoz.",
+    "aircraftTypesSummary": "{total} családból {flown} kipróbálva",
+    "aircraftFilterFlown": "Repült",
+    "aircraftFilterNotFlown": "Nem repült",
+    "aircraftFlights": "Repülések",
+    "aircraftFirstFlown": "Első repülés",
+    "aircraftLastFlown": "Utolsó repülés",
+    "aircraftVariantsFlown": "{total} változatból {flown} kipróbálva",
+    "aircraftLbIntro": "Minden kipróbált repülőgép-változat egy pont: a 777-200, 777-200LR, 777-300 és 777-300ER négy.",
+    "aircraftLbVariants": "Kipróbált változatok",
+    "aircraftLbFamilies": "Kipróbált családok"
 }

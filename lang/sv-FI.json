@@ -1771,5 +1771,17 @@
     "shareCopyLink": "Kopiera länk",
     "shareLinkShows": "Länken visar:",
     "viewOnMap": "Visa på kartan",
-    "shareLinksHeading": "Delade länkar"
+    "shareLinksHeading": "Delade länkar",
+    "aircraftTypesTitle": "Flygplanstyper",
+    "aircraftTypesIntro": "Alla flygplansfamiljer som Trainlog känner till. De du ännu inte har flugit med är svärtade; öppna en familj för att se varje variant.",
+    "aircraftTypesSummary": "{flown} av {total} familjer flugna",
+    "aircraftFilterFlown": "Flugna",
+    "aircraftFilterNotFlown": "Inte flugna",
+    "aircraftFlights": "Flygningar",
+    "aircraftFirstFlown": "Första flygningen",
+    "aircraftLastFlown": "Senaste flygningen",
+    "aircraftVariantsFlown": "{flown} av {total} varianter flugna",
+    "aircraftLbIntro": "Varje flygplansvariant man har flugit med ger en poäng: 777-200, 777-200LR, 777-300 och 777-300ER ger fyra.",
+    "aircraftLbVariants": "Flugna varianter",
+    "aircraftLbFamilies": "Flugna familjer"
 }

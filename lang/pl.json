@@ -1801,5 +1801,17 @@
     "shareCopyLink": "Kopiuj link",
     "shareLinkShows": "Link pokazuje:",
     "viewOnMap": "Pokaż na mapie",
-    "shareLinksHeading": "Udostępniane linki"
+    "shareLinksHeading": "Udostępniane linki",
+    "aircraftTypesTitle": "Typy samolotów",
+    "aircraftTypesIntro": "Wszystkie rodziny samolotów znane Trainlogowi. Te, którymi jeszcze nie leciałeś, są zaczernione; rozwiń rodzinę, aby zobaczyć poszczególne warianty.",
+    "aircraftTypesSummary": "{flown} z {total} rodzin wylatanych",
+    "aircraftFilterFlown": "Wylatane",
+    "aircraftFilterNotFlown": "Niewylatane",
+    "aircraftFlights": "Loty",
+    "aircraftFirstFlown": "Pierwszy lot",
+    "aircraftLastFlown": "Ostatni lot",
+    "aircraftVariantsFlown": "{flown} z {total} wariantów wylatanych",
+    "aircraftLbIntro": "Każdy wylatany wariant samolotu to jeden punkt: 777-200, 777-200LR, 777-300 i 777-300ER dają cztery.",
+    "aircraftLbVariants": "Wylatane warianty",
+    "aircraftLbFamilies": "Wylatane rodziny"
 }

@@ -1,0 +1,95 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include nav %}
+
+<!-- Loading screen -->
+<div id="loadingScreen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background: light-dark(rgba(255, 255, 255, 0.8), rgba(var(--bs-body-bg-rgb), 0.8)); z-index: 9999; display: flex; justify-content: center; align-items: center;">
+    <div class="spinner-border text-primary" role="status"></div>
+</div>
+
+<div id="leaderboard-container" class="container mt-3">
+    <h1>{{ aircraftTypesTitle }}</h1>
+
+    <br>
+
+    {% include "leaderboardNav.html" %}
+
+    <br>
+
+    <p class="text-body-secondary">{{ aircraftLbIntro }}</p>
+
+    <table id="leaderboard" class="table table-bordered display nowrap">
+        <thead>
+            <tr>
+                <th class="rank-column" style="white-space: nowrap;">{{ leaderboardRank }}</th>
+                <th>{{ leaderboardUsername }}</th>
+                <th>{{ aircraftLbVariants }}</th>
+                <th>{{ aircraftLbFamilies }}</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+var table = $('#leaderboard');
+showLoading();
+
+$.get('{{ url_for("getLeaderboardUsers", type="aircraft") }}', function (data) {
+    function generateLink(username, highlighted = false) {
+        const safe = sanitize(username);
+        const encoded = encodeURIComponent(username);
+        if (data.non_public_users.includes(username)) {
+            return safe;
+        }
+        // A public profile also has the aircraft page, so link straight to it.
+        const href = `{{ url_for('aircraft.aircraft_types', username='__USER__') }}`.replace('__USER__', encoded);
+        return `<a class="leaderboardLink ${highlighted ? 'link-light' : 'link-dark'}" href="${href}">${safe}</a>`;
+    }
+
+    function medal(rank) {
+        if (rank === 1) return '<i class="fa fa-trophy" style="color: gold;"></i>';
+        if (rank === 2) return '<i class="fa fa-medal" style="color: silver;"></i>';
+        if (rank === 3) return '<i class="fa fa-medal" style="color: #cd7f32;"></i>';
+        return rank;
+    }
+
+    // Already sorted by the server: variants, then families, then name.
+    data.leaderboard_data.forEach(function (user, index) {
+        const highlighted = user.username === '{{ username }}';
+        table.append($('<tr>').addClass(highlighted ? 'highlight' : '')
+            .append($('<td>').html(medal(index + 1)))
+            .append($('<td>').html(generateLink(user.username, highlighted)))
+            .append($('<td>').text(user.variants))
+            .append($('<td>').text(user.families))
+        );
+    });
+
+    $('#leaderboard').DataTable({
+        paging: false,
+        columnDefs: [
+            { orderable: false, targets: [0, 1] }
+        ],
+        responsive: true,
+        order: [[2, 'desc'], [3, 'desc']],
+        language: {
+            info: "{{ dtInfo }}",
+            paginate: {
+                next: "{{ dtNext }}",
+                previous: "{{ dtPrevious }}",
+            },
+            emptyTable: "{{ dtEmptyTable }}",
+            lengthMenu: "{{ dtLengthMenu }}",
+            search: "{{ dtSearch }}"
+        },
+    });
+
+    hideLoading();
+}).fail(function () {
+    hideLoading();
+    console.error('Failed to load aircraft leaderboard data');
+});
+
+$('.rank-column').css('width', '1%');
+</script>
+{% endblock %}

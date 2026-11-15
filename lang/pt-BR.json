@@ -1771,5 +1771,17 @@
     "shareCopyLink": "Copiar link",
     "shareLinkShows": "O link mostra:",
     "viewOnMap": "Ver no mapa",
-    "shareLinksHeading": "Links compartilhados"
+    "shareLinksHeading": "Links compartilhados",
+    "aircraftTypesTitle": "Tipos de aeronave",
+    "aircraftTypesIntro": "Todas as famílias de aeronaves que o Trainlog conhece. As que você ainda não voou aparecem em preto; abra uma família para ver cada variante.",
+    "aircraftTypesSummary": "{flown} de {total} famílias voadas",
+    "aircraftFilterFlown": "Voadas",
+    "aircraftFilterNotFlown": "Não voadas",
+    "aircraftFlights": "Voos",
+    "aircraftFirstFlown": "Primeiro voo",
+    "aircraftLastFlown": "Último voo",
+    "aircraftVariantsFlown": "{flown} de {total} variantes voadas",
+    "aircraftLbIntro": "Cada variante de aeronave voada vale um ponto: um 777-200, 777-200LR, 777-300 e 777-300ER somam quatro.",
+    "aircraftLbVariants": "Variantes voadas",
+    "aircraftLbFamilies": "Famílias voadas"
 }
