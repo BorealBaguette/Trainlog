@@ -35,6 +35,9 @@
   const map = await MapLibreUtils.initializeMapLibre({
     container: 'cs-map', tileserver: '{{ tileserver }}', useGlobe: true, center: [0, -20], zoom: 1.5,
   });
+  // 'load' fires once, likely during the long download: listen now. map.loaded() is no substitute,
+  // it is false whenever tiles are loading, and the draw then waited for a 'load' that had passed.
+  const styled = new Promise(r => map.isStyleLoaded() ? r() : map.once('load', r));
 
   // A stable colour per code, so neighbours rarely share one.
   const hue = code => [...code].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -89,7 +92,7 @@
     map.addLayer({ id: 'countries-line', type: 'line', source: 'countries',
       paint: { 'line-color': ['get', 'color'], 'line-width': 1 } });
   };
-  map.loaded() ? draw() : map.on('load', draw);
+  styled.then(draw);
 
   let hovered = null;
   map.on('mousemove', 'countries-fill', e => {
