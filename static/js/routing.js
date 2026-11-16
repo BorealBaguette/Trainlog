@@ -2234,9 +2234,11 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
             return saved;
           });
           newTrip["waypoints"] = JSON.stringify(latLngs);
-      } else if (newTrip["waypoints"]) {
+      } else {
           // Every intermediate point gone (removed on the map or in the stops dialog):
-          // say so, rather than leave the previous list to be saved again.
+          // say so, rather than leave the previous list to be saved again. Always, even
+          // if no route with points set it before: the edit page's newTrip starts empty,
+          // and the server keeps the trip's stored waypoints when none are sent.
           newTrip["waypoints"] = "[]";
       }
       
