@@ -74,6 +74,38 @@ var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 var routeDetails = null;
 // [from, to, ms] per stretch of the last routed line (point indexes), new router only
 var routeTimeDetail = null;
+// The details of the last few router answers, newest last. A route can come from more than
+// one request (with exact points it is asked for exact and approximate at once, sometimes
+// again), and the last answer to arrive need not be the route kept: the kept route takes
+// the details whose ranges cover exactly its points (pickRouteDetails).
+var recentRouteDetails = [];
+
+// Points a router answer's details are about: their ranges end on its last point, and the
+// heights are one per point.
+function detailsPointCount(details) {
+  if (Array.isArray(details.elevation)) return details.elevation.length;
+  var end = -1;
+  Object.keys(details).forEach(function(key) {
+    var ranges = details[key];
+    if (Array.isArray(ranges) && ranges.length && Array.isArray(ranges[ranges.length - 1]))
+      end = Math.max(end, ranges[ranges.length - 1][1]);
+  });
+  return end + 1;
+}
+
+// routeDetails/routeTimeDetail for the route kept, or none when no answer matches it (a
+// route with freehand parts, put together from several answers)
+function pickRouteDetails(pointCount) {
+  routeDetails = null;
+  routeTimeDetail = null;
+  for (var i = recentRouteDetails.length - 1; i >= 0; i--) {
+    if (recentRouteDetails[i].n === pointCount) {
+      routeDetails = Object.assign({}, recentRouteDetails[i].details);
+      routeTimeDetail = recentRouteDetails[i].time;
+      break;
+    }
+  }
+}
 
 // Bumped on every reroute so a slow /api/electrification-preview response from an
 // earlier route can't overwrite the sidebar after a newer one has already resolved.
@@ -171,11 +203,13 @@ document.addEventListener('toggle', function (e) {
           try {
             var response = JSON.parse(self.responseText);
             if (response.routes && response.routes[0] && response.routes[0].details) {
-              routeDetails = response.routes[0].details;
+              var details = response.routes[0].details;
               // The new router's travel time per stretch of the line, for the timeline's
               // estimates: kept apart so it isn't saved with the trip's details.
-              routeTimeDetail = routeDetails.time || null;
-              delete routeDetails.time;
+              var time = details.time || null;
+              delete details.time;
+              recentRouteDetails.push({ n: detailsPointCount(details), details: details, time: time });
+              if (recentRouteDetails.length > 8) recentRouteDetails.shift();
             }
           } catch(e) {
             console.error('Error parsing OSRM response:', e);
@@ -325,6 +359,7 @@ function switchRouter() {
 
   // Clear route details when switching routers to prevent mixing data
   routeDetails = null;
+  recentRouteDetails = [];
   if (newTrip["details"]) {
     delete newTrip["details"];
   }
@@ -415,6 +450,7 @@ function switchRouterProfile(value) {
 
   sidebar.setContent(spinnerContent);
   routeDetails = null;
+  recentRouteDetails = [];
   if (newTrip["details"]) {
     delete newTrip["details"];
   }
@@ -1146,6 +1182,7 @@ function rerouteForFilters() {
   document.querySelectorAll('.route-filters-box').forEach(function (el) { el.classList.add('loading'); });
   routeFilterTimer = setTimeout(function () {
     routeDetails = null;
+    recentRouteDetails = [];
     delete newTrip.details;
     lastElecPreview = null;
     lastElecPreviewPath = null;
@@ -2053,7 +2090,8 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           path: currentRoute.map(function(p) { return {lat: p.lat, lng: p.lng}; }),
           type: type,
           powerType: newTrip["powerType"],
-          details: newTrip["details"] || {}
+          // The track heights (one per point) don't bear on electrification
+          details: Object.assign({}, newTrip["details"] || {}, { elevation: undefined })
         })
       }).then(function(r) { return r.json(); }).then(function(data) {
         if (requestId !== elecPreviewRequestId) return; // a newer request already resolved
@@ -2096,6 +2134,8 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       },
       router: customRouter
     }).on('routeselected', function(){
+      // The details of the answer this route came from, not of whichever arrived last
+      pickRouteDetails(this._selectedRoute.coordinates.length);
       var content = `<h4>${texts.routeTitle.replace("{origLabel}", origLabel).replace("{destLabel}", destLabel)}</h4>`;
       var hintHtml = ''; // "adjust the markers" hint, shown inline next to the distance (train only)
 
@@ -2210,6 +2250,8 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       if(routeDetails) {
         routeDetails["powerType"] = newTrip["powerType"]
         newTrip["details"] = routeDetails;
+      } else {
+        delete newTrip["details"];  // none matches this route: don't keep another one's
       }
 
       if (ELEC_PREVIEW_TYPES.includes(type)) refreshElecPreview();
