@@ -30,10 +30,11 @@ def _duplicate_trip(trip_id: int, owner_id: int) -> int:
             },
         ).fetchone()[0]
         pg.execute(
-            "INSERT INTO paths (trip_id, geom, altitude, timestamps)"
-            " SELECT :new_id, geom, altitude, timestamps FROM paths WHERE trip_id = :old_id"
+            "INSERT INTO paths (trip_id, geom, altitude, timestamps, track_env)"
+            " SELECT :new_id, geom, altitude, timestamps, track_env FROM paths WHERE trip_id = :old_id"
             " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
-            " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
+            " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps,"
+            " track_env = EXCLUDED.track_env",
             {"new_id": new_trip_id, "old_id": trip_id},
         )
         sync_trip_operators(new_trip_id, pg_session_=pg)
@@ -50,10 +51,11 @@ def duplicate_trip(trip_id: int):
         ).fetchone()[0]
         # Copy the route geometry (and any 3D flight track) to the new trip.
         pg.execute(
-            "INSERT INTO paths (trip_id, geom, altitude, timestamps)"
-            " SELECT :new_id, geom, altitude, timestamps FROM paths WHERE trip_id = :old_id"
+            "INSERT INTO paths (trip_id, geom, altitude, timestamps, track_env)"
+            " SELECT :new_id, geom, altitude, timestamps, track_env FROM paths WHERE trip_id = :old_id"
             " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
-            " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
+            " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps,"
+            " track_env = EXCLUDED.track_env",
             {"new_id": new_trip_id, "old_id": trip_id},
         )
         sync_trip_operators(new_trip_id, pg_session_=pg)

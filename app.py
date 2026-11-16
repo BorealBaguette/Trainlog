@@ -293,6 +293,7 @@ from src.trips import (
     get_current_trip_id,
 )
 from src.paths import Path, coords_to_ewkt, fetch_raw_path, geom_geojson_to_coords
+from src.track_profile import track_from_details
 from src.trips.freehand_transform import (
     apply_to_trip,
     purge_expired_backups,
@@ -959,6 +960,15 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
 
     user_id = User.query.filter_by(username=username).first().uid
 
+    # The rail router's track heights and tunnel/bridge stretches, when it drew this path
+    # (they come in `details`, see src/graphhopper.py). A caller's own altitude (an FR24
+    # or GPX track) wins.
+    track_env = None
+    if trip_type in ("train", "tram", "metro", "funicular", "rail"):
+        route_altitude, track_env = track_from_details(newTrip.get("details"), len(newPath))
+        if altitude is None:
+            altitude = route_altitude
+
     trip = Trip(
         username=username,
         user_id=user_id,
@@ -1005,6 +1015,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         timestamps=timestamps,
         route_source=newTrip.get("route_source") or "router",
         raw_path=raw_path,
+        track_env=track_env,
     )
 
     create_trip(trip)

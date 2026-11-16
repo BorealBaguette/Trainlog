@@ -1,4 +1,6 @@
 # src/routing.py
+import os
+
 import requests
 from urllib.parse import parse_qs
 from flask import make_response
@@ -7,6 +9,15 @@ from flask import make_response
 # Adjust imports to match your structure.
 from src.router_regions import all_in_region
 from src.graphhopper import convert_graphhopper_to_osrm     # example
+
+# The new (GraphHopper) rail router. TRAIN_GH_ELEVATION asks it for track heights as
+# well, which only a router imported with elevation answers (any other refuses the
+# request); a test instance can stand in through TRAIN_GH_URL.
+TRAIN_GH_URL = os.environ.get("TRAIN_GH_URL", "https://train-gh.srv.trainlog.me").rstrip("/")
+TRAIN_GH_ELEVATION = os.environ.get("TRAIN_GH_ELEVATION", "").lower() in ("1", "true", "yes")
+# road_environment: where the route runs in a tunnel or over a bridge, kept with the trip
+# (src/track_profile.py).
+GH_DETAILS = ["electrified", "distance", "time", "road_environment"]
 
 
 # Track filters of the new router's train profile, sent by routing.js as plain
@@ -71,7 +82,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
     if routingType == "train":
         if use_new_router is None:
             use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
-        base = "https://train-gh.srv.trainlog.me" if use_new_router else "https://train.srv.trainlog.me"
+        base = TRAIN_GH_URL if use_new_router else "https://train.srv.trainlog.me"
 
     elif routingType == "ferry":
         base = "https://ferry.srv.trainlog.me"
@@ -169,10 +180,12 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
             points.append(f"point={lat}%2C{lon}")
         point_params = "&".join(points)
 
-        full_url = (
-            f"{base_url}/route?"
-            f"{point_params}&type=json&profile={gh_profile}&details=electrified&details=distance&details=time"
-        )
+        details = "".join(f"&details={d}" for d in GH_DETAILS)
+        full_url = f"{base_url}/route?{point_params}&type=json&profile={gh_profile}{details}"
+        if TRAIN_GH_ELEVATION:
+            # Plain coordinates: the encoded polyline turns three-dimensional with
+            # elevation, which the clients don't read (src/graphhopper.py splits it).
+            full_url += "&elevation=true&points_encoded=false"
         if waypoint_modes:
             full_url += f"&waypoint_modes={waypoint_modes}"
 
@@ -186,10 +199,13 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
         body = {
             "profile": gh_profile,
             "points": [[float(c) for c in coord.split(",")] for coord in path.split("/")[-1].split(";")],
-            "details": ["electrified", "distance", "time"],
+            "details": GH_DETAILS,
             "ch.disable": True,
             "custom_model": {"priority": [{"if": c, "multiply_by": "0"} for c in filters]},
         }
+        if TRAIN_GH_ELEVATION:
+            body["elevation"] = True
+            body["points_encoded"] = False
         if max_speed:
             # limit_to only ever lowers speeds
             body["custom_model"]["speed"] = [{"if": "true", "limit_to": str(max_speed)}]
