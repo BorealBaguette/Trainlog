@@ -1558,7 +1558,10 @@
     "stopDelay": "Verspätung (min)",
     "dragToReorder": "Zum Umsortieren ziehen",
     "stopsOutOfOrder": "Manche Zeiten liegen vor denen darüber: prüfe die rot markierten Halte.",
-    "motisStops": {"one": "{n} Halt", "other": "{n} Halte"},
+    "motisStops": {
+        "one": "{n} Halt",
+        "other": "{n} Halte"
+    },
     "ormOverlayEnable": "OpenRailwayMap-Overlay aktivieren",
     "ormLayerType": "Art der Bahnebene",
     "ormLayerStandard": "Standard",
@@ -1591,9 +1594,15 @@
     "tidyStationsIgnore": "Ignorieren",
     "tidyStationsUnignore": "Nicht mehr ignorieren",
     "tidyStationsConfirm": "Diese Fahrten in „{name}“ umbenennen?",
-    "tidyStationsRenamed": {"one": "{n} Fahrt umbenannt", "other": "{n} Fahrten umbenannt"},
+    "tidyStationsRenamed": {
+        "one": "{n} Fahrt umbenannt",
+        "other": "{n} Fahrten umbenannt"
+    },
     "tidyStationsNothing": "Nichts aufzuräumen: Jeder deiner Bahnhöfe hat nur einen Namen.",
-    "tidyStationsUnmatched": {"one": "{n} Fahrtende liegt an keinem bekannten Bahnhof und wird nicht aufgeführt.", "other": "{n} Fahrtenden liegen an keinem bekannten Bahnhof und werden nicht aufgeführt."},
+    "tidyStationsUnmatched": {
+        "one": "{n} Fahrtende liegt an keinem bekannten Bahnhof und wird nicht aufgeführt.",
+        "other": "{n} Fahrtenden liegen an keinem bekannten Bahnhof und werden nicht aufgeführt."
+    },
     "liftLowerStation": "{name} Talstation",
     "liftUpperStation": "{name} Bergstation",
     "endModeRename": "Nur den Namen bearbeiten",
@@ -1613,7 +1622,7 @@
         "one": "{n} Reise",
         "other": "{n} Reisen"
     },
-    "vizHexagons": "Bestecke",
+    "vizHexagons": "Bestagons",
     "vizHexagonsSub": "Wo Sie am meisten unterwegs sind, in 3D-Säulen",
     "vizCalendar": "Kalender",
     "vizCalendarSub": "Ihre Reisetage, Jahr für Jahr",
