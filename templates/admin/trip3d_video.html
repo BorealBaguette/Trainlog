@@ -130,9 +130,12 @@ const TAG_NAME = {{ (tag_description if tag_uuid else none) | tojson }};
 const BG = new URLSearchParams(location.search).get('bg');
 const TILESERVER = BG || {{ tileserver | tojson }};
 // Another one reloads the page (on Apply): the terrain and the route are laid over the map's
-// style, which a background swap in place would lose. The length asked for rides along (?len=)
+// style, which a background swap in place would lose. The length and the size limit asked for
+// ride along (?len=, ?mb=)
 document.getElementById('v-bg').value = BG || '';
 const LEN = new URLSearchParams(location.search).get('len');
+const MB = new URLSearchParams(location.search).get('mb');
+if (MB) document.getElementById('v-mb').value = MB;
 const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
@@ -1507,6 +1510,8 @@ async function setup() {
       const url = new URL(location.href);
       if (now.bg) url.searchParams.set('bg', now.bg); else url.searchParams.delete('bg');
       if (now.len) url.searchParams.set('len', now.len); else url.searchParams.delete('len');
+      const mb = document.getElementById('v-mb').value;
+      if (mb) url.searchParams.set('mb', mb); else url.searchParams.delete('mb');
       const [w, h] = format();
       url.hash = `${w}x${h}`;
       location.href = url.toString();
