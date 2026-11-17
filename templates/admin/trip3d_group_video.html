@@ -129,8 +129,8 @@ const TAG_NAME = {{ (tag_description if tag_uuid else none) | tojson }};
 const BG = new URLSearchParams(location.search).get('bg');
 const TILESERVER = BG || {{ tileserver | tojson }};
 // Another one reloads the page (on Apply): the terrain and the route are laid over the map's
-// style, which a background swap in place would lose. The length and the size limit asked for
-// ride along (?len=, ?mb=)
+// style, which a background swap in place would lose. The other options ride along in the
+// address too (?len=, ?mb=, ?size=)
 document.getElementById('v-bg').value = BG || '';
 const LEN = new URLSearchParams(location.search).get('len');
 const MB = new URLSearchParams(location.search).get('mb');
@@ -892,12 +892,13 @@ async function setup() {
   // Custom sizes kept even (the encoders want it), 128 to 3840 px a side
   const side = el => 2 * Math.round(Math.max(128, Math.min(3840, Number(el.value) || 1080)) / 2);
   const format = () => (sizeSel.value === 'custom' ? [side($w), side($h)] : sizeSel.value.split('x').map(Number));
-  // A size in the address (#1280x720) picked on load: its preset, else as a custom one
-  const fromHash = location.hash.match(/^#(\d+)x(\d+)$/);
-  if (fromHash) {
-    const v = `${fromHash[1]}x${fromHash[2]}`;
+  // A size in the address (?size=1280x720; #1280x720 in older links) picked on load: its
+  // preset, else as a custom one
+  const sizeAsked = (new URLSearchParams(location.search).get('size') || location.hash.slice(1)).match(/^(\d+)x(\d+)$/);
+  if (sizeAsked) {
+    const v = `${sizeAsked[1]}x${sizeAsked[2]}`;
     if ([...sizeSel.options].some(o => o.value === v)) sizeSel.value = v;
-    else { sizeSel.value = 'custom'; [$w.value, $h.value] = [fromHash[1], fromHash[2]]; $custom.hidden = false; }
+    else { sizeSel.value = 'custom'; [$w.value, $h.value] = [sizeAsked[1], sizeAsked[2]]; $custom.hidden = false; }
   }
   // The default length follows the journey, so the pace stays about the same from one video
   // to the next: 1.6 s per square root of each trip's minutes (or km), plus its halts and hops
@@ -924,32 +925,31 @@ async function setup() {
   // and Apply rebuilds once (or reloads the page, for another background)
   if (LEN) lenSel.value = LEN;
   const bgSel = document.getElementById('v-bg'), $apply = document.getElementById('v-apply');
-  const chosen = () => ({ len: lenSel.value, size: sizeSel.value, w: $w.value, h: $h.value, bg: bgSel.value });
+  const $mb = document.getElementById('v-mb');
+  const chosen = () => ({ len: lenSel.value, size: sizeSel.value, w: $w.value, h: $h.value, bg: bgSel.value, mb: $mb.value });
   let applied = chosen();
   const markPending = () => {
     const now = chosen(), custom = now.size === 'custom';
     const changed = { 'v-len': now.len !== applied.len, 'v-size': now.size !== applied.size,
-      'v-w': custom && now.w !== applied.w, 'v-h': custom && now.h !== applied.h, 'v-bg': now.bg !== applied.bg };
+      'v-w': custom && now.w !== applied.w, 'v-h': custom && now.h !== applied.h, 'v-bg': now.bg !== applied.bg,
+      'v-mb': now.mb !== applied.mb };
     for (const [id, c] of Object.entries(changed)) document.getElementById(id).classList.toggle('v-pending', c);
     $apply.disabled = !Object.values(changed).some(Boolean);
   };
-  for (const el of [lenSel, sizeSel, $w, $h, bgSel]) { el.addEventListener('input', markPending); el.addEventListener('change', markPending); }
+  for (const el of [lenSel, sizeSel, $w, $h, bgSel, $mb]) { el.addEventListener('input', markPending); el.addEventListener('change', markPending); }
   sizeSel.addEventListener('change', () => { $custom.hidden = sizeSel.value !== 'custom'; });
   $apply.addEventListener('click', () => {
     const now = chosen();
-    if (now.bg !== applied.bg) {
-      const url = new URL(location.href);
-      if (now.bg) url.searchParams.set('bg', now.bg); else url.searchParams.delete('bg');
-      if (now.len) url.searchParams.set('len', now.len); else url.searchParams.delete('len');
-      const mb = document.getElementById('v-mb').value;
-      if (mb) url.searchParams.set('mb', mb); else url.searchParams.delete('mb');
-      const [w, h] = format();
-      url.hash = `${w}x${h}`;
-      location.href = url.toString();
-      return;
+    // Every option in the address alike (?size=&len=&bg=&mb=), so a link keeps the video as set
+    const url = new URL(location.href), [w, h] = format();
+    for (const [key, value] of [['size', `${w}x${h}`], ['len', now.len], ['bg', now.bg], ['mb', now.mb]]) {
+      if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
     }
-    applySettings();
-    location.hash = `${W}x${H}`;
+    url.hash = '';
+    if (now.bg !== applied.bg) { location.href = url.toString(); return; }
+    // The size limit alone is only read on rendering: nothing to rebuild for it
+    if (['len', 'size', 'w', 'h'].some(k => now[k] !== applied[k])) applySettings();
+    history.replaceState(null, '', url.toString());
     applied = now;
     markPending();
   });
