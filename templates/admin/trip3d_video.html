@@ -791,8 +791,19 @@ async function setup() {
     // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
     // first, then the stops the timetable waits longest at; the train runs through the rest
     const dwellOf = st => (st.arr && st.dep ? (minutes(st.dep) - minutes(st.arr) + 1440) % 1440 : 0);
-    const halts = [...stops].sort((a, b) => (b.major ? 1 : 0) - (a.major ? 1 : 0) || dwellOf(b) - dwellOf(a) || a.d - b.d)
-      .slice(0, Math.floor(JOURNEY / 4)).sort((a, b) => a.d - b.d);
+    // A tram, metro or bus stops every few hundred metres: it runs through them, halting only
+    // at changes. Elsewhere the halts are kept apart (at least half an even share of the line
+    // between two), or the first stops, all alike, took every halt and the rest of the trip none
+    const maxHalts = Math.floor(JOURNEY / 4), minGap = total / (maxHalts + 1) / 2;
+    const urban = new Set(['tram', 'metro', 'bus']);
+    const halts = [];
+    for (const st of [...stops].filter(st => st.major || !urban.has(typeAfter(st)))
+      .sort((a, b) => (b.major ? 1 : 0) - (a.major ? 1 : 0) || dwellOf(b) - dwellOf(a) || a.d - b.d)) {
+      if (halts.length >= maxHalts) break;
+      if (halts.some(h => Math.abs(h.d - st.d) < minGap)) continue;
+      halts.push(st);
+    }
+    halts.sort((a, b) => a.d - b.d);
     const wait = Math.min(0.5, JOURNEY * 0.15 / Math.max(1, halts.length));
     halting = new Set(halts);
     // The hops between trips: crossed in HOP seconds each, whatever their length
