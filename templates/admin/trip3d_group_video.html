@@ -59,6 +59,16 @@
       <div style="flex:1"><label>{{ video3dHeight }}</label><input id="v-h" type="number" min="128" max="3840" step="2" value="1080" class="form-control form-control-sm"></div>
     </div>
     <div class="v-row">
+      <div style="flex:1"><label>{{ tilesetLabel }}</label>
+        <select id="v-bg" class="form-select form-select-sm">
+          <option value="">{{ posterLabelDefault }}</option>
+          <optgroup label="Trainlog"><option value="trainlog-light">Trainlog Rail Light</option><option value="trainlog-rail">Trainlog Rail Dark</option><option value="dark-train">Trainlog Dark</option></optgroup>
+          <optgroup label="OpenFreeMap"><option value="ofm-liberty">Liberty</option><option value="ofm-bright">Bright</option><option value="ofm-positron">Positron</option></optgroup>
+          <optgroup label="Jawg"><option value="jawg-streets-v2">Streets V2</option><option value="jawg-lagoon-v2">Lagoon V2</option><option value="jawg-terrain">{{ tileserver_jawg_terrain }}</option><option value="jawg-sunny">{{ tileserver_jawg_sunny }}</option><option value="jawg-light">{{ tileserver_jawg_light }}</option><option value="jawg-dark">{{ tileserver_jawg_dark }}</option></optgroup>
+          <optgroup label="OpenStreetMap"><option value="osm">{{ tileserver_default }}</option><option value="de">{{ tileserver_de }}</option><option value="fr">{{ tileserver_fr }}</option></optgroup>
+        </select></div>
+    </div>
+    <div class="v-row">
       <div style="flex:1"><label>{{ video3dMaxSize }}</label>
         <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
     </div>
@@ -94,7 +104,17 @@ const DATA_URL = {{ url_for('trip3d.trips_json') | tojson }};
 const fetchTrips = () => fetch(DATA_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ ids: {{ tripIds | tojson }} }) });
 const TAG_NAME = {{ (tag_description if tag_uuid else none) | tojson }};
-const TILESERVER = {{ tileserver | tojson }};
+// The background chosen for this page (?bg=, not saved), else the user's own
+const BG = new URLSearchParams(location.search).get('bg');
+const TILESERVER = BG || {{ tileserver | tojson }};
+// Choosing another reloads the page with it: the terrain and the route are laid over the map's
+// style, which a background swap in place would lose
+document.getElementById('v-bg').value = BG || '';
+document.getElementById('v-bg').addEventListener('change', e => {
+  const url = new URL(location.href);
+  if (e.target.value) url.searchParams.set('bg', e.target.value); else url.searchParams.delete('bg');
+  location.href = url.toString();
+});
 const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const DEM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';

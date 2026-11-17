@@ -9,9 +9,10 @@ from zoneinfo import ZoneInfo
 
 from flask import Blueprint, abort, jsonify, render_template, request, session, url_for
 
+from py.utils import getCountryFromCoordinates
 from src.paths import geom_geojson_to_coords
 from src.pg import pg_session
-from src.track_profile import TRACK_TYPES, fill_gaps, smooth_profile
+from src.track_profile import TRACK_TYPES, cumulative_distances, fill_gaps, smooth_profile
 from src.trip_selections import parse_trip_ids
 from src.users import User
 from src.utils import get_user_id, getUser, has_current_trip, lang, owner
@@ -59,6 +60,46 @@ TRIP_QUERY = """
 """
 
 
+def country_runs(coords):
+    """Where the path changes country: [[point index, "gb"], ...], each country from the
+    point it starts at, for the video's flag. Read every 2 km, and between two readings that
+    differ narrowed down to the point by halving; at sea (no country) the last one holds."""
+    def code(i):
+        cc = (getCountryFromCoordinates(lat=coords[i][0], lng=coords[i][1]) or {}).get("countryCode")
+        return cc.lower() if cc and cc != "UN" else None  # UN: at sea
+
+    if not coords:
+        return []
+    dist = cumulative_distances(coords)
+    samples, next_at = [], 0.0
+    for i, d in enumerate(dist):
+        if d >= next_at or i == len(coords) - 1:
+            samples.append(i)
+            next_at = d + 2000
+    runs, last, seen = [], None, 0
+    for i in samples:
+        c = code(i)
+        if c is None:
+            continue
+        if c == last:
+            seen = i
+            continue
+        start = i
+        if runs:
+            # The first point of the new country after the last reading of the previous one
+            lo, hi = seen, i
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                if code(mid) == c:
+                    hi = mid
+                else:
+                    lo = mid
+            start = hi
+        runs.append([start, c])
+        last, seen = c, i
+    return runs
+
+
 def _epoch_ms(value):
     """A stored UTC datetime as epoch milliseconds, or None."""
     return int(value.replace(tzinfo=timezone.utc).timestamp() * 1000) if isinstance(value, datetime) else None
@@ -88,6 +129,7 @@ def _payload(row, user=None):
         # A flight's recorded altitude is its height as flown, not to be smoothed
         "height": (fill_gaps(raw) if air else smooth_profile(coords, raw, env)) if raw else None,
         "env": env,
+        "countries": country_runs(coords),
     }
 
 

@@ -59,6 +59,16 @@
       <div style="flex:1"><label>{{ video3dHeight }}</label><input id="v-h" type="number" min="128" max="3840" step="2" value="1080" class="form-control form-control-sm"></div>
     </div>
     <div class="v-row">
+      <div style="flex:1"><label>{{ tilesetLabel }}</label>
+        <select id="v-bg" class="form-select form-select-sm">
+          <option value="">{{ posterLabelDefault }}</option>
+          <optgroup label="Trainlog"><option value="trainlog-light">Trainlog Rail Light</option><option value="trainlog-rail">Trainlog Rail Dark</option><option value="dark-train">Trainlog Dark</option></optgroup>
+          <optgroup label="OpenFreeMap"><option value="ofm-liberty">Liberty</option><option value="ofm-bright">Bright</option><option value="ofm-positron">Positron</option></optgroup>
+          <optgroup label="Jawg"><option value="jawg-streets-v2">Streets V2</option><option value="jawg-lagoon-v2">Lagoon V2</option><option value="jawg-terrain">{{ tileserver_jawg_terrain }}</option><option value="jawg-sunny">{{ tileserver_jawg_sunny }}</option><option value="jawg-light">{{ tileserver_jawg_light }}</option><option value="jawg-dark">{{ tileserver_jawg_dark }}</option></optgroup>
+          <optgroup label="OpenStreetMap"><option value="osm">{{ tileserver_default }}</option><option value="de">{{ tileserver_de }}</option><option value="fr">{{ tileserver_fr }}</option></optgroup>
+        </select></div>
+    </div>
+    <div class="v-row">
       <div style="flex:1"><label>{{ video3dMaxSize }}</label>
         <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
     </div>
@@ -95,9 +105,36 @@ const DATA_URL = {{ url_for('trip3d.trips_json') | tojson }};
 const fetchTrips = () => fetch(DATA_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ ids: {{ tripIds | tojson }} }) });
 const TAG_NAME = {{ (tag_description if tag_uuid else none) | tojson }};
-const TILESERVER = {{ tileserver | tojson }};
+// The background chosen for this page (?bg=, not saved), else the user's own
+const BG = new URLSearchParams(location.search).get('bg');
+const TILESERVER = BG || {{ tileserver | tojson }};
+// Choosing another reloads the page with it: the terrain and the route are laid over the map's
+// style, which a background swap in place would lose
+document.getElementById('v-bg').value = BG || '';
+document.getElementById('v-bg').addEventListener('change', e => {
+  const url = new URL(location.href);
+  if (e.target.value) url.searchParams.set('bg', e.target.value); else url.searchParams.delete('bg');
+  location.href = url.toString();
+});
 const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
+const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
+// A station name's flag emoji as its country code ("🇬🇧 Aviemore" → "gb"), drawn from the
+// site's flag images: canvas cannot draw flag emoji everywhere (Windows shows two letters)
+const flagCode = name => {
+  const m = (name || '').match(/\p{Regional_Indicator}{2}/u);
+  return m ? [...m[0]].map(c => String.fromCharCode(c.codePointAt(0) - 0x1F1E6 + 97)).join('') : null;
+};
+const flagImages = {};
+const flagImage = code => {
+  if (!code) return null;
+  if (!flagImages[code]) {
+    const img = flagImages[code] = new Image();
+    img.onload = () => { img.ready = true; };
+    img.src = `${FLAGS}${code}.svg`;
+  }
+  return flagImages[code].ready ? flagImages[code] : null;
+};
 const DEM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
 // The site's colours per trip type (as on its maps); metro brightened to read on the terrain
 const COLOR = { train: '#52b0fe', tram: '#a2d7ff', metro: '#3d8bff', funicular: '#6495ed', rail: '#7ec8ff',
@@ -198,7 +235,17 @@ async function setup() {
   const total = dist[last] || 1;
   const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
   const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
-    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real }));
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags }));
+  tripSpans.forEach(t => t.flags.forEach(flagImage));
+  data.countries.forEach(([, c]) => flagImage(c));
+  // The country at s (metres along the line): of the runs the server read along each path
+  const countryAt = s => {
+    let lo = 0, hi = dist.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (dist[m] <= s) lo = m; else hi = m - 1; }
+    let c = null;
+    for (const [i, code] of data.countries) { if (i <= lo) c = code; else break; }
+    return c;
+  };
 
   // ── The track line, every ~20 m ────────────────────────────────────────────────
   // Open track on the ground smoothed along the line (a 200 m median bridges culverts and
@@ -1055,12 +1102,27 @@ async function setup() {
       g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
       g2.font = font(800, corner.px);
       corner.lines.forEach((l, i) => g2.fillText(l, textX, pad + (30 + i * corner.px * 1.15) * u));
+      // The clock's line, and its middle (its digits stand about 0.36 of the size above the
+      // baseline), which the flag is centred on
+      const below = pad + (30 + (corner.lines.length - 1) * corner.px * 1.15 + 42) * u, clockMid = below - 30 * u * 0.36;
       if (cornerIcon) {
-        const img = shrink(cornerIcon, iconW, '#ffffff');
-        g2.drawImage(img, Math.round(pad), Math.round(pad + 30 * u - corner.px * u * 0.8 - (img.height - corner.px * u) / 2));
+        const img = shrink(cornerIcon, iconW, '#ffffff'), iy = Math.round(pad + 30 * u - corner.px * u * 0.8 - (img.height - corner.px * u) / 2);
+        g2.drawImage(img, Math.round(pad), iy);
+        // Under it, the flag of the country the train is in, changing at the border; for a
+        // trip without countries read along it, its origin's then its destination's
+        const trip = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
+        const flag = flagImage(countryAt(f.s) || trip.flags[f.s < (trip.from + trip.to) / 2 ? 0 : 1] || trip.flags[0]);
+        if (flag) {
+          // At its own proportions (Firefox gives these SVGs no size: 3:2 then)
+          const fw = iconW, fh = Math.round(fw * (flag.naturalWidth ? flag.naturalHeight / flag.naturalWidth : 2 / 3)), fy = Math.round(clockMid - fh / 2);
+          g2.save();
+          roundRect(pad, fy, fw, fh, 4 * u); g2.clip();
+          g2.shadowBlur = 0; g2.drawImage(flag, pad, fy, fw, fh);
+          g2.restore();
+          roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
+        }
       }
       const clock = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s);
-      const below = pad + (30 + (corner.lines.length - 1) * corner.px * 1.15 + 42) * u;
       if (clock) { g2.font = font(700, 30); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fillText(clock, textX, below); }
       g2.shadowBlur = 0; g2.globalAlpha = 1;
     }
@@ -1319,7 +1381,7 @@ async function nameTunnels(tunnels, coords) {
 // and each connection a stop with the arrival and departure times
 function mergeTrips(list) {
   const out = { trip: { ...list[0].trip, destination: list[list.length - 1].trip.destination,
-    end: list[list.length - 1].trip.end }, coords: [], height: [], env: [], stops: [], gaps: [], types: [], spans: [] };
+    end: list[list.length - 1].trip.end }, coords: [], height: [], env: [], stops: [], gaps: [], types: [], countries: [], spans: [] };
   list.forEach((t, i) => {
     const off = out.coords.length;
     if (i) {
@@ -1332,13 +1394,14 @@ function mergeTrips(list) {
     out.types.push(...t.coords.map(() => t.trip.type));
     out.height.push(...(t.height || t.coords.map(() => 0)));
     for (const [s, e, k] of t.env || []) out.env.push([s + off, e + off, k]);
+    for (const [i, c] of t.countries || []) out.countries.push([i + off, c]);
     // A trip's own stops are looked for along that trip only
     out.stops.push(...(t.stops || []).map(st => ({ ...st, within: [off, off + t.coords.length - 1] })));
     // Each trip's points and how long it took, so the video gives it its share of the time
     const took = t.trip.start && t.trip.end ? (new Date(t.trip.end) - new Date(t.trip.start)) / 60000 : null;
     out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
       name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
-      real: !!t.height?.some(v => v > 300) });
+      real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)] });
   });
   return out;
 }
