@@ -44,6 +44,13 @@
   #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
   #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
   #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
+  /* Phones: the frame on top, the controls under it, the page scrolling */
+  @media (max-width: 800px) {
+    html, body { overflow: auto; }
+    #v-wrap { flex-direction: column; height: auto !important; padding: 10px; }
+    #v-stage-box { flex: none; height: 60vh; }
+    #v-panel { width: 100%; padding-bottom: 20px; }
+  }
 </style>
 
 <div id="v-wrap">
@@ -178,8 +185,9 @@ let [W, H] = [1920, 1080];
 const $stage = document.getElementById('v-stage'), $scale = document.getElementById('v-scale');
 const $map = document.getElementById('v-map'), hud = document.getElementById('v-hud'), g2 = hud.getContext('2d');
 function layoutStage() {
+  // The page fills the window below the navbar; on a phone it scrolls instead (CSS)
   const wrap = document.getElementById('v-wrap');
-  wrap.style.height = `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
+  wrap.style.height = window.matchMedia('(max-width: 800px)').matches ? '' : `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
   const box = document.getElementById('v-stage-box').getBoundingClientRect();
   const s = Math.min(box.width / W, box.height / H);
   $stage.style.width = `${W * s}px`; $stage.style.height = `${H * s}px`;
@@ -554,7 +562,8 @@ async function setup() {
   // The route at progress s (metres), `px` metres to a pixel at the focus: ahead a grey
   // strip; behind, a dark outline strip under the whole route, then the core, the track's
   // colour on open line and dark in tunnels. Runs of one kind as separate polylines.
-  function drawRoute(s, showHead, px) {
+  // whole: the opening's overview, the whole route faint, flights included
+  function drawRoute(s, showHead, px, whole = false) {
     for (const c of [...group.children]) { if (c !== head) { c.geometry.dispose(); c.material?.dispose?.(); } group.remove(c); }
     const cut = s >= total ? S.length - 1 : Math.max(0, d.findIndex(v => v > s) - 1);
     const t = s >= total ? 1 : (s - d[cut]) / ((d[cut + 1] - d[cut]) || 1);
@@ -582,7 +591,7 @@ async function setup() {
     // A flight ahead is not drawn at all: its straight line stood out over the whole map
     for (const r of behind) if (r.type === 'air') ribbon(r.ks.map(k => G[k]), 5 * px, DARK, 0, { opacity: 0.35 });
     for (const r of behind) if (r.type === 'air') curtain(r.ks, typeColor('air'), 0.45, 0);
-    for (const r of ahead) if (!r.gap && r.type !== 'air') ribbon(r.pts, 3 * px, AHEAD, 1, { xray: r.tunnel });
+    for (const r of ahead) if (!r.gap && (r.type !== 'air' || whole)) ribbon(r.pts, 3 * px, AHEAD, 1, { xray: r.tunnel });
     for (const r of behind) if (!r.gap) ribbon(r.pts, 10 * px, DARK, 2, { xray: r.tunnel });
     for (const r of behind) if (!r.gap) ribbon(r.pts, 6 * px, r.tunnel ? MUTED : typeColor(r.type), 3, { xray: r.tunnel });
     // A flight's line also stood on edge, so it keeps its thickness seen from the side
@@ -739,15 +748,26 @@ async function setup() {
       bearing: Math.atan2(lerp(hy[k], hy[k + 1], u), lerp(hx[k], hx[k + 1], u)) * 180 / Math.PI + 65 * lerp(airy[k], airy[k + 1], u) };
   };
   const overview = (north = false) => {
-    const along = bearingTo({ lng: coords[0][0], lat: coords[0][1] }, { lng: coords[last][0], lat: coords[last][1] }) * 180 / Math.PI;
-    const cam = map.cameraForBounds(bounds, { padding: Math.round(Math.min(W, H) * 0.14), bearing: north ? 0 : along - 90, pitch: north ? 40 : 50 });
-    return { center: [cam.center.lng, cam.center.lat], zoom: cam.zoom, pitch: north ? 40 : 50, bearing: north ? 0 : along - 90,
+    // Fitted from straight above, within the margins the frames keep clear for the title and
+    // the profile strip (show()), then tilted, a little further out for the tilt to fit: fitted
+    // tilted, the near end (the start, often) fell under the strip
+    // North up, as a map: the dive then turns the shortest way to the camera's heading at the
+    // start, while it closes in
+    const facing = 0;
+    const m = Math.min(W, H) * 0.08;
+    const cam = map.cameraForBounds(bounds, { bearing: facing,
+      padding: { top: 120 * scale + m, bottom: (128 + 44 + 16) * scale + m, left: m, right: m } });
+    return { center: [cam.center.lng, cam.center.lat], zoom: cam.zoom - 0.4, pitch: north ? 40 : 45, bearing: facing,
       elevation: zr.reduce((a, v) => a + v, 0) / zr.length };
   };
+  // From one camera to another, the centre moving in step with the zoom (as a fly-to does):
+  // a straight blend of both let the target drift across the screen while the zoom closed in
   const mix = (a, b, t) => {
-    const db = ((b.bearing - a.bearing + 540) % 360) - 180;
-    return { center: [lerp(a.center[0], b.center[0], t), lerp(a.center[1], b.center[1], t)],
-      zoom: lerp(a.zoom, b.zoom, t), pitch: lerp(a.pitch, b.pitch, t), bearing: a.bearing + db * t,
+    const db = ((b.bearing - a.bearing + 540) % 360) - 180, zoom = lerp(a.zoom, b.zoom, t);
+    const span = 2 ** -a.zoom - 2 ** -b.zoom;
+    const w = Math.abs(span) > 1e-12 ? (2 ** -a.zoom - 2 ** -zoom) / span : t;
+    return { center: [lerp(a.center[0], b.center[0], w), lerp(a.center[1], b.center[1], w)],
+      zoom, pitch: lerp(a.pitch, b.pitch, t), bearing: a.bearing + db * t,
       elevation: lerp(a.elevation, b.elevation, t) };
   };
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
@@ -763,7 +783,7 @@ async function setup() {
     let cam, s, title = 0, card = 0, headOn = true, dwell = null, speed = legSpeed(JOURNEY), jt = JOURNEY;
     if (t < INTRO) {
       const u = t / INTRO;
-      cam = { ...ov, bearing: ov.bearing - 6 + 6 * u, zoom: ov.zoom - 0.15 + 0.15 * u };
+      cam = { ...ov, zoom: ov.zoom - 0.15 + 0.15 * u };
       s = 0; jt = 0; headOn = t > 1.2;
       // Full from the very first frame (the one apps show as the video's thumbnail), fading out
       title = Math.min(1, (INTRO - t) / 0.6);
@@ -780,7 +800,7 @@ async function setup() {
       const u = (t - INTRO - DIVE - JOURNEY - BACK) / OUTRO;
       cam = { ...ovEnd, bearing: -3 + 3 * Math.min(1, u * 1.5) }; s = total; card = Math.min(1, u / 0.18); headOn = false;
     }
-    return { cam, s, title, card, headOn, dwell, speed, jt };
+    return { cam, s, title, card, headOn, dwell, speed, jt, whole: t < INTRO + DIVE / 2 };
   }
   const duration = () => INTRO + DIVE + JOURNEY + BACK + OUTRO;
 
@@ -1253,7 +1273,7 @@ async function setup() {
     // The aim point centred in the open part of the picture: under the title and chip, above
     // the profile strip, so the train never runs under the strip
     map.jumpTo({ ...f.cam, padding: { top: 120 * scale, bottom: (128 + 44 + 16) * scale, left: 0, right: 0 } });
-    drawRoute(f.s, f.headOn, metresPerPx(f.cam.zoom));
+    drawRoute(f.s, f.headOn, metresPerPx(f.cam.zoom), f.whole);
     drawHud(f);
     return f;
   }

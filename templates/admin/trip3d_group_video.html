@@ -44,6 +44,13 @@
   #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
   #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
   #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
+  /* Phones: the frame on top, the controls under it, the page scrolling */
+  @media (max-width: 800px) {
+    html, body { overflow: auto; }
+    #v-wrap { flex-direction: column; height: auto !important; padding: 10px; }
+    #v-stage-box { flex: none; height: 60vh; }
+    #v-panel { width: 100%; padding-bottom: 20px; }
+  }
 </style>
 
 <div id="v-wrap">
@@ -148,8 +155,9 @@ let [W, H] = [1920, 1080];
 const $stage = document.getElementById('v-stage'), $scale = document.getElementById('v-scale');
 const $map = document.getElementById('v-map'), hud = document.getElementById('v-hud'), g2 = hud.getContext('2d');
 function layoutStage() {
+  // The page fills the window below the navbar; on a phone it scrolls instead (CSS)
   const wrap = document.getElementById('v-wrap');
-  wrap.style.height = `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
+  wrap.style.height = window.matchMedia('(max-width: 800px)').matches ? '' : `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
   const box = document.getElementById('v-stage-box').getBoundingClientRect();
   const s = Math.min(box.width / W, box.height / H);
   $stage.style.width = `${W * s}px`; $stage.style.height = `${H * s}px`;
@@ -598,15 +606,23 @@ async function setup() {
       elevation: lerp(el[k], el[k + 1], u), pitch: 50, bearing: 0 };
   };
   const overview = (north = false) => {
-    const along = bearingTo({ lng: coords[0][0], lat: coords[0][1] }, { lng: coords[last][0], lat: coords[last][1] }) * 180 / Math.PI;
-    const cam = map.cameraForBounds(bounds, { padding: Math.round(Math.min(W, H) * 0.14), bearing: north ? 0 : along - 90, pitch: north ? 40 : 50 });
-    return { center: [cam.center.lng, cam.center.lat], zoom: cam.zoom, pitch: north ? 40 : 50, bearing: north ? 0 : along - 90,
+    // Fitted from straight above, within the margins the frames keep clear for the title
+    // (show()), then tilted, a little further out for the tilt to fit
+    const m = Math.min(W, H) * 0.08;
+    // North up, as the group camera always is, so the dive only zooms and tilts
+    const cam = map.cameraForBounds(bounds, { bearing: 0,
+      padding: { top: 120 * scale + m, bottom: 60 * scale + m, left: m, right: m } });
+    return { center: [cam.center.lng, cam.center.lat], zoom: cam.zoom - 0.4, pitch: north ? 40 : 45, bearing: 0,
       elevation: zr.reduce((a, v) => a + v, 0) / zr.length };
   };
+  // From one camera to another, the centre moving in step with the zoom (as a fly-to does):
+  // a straight blend of both let the target drift across the screen while the zoom closed in
   const mix = (a, b, t) => {
-    const db = ((b.bearing - a.bearing + 540) % 360) - 180;
-    return { center: [lerp(a.center[0], b.center[0], t), lerp(a.center[1], b.center[1], t)],
-      zoom: lerp(a.zoom, b.zoom, t), pitch: lerp(a.pitch, b.pitch, t), bearing: a.bearing + db * t,
+    const db = ((b.bearing - a.bearing + 540) % 360) - 180, zoom = lerp(a.zoom, b.zoom, t);
+    const span = 2 ** -a.zoom - 2 ** -b.zoom;
+    const w = Math.abs(span) > 1e-12 ? (2 ** -a.zoom - 2 ** -zoom) / span : t;
+    return { center: [lerp(a.center[0], b.center[0], w), lerp(a.center[1], b.center[1], w)],
+      zoom, pitch: lerp(a.pitch, b.pitch, t), bearing: a.bearing + db * t,
       elevation: lerp(a.elevation, b.elevation, t) };
   };
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
@@ -622,7 +638,7 @@ async function setup() {
     let cam, title = 0, card = 0, headOn = true, jt = JOURNEY;
     if (t < INTRO) {
       const u = t / INTRO;
-      cam = { ...ov, bearing: ov.bearing - 6 + 6 * u, zoom: ov.zoom - 0.15 + 0.15 * u };
+      cam = { ...ov, zoom: ov.zoom - 0.15 + 0.15 * u };
       jt = 0; headOn = t > 1.2;
       // Full from the very first frame (the one apps show as the video's thumbnail), fading out
       title = Math.min(1, (INTRO - t) / 0.6);
