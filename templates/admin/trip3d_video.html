@@ -314,6 +314,13 @@ async function setup() {
   if (!legs.length) { stuck('Nothing to show: no trip with a path.'); return; }
   const data = mergeTrips(legs);
   const coords = data.coords, n = coords.length, last = n - 1;
+  // Longitudes made continuous along the way: a flight over the date line went from +178° to
+  // -122° and was drawn the long way round the world (MapLibre draws beyond ±180° on the next
+  // copy of it)
+  for (let i = 1; i < n; i++) {
+    while (coords[i][0] - coords[i - 1][0] > 180) coords[i][0] -= 360;
+    while (coords[i][0] - coords[i - 1][0] < -180) coords[i][0] += 360;
+  }
   const color = COLOR[data.trip.type] || COLOR.train;
   const kindAt = new Array(Math.max(n - 1, 0)).fill('open');
   for (const [s, e, k] of data.env || []) for (let i = s; i < e; i++) kindAt[i] = k;
@@ -323,7 +330,7 @@ async function setup() {
   const total = dist[last] || 1;
   const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
   const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
-    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start }));
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start, end: t.end, utc: t.utc }));
   tripSpans.forEach(t => t.units.forEach(wagonImage));
   // Every drawing the video shows, for the end card's credits
   const allUnits = tripSpans.flatMap(t => t.units);
@@ -372,6 +379,8 @@ async function setup() {
   }
   // The terrain around the route, for the camera to keep it out of its way
   const terrainAt = await terrainSampler(S, ridden + flown);
+  // A ferry is at sea level, whatever its line crosses (a sound, the land at either end)
+  for (let k = 0; k < S.length; k++) if (S[k].type === 'ferry') ground[k] = 0;
   let z = movingAverage(runningMedian(ground, d, 200), d, 100);
   const runs = [];
   for (let i = 0; i < kindAt.length; i++) {
@@ -413,13 +422,20 @@ async function setup() {
   const bridges = runs.filter(r => r.kind === 'bridge').map(r => ({ from: dist[r.s], to: dist[r.e] }));
   const tunnelLen = tunnels.reduce((a, t) => a + t.to - t.from, 0);
   const zr = z.map(v => v - LIFT);
+  // A distance as people write it: one decimal under 100 km, whole km above, with the
+  // language's thousands separator
+  const kmText = km => `${km.toLocaleString(LANG, { maximumFractionDigits: km < 100 ? 1 : 0, minimumFractionDigits: km < 100 ? 1 : 0 })} km`;
+  // No height to speak of (a sea crossing): no profile strip, nor heights on the end card
+  const flat = maxOf(zr) - minOf(zr) < 10;
+  const stripRoom = flat ? 60 : 128 + 44 + 16;
   // Climb and descent as tracking apps count them: on the smoothed line, a rise or a drop only
   // once it passes 10 m (each 20 m sample's small ups and downs otherwise doubled the totals);
-  // flights left out
+  // flights left out, unless there is nothing else: then the flight's own climb and descent
+  const allAir = isAir.every(Boolean);
   let climb = 0, descent = 0, ref = null;
   for (let k = 0; k < zSmooth.length; k++) {
-    if (isAir[k]) { ref = null; continue; }
-    const v = zSmooth[k];
+    if (isAir[k] && !allAir) { ref = null; continue; }
+    const v = allAir ? zr[k] : zSmooth[k];
     if (ref == null) ref = v;
     else if (v - ref >= 10) { climb += v - ref; ref = v; }
     else if (ref - v >= 10) { descent += ref - v; ref = v; }
@@ -450,39 +466,50 @@ async function setup() {
     { name: plain(data.trip.destination), lng: coords[last][0], lat: coords[last][1], d: total, arr: data.trip.end?.slice(-5), major: true },
   ];
   const minutes = hm => (hm ? Number(hm.slice(-5, -3)) * 60 + Number(hm.slice(-2)) : null);
-  const anchors = [];
-  if (data.trip.start) anchors.push({ d: 0, m: minutes(data.trip.start) });
-  for (const st of stops) {
-    if (st.arr) anchors.push({ d: st.d, m: minutes(st.arr) });
-    if (st.dep) anchors.push({ d: st.d, m: minutes(st.dep) });
+  // The clock on real time, shown in local time. Each trip's departure and arrival are pinned to
+  // their UTC instants, so it runs forwards and at true speed across time zones (on local hours
+  // alone, a Pacific crossing ran too fast one way and backwards the other); a timetable stop's
+  // local hour is turned to UTC with its trip's departure offset. Shown in the departure's local
+  // time on a trip's first half and the arrival's on its second. A trip without UTC times keeps
+  // its local times, at no offset
+  const localMs = iso => Date.parse(`${iso.slice(0, 16)}:00Z`);
+  for (const t of tripSpans) {
+    t.offIn = t.utc?.[0] != null && t.start ? localMs(t.start) - t.utc[0] : 0;
+    t.offOut = t.utc?.[1] != null && t.end ? localMs(t.end) - t.utc[1] : t.offIn;
   }
-  if (data.trip.end) anchors.push({ d: total, m: minutes(data.trip.end) });
-  // A jump between two unconnected trips takes no time: the next trip's departure at its far
-  // end too (else the clock raced over the jump and crawled along the trip after it)
-  for (const g of gapSpans) {
-    const st = stops.find(st => st.transfer && Math.abs(st.d - g.from) < 600);
-    if (st?.dep) anchors.push({ d: g.to, m: minutes(st.dep) });
+  const tripAt = s => tripSpans.find(t => s <= t.to) || tripSpans[tripSpans.length - 1];
+  const offsetAt = s => { const t = tripAt(s); return s < (t.from + t.to) / 2 ? t.offIn : t.offOut; };
+  const anchors = [];
+  for (const t of tripSpans) {
+    if (t.start) anchors.push({ d: t.from, ms: localMs(t.start) - t.offIn });
+    if (t.end) anchors.push({ d: t.to, ms: localMs(t.end) - t.offOut });
   }
   anchors.sort((a, b) => a.d - b.d);
-  for (let i = 1; i < anchors.length; i++) while (anchors[i].m < anchors[i - 1].m) anchors[i].m += 1440;
-  // The date at s ("YYYY-MM-DD"): its trip's start date, a day on once the clock has gone round
-  // past midnight; and whether the journey spans several days, its clock then dated
-  const dayAt = s => {
-    const trip = tripSpans.find(t => s <= t.to) || tripSpans[tripSpans.length - 1], clock = clockAt(s);
-    if (!trip.start) return null;
-    const day = new Date(`${trip.start.slice(0, 10)}T00:00:00Z`);
-    if (clock && minutes(clock) < minutes(trip.start) - 1) day.setUTCDate(day.getUTCDate() + 1);
-    return day.toISOString().slice(0, 10);
-  };
-  const clockAt = s => {
+  for (const st of stops.filter(st => !st.transfer)) {
+    const t = tripAt(st.d), before = anchors.filter(a => a.d <= st.d).pop();
+    for (const hm of [st.arr, st.dep].filter(Boolean)) {
+      if (!before || !t.start) continue;
+      // That hour on the trip's local day, then on the next days until it comes after the time before
+      let ms = localMs(`${t.start.slice(0, 10)}T${hm}`) - t.offIn;
+      while (ms < before.ms) ms += 86400000;
+      anchors.push({ d: st.d, ms });
+    }
+  }
+  anchors.sort((a, b) => a.d - b.d || a.ms - b.ms);
+  const realAt = s => {
     if (anchors.length < 2) return null;
     let i = anchors.findIndex(a => a.d >= s);
     if (i <= 0) i = s <= anchors[0].d ? 0 : anchors.length - 1;
     const b = anchors[i], a = anchors[Math.max(0, i - 1)];
-    const m = a === b || b.d === a.d ? b.m : a.m + (b.m - a.m) * (s - a.d) / (b.d - a.d);
-    const mm = ((Math.round(m) % 1440) + 1440) % 1440;
-    return `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`;
+    return a === b || b.d === a.d ? b.ms : a.ms + (b.ms - a.ms) * (s - a.d) / (b.d - a.d);
   };
+  const localAt = s => { const ms = realAt(s); return ms == null ? null : new Date(ms + offsetAt(s)); };
+  const clockAt = s => {
+    const t = localAt(s);
+    return t && `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
+  };
+  // The local date at s ("YYYY-MM-DD"); and whether the journey spans several days, then dated
+  const dayAt = s => localAt(s)?.toISOString().slice(0, 10) ?? null;
   const multiDay = dayAt(0) !== dayAt(total);
   const dateText = (day, opts) => new Date(`${day}T00:00:00Z`).toLocaleDateString(LANG, { ...opts, timeZone: 'UTC' });
   const dateOf = (iso, year) => new Date(iso).toLocaleDateString(LANG, { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
@@ -786,6 +813,11 @@ async function setup() {
     for (let t = 0; t < JOURNEY; t += GS) GT.push(t);
     GT.push(JOURNEY);
     const ss = GT.map(t => journeyAt(t).s), sp = GT.map(legSpeed);
+    // In flight, the speed of the moment rather than the leg's mean: slow at take-off and landing,
+    // the view comes close (8 km at least) to watch the climb; at cruise it opens on the route
+    const pace = ss.map((s, i) => (isAir[pointAt(s).k]
+      ? Math.max(8000 / 6, Math.abs(ss[Math.min(GT.length - 1, i + 1)] - ss[Math.max(0, i - 1)]) / (2 * GS))
+      : sp[i]));
     // Centred on the train itself: a point ahead of it put it low on the screen, under the
     // profile strip, whenever the camera faced up a slope while the train came down it
     const aim = ss.map(s => pointAt(s));
@@ -795,7 +827,7 @@ async function setup() {
     // The view spans about 6 s of travel at that leg's own speed (at least 500 m): a walk
     // between two trains is seen up close, the trains from further out
     zm = movingAverage(ss.map((s, i) => chaseZoom(s)
-      + Math.min(16, Math.max(3, Math.log2(40075016 * cosLat / (512 * Math.max(500, 6 * sp[i]) / W))))), GT, 5);
+      + Math.min(16, Math.max(3, Math.log2(40075016 * cosLat / (512 * Math.max(500, 6 * pace[i]) / W))))), GT, 5);
     // A second pass of each: the two make a gentle bell rather than a box, so turns start
     // and end without a kink
     [cLng, cLat] = [movingAverage(cLng, GT, 3.5), movingAverage(cLat, GT, 3.5)];
@@ -840,7 +872,7 @@ async function setup() {
     const facing = 0;
     const m = Math.min(W, H) * 0.08;
     const cam = map.cameraForBounds(bounds, { bearing: facing,
-      padding: { top: 120 * scale + m, bottom: (128 + 44 + 16) * scale + m, left: m, right: m } });
+      padding: { top: 120 * scale + m, bottom: stripRoom * scale + m, left: m, right: m } });
     return { center: [cam.center.lng, cam.center.lat], zoom: cam.zoom - 0.4, pitch: north ? 40 : 45, bearing: facing,
       elevation: zr.reduce((a, v) => a + v, 0) / zr.length };
   };
@@ -890,7 +922,7 @@ async function setup() {
 
   // The journey's timing: legs between the stations it halts at, each starting and ending at
   // rest (eased, their time shared by distance), and a wait at each
-  let plan = [], halting = new Set(), stationTimes = new Map(), dayChanges = [];
+  let plan = [], halting = new Set(), stationTimes = new Map(), dayChanges = [], zoneChanges = [];
   const planJourney = () => {
     // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
     // first, then the stops the timetable waits longest at; the train runs through the rest
@@ -933,10 +965,41 @@ async function setup() {
     let t = 0;
     for (let i = 0; i + 1 < cuts.length; i++) {
       const a = cuts[i], b = cuts[i + 1], dt = isHop(a, b) ? HOP : moving * share(a, b);
-      plan.push({ t0: t, t1: t + dt, s0: a, s1: b });
+      plan.push({ t0: t, t1: t + dt, s0: a, s1: b, air: !isHop(a, b) && isAir[pointAt((a + b) / 2).k] });
       t += dt;
       const halt = halts.find(st => Math.abs(st.d - b) < 1);
       if (halt && i + 1 < cuts.length - 1) { plan.push({ t0: t, t1: t + waitOf(halt), s0: b, s1: b, stop: halt }); t += waitOf(halt); }
+    }
+    // A flight's time: its climb and its descent (under 8000 m) a quarter and more
+    // each, being what is worth watching, the cruise the rest (45 %) going by fast; within the
+    // climb and the descent, the lower the slower. Shared by time rather than by distance, as a
+    // steep climb is short and a descent long. The camera, following the pace, comes close for both
+    for (const leg of plan) {
+      if (!leg.air) continue;
+      const ks = [];
+      for (let k = 0; k < S.length; k++) if (d[k] >= leg.s0 && d[k] <= leg.s1) ks.push(k);
+      if (ks.length < 3) continue;
+      const heights = ks.map(k => zr[k] - ground[k]), top = maxOf(heights) || 1;
+      const low = heights.map(h => 1 - Math.max(0, Math.min(1, h / top)));
+      // The top of the climb and the start of the descent: 8000 m (90 % of the top for a lower
+      // flight), not 90 % of the top, which a step climb reaches only an ocean later; a flight
+      // without a level cruise turns at its highest point
+      const level = Math.min(0.9 * top, 8000);
+      let up = heights.findIndex(h => h >= level), down = heights.length - 1 - [...heights].reverse().findIndex(h => h >= level);
+      if (up < 0 || down <= up) up = down = heights.indexOf(top);
+      const parts = up === down ? [[0, up, 0.5], [up, ks.length - 1, 0.5]]
+        : [[0, up, 0.275], [up, down, 0.45], [down, ks.length - 1, 0.275]];
+      const c = new Array(ks.length).fill(0);
+      let start = 0;
+      for (const [i0, i1, share] of parts) {
+        const climbing = share < 0.45, steps = [];
+        for (let i = i0 + 1; i <= i1; i++) steps.push((d[ks[i]] - d[ks[i - 1]]) * (climbing ? 1 + 20 * low[i] ** 2 : 1));
+        const sum = steps.reduce((x, v) => x + v, 0) || 1;
+        let acc = start;
+        for (let i = i0 + 1; i <= i1; i++) { acc += steps[i - i0 - 1] / sum * share; c[i] = acc; }
+        start += share;
+      }
+      leg.table = { c, ss: ks.map(k => d[k]) };
     }
     // When each trip starts and ends on the journey's clock, for its train sliding in and out
     const timeAt = s => {
@@ -945,12 +1008,15 @@ async function setup() {
     };
     for (const t of tripSpans) { t.tIn = timeAt(t.from); t.tOut = timeAt(t.to); }
     // Where the date changes on the journey's clock, for the day's name over the map
-    // (the first day too, as the journey starts, when there are several)
     let day = dayAt(0);
-    dayChanges = multiDay && day ? [{ t: 0, day }] : [];
+    dayChanges = [];
+    // and where the clock moves to another time zone, for its own highlight
+    zoneChanges = [];
+    let zone = offsetAt(0);
     for (let t = 0.1; t <= JOURNEY; t += 0.1) {
-      const now = dayAt(journeyAt(t).s);
+      const s = journeyAt(t).s, now = dayAt(s), off = offsetAt(s);
       if (now && now !== day) { dayChanges.push({ t, day: now }); day = now; }
+      if (off !== zone) { zoneChanges.push({ t }); zone = off; }
     }
     // When the train reaches and leaves each station shown
     stationTimes = new Map();
@@ -970,10 +1036,17 @@ async function setup() {
   const journeyAt = t => {
     const leg = plan.find(p => t <= p.t1) || plan[plan.length - 1];
     if (leg.stop) return { s: leg.s0, dwell: leg.stop };
+    const T = (leg.t1 - leg.t0) || 1, x = Math.max(0, Math.min(T, t - leg.t0));
+    // A flight along its time table (planJourney): slow low down, fast at cruise
+    if (leg.table) {
+      const { c, ss } = leg.table, u = x / T;
+      let lo = 0, hi = c.length - 1;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (c[m] <= u) lo = m; else hi = m; }
+      return { s: lerp(ss[lo], ss[hi], (u - c[lo]) / ((c[hi] - c[lo]) || 1)), dwell: null };
+    }
     // Pull away and brake over a short ramp, cruising in between: a smoothstep over the
     // whole leg peaks at 1.5x the mean speed, this at barely above it
-    const T = (leg.t1 - leg.t0) || 1, r = Math.min(0.6, T / 3), v = 1 / (T - r);
-    const x = Math.max(0, Math.min(T, t - leg.t0));
+    const r = Math.min(0.6, T / 3), v = 1 / (T - r);
     const f = x < r ? v * x * x / (2 * r) : x > T - r ? 1 - v * (T - x) ** 2 / (2 * r) : v * (x - r / 2);
     return { s: leg.s0 + (leg.s1 - leg.s0) * f, dwell: null };
   };
@@ -1113,6 +1186,7 @@ async function setup() {
     // With several trips, the one under way: its own origin and destination
     const current = tripSpans.length > 1 && (tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]);
     const corner = fitTitle(current ? current.name : name, W * 0.34, 800, 34, 22);
+    const dateRow = multiDay ? 30 * u : 0;
     g2.font = font(800, corner.px);
     // The current trip's type icon before it, white
     const cornerIcon = typeIcon(S[Math.min(S.length - 2, pointAt(f.s).k)].type);
@@ -1129,7 +1203,7 @@ async function setup() {
 
     // Profile strip with the distance and height, during the trip
     const strip = 1 - f.card;
-    if (strip > 0.01 && f.title < 0.99) {
+    if (!flat && strip > 0.01 && f.title < 0.99) {
       g2.globalAlpha = strip * (1 - f.title);
       const x = pad, h = 128 * u, y = H - pad - h, w = W - 2 * pad;
       roundRect(x, y, w, h, 16 * u); g2.fillStyle = 'rgba(12,16,22,0.62)'; g2.fill();
@@ -1202,7 +1276,7 @@ async function setup() {
           }
           x += w;
         }
-        const bottom = H - pad - 128 * u - 14 * u, top = bottom - trainH;
+        const bottom = H - pad - (flat ? 0 : 128 * u + 14 * u), top = bottom - trainH;
         // A passing train: in from the right as its trip starts, on out to the left as it ends,
         // over a fifth of the trip's time on screen each (1.5 to 3 s, at most half of a short
         // trip), so one train is gone before the next comes
@@ -1315,6 +1389,7 @@ async function setup() {
     // The chip names the station from 0.8 s before the train arrives until 0.8 s after it leaves
     const atStop = [...stationTimes].find(([, tt]) => jt > tt.arr - 0.8 && jt < tt.dep + 0.8)?.[0];
     const chipFor = atStop ? { from: atStop.d - speed * 0.8, to: atStop.d + speed * 0.8, stop: atStop } : inT || inB;
+    let chipBox = null;
     if (chipFor && f.card < 0.5 && f.title < 0.5) {
       const len = chipFor.to - chipFor.from, size = len >= 1000 ? (len / 1000).toFixed(1) + ' km' : Math.round(len) + ' m';
       const label = chipFor.stop?.transfer ? `${chipFor.stop.name.toUpperCase()} · ${chipFor.stop.arr || ''} → ${chipFor.stop.dep || ''}`
@@ -1330,9 +1405,10 @@ async function setup() {
       const tw = g2.measureText(label).width, cw = tw + 64 * u, ch = 50 * u;
       const roomL = cornerRight + 24 * u, roomR = W - pad - logoW - 24 * u;
       let cx = Math.max(roomL, Math.min((W - cw) / 2, roomR - cw)), cy = pad;
-      if (cx + cw > roomR) { cx = pad; cy = pad + (corner.lines.length * corner.px * 1.15 + 60) * u; }
+      if (cx + cw > roomR) { cx = pad; cy = pad + dateRow + (corner.lines.length * corner.px * 1.15 + 60) * u; }
       // A transfer's chip in the colour of the trip it changes to, white on it
       const dark = inT && !chipFor.stop, change = chipFor.stop?.transfer;
+      chipBox = { x: cx, y: cy, w: cw, h: ch };
       roundRect(cx, cy, cw, ch, ch / 2);
       g2.fillStyle = change ? COLOR[typeAfter(chipFor.stop)] || color : dark ? 'rgba(20,26,34,0.82)' : 'rgba(255,255,255,0.88)'; g2.fill();
       if (change) { g2.lineWidth = 2.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.9)'; g2.stroke(); }
@@ -1346,40 +1422,50 @@ async function setup() {
       g2.globalAlpha = 1;
     }
 
-    // A new day: its name large over the map for 2.5 s, as the journey's clock passes into it
-    const newDay = dayChanges.find(c => f.jt >= c.t && f.jt < c.t + 2.5);
-    if (newDay && f.title < 0.5 && f.card < 0.5) {
-      const text = dateText(newDay.day, { weekday: 'long', day: 'numeric', month: 'long' });
-      g2.globalAlpha = Math.max(0, Math.min(1, (f.jt - newDay.t) / 0.3, (newDay.t + 2.5 - f.jt) / 0.6));
-      g2.font = font(800, 56); g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillStyle = '#fff';
-      g2.shadowColor = 'rgba(0,0,0,0.75)'; g2.shadowBlur = 20 * u;
-      g2.fillText(text.charAt(0).toUpperCase() + text.slice(1), W / 2, H * 0.3);
-      g2.shadowBlur = 0; g2.textAlign = 'left'; g2.textBaseline = 'alphabetic'; g2.globalAlpha = 1;
-    }
-
     // Trip name in the corner during the journey, large over the opening
     if (f.title < 0.99 && f.card < 0.99) {
       g2.globalAlpha = (1 - f.title) * (1 - f.card);
       g2.textBaseline = 'alphabetic'; g2.fillStyle = '#fff';
       g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
       g2.font = font(800, corner.px);
-      corner.lines.forEach((l, i) => g2.fillText(l, textX, pad + (30 + i * corner.px * 1.15) * u));
+      // On a journey of several days, its date above the title; as a new day starts, it turns
+      // warm and grows a little for 2.5 s, then settles back
+      if (dateRow) {
+        const today = dayAt(f.s), change = dayChanges.find(c => f.jt >= c.t && f.jt < c.t + 2.5);
+        const glow = change ? Math.max(0, Math.min(1, (f.jt - change.t) / 0.3, (change.t + 2.5 - f.jt) / 0.8)) : 0;
+        g2.font = font(700, 20 + 4 * glow);
+        g2.fillStyle = glow ? `rgba(255,${Math.round(255 - 46 * glow)},${Math.round(255 - 153 * glow)},0.95)` : 'rgba(255,255,255,0.85)';
+        // Its day and month names capitalised ("Mercredi 15 Février")
+        const date = today && dateText(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+        if (date) g2.fillText(date, textX, pad + 14 * u);
+        // A calendar in the icon column, as the trip's type icon and flag are below it
+        if (today && iconW) {
+          g2.font = faFont(18 + 3 * glow); g2.textAlign = 'center';
+          g2.fillText(FA.calendar, pad + iconW / 2, pad + 14 * u);
+          g2.textAlign = 'left';
+        }
+        g2.font = font(800, corner.px); g2.fillStyle = '#fff';
+      }
+      corner.lines.forEach((l, i) => g2.fillText(l, textX, pad + dateRow + (30 + i * corner.px * 1.15) * u));
       // The type icon beside the title, and under them one line: the flag (in the icon's
       // column), the operator's logo on a light chip (the logos are made for a white page),
       // then the time; the line starts below the icon, however tall the icon is
       const icon = cornerIcon && shrink(cornerIcon, iconW, true);
-      const iy = icon ? Math.round(pad + 30 * u - corner.px * u * 0.8 - (icon.height - corner.px * u) / 2) : 0;
+      const iy = icon ? Math.round(pad + dateRow + 30 * u - corner.px * u * 0.8 - (icon.height - corner.px * u) / 2) : 0;
       if (icon) g2.drawImage(icon, Math.round(pad), iy);
       const trip = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
       // The flag of the country the train is in, changing at the border; for a trip without
       // countries read along it, its origin's then its destination's
       const flag = icon && flagImage(countryAt(f.s) || trip.flags[f.s < (trip.from + trip.to) / 2 ? 0 : 1] || trip.flags[0]);
-      // At its own proportions (Firefox gives these SVGs no size: 3:2 then)
-      const fw = iconW, fh = flag ? Math.round(fw * (flag.naturalWidth ? flag.naturalHeight / flag.naturalWidth : 2 / 3)) : 0;
+      // The flag as tall as the logo's chip (34 px), at its own width (Firefox gives these SVGs
+      // no size: 3:2 then), left-aligned with the icons above; a wide one pushes the logo along
       const lh = 22 * u, cpad = 6 * u, ch = opLogo ? lh + 2 * cpad : 0;
+      const fh = flag ? Math.round(lh + 2 * cpad) : 0;
+      const fw = flag ? Math.round(fh * (flag.naturalWidth && flag.naturalHeight ? flag.naturalWidth / flag.naturalHeight : 1.5)) : 0;
+      const rowX = Math.max(textX, flag ? pad + fw + 10 * u : 0);
       // The line's middle: under the title, and clear of the icon by 10 px (the time's digits
       // stand about 0.36 of its size above its baseline)
-      const titleBase = pad + (30 + (corner.lines.length - 1) * corner.px * 1.15) * u;
+      const titleBase = pad + dateRow + (30 + (corner.lines.length - 1) * corner.px * 1.15) * u;
       const clockMid = Math.max(titleBase + 42 * u - 30 * u * 0.36, icon ? iy + icon.height + 10 * u + Math.max(fh, ch) / 2 : 0);
       const below = clockMid + 30 * u * 0.36;
       // The flag and the chip carry the shadow; what is drawn on them does not
@@ -1395,20 +1481,26 @@ async function setup() {
         g2.save(); roundRect(pad, fy, fw, fh, 4 * u); g2.clip(); g2.drawImage(flag, pad, fy, fw, fh); g2.restore();
         roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
       }
-      let clockX = textX;
+      let clockX = rowX;
       if (opLogo) {
         const lw = Math.min(130 * u, lh * opLogo.naturalWidth / (opLogo.naturalHeight || 1)), cy = Math.round(clockMid - ch / 2);
-        box(textX, cy, lw + 2 * cpad, ch, 8 * u, 'rgba(255,255,255,0.92)');
+        box(rowX, cy, lw + 2 * cpad, ch, 8 * u, 'rgba(255,255,255,0.92)');
         const img = shrink(opLogo, Math.max(1, Math.round(lw)));
-        g2.drawImage(img, Math.round(textX + cpad), Math.round(cy + (ch - img.height) / 2));
-        clockX = textX + lw + 2 * cpad + 12 * u;
+        g2.drawImage(img, Math.round(rowX + cpad), Math.round(cy + (ch - img.height) / 2));
+        clockX = rowX + lw + 2 * cpad + 12 * u;
       }
-      // Dated when the journey spans several days
-      const time = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s), day = multiDay && time && dayAt(f.s);
-      const clock = day ? `${dateText(day, { day: 'numeric', month: 'short' })} · ${time}` : time;
+      const clock = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s);
       // The time keeps the title's shadow, to read over any map
       g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
-      if (clock) { g2.font = font(700, 30); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fillText(clock, clockX, below); }
+      // Turning warm and a little larger for 2.5 s as it moves to another time zone
+      const zoneChange = zoneChanges.find(c => f.jt >= c.t && f.jt < c.t + 2.5);
+      const zoneGlow = zoneChange ? Math.max(0, Math.min(1, (f.jt - zoneChange.t) / 0.3, (zoneChange.t + 2.5 - f.jt) / 0.8)) : 0;
+      if (clock) {
+        g2.font = font(700, 30 + 4 * zoneGlow);
+        g2.fillStyle = zoneGlow ? `rgba(255,${Math.round(255 - 46 * zoneGlow)},${Math.round(255 - 153 * zoneGlow)},0.95)` : 'rgba(255,255,255,0.92)';
+        g2.fillText(clock, clockX, below);
+        g2.font = font(700, 30);
+      }
       // Then the line and the vehicle (a flight's aircraft by name), dimmer, cut short to fit
       const extra = [trip.line, trip.vehicle].filter(Boolean).join(' · ');
       if (extra) {
@@ -1418,7 +1510,9 @@ async function setup() {
         let after = clockX + (clock ? g2.measureText(clock).width + gap : 0);
         g2.font = font(600, 22); g2.fillStyle = 'rgba(255,255,255,0.78)';
         if (clock) { g2.fillText('·', after, base); after += g2.measureText('·').width + gap; }
-        const room = W * 0.5 - after;
+        // Stopping short of a chip at the top reaching down to this line
+        const ends = [chipBox].filter(b => b && b.x > after && b.y < clockMid + 16 * u && b.y + b.h > clockMid - 16 * u).map(b => b.x - 12 * u);
+        const room = Math.min(W * 0.5, ...ends) - after;
         let text = extra;
         while (text.length > 2 && g2.measureText(text).width > room) text = text.slice(0, -2).trimEnd() + '…';
         // Centred on the time's digits, as the flag and the logo are (its own digits stand
@@ -1438,8 +1532,8 @@ async function setup() {
       const shift = (big.lines.length - 1) * lh / 2;
       // The lines under it shadowed as dark as the title, to read over any map
       g2.shadowColor = 'rgba(0,0,0,0.85)'; g2.shadowBlur = 16 * u; g2.font = font(600, 30); g2.fillStyle = 'rgba(255,255,255,0.95)';
-      iconLine([[FA.route, `${facts.km.toFixed(1)} km`], facts.flownKm && [FA.plane, `${facts.flownKm.toFixed(0)} km`],
-        facts.tunnels && [FA.tunnel, plural(T.tunnels, facts.tunnels)], facts.top != null && [FA.mountain, `${Math.round(facts.top)} m`]].filter(Boolean),
+      iconLine([[FA.route, kmText(facts.km)], facts.flownKm && [FA.plane, kmText(facts.flownKm)],
+        facts.tunnels && [FA.tunnel, plural(T.tunnels, facts.tunnels)], facts.top != null && !flat && [FA.mountain, `${Math.round(facts.top)} m`]].filter(Boolean),
         W / 2, H / 2 + 46 * u + shift, 30, 600);
       if (day) {
         g2.font = font(500, 26); g2.fillStyle = 'rgba(255,255,255,0.88)';
@@ -1450,11 +1544,13 @@ async function setup() {
     }
     if (f.card > 0.01) {
       g2.globalAlpha = f.card;
-      const stats = [[`${facts.km.toFixed(1)} km`, T.distance, FA.route],
+      const stats = [[kmText(facts.km), T.distance, FA.route],
         // Tunnels only when there are some
-        facts.tunnels && [`${facts.tunnelKm.toFixed(1)} km`, `${plural(T.inTunnels, facts.tunnels)} (${Math.round(facts.tunnelKm / ((facts.km - facts.flownKm) || 1) * 100)} %)`, FA.tunnel],
+        facts.tunnels && [kmText(facts.tunnelKm), `${plural(T.inTunnels, facts.tunnels)} (${Math.round(facts.tunnelKm / ((facts.km - facts.flownKm) || 1) * 100)} %)`, FA.tunnel],
         facts.top != null ? [`${Math.round(facts.top)} m`, T.highest, FA.mountain] : [`${Math.round(facts.cruise)} m`, T.cruise, FA.plane],
         [`${Math.round(facts.descent)} m`, T.descent, FA.down], [`${Math.round(facts.climb)} m`, T.climb, FA.up]].filter(Boolean);
+      // Heights only where there are some
+      if (flat) stats.splice(0, stats.length, ...stats.filter(([, , icon]) => ![FA.mountain, FA.down, FA.up, FA.plane].includes(icon)));
       // A narrow frame keeps the first three
       if (W < 900) stats.length = 3;
       const cw = Math.min(W - 2 * pad, 1100 * u), ch = 300 * u, cx = (W - cw) / 2, cy = (H - ch) / 2;
@@ -1500,7 +1596,7 @@ async function setup() {
     if (poster) { f.title = 1; f.headOn = false; }
     // The aim point centred in the open part of the picture: under the title and chip, above
     // the profile strip, so the train never runs under the strip
-    map.jumpTo({ ...f.cam, padding: { top: 120 * scale, bottom: (128 + 44 + 16) * scale, left: 0, right: 0 } });
+    map.jumpTo({ ...f.cam, padding: { top: 120 * scale, bottom: stripRoom * scale, left: 0, right: 0 } });
     drawRoute(f.s, f.headOn, metresPerPx(f.cam.zoom), f.whole);
     drawHud(f);
     return f;
@@ -1729,7 +1825,8 @@ function mergeTrips(list) {
       const prev = list[i - 1], at = prev.coords[prev.coords.length - 1];
       // A change named after where the next trip leaves from (the airport, not the shuttle's stop)
       out.stops.push({ name: (t.trip.origin || prev.trip.destination || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), lng: at[0], lat: at[1],
-        arr: prev.trip.end?.slice(-5), dep: t.trip.start?.slice(-5), major: true, transfer: true, at: off - 1 });
+        arr: prev.trip.end?.slice(-5), dep: t.trip.start?.slice(-5), arrFull: prev.trip.end, depFull: t.trip.start,
+        major: true, transfer: true, at: off - 1 });
       out.gaps.push(off - 1);
     }
     out.coords.push(...t.coords);
@@ -1744,7 +1841,8 @@ function mergeTrips(list) {
     out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
       name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
       real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)],
-      logo: t.trip.operator_logo, line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start });
+      logo: t.trip.operator_logo, line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start,
+      end: t.trip.end, utc: t.trip.utc });
   });
   return out;
 }
@@ -1803,7 +1901,7 @@ async function terrainSampler(S, length) {
   const TILE = 512, lat0 = S[Math.floor(S.length / 2)].lat * Math.PI / 180;
   const span = Math.max(500, 6 * length / 30);
   let z = Math.max(8, Math.min(12, Math.floor(Math.log2(40075016 * Math.cos(lat0) / (1.2 * span)))));
-  const tileXY = (lng, lat, n) => [(lng + 180) / 360 * n,
+  const tileXY = (lng, lat, n) => [(((lng + 180) / 360) % 1 + 1) % 1 * n,
     (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n];
   let keys;
   for (;; z--) {
@@ -1836,7 +1934,7 @@ async function terrainSampler(S, length) {
 async function groundHeights(points) {
   // The most detailed zoom whose tiles under the points number at most 80: counted, not
   // guessed from the length (a ski day's dozens of runs share a few tiles)
-  const tileKey = (lng, lat, n) => `${Math.floor((lng + 180) / 360 * n)}/${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n)}`;
+  const tileKey = (lng, lat, n) => `${Math.floor((((lng + 180) / 360) % 1 + 1) % 1 * n)}/${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n)}`;
   let z = 14;
   while (z > 6) {
     const keys = new Set();
@@ -1860,7 +1958,7 @@ async function groundHeights(points) {
 async function heightsAtZoom(points, z) {
   const TILE = 512, n = 2 ** z, tiles = new Map();
   const where = points.map(([lng, lat]) => {
-    const x = (lng + 180) / 360 * n;
+    const x = (((lng + 180) / 360) % 1 + 1) % 1 * n;
     const y = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
     const key = `${Math.floor(x)}/${Math.floor(y)}`;
     if (!tiles.has(key)) tiles.set(key, null);

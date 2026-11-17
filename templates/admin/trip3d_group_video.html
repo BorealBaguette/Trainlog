@@ -239,6 +239,13 @@ async function setup() {
   if (!legs.length) { stuck('Nothing to show: no trip with a path.'); return; }
   const data = mergeTrips(legs);
   const coords = data.coords, n = coords.length, last = n - 1;
+  // Longitudes made continuous along the way: a flight over the date line went from +178° to
+  // -122° and was drawn the long way round the world (MapLibre draws beyond ±180° on the next
+  // copy of it)
+  for (let i = 1; i < n; i++) {
+    while (coords[i][0] - coords[i - 1][0] > 180) coords[i][0] -= 360;
+    while (coords[i][0] - coords[i - 1][0] < -180) coords[i][0] += 360;
+  }
   const color = COLOR[data.trip.type] || COLOR.train;
   const kindAt = new Array(Math.max(n - 1, 0)).fill('open');
   for (const [s, e, k] of data.env || []) for (let i = s; i < e; i++) kindAt[i] = k;
@@ -278,6 +285,8 @@ async function setup() {
     const got = await groundHeights(ks.map(k => [S[k].lng, S[k].lat]));
     ks.forEach((k, i) => { ground[k] = got[i] ?? (air ? 0 : S[k].h); });
   }
+  // A ferry is at sea level, whatever its line crosses (a sound, the land at either end)
+  for (let k = 0; k < S.length; k++) if (S[k].type === 'ferry') ground[k] = 0;
   let z = movingAverage(runningMedian(ground, d, 200), d, 100);
   const runs = [];
   for (let i = 0; i < kindAt.length; i++) {
@@ -1145,7 +1154,7 @@ function haversine([lng1, lat1], [lng2, lat2]) {
 async function groundHeights(points) {
   // The most detailed zoom whose tiles under the points number at most 80: counted, not
   // guessed from the length (a ski day's dozens of runs share a few tiles)
-  const tileKey = (lng, lat, n) => `${Math.floor((lng + 180) / 360 * n)}/${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n)}`;
+  const tileKey = (lng, lat, n) => `${Math.floor((((lng + 180) / 360) % 1 + 1) % 1 * n)}/${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n)}`;
   let z = 14;
   while (z > 6) {
     const keys = new Set();
@@ -1169,7 +1178,7 @@ async function groundHeights(points) {
 async function heightsAtZoom(points, z) {
   const TILE = 512, n = 2 ** z, tiles = new Map();
   const where = points.map(([lng, lat]) => {
-    const x = (lng + 180) / 360 * n;
+    const x = (((lng + 180) / 360) % 1 + 1) % 1 * n;
     const y = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
     const key = `${Math.floor(x)}/${Math.floor(y)}`;
     if (!tiles.has(key)) tiles.set(key, null);
