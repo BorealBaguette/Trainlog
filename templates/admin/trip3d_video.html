@@ -16,31 +16,40 @@
 
 <style>
   html, body { overflow: hidden; }
-  #v-wrap { height: calc(100vh - 70px); display: flex; gap: 14px; padding: 14px; background: #0d1117; }
-  #v-stage-box { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+  /* The site's light or dark theme (the user's setting), through Bootstrap's own colours */
+  #v-wrap { --v-bg: var(--bs-tertiary-bg); --v-fg: var(--bs-body-color); --v-dim: var(--bs-secondary-color);
+    --v-btn: var(--bs-secondary-bg); --v-accent: #2f81f7;
+    height: calc(100vh - 70px); display: flex; gap: 14px; padding: 14px; background: var(--v-bg); box-sizing: border-box; }
+  #v-stage-box { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+  /* Over the frame while the map, the trips and the terrain load (it can take a while) */
+  #v-loading { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: var(--v-bg); color: var(--v-fg); font-size: .95rem; }
+  #v-loading i { font-size: 2rem; color: var(--v-accent); }
+  #v-loading.v-done { display: none; }
   #v-stage { position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: #000; }
   #v-scale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
   #v-map { position: absolute; left: 0; top: 0; pointer-events: none; }
   #v-hud { position: absolute; left: 0; top: 0; pointer-events: none; }
   /* The video draws its own credits; the map's buttons have no place in it */
   #v-map .maplibregl-control-container, #v-map > div[style*="monospace"] { display: none; }
-  #v-panel { width: 290px; flex-shrink: 0; color: #e6edf3; font-size: .85rem; display: flex; flex-direction: column; gap: 10px; }
+  #v-panel { width: 290px; flex-shrink: 0; color: var(--v-fg); font-size: .85rem; display: flex; flex-direction: column; gap: 10px; }
   #v-panel h5 { margin: 0; font-weight: 700; }
   #v-panel select, #v-panel input { width: 100%; }
   #v-panel .v-row { display: flex; gap: 8px; align-items: center; }
-  #v-panel label { color: #9da7b3; font-size: .75rem; margin-bottom: 2px; display: block; }
+  #v-panel label { color: var(--v-dim); font-size: .75rem; margin-bottom: 2px; display: block; }
   #v-panel button { border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 600; cursor: pointer; }
-  #v-play { background: #30363d; color: #e6edf3; }
-  #v-render { background: #2f81f7; color: #fff; }
+  #v-play { background: var(--v-btn); color: var(--v-fg); }
+  #v-render { background: var(--v-accent); color: #fff; }
   #v-panel button:disabled { opacity: .5; cursor: default; }
-  #v-bar { height: 6px; background: #30363d; border-radius: 3px; overflow: hidden; }
-  #v-bar div { height: 100%; width: 0; background: #2f81f7; transition: width .2s; }
-  #v-status { color: #9da7b3; font-size: .75rem; min-height: 1.2em; }
+  #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
+  #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
+  #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
 </style>
 
 <div id="v-wrap">
   <div id="v-stage-box">
     <div id="v-stage"><div id="v-scale"><div id="v-map"></div><canvas id="v-hud"></canvas></div></div>
+    <div id="v-loading"><i class="fa-solid fa-circle-notch fa-spin"></i><div id="v-loading-text">Loading…</div></div>
   </div>
   <div id="v-panel">
     <h5>{{ video3dTitle }}</h5>
@@ -119,6 +128,18 @@ document.getElementById('v-bg').addEventListener('change', e => {
 const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
+const STATIC = {{ url_for('static', filename='') | tojson }};
+// The operators' logos, as the site shows them
+const operatorLogos = {};
+const operatorLogo = path => {
+  if (!path) return null;
+  if (!operatorLogos[path]) {
+    const img = operatorLogos[path] = new Image();
+    img.onload = () => { img.ready = true; };
+    img.src = STATIC + path;
+  }
+  return operatorLogos[path].ready ? operatorLogos[path] : null;
+};
 // A station name's flag emoji as its country code ("🇬🇧 Aviemore" → "gb"), drawn from the
 // site's flag images: canvas cannot draw flag emoji everywhere (Windows shows two letters)
 const flagCode = name => {
@@ -143,13 +164,22 @@ const FPS = 30;
 THREE.ColorManagement.enabled = false;
 
 const $status = document.getElementById('v-status'), $bar = document.querySelector('#v-bar div');
-const status = (text, pct) => { $status.textContent = text; if (pct != null) $bar.style.width = `${pct}%`; };
+const status = (text, pct) => {
+  $status.textContent = text;
+  if (pct != null) $bar.style.width = `${pct}%`;
+  document.getElementById('v-loading-text').textContent = text;
+};
+// The loading cover goes once the first frame is drawn (or stays, with the reason, if none can be)
+const uncover = () => document.getElementById('v-loading').classList.add('v-done');
+const stuck = text => { status(text); document.querySelector('#v-loading i').className = 'fa-solid fa-triangle-exclamation'; };
 
 // ── Stage: the map at the video's own size, shown scaled to fit ─────────────────────
 let [W, H] = [1920, 1080];
 const $stage = document.getElementById('v-stage'), $scale = document.getElementById('v-scale');
 const $map = document.getElementById('v-map'), hud = document.getElementById('v-hud'), g2 = hud.getContext('2d');
 function layoutStage() {
+  const wrap = document.getElementById('v-wrap');
+  wrap.style.height = `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
   const box = document.getElementById('v-stage-box').getBoundingClientRect();
   const s = Math.min(box.width / W, box.height / H);
   $stage.style.width = `${W * s}px`; $stage.style.height = `${H * s}px`;
@@ -217,13 +247,14 @@ const typeIcon = type => {
 };
 
 await document.fonts.load('900 20px "Font Awesome 6 Free"', '\uf4d7').catch(() => {});
-await setup();
+// A failure (trips not found or not one's own, a map that will not load) stays on the cover
+await setup().catch(e => stuck(`${e.message || e}`));
 
 async function setup() {
   const loaded = await (await fetchTrips()).json();
   const legs = (loaded.trips || [loaded]).filter(t => t.coords?.length > 1);
   PREMIUM = legs.length > 0 && legs.every(t => t.trip.premium);
-  if (!legs.length) { status('Nothing to show: no trip with a path.'); return; }
+  if (!legs.length) { stuck('Nothing to show: no trip with a path.'); return; }
   const data = mergeTrips(legs);
   const coords = data.coords, n = coords.length, last = n - 1;
   const color = COLOR[data.trip.type] || COLOR.train;
@@ -235,7 +266,8 @@ async function setup() {
   const total = dist[last] || 1;
   const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
   const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
-    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags }));
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo }));
+  tripSpans.forEach(t => operatorLogo(t.logo));
   tripSpans.forEach(t => t.flags.forEach(flagImage));
   data.countries.forEach(([, c]) => flagImage(c));
   // The country at s (metres along the line): of the runs the server read along each path
@@ -957,6 +989,8 @@ async function setup() {
     const cornerIcon = typeIcon(S[Math.min(S.length - 2, pointAt(f.s).k)].type);
     const iconW = cornerIcon ? Math.round(corner.px * 1.3 * u) : 0, textX = pad + (iconW ? iconW + 12 * u : 0);
     const cornerRight = textX + Math.max(...corner.lines.map(l => g2.measureText(l).width));
+    // The current trip's operator logo, beside the clock
+    const opLogo = operatorLogo((tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]).logo);
     // Below 900 px wide, the logo's train alone
     const compact = W < 900, brand = brandLayout(u, compact), logoW = brand.w;
     // Vignette, for depth and to seat the text
@@ -1102,28 +1136,49 @@ async function setup() {
       g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
       g2.font = font(800, corner.px);
       corner.lines.forEach((l, i) => g2.fillText(l, textX, pad + (30 + i * corner.px * 1.15) * u));
-      // The clock's line, and its middle (its digits stand about 0.36 of the size above the
-      // baseline), which the flag is centred on
-      const below = pad + (30 + (corner.lines.length - 1) * corner.px * 1.15 + 42) * u, clockMid = below - 30 * u * 0.36;
-      if (cornerIcon) {
-        const img = shrink(cornerIcon, iconW, '#ffffff'), iy = Math.round(pad + 30 * u - corner.px * u * 0.8 - (img.height - corner.px * u) / 2);
-        g2.drawImage(img, Math.round(pad), iy);
-        // Under it, the flag of the country the train is in, changing at the border; for a
-        // trip without countries read along it, its origin's then its destination's
-        const trip = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
-        const flag = flagImage(countryAt(f.s) || trip.flags[f.s < (trip.from + trip.to) / 2 ? 0 : 1] || trip.flags[0]);
-        if (flag) {
-          // At its own proportions (Firefox gives these SVGs no size: 3:2 then)
-          const fw = iconW, fh = Math.round(fw * (flag.naturalWidth ? flag.naturalHeight / flag.naturalWidth : 2 / 3)), fy = Math.round(clockMid - fh / 2);
-          g2.save();
-          roundRect(pad, fy, fw, fh, 4 * u); g2.clip();
-          g2.shadowBlur = 0; g2.drawImage(flag, pad, fy, fw, fh);
-          g2.restore();
-          roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
-        }
+      // The type icon beside the title, and under them one line: the flag (in the icon's
+      // column), the operator's logo on a light chip (the logos are made for a white page),
+      // then the time; the line starts below the icon, however tall the icon is
+      const icon = cornerIcon && shrink(cornerIcon, iconW, '#ffffff');
+      const iy = icon ? Math.round(pad + 30 * u - corner.px * u * 0.8 - (icon.height - corner.px * u) / 2) : 0;
+      if (icon) g2.drawImage(icon, Math.round(pad), iy);
+      const trip = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
+      // The flag of the country the train is in, changing at the border; for a trip without
+      // countries read along it, its origin's then its destination's
+      const flag = icon && flagImage(countryAt(f.s) || trip.flags[f.s < (trip.from + trip.to) / 2 ? 0 : 1] || trip.flags[0]);
+      // At its own proportions (Firefox gives these SVGs no size: 3:2 then)
+      const fw = iconW, fh = flag ? Math.round(fw * (flag.naturalWidth ? flag.naturalHeight / flag.naturalWidth : 2 / 3)) : 0;
+      const lh = 22 * u, cpad = 6 * u, ch = opLogo ? lh + 2 * cpad : 0;
+      // The line's middle: under the title, and clear of the icon by 10 px (the time's digits
+      // stand about 0.36 of its size above its baseline)
+      const titleBase = pad + (30 + (corner.lines.length - 1) * corner.px * 1.15) * u;
+      const clockMid = Math.max(titleBase + 42 * u - 30 * u * 0.36, icon ? iy + icon.height + 10 * u + Math.max(fh, ch) / 2 : 0);
+      const below = clockMid + 30 * u * 0.36;
+      // The flag and the chip carry the shadow; what is drawn on them does not
+      const box = (x, y, w, h, r, fill) => {
+        g2.save(); g2.shadowColor = 'rgba(0,0,0,0.35)'; g2.shadowBlur = 8 * u; g2.shadowOffsetY = 2 * u;
+        roundRect(x, y, w, h, r); g2.fillStyle = fill; g2.fill();
+        g2.restore();
+      };
+      g2.shadowBlur = 0;
+      if (flag) {
+        const fy = Math.round(clockMid - fh / 2);
+        box(pad, fy, fw, fh, 4 * u, '#fff');
+        g2.save(); roundRect(pad, fy, fw, fh, 4 * u); g2.clip(); g2.drawImage(flag, pad, fy, fw, fh); g2.restore();
+        roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
+      }
+      let clockX = textX;
+      if (opLogo) {
+        const lw = Math.min(130 * u, lh * opLogo.naturalWidth / (opLogo.naturalHeight || 1)), cy = Math.round(clockMid - ch / 2);
+        box(textX, cy, lw + 2 * cpad, ch, 8 * u, 'rgba(255,255,255,0.92)');
+        const img = shrink(opLogo, Math.max(1, Math.round(lw)));
+        g2.drawImage(img, Math.round(textX + cpad), Math.round(cy + (ch - img.height) / 2));
+        clockX = textX + lw + 2 * cpad + 12 * u;
       }
       const clock = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s);
-      if (clock) { g2.font = font(700, 30); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fillText(clock, textX, below); }
+      // The time keeps the title's shadow, to read over any map
+      g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
+      if (clock) { g2.font = font(700, 30); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fillText(clock, clockX, below); }
       g2.shadowBlur = 0; g2.globalAlpha = 1;
     }
     if (f.title > 0.01) {
@@ -1204,10 +1259,10 @@ async function setup() {
     else { sizeSel.value = 'custom'; [$w.value, $h.value] = [fromHash[1], fromHash[2]]; $custom.hidden = false; }
   }
   // The default length follows the journey, so the pace stays about the same from one video
-  // to the next: 2.5 s per square root of each trip's minutes (or km), plus its halts and hops
+  // to the next: 1.6 s per square root of each trip's minutes (or km), plus its halts and hops
   const autoLength = () => {
     const timed = tripSpans.every(t => t.minutes);
-    const ride = tripSpans.reduce((x, t) => x + 2.5 * Math.sqrt(timed ? t.minutes : (t.to - t.from) / 1000), 0);
+    const ride = tripSpans.reduce((x, t) => x + 1.6 * Math.sqrt(timed ? t.minutes : (t.to - t.from) / 1000), 0);
     const journey = ride + Math.min(stops.length, Math.floor(ride / 4)) * 0.5 + gapSpans.length * 1.5;
     return Math.round(Math.max(20, journey + INTRO + DIVE + BACK + OUTRO));
   };
@@ -1236,6 +1291,7 @@ async function setup() {
   $w.addEventListener('change', onFormat); $h.addEventListener('change', onFormat);
   applySettings();
   status(T.ready, 0);
+  uncover();
 
   let playing = null;
   document.getElementById('v-play').addEventListener('click', () => {
@@ -1401,7 +1457,8 @@ function mergeTrips(list) {
     const took = t.trip.start && t.trip.end ? (new Date(t.trip.end) - new Date(t.trip.start)) / 60000 : null;
     out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
       name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
-      real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)] });
+      real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)],
+      logo: t.trip.operator_logo });
   });
   return out;
 }

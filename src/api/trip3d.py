@@ -54,7 +54,13 @@ def timetable_stops(waypoints_json):
 TRIP_QUERY = """
     SELECT t.trip_id, t.user_id, t.origin_station, t.destination_station, t.trip_type,
            t.start_datetime, t.end_datetime, t.utc_start_datetime, t.utc_end_datetime, t.waypoints, t.visibility,
-           ST_AsGeoJSON(p.geom) AS geojson, p.altitude, p.track_env
+           ST_AsGeoJSON(p.geom) AS geojson, p.altitude, p.track_env,
+           -- The first operator's logo, the one in use on the trip's day
+           (SELECT l.logo_url FROM trip_operators o JOIN operator_logos l ON l.operator_id = o.operator_id
+            WHERE o.trip_id = t.trip_id AND l.logo_url IS NOT NULL
+            ORDER BY o.position, (l.effective_date IS NULL OR l.effective_date <= t.start_datetime::date) DESC,
+                     l.effective_date DESC NULLS LAST, l.uid DESC
+            LIMIT 1) AS operator_logo
     FROM trips t JOIN paths p ON p.trip_id = t.trip_id
     WHERE t.trip_id = ANY(:ids)
 """
@@ -121,6 +127,7 @@ def _payload(row, user=None):
             "start": _local(row["start_datetime"]),
             "end": _local(row["end_datetime"]),
             "utc": [_epoch_ms(row["utc_start_datetime"]), _epoch_ms(row["utc_end_datetime"])],
+            "operator_logo": row["operator_logo"],
             "user": user,
         },
         "stops": timetable_stops(row["waypoints"]),

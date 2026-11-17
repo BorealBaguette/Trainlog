@@ -16,31 +16,40 @@
 
 <style>
   html, body { overflow: hidden; }
-  #v-wrap { height: calc(100vh - 70px); display: flex; gap: 14px; padding: 14px; background: #0d1117; }
-  #v-stage-box { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+  /* The site's light or dark theme (the user's setting), through Bootstrap's own colours */
+  #v-wrap { --v-bg: var(--bs-tertiary-bg); --v-fg: var(--bs-body-color); --v-dim: var(--bs-secondary-color);
+    --v-btn: var(--bs-secondary-bg); --v-accent: #2f81f7;
+    height: calc(100vh - 70px); display: flex; gap: 14px; padding: 14px; background: var(--v-bg); box-sizing: border-box; }
+  #v-stage-box { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+  /* Over the frame while the map, the trips and the terrain load (it can take a while) */
+  #v-loading { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: var(--v-bg); color: var(--v-fg); font-size: .95rem; }
+  #v-loading i { font-size: 2rem; color: var(--v-accent); }
+  #v-loading.v-done { display: none; }
   #v-stage { position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: #000; }
   #v-scale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
   #v-map { position: absolute; left: 0; top: 0; pointer-events: none; }
   #v-hud { position: absolute; left: 0; top: 0; pointer-events: none; }
   /* The video draws its own credits; the map's buttons have no place in it */
   #v-map .maplibregl-control-container, #v-map > div[style*="monospace"] { display: none; }
-  #v-panel { width: 290px; flex-shrink: 0; color: #e6edf3; font-size: .85rem; display: flex; flex-direction: column; gap: 10px; }
+  #v-panel { width: 290px; flex-shrink: 0; color: var(--v-fg); font-size: .85rem; display: flex; flex-direction: column; gap: 10px; }
   #v-panel h5 { margin: 0; font-weight: 700; }
   #v-panel select, #v-panel input { width: 100%; }
   #v-panel .v-row { display: flex; gap: 8px; align-items: center; }
-  #v-panel label { color: #9da7b3; font-size: .75rem; margin-bottom: 2px; display: block; }
+  #v-panel label { color: var(--v-dim); font-size: .75rem; margin-bottom: 2px; display: block; }
   #v-panel button { border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 600; cursor: pointer; }
-  #v-play { background: #30363d; color: #e6edf3; }
-  #v-render { background: #2f81f7; color: #fff; }
+  #v-play { background: var(--v-btn); color: var(--v-fg); }
+  #v-render { background: var(--v-accent); color: #fff; }
   #v-panel button:disabled { opacity: .5; cursor: default; }
-  #v-bar { height: 6px; background: #30363d; border-radius: 3px; overflow: hidden; }
-  #v-bar div { height: 100%; width: 0; background: #2f81f7; transition: width .2s; }
-  #v-status { color: #9da7b3; font-size: .75rem; min-height: 1.2em; }
+  #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
+  #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
+  #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
 </style>
 
 <div id="v-wrap">
   <div id="v-stage-box">
     <div id="v-stage"><div id="v-scale"><div id="v-map"></div><canvas id="v-hud"></canvas></div></div>
+    <div id="v-loading"><i class="fa-solid fa-circle-notch fa-spin"></i><div id="v-loading-text">Loading…</div></div>
   </div>
   <div id="v-panel">
     <h5>{{ video3dTitle }}</h5>
@@ -125,13 +134,22 @@ const FPS = 30;
 THREE.ColorManagement.enabled = false;
 
 const $status = document.getElementById('v-status'), $bar = document.querySelector('#v-bar div');
-const status = (text, pct) => { $status.textContent = text; if (pct != null) $bar.style.width = `${pct}%`; };
+const status = (text, pct) => {
+  $status.textContent = text;
+  if (pct != null) $bar.style.width = `${pct}%`;
+  document.getElementById('v-loading-text').textContent = text;
+};
+// The loading cover goes once the first frame is drawn (or stays, with the reason, if none can be)
+const uncover = () => document.getElementById('v-loading').classList.add('v-done');
+const stuck = text => { status(text); document.querySelector('#v-loading i').className = 'fa-solid fa-triangle-exclamation'; };
 
 // ── Stage: the map at the video's own size, shown scaled to fit ─────────────────────
 let [W, H] = [1920, 1080];
 const $stage = document.getElementById('v-stage'), $scale = document.getElementById('v-scale');
 const $map = document.getElementById('v-map'), hud = document.getElementById('v-hud'), g2 = hud.getContext('2d');
 function layoutStage() {
+  const wrap = document.getElementById('v-wrap');
+  wrap.style.height = `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
   const box = document.getElementById('v-stage-box').getBoundingClientRect();
   const s = Math.min(box.width / W, box.height / H);
   $stage.style.width = `${W * s}px`; $stage.style.height = `${H * s}px`;
@@ -199,13 +217,14 @@ const typeIcon = type => {
 };
 
 await document.fonts.load('900 20px "Font Awesome 6 Free"', '\uf4d7').catch(() => {});
-await setup();
+// A failure (trips not found or not one's own, a map that will not load) stays on the cover
+await setup().catch(e => stuck(`${e.message || e}`));
 
 async function setup() {
   const loaded = await (await fetchTrips()).json();
   // Only trips with times: everyone moves on the real clock
   const legs = (loaded.trips || [loaded]).filter(t => t.coords?.length > 1 && t.trip.utc?.[0]);
-  if (!legs.length) { status('Nothing to show: no trip with a path.'); return; }
+  if (!legs.length) { stuck('Nothing to show: no trip with a path.'); return; }
   const data = mergeTrips(legs);
   const coords = data.coords, n = coords.length, last = n - 1;
   const color = COLOR[data.trip.type] || COLOR.train;
@@ -861,9 +880,9 @@ async function setup() {
     else { sizeSel.value = 'custom'; [$w.value, $h.value] = [fromHash[1], fromHash[2]]; $custom.hidden = false; }
   }
   // The default length follows the journey, so the pace stays about the same from one video
-  // to the next: 2.5 s per square root of each trip's minutes (or km), plus its halts and hops
+  // to the next: 1.6 s per square root of each trip's minutes (or km), plus its halts and hops
   const autoLength = () => {
-    const ride = busy.reduce((x, [a, b]) => x + 2.5 * Math.sqrt((b - a) / 60000), 0);
+    const ride = busy.reduce((x, [a, b]) => x + 1.6 * Math.sqrt((b - a) / 60000), 0);
     return Math.round(Math.max(20, ride + IDLE * (busy.length - 1) + INTRO + DIVE + BACK + OUTRO));
   };
   // Empty: the length follows the journey; else the seconds asked for (at least 15)
@@ -891,6 +910,7 @@ async function setup() {
   $w.addEventListener('change', onFormat); $h.addEventListener('change', onFormat);
   applySettings();
   status(T.ready, 0);
+  uncover();
 
   let playing = null;
   document.getElementById('v-play').addEventListener('click', () => {
