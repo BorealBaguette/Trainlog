@@ -1822,5 +1822,8 @@
     "video3dTravellersLabel": "путешественников",
     "video3dTripsLabel": "поездок",
     "video3dEta": "осталось {t}",
-    "video3dApply": "Применить"
+    "video3dApply": "Применить",
+    "video3dMusic": "Музыка",
+    "video3dMusicRights": "Используйте только музыку, на которую у вас есть права. Она остаётся на вашем устройстве.",
+    "video3dFitMusic": "Подогнать под музыку"
 }

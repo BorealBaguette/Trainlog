@@ -89,6 +89,18 @@
         </select></div>
     </div>
     <div class="v-row">
+      <div style="flex:1"><label>{{ video3dMusic }}</label>
+        <input id="v-music" type="file" accept="audio/*" class="form-control form-control-sm">
+        <div id="v-music-trim" hidden style="margin-top: 6px">
+          <canvas id="v-wave" style="display: block; width: 100%; height: 56px; cursor: grab; border-radius: 6px; background: var(--v-btn); touch-action: none"></canvas>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px">
+            <div id="v-music-info" style="flex: 1; color: var(--v-dim); font-size: .75rem"></div>
+            <button id="v-music-fit" type="button" style="padding: 3px 8px; font-size: .75rem; background: var(--v-btn); color: var(--v-fg)">{{ video3dFitMusic }}</button>
+          </div>
+        </div>
+        <div style="color: var(--v-dim); font-size: .7rem; margin-top: 3px">{{ video3dMusicRights }}</div></div>
+    </div>
+    <div class="v-row">
       <div style="flex:1"><label>{{ video3dMaxSize }}</label>
         <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
     </div>
@@ -377,9 +389,13 @@ async function setup() {
   // Each trip in its own type's colour
   const typeColors = {};
   const typeColor = type => (typeColors[type] ??= new THREE.Color(COLOR[type] || color));
+  // Inside a tunnel the trip's own colour, much darker: the same line underground, still telling
+  // one trip from another (a slate common to all made every tunnel look like a faded line)
+  const tunnelColors = {};
+  const tunnelColor = type => (tunnelColors[type] ??= typeColor(type).clone().lerp(new THREE.Color('#141a22'), 0.78));
   const C = new THREE.Color(color), WHITE = new THREE.Color('#ffffff'), DARK = new THREE.Color('#141a22');
-  // Tunnels dark slate against the bright track, so they stand apart at a glance
-  const MUTED = new THREE.Color('#3a4350'), AHEAD = new THREE.Color('#6e7b8a');
+  // The route ahead, faint grey
+  const AHEAD = new THREE.Color('#6e7b8a');
   // Glowing head: a dot of fixed size on screen, drawn over everything, in the colour of the
   // trip it is on
   const glows = {};
@@ -438,6 +454,10 @@ async function setup() {
     group.add(stake);
   }
   // Flat on the ground plane; `upright` stands it on edge (a flight seen side-on stays thick)
+  // Lines on the ground lifted by a few pixels' worth of metres (set each frame by drawRoute):
+  // zoomed out, MapLibre draws the terrain from coarse tiles that fill valley floors, so a road
+  // along a valley sank under it and showed only as its faint see-through copy
+  let lineLift = 0;
   function ribbon(points, width, rgb, order, { opacity = 1, upright = false, xray = false } = {}) {
     if (points.length < 2) return;
     const pos = [], idx = [];
@@ -487,10 +507,14 @@ async function setup() {
         transparent: alpha < 1, opacity: alpha, depthTest, depthWrite: false,
         polygonOffset: depthTest, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
       mesh.renderOrder = ord;
+      // Tunnels too, or they no longer met the road at their portals
+      if (!upright) mesh.position.z = lineLift;
       mesh.frustumCulled = false;
       group.add(mesh);
     };
-    if (xray) draw(false, opacity, order);
+    // A tunnel in the same layer as the line it belongs to (one line, coloured differently),
+    // drawn whole as it runs inside the mountain
+    if (xray) draw(false, opacity, order + 100000);
     else { draw(false, opacity * 0.3, order); draw(true, opacity, order + 10); }
   }
 
@@ -498,6 +522,7 @@ async function setup() {
   // strip; behind, a dark outline strip under the whole route, then the core, the track's
   // colour on open line and dark in tunnels. Runs of one kind as separate polylines.
   function drawRoute(R, showHead, px) {
+    lineLift = 5 * px;
     for (const c of [...group.children]) { if (!heads.includes(c)) { c.geometry.dispose(); c.material?.dispose?.(); } group.remove(c); }
     const runsOf = (from, to, lead, tail) => {
       const out = [];
@@ -530,7 +555,7 @@ async function setup() {
     for (const r of behind) if (r.type === 'air') curtain(r.ks, typeColor('air'), 0.45, 0);
     for (const r of ahead) if (!r.gap && r.type !== 'air') ribbon(r.pts, 3 * px, AHEAD, 1, { xray: r.tunnel });
     for (const r of behind) if (!r.gap) ribbon(r.pts, 10 * px, DARK, 2, { xray: r.tunnel });
-    for (const r of behind) if (!r.gap) ribbon(r.pts, 6 * px, r.tunnel ? MUTED : typeColor(r.type), 3, { xray: r.tunnel });
+    for (const r of behind) if (!r.gap) ribbon(r.pts, 6 * px, r.tunnel ? tunnelColor(r.type) : typeColor(r.type), 3, { xray: r.tunnel });
     for (const r of behind) if (r.type === 'air') ribbon(r.pts, 10 * px, DARK, 2, { upright: true });
     for (const r of behind) if (r.type === 'air') ribbon(r.pts, 6 * px, typeColor('air'), 3, { upright: true });
     // Each traveller's dot: bright on the move, dimmer while waiting for their next trip
@@ -929,6 +954,7 @@ async function setup() {
     map.resize();
     Object.assign(ov, overview()); Object.assign(ovEnd, overview(true));
     show(0, true);
+    window.redrawMusic?.();
   };
   // The options take effect on Apply, not as they change: those changed are marked until then,
   // and Apply rebuilds once (or reloads the page, for another background)
@@ -967,13 +993,90 @@ async function setup() {
   uncover();
 
   let playing = null;
+  // Music from the user's own device, mixed in here and never sent anywhere: faded in over the
+  // opening and out over the end, looped when shorter than the video
+  const $music = document.getElementById('v-music');
+  const fadeIn = () => 1.5, fadeOut = () => 2.5;
+  let musicFile = null, musicAudio = null, musicBuffer = null, musicOffset = 0, peaks = [];
+  // Its waveform, the part the video uses (as long as the video) highlighted and dragged along
+  // it, the rest dimmed; with the track's length against the video's
+  const $trim = document.getElementById('v-music-trim'), $wave = document.getElementById('v-wave');
+  const $info = document.getElementById('v-music-info');
+  const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const drawWave = () => {
+    $trim.hidden = !musicBuffer;
+    if (!musicBuffer) return;
+    const w = Math.max(1, Math.round($wave.clientWidth * devicePixelRatio)), h = Math.round(56 * devicePixelRatio);
+    $wave.width = w; $wave.height = h;
+    const g = $wave.getContext('2d'), len = musicBuffer.duration, video = duration();
+    musicOffset = Math.max(0, Math.min(musicOffset, Math.max(0, len - video)));
+    if (peaks.length !== w) {
+      const data = musicBuffer.getChannelData(0), per = Math.max(1, Math.floor(data.length / w));
+      peaks = Array.from({ length: w }, (_, i) => {
+        let m = 0;
+        for (let j = i * per, end = Math.min(data.length, j + per); j < end; j += 4) m = Math.max(m, Math.abs(data[j]));
+        return m;
+      });
+    }
+    const x0 = musicOffset / len * w, x1 = Math.min(len, musicOffset + video) / len * w;
+    g.fillStyle = 'rgba(47,129,247,0.18)'; g.fillRect(x0, 0, x1 - x0, h);
+    for (let x = 0; x < w; x++) {
+      // Inside the window, as loud as it will play: the fades show as the bars' ramps
+      const inside = x >= x0 && x <= x1, gainHere = inside ? musicGain(x / w * len - musicOffset) : 1;
+      const bar = Math.max(1, peaks[x] * gainHere * (h - 6));
+      g.fillStyle = x >= x0 && x <= x1 ? '#2f81f7' : 'rgba(139,148,158,0.45)';
+      g.fillRect(x, (h - bar) / 2, 1, bar);
+    }
+    g.strokeStyle = '#2f81f7'; g.lineWidth = 2 * devicePixelRatio; g.strokeRect(x0 + 1, 1, Math.max(2, x1 - x0 - 2), h - 2);
+    $info.textContent = `♪ ${mmss(len)} · ▶ ${mmss(video)} · ${mmss(musicOffset)} → ${mmss(Math.min(len, musicOffset + video))}${len < video ? ' ↻' : ''}`;
+  };
+  window.redrawMusic = drawWave;
+  // The video made as long as the track (15 s to an hour), the whole of it played
+  document.getElementById('v-music-fit').addEventListener('click', () => {
+    if (!musicBuffer) return;
+    lenSel.value = Math.max(15, Math.min(3600, Math.round(musicBuffer.duration)));
+    musicOffset = 0;
+    markPending();
+    $apply.click();
+  });
+  window.addEventListener('resize', drawWave);
+  // Dragging the window along the track (a click centres it there)
+  let drag = null;
+  $wave.addEventListener('pointerdown', e => {
+    if (!musicBuffer) return;
+    const len = musicBuffer.duration, rect = $wave.getBoundingClientRect();
+    const at = (e.clientX - rect.left) / rect.width * len, video = duration();
+    if (at < musicOffset || at > musicOffset + video) musicOffset = at - video / 2;
+    drag = { x: e.clientX, offset: musicOffset, width: rect.width, len };
+    $wave.setPointerCapture(e.pointerId); $wave.style.cursor = 'grabbing';
+    drawWave();
+  });
+  $wave.addEventListener('pointermove', e => {
+    if (!drag) return;
+    musicOffset = drag.offset + (e.clientX - drag.x) / drag.width * drag.len;
+    drawWave();
+  });
+  $wave.addEventListener('pointerup', () => { drag = null; $wave.style.cursor = 'grab'; });
+  $music.addEventListener('change', async () => {
+    musicFile = $music.files[0] || null;
+    if (musicAudio) { musicAudio.pause(); URL.revokeObjectURL(musicAudio.src); }
+    musicAudio = musicFile ? Object.assign(new Audio(URL.createObjectURL(musicFile)), { loop: true }) : null;
+    musicBuffer = null; musicOffset = 0; peaks = [];
+    if (musicFile) {
+      try { musicBuffer = await new AudioContext().decodeAudioData(await musicFile.arrayBuffer()); } catch (e) { status(fill(T.failed, { e: e.message })); }
+    }
+    drawWave();
+  });
+  const musicGain = t => Math.max(0, Math.min(1, t / fadeIn(), (duration() - t) / fadeOut()));
   document.getElementById('v-play').addEventListener('click', () => {
-    if (playing) { cancelAnimationFrame(playing); playing = null; document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+    if (playing) { cancelAnimationFrame(playing); playing = null; musicAudio?.pause(); document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+    if (musicAudio) { musicAudio.currentTime = musicOffset; musicAudio.volume = 0; musicAudio.play(); }
     const start = performance.now();
     document.getElementById('v-play').textContent = '■ Stop';
     const tick = () => {
       const t = (performance.now() - start) / 1000;
-      if (t > duration()) { playing = null; document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+      if (t > duration()) { playing = null; musicAudio?.pause(); document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+      if (musicAudio) musicAudio.volume = musicGain(t);
       show(t);
       status(`Preview ${t.toFixed(1)} / ${duration().toFixed(0)} s (tiles may still be loading)`, t / duration() * 100);
       playing = requestAnimationFrame(tick);
@@ -1018,7 +1121,17 @@ async function setup() {
       // else VP9
       // With a size asked for, the bitrate capped to fit it whatever the length (8 % kept for
       // the MP4's own overhead), held constant so the encoder cannot overshoot it
-      const mb = Number(document.getElementById('v-mb').value), cap = mb > 0 ? mb * 1e6 * 8 * 0.92 / duration() : Infinity;
+      // The music's encoding: AAC, which every player reads, else Opus (Firefox); none at all
+      // in a browser without either, the video then made silent
+      let audio = null;
+      if (musicFile && 'AudioEncoder' in window) {
+        for (const [codec, m] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+          const c = { codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 };
+          try { if ((await AudioEncoder.isConfigSupported(c)).supported) { audio = { config: c, mux: m }; break; } } catch (e) { /* next */ }
+        }
+      }
+      const mb = Number(document.getElementById('v-mb').value);
+      const cap = mb > 0 ? mb * 1e6 * 8 * 0.92 / duration() - (audio ? 128000 : 0) : Infinity;
       const base = { width: W, height: H, bitrate: Math.min(W * H >= 1920 * 1080 ? 14e6 : 8e6, cap),
         bitrateMode: 'constant', framerate: FPS };
       let config = null, mux = null;
@@ -1031,7 +1144,8 @@ async function setup() {
       }
       if (!config) throw new Error('no video encoding (H.264 or VP9) available in this browser');
       const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), fastStart: 'in-memory',
-        video: { codec: mux, width: W, height: H } });
+        video: { codec: mux, width: W, height: H },
+        ...(audio ? { audio: { codec: audio.mux, sampleRate: 48000, numberOfChannels: 2 } } : {}) });
       let failure = null;
       const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { failure = e; } });
       encoder.configure(config);
@@ -1057,13 +1171,41 @@ async function setup() {
         status(fill(T.rendering, { i: i + 1, n: frames }) + eta, (i + 1) / frames * 100);
       }
       await encoder.flush();
+      if (audio) {
+        // The music rendered to the video's exact length, with its fades, then encoded in
+        // tenth-of-a-second blocks
+        const rate = 48000, length = Math.ceil(duration() * rate), mix = new OfflineAudioContext(2, length, rate);
+        const source = mix.createBufferSource(), gain = mix.createGain();
+        source.buffer = await mix.decodeAudioData(await musicFile.arrayBuffer());
+        source.loop = true;
+        gain.gain.setValueAtTime(0, 0);
+        gain.gain.linearRampToValueAtTime(1, fadeIn());
+        gain.gain.setValueAtTime(1, Math.max(fadeIn(), duration() - fadeOut()));
+        gain.gain.linearRampToValueAtTime(0, duration());
+        source.connect(gain).connect(mix.destination);
+        source.start(0, musicOffset);
+        const mixed = await mix.startRendering(), left = mixed.getChannelData(0), right = mixed.getChannelData(1);
+        let audioFailure = null;
+        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => { audioFailure = e; } });
+        audioEncoder.configure(audio.config);
+        for (let i = 0; i < length; i += rate / 10) {
+          const n = Math.min(rate / 10, length - i), data = new Float32Array(n * 2);
+          data.set(left.subarray(i, i + n), 0); data.set(right.subarray(i, i + n), n);
+          const block = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: n, numberOfChannels: 2,
+            timestamp: Math.round(i / rate * 1e6), data });
+          audioEncoder.encode(block);
+          block.close();
+        }
+        await audioEncoder.flush();
+        if (audioFailure) throw audioFailure;
+      }
       muxer.finalize();
       const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'trip'}-${H}p.mp4`;
       a.click();
-      status(fill(T.done, { n: (blob.size / 1e6).toFixed(1) }), 100);
+      status(fill(T.done, { n: (blob.size / 1e6).toFixed(1) }) + (musicFile && !audio ? ' (no music: this browser cannot encode audio)' : ''), 100);
     } catch (e) {
       status(fill(T.failed, { e: e.message }));
     } finally {

@@ -1807,5 +1807,8 @@
     "video3dTravellersLabel": "rejsende",
     "video3dTripsLabel": "rejser",
     "video3dEta": "{t} tilbage",
-    "video3dApply": "Anvend"
+    "video3dApply": "Anvend",
+    "video3dMusic": "Musik",
+    "video3dMusicRights": "Brug kun musik, du har rettighederne til. Den bliver på din enhed.",
+    "video3dFitMusic": "Tilpas til musik"
 }

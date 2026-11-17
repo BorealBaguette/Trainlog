@@ -1807,5 +1807,8 @@
     "video3dTravellersLabel": "viaggiatori",
     "video3dTripsLabel": "viaggi",
     "video3dEta": "mancano {t}",
-    "video3dApply": "Applica"
+    "video3dApply": "Applica",
+    "video3dMusic": "Musica",
+    "video3dMusicRights": "Usa solo musica di cui hai i diritti. Resta sul tuo dispositivo.",
+    "video3dFitMusic": "Adatta alla musica"
 }

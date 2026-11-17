@@ -1792,5 +1792,8 @@
     "video3dTravellersLabel": "旅行者",
     "video3dTripsLabel": "行程",
     "video3dEta": "剩余 {t}",
-    "video3dApply": "应用"
+    "video3dApply": "应用",
+    "video3dMusic": "音乐",
+    "video3dMusicRights": "仅使用您拥有权利的音乐。音乐只保留在您的设备上。",
+    "video3dFitMusic": "匹配音乐时长"
 }

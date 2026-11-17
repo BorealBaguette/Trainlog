@@ -1804,5 +1804,8 @@
     "video3dTravellersLabel": "reisijat",
     "video3dTripsLabel": "reisi",
     "video3dEta": "veel {t}",
-    "video3dApply": "Rakenda"
+    "video3dApply": "Rakenda",
+    "video3dMusic": "Muusika",
+    "video3dMusicRights": "Kasuta ainult muusikat, mille õigused sul on. See jääb sinu seadmesse.",
+    "video3dFitMusic": "Sobita muusikaga"
 }

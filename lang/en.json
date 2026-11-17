@@ -1804,5 +1804,8 @@
     "video3dTravellersLabel": "travellers",
     "video3dTripsLabel": "trips",
     "video3dEta": "{t} left",
-    "video3dApply": "Apply"
+    "video3dApply": "Apply",
+    "video3dMusic": "Music",
+    "video3dMusicRights": "Only use music you have the rights to. It stays on your device.",
+    "video3dFitMusic": "Fit to music"
 }

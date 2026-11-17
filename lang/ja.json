@@ -1792,5 +1792,8 @@
     "video3dTravellersLabel": "旅行者",
     "video3dTripsLabel": "旅程",
     "video3dEta": "残り {t}",
-    "video3dApply": "適用"
+    "video3dApply": "適用",
+    "video3dMusic": "音楽",
+    "video3dMusicRights": "権利を持っている音楽のみを使用してください。音楽はお使いの端末から出ません。",
+    "video3dFitMusic": "音楽に合わせる"
 }

@@ -1792,5 +1792,8 @@
     "video3dTravellersLabel": "utazó",
     "video3dTripsLabel": "út",
     "video3dEta": "még {t}",
-    "video3dApply": "Alkalmaz"
+    "video3dApply": "Alkalmaz",
+    "video3dMusic": "Zene",
+    "video3dMusicRights": "Csak olyan zenét használj, amelyhez jogod van. Az eszközödön marad.",
+    "video3dFitMusic": "Igazítás a zenéhez"
 }

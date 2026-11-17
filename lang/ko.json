@@ -1794,5 +1794,8 @@
     "video3dTravellersLabel": "여행자",
     "video3dTripsLabel": "여정",
     "video3dEta": "{t} 남음",
-    "video3dApply": "적용"
+    "video3dApply": "적용",
+    "video3dMusic": "음악",
+    "video3dMusicRights": "권리가 있는 음악만 사용하세요. 음악은 기기에만 남습니다.",
+    "video3dFitMusic": "음악에 맞추기"
 }

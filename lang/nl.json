@@ -1807,5 +1807,8 @@
     "video3dTravellersLabel": "reizigers",
     "video3dTripsLabel": "reizen",
     "video3dEta": "nog {t}",
-    "video3dApply": "Toepassen"
+    "video3dApply": "Toepassen",
+    "video3dMusic": "Muziek",
+    "video3dMusicRights": "Gebruik alleen muziek waarvan je de rechten hebt. Ze blijft op je apparaat.",
+    "video3dFitMusic": "Op muziek afstemmen"
 }

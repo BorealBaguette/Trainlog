@@ -1805,5 +1805,8 @@
     "video3dTravellersLabel": "Reisendi",
     "video3dTripsLabel": "Fahrte",
     "video3dEta": "no {t}",
-    "video3dApply": "Übernäh"
+    "video3dApply": "Übernäh",
+    "video3dMusic": "Musig",
+    "video3dMusicRights": "Nume Musig bruuche, wo Sie d Rächt dra händ. Si blibt uf Ihrem Grät.",
+    "video3dFitMusic": "Uf d Musig apasse"
 }

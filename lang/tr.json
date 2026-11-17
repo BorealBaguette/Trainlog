@@ -1801,5 +1801,8 @@
     "video3dTravellersLabel": "yolcu",
     "video3dTripsLabel": "yolculuk",
     "video3dEta": "{t} kaldı",
-    "video3dApply": "Uygula"
+    "video3dApply": "Uygula",
+    "video3dMusic": "Müzik",
+    "video3dMusicRights": "Yalnızca hakkına sahip olduğunuz müziği kullanın. Cihazınızda kalır.",
+    "video3dFitMusic": "Müziğe uydur"
 }

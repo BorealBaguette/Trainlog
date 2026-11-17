@@ -1807,5 +1807,8 @@
     "video3dTravellersLabel": "resenärer",
     "video3dTripsLabel": "resor",
     "video3dEta": "{t} kvar",
-    "video3dApply": "Verkställ"
+    "video3dApply": "Verkställ",
+    "video3dMusic": "Musik",
+    "video3dMusicRights": "Använd bara musik som du har rättigheterna till. Den stannar på din enhet.",
+    "video3dFitMusic": "Anpassa till musiken"
 }

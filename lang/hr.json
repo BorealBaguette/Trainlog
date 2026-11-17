@@ -1822,5 +1822,8 @@
     "video3dTravellersLabel": "putnika",
     "video3dTripsLabel": "putovanja",
     "video3dEta": "još {t}",
-    "video3dApply": "Primijeni"
+    "video3dApply": "Primijeni",
+    "video3dMusic": "Glazba",
+    "video3dMusicRights": "Koristite samo glazbu za koju imate prava. Ostaje na vašem uređaju.",
+    "video3dFitMusic": "Prilagodi glazbi"
 }

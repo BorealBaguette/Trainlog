@@ -1839,5 +1839,8 @@
     "video3dTravellersLabel": "cestujících",
     "video3dTripsLabel": "cest",
     "video3dEta": "zbývá {t}",
-    "video3dApply": "Použít"
+    "video3dApply": "Použít",
+    "video3dMusic": "Hudba",
+    "video3dMusicRights": "Používejte jen hudbu, ke které máte práva. Zůstává ve vašem zařízení.",
+    "video3dFitMusic": "Přizpůsobit hudbě"
 }

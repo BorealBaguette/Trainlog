@@ -1807,5 +1807,8 @@
     "video3dTravellersLabel": "reisende",
     "video3dTripsLabel": "reiser",
     "video3dEta": "{t} igjen",
-    "video3dApply": "Bruk"
+    "video3dApply": "Bruk",
+    "video3dMusic": "Musikk",
+    "video3dMusicRights": "Bruk bare musikk du har rettighetene til. Den blir på enheten din.",
+    "video3dFitMusic": "Tilpass til musikken"
 }

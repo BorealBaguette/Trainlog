@@ -1805,5 +1805,8 @@
     "video3dTravellersLabel": "matkustajaa",
     "video3dTripsLabel": "matkaa",
     "video3dEta": "{t} jäljellä",
-    "video3dApply": "Käytä"
+    "video3dApply": "Käytä",
+    "video3dMusic": "Musiikki",
+    "video3dMusicRights": "Käytä vain musiikkia, johon sinulla on oikeudet. Se pysyy laitteellasi.",
+    "video3dFitMusic": "Sovita musiikkiin"
 }

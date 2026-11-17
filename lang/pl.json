@@ -1837,5 +1837,8 @@
     "video3dTravellersLabel": "podróżnych",
     "video3dTripsLabel": "podróży",
     "video3dEta": "pozostało {t}",
-    "video3dApply": "Zastosuj"
+    "video3dApply": "Zastosuj",
+    "video3dMusic": "Muzyka",
+    "video3dMusicRights": "Używaj tylko muzyki, do której masz prawa. Zostaje na twoim urządzeniu.",
+    "video3dFitMusic": "Dopasuj do muzyki"
 }
