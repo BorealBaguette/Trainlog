@@ -1046,10 +1046,19 @@ async function setup() {
       const trackPath = upto => { g2.beginPath(); let started = false;
         for (let k = 0; k < zr.length && d[k] <= upto; k++) { g2[started ? 'lineTo' : 'moveTo'](X(d[k]), Y(zr[k])); started = true; } };
       trackPath(total); g2.strokeStyle = 'rgba(255,255,255,0.35)'; g2.lineWidth = 2 * u; g2.stroke();
-      trackPath(f.s); g2.strokeStyle = color; g2.lineWidth = 3.5 * u; g2.stroke();
+      // The part travelled, each trip in its type's colour (a change starts a new stroke)
+      g2.lineWidth = 3.5 * u; g2.lineJoin = 'round';
+      for (let k = 0, run = null; k < zr.length && d[k] <= f.s; k++) {
+        const type = S[Math.min(k, S.length - 2)].type;
+        if (!run || run !== type) {
+          if (run) { g2.lineTo(X(d[k]), Y(zr[k])); g2.stroke(); }
+          run = type; g2.beginPath(); g2.moveTo(X(d[k]), Y(zr[k])); g2.strokeStyle = COLOR[type] || color;
+        } else g2.lineTo(X(d[k]), Y(zr[k]));
+        if (k + 1 >= zr.length || d[k + 1] > f.s) g2.stroke();
+      }
       const here = pointAt(f.s), hz = lerp(zr[here.k], zr[here.k + 1], (f.s - d[here.k]) / ((d[here.k + 1] - d[here.k]) || 1));
       g2.beginPath(); g2.arc(X(f.s), Y(hz), 6 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
-      g2.lineWidth = 3 * u; g2.strokeStyle = color; g2.stroke();
+      g2.lineWidth = 3 * u; g2.strokeStyle = COLOR[S[here.k].type] || color; g2.stroke();
       g2.fillStyle = '#fff'; g2.font = font(700, 40); g2.textBaseline = 'alphabetic';
       g2.fillText(`${(f.s / 1000).toFixed(1)} km`, x + 24 * u, y + 60 * u);
       g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.font = font(500, 22);
