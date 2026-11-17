@@ -945,8 +945,9 @@ async function setup() {
     };
     for (const t of tripSpans) { t.tIn = timeAt(t.from); t.tOut = timeAt(t.to); }
     // Where the date changes on the journey's clock, for the day's name over the map
-    dayChanges = [];
+    // (the first day too, as the journey starts, when there are several)
     let day = dayAt(0);
+    dayChanges = multiDay && day ? [{ t: 0, day }] : [];
     for (let t = 0.1; t <= JOURNEY; t += 0.1) {
       const now = dayAt(journeyAt(t).s);
       if (now && now !== day) { dayChanges.push({ t, day: now }); day = now; }
