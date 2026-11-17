@@ -385,6 +385,9 @@ async function setup() {
   // Tunnels and bridges run straight from end to end; a light average over the whole line
   // rounds the corners where they meet the open track
   z = movingAverage(z, d, 150);
+  // The smoothed line as it is, for the climb and descent (the ground's own bumps, brought back
+  // just below, would each count)
+  const zSmooth = z.slice();
   // Smoothing cuts under a ridge or a convex slope (a ski run): on the ground, never below it
   z = z.map((v, k) => (S[k].kind === 'tunnel' || isAir[k] || ground[k] == null ? v : Math.max(v, ground[k])));
   const LIFT = 3;
@@ -408,8 +411,17 @@ async function setup() {
   const bridges = runs.filter(r => r.kind === 'bridge').map(r => ({ from: dist[r.s], to: dist[r.e] }));
   const tunnelLen = tunnels.reduce((a, t) => a + t.to - t.from, 0);
   const zr = z.map(v => v - LIFT);
-  let climb = 0, descent = 0;
-  for (let k = 1; k < zr.length; k++) { if (isAir[k] || isAir[k - 1]) continue; const dz = zr[k] - zr[k - 1]; if (dz > 0) climb += dz; else descent -= dz; }
+  // Climb and descent as tracking apps count them: on the smoothed line, a rise or a drop only
+  // once it passes 10 m (each 20 m sample's small ups and downs otherwise doubled the totals);
+  // flights left out
+  let climb = 0, descent = 0, ref = null;
+  for (let k = 0; k < zSmooth.length; k++) {
+    if (isAir[k]) { ref = null; continue; }
+    const v = zSmooth[k];
+    if (ref == null) ref = v;
+    else if (v - ref >= 10) { climb += v - ref; ref = v; }
+    else if (ref - v >= 10) { descent += ref - v; ref = v; }
+  }
   // Timetable stops placed on the line (the nearest point of it, in order), and the time of
   // day along it: between the trip's start, each stop's arrival and departure and its end,
   // interpolated by distance
