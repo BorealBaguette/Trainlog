@@ -91,6 +91,7 @@
             <input type="range" min="0" max="1" step="0.05" oninput="MapLibreUtils.setYearSpread(this.value); updateColorMode()">
             <div class="year-spread-ends"><span>{{ yearSpreadEven }}</span><span>{{ yearSpreadTravel }}</span></div>
         </div>
+        <label class="control-check"><input type="checkbox" id="oldestOnTop" onchange="updateStacking()"> {{ mapOldestOnTop }}</label>
     </div>
 
     <div class="control-group" id="yearSelector" style="display: none;">
@@ -405,10 +406,11 @@ const DETAIL_ZOOM = 12;
 
 // The displayed trips go to the map as consecutive slices in time, each on
 // its own source with its own shadow + line layers, stacked oldest at the
-// bottom (newest at the bottom when coloured by year): a newer trip is drawn over older ones with its outline intact, and
-// inside a slice lines are drawn in time order too. Slices hold equal shares
-// of the points, so MapLibre processes each once (in parallel across its
-// workers) and the map fills in slice after slice, oldest first. One source
+// bottom (or newest, with "oldest on top"): a newer trip is drawn over older
+// ones with its outline intact, and inside a slice lines are drawn in that
+// order too. Slices hold equal shares of the points, so MapLibre processes
+// each once (in parallel across its workers) and the map fills in slice after
+// slice, bottom first. One source
 // fed in steps would re-process everything at every step instead.
 const SLICE_COUNT = 10;
 const SLICE_SOURCES = Array.from({ length: SLICE_COUNT }, (_, i) => `trips-${i}`);
@@ -452,10 +454,12 @@ function applyColorMode() {
 }
 
 function updateColorMode() {
-    if (layersBuilt) {
-        applyColorMode();
-        if (trips.length) refreshDisplayed();  // the stacking order follows the colour mode
-    }
+    if (layersBuilt) applyColorMode();
+    savePreferences();
+}
+
+function updateStacking() {
+    if (layersBuilt) refreshDisplayed();
     savePreferences();
 }
 
@@ -649,14 +653,12 @@ async function refreshDisplayed(beforeDraw) {
         if (seq !== refreshSeq) return null;
     }
 
-    // Coloured by year, newest trips go at the bottom so the older years
-    // (often fewer, sparser lines) stay visible on top of them
-    const newestFirst = document.getElementById('colorMode').value === 'year';
-    const key = lod + (newestFirst ? '-desc' : '') + list.map(t => t.trip.uid + ':' + t.v).join(',');
+    const oldestOnTop = document.getElementById('oldestOnTop').checked;
+    const key = lod + oldestOnTop + list.map(t => t.trip.uid + ':' + t.v).join(',');
     if (key === drawnKey) return null;
     drawnKey = key;
     drawnLod = lod;
-    displayedFeatures = [...list].sort(newestFirst ? (a, b) => byTime(b, a) : byTime)
+    displayedFeatures = [...list].sort(oldestOnTop ? (a, b) => byTime(b, a) : byTime)
         .map(t => tripLoader[lod].featureFor(t)).filter(f => f !== null);
     return drawSlices(displayedFeatures, seq);
 }
@@ -894,6 +896,7 @@ function hideLoading() {
 function savePreferences() {
     Cookies.set('viewMode', activeFilters.viewMode, { expires: 30 });
     Cookies.set('colorMode', document.getElementById('colorMode').value, { expires: 30 });
+    Cookies.set('oldestOnTop', document.getElementById('oldestOnTop').checked, { expires: 30 });
     Cookies.set('yearSelect', Array.from(selectedYears).join(','), { expires: 30 });
     
     MapLibreUtils.MapConfig.transportTypes.forEach(type => {
@@ -914,6 +917,7 @@ function loadPreferences() {
     
     const savedColorMode = Cookies.get('colorMode');
     if (savedColorMode) document.getElementById('colorMode').value = savedColorMode;
+    document.getElementById('oldestOnTop').checked = Cookies.get('oldestOnTop') === 'true';
     document.querySelector('#yearSpread input').value = MapLibreUtils.yearSpread();
 
     // Load selected years
