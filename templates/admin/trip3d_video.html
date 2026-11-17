@@ -323,7 +323,7 @@ async function setup() {
   const total = dist[last] || 1;
   const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
   const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
-    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo, line: t.line, vehicle: t.vehicle, units: t.units }));
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start }));
   tripSpans.forEach(t => t.units.forEach(wagonImage));
   // Every drawing the video shows, for the end card's credits
   const allUnits = tripSpans.flatMap(t => t.units);
@@ -343,6 +343,8 @@ async function setup() {
   // Open track on the ground smoothed along the line (a 200 m median bridges culverts and
   // gullies, a 100 m average evens the rest); tunnels and bridges straight from end to end.
   status(T.terrain);
+  // The trip each point of the line belongs to (a hop between two trips, to the one before)
+  const tripOf = i => Math.max(0, data.spans.findIndex(t => i < t.e));
   const S = [], at = [];
   for (let i = 0; i < last; i++) {
     at[i] = S.length;
@@ -350,11 +352,11 @@ async function setup() {
     for (let j = 0; j < m; j++) {
       const t = j / m;
       S.push({ lng: lerp(coords[i][0], coords[i + 1][0], t), lat: lerp(coords[i][1], coords[i + 1][1], t),
-        d: lerp(dist[i], dist[i + 1], t), kind: kindAt[i], h: lerp(data.height[i], data.height[i + 1], t), type: data.types[i] });
+        d: lerp(dist[i], dist[i + 1], t), kind: kindAt[i], h: lerp(data.height[i], data.height[i + 1], t), type: data.types[i], trip: tripOf(i) });
     }
   }
   at[last] = S.length;
-  S.push({ lng: coords[last][0], lat: coords[last][1], d: total, kind: kindAt[last - 1] || 'open', h: data.height[last], type: data.types[last] });
+  S.push({ lng: coords[last][0], lat: coords[last][1], d: total, kind: kindAt[last - 1] || 'open', h: data.height[last], type: data.types[last], trip: tripOf(last) });
   new Set(data.types).forEach(typeIcon);
   const d = S.map(p => p.d);
   // Flights read the ground under them apart, at their own coarser zoom
@@ -463,6 +465,15 @@ async function setup() {
   }
   anchors.sort((a, b) => a.d - b.d);
   for (let i = 1; i < anchors.length; i++) while (anchors[i].m < anchors[i - 1].m) anchors[i].m += 1440;
+  // The date at s ("YYYY-MM-DD"): its trip's start date, a day on once the clock has gone round
+  // past midnight; and whether the journey spans several days, its clock then dated
+  const dayAt = s => {
+    const trip = tripSpans.find(t => s <= t.to) || tripSpans[tripSpans.length - 1], clock = clockAt(s);
+    if (!trip.start) return null;
+    const day = new Date(`${trip.start.slice(0, 10)}T00:00:00Z`);
+    if (clock && minutes(clock) < minutes(trip.start) - 1) day.setUTCDate(day.getUTCDate() + 1);
+    return day.toISOString().slice(0, 10);
+  };
   const clockAt = s => {
     if (anchors.length < 2) return null;
     let i = anchors.findIndex(a => a.d >= s);
@@ -472,6 +483,8 @@ async function setup() {
     const mm = ((Math.round(m) % 1440) + 1440) % 1440;
     return `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`;
   };
+  const multiDay = dayAt(0) !== dayAt(total);
+  const dateText = (day, opts) => new Date(`${day}T00:00:00Z`).toLocaleDateString(LANG, { ...opts, timeZone: 'UTC' });
   const dateOf = (iso, year) => new Date(iso).toLocaleDateString(LANG, { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
   const day = data.trip.start ? dateOf(data.trip.start, true) : null;
   // The end's date too when the journey runs over several days
@@ -530,7 +543,7 @@ async function setup() {
   };
   const head = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)),
     new THREE.PointsMaterial({ map: glowFor(data.types[0]), size: 54, sizeAttenuation: false, transparent: true, depthTest: false, depthWrite: false }));
-  head.renderOrder = 20;
+  head.renderOrder = 1e9;
   head.frustumCulled = false;
 
   // The route at progress s (metres): travelled in colour with an outline, ahead faint;
@@ -620,7 +633,7 @@ async function setup() {
       group.add(mesh);
     };
     if (xray) draw(false, opacity, order);
-    else { draw(false, opacity * 0.3, order); draw(true, opacity, order + 10); }
+    else { draw(false, opacity * 0.3, order); draw(true, opacity, order + 100000); }
   }
 
   // The route at progress s (metres), `px` metres to a pixel at the focus: ahead a grey
@@ -636,10 +649,10 @@ async function setup() {
       const out = [];
       let cur = null;
       for (let k = from; k <= to; k++) {
-        const sk = S[Math.min(k, S.length - 2)], tunnel = sk.kind === 'tunnel', gap = sk.kind === 'gap', type = sk.type;
-        if (!cur || cur.tunnel !== tunnel || cur.gap !== gap || cur.type !== type) {
+        const sk = S[Math.min(k, S.length - 2)], tunnel = sk.kind === 'tunnel', gap = sk.kind === 'gap', type = sk.type, trip = sk.trip;
+        if (!cur || cur.tunnel !== tunnel || cur.gap !== gap || cur.type !== type || cur.trip !== trip) {
           // Joined to the run before it, unless that was the hop between two trips
-          cur = { tunnel, gap, type, ks: [], pts: cur && !cur.gap ? [cur.pts[cur.pts.length - 1]] : [] };
+          cur = { tunnel, gap, type, trip, ks: [], pts: cur && !cur.gap ? [cur.pts[cur.pts.length - 1]] : [] };
           out.push(cur);
         }
         cur.pts.push(P[k]); cur.ks.push(k);
@@ -656,11 +669,16 @@ async function setup() {
     for (const r of behind) if (r.type === 'air') ribbon(r.ks.map(k => G[k]), 5 * px, DARK, 0, { opacity: 0.35 });
     for (const r of behind) if (r.type === 'air') curtain(r.ks, typeColor('air'), 0.45, 0);
     for (const r of ahead) if (!r.gap && (r.type !== 'air' || whole)) ribbon(r.pts, 3 * px, AHEAD, 1, { xray: r.tunnel });
-    for (const r of behind) if (!r.gap) ribbon(r.pts, 10 * px, DARK, 2, { xray: r.tunnel });
-    for (const r of behind) if (!r.gap) ribbon(r.pts, 6 * px, r.tunnel ? MUTED : typeColor(r.type), 3, { xray: r.tunnel });
+    // Each trip on its own layer, a later one over an earlier (its outline cutting across it, never
+    // merging), so where a journey goes back over itself, both passes read
+    for (const r of behind) if (!r.gap) {
+      const layer = 10 + r.trip * 2;
+      ribbon(r.pts, 10 * px, DARK, layer, { xray: r.tunnel });
+      ribbon(r.pts, 6 * px, r.tunnel ? MUTED : typeColor(r.type), layer + 1, { xray: r.tunnel });
+    }
     // A flight's line also stood on edge, so it keeps its thickness seen from the side
-    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 10 * px, DARK, 2, { upright: true });
-    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 6 * px, typeColor('air'), 3, { upright: true });
+    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 10 * px, DARK, 10 + r.trip * 2, { upright: true });
+    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 6 * px, typeColor('air'), 11 + r.trip * 2, { upright: true });
     if (showHead) {
       head.position.set(...here);
       head.material.map = glowFor(S[Math.min(cut, S.length - 2)].type);
@@ -872,7 +890,7 @@ async function setup() {
 
   // The journey's timing: legs between the stations it halts at, each starting and ending at
   // rest (eased, their time shared by distance), and a wait at each
-  let plan = [], halting = new Set(), stationTimes = new Map();
+  let plan = [], halting = new Set(), stationTimes = new Map(), dayChanges = [];
   const planJourney = () => {
     // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
     // first, then the stops the timetable waits longest at; the train runs through the rest
@@ -926,6 +944,13 @@ async function setup() {
       return leg.s1 > leg.s0 ? leg.t0 + (Math.min(Math.max(s, leg.s0), leg.s1) - leg.s0) / (leg.s1 - leg.s0) * (leg.t1 - leg.t0) : leg.t0;
     };
     for (const t of tripSpans) { t.tIn = timeAt(t.from); t.tOut = timeAt(t.to); }
+    // Where the date changes on the journey's clock, for the day's name over the map
+    dayChanges = [];
+    let day = dayAt(0);
+    for (let t = 0.1; t <= JOURNEY; t += 0.1) {
+      const now = dayAt(journeyAt(t).s);
+      if (now && now !== day) { dayChanges.push({ t, day: now }); day = now; }
+    }
     // When the train reaches and leaves each station shown
     stationTimes = new Map();
     for (const st of stations) {
@@ -1320,6 +1345,17 @@ async function setup() {
       g2.globalAlpha = 1;
     }
 
+    // A new day: its name large over the map for 2.5 s, as the journey's clock passes into it
+    const newDay = dayChanges.find(c => f.jt >= c.t && f.jt < c.t + 2.5);
+    if (newDay && f.title < 0.5 && f.card < 0.5) {
+      const text = dateText(newDay.day, { weekday: 'long', day: 'numeric', month: 'long' });
+      g2.globalAlpha = Math.max(0, Math.min(1, (f.jt - newDay.t) / 0.3, (newDay.t + 2.5 - f.jt) / 0.6));
+      g2.font = font(800, 56); g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillStyle = '#fff';
+      g2.shadowColor = 'rgba(0,0,0,0.75)'; g2.shadowBlur = 20 * u;
+      g2.fillText(text.charAt(0).toUpperCase() + text.slice(1), W / 2, H * 0.3);
+      g2.shadowBlur = 0; g2.textAlign = 'left'; g2.textBaseline = 'alphabetic'; g2.globalAlpha = 1;
+    }
+
     // Trip name in the corner during the journey, large over the opening
     if (f.title < 0.99 && f.card < 0.99) {
       g2.globalAlpha = (1 - f.title) * (1 - f.card);
@@ -1366,7 +1402,9 @@ async function setup() {
         g2.drawImage(img, Math.round(textX + cpad), Math.round(cy + (ch - img.height) / 2));
         clockX = textX + lw + 2 * cpad + 12 * u;
       }
-      const clock = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s);
+      // Dated when the journey spans several days
+      const time = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s), day = multiDay && time && dayAt(f.s);
+      const clock = day ? `${dateText(day, { day: 'numeric', month: 'short' })} · ${time}` : time;
       // The time keeps the title's shadow, to read over any map
       g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
       if (clock) { g2.font = font(700, 30); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fillText(clock, clockX, below); }
@@ -1705,7 +1743,7 @@ function mergeTrips(list) {
     out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
       name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
       real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)],
-      logo: t.trip.operator_logo, line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [] });
+      logo: t.trip.operator_logo, line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start });
   });
   return out;
 }
