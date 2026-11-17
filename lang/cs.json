@@ -1838,5 +1838,6 @@
     "video3dTravellers": {"one": "{n} cestující", "few": "{n} cestující", "many": "{n} cestujícího", "other": "{n} cestujících"},
     "video3dTravellersLabel": "cestujících",
     "video3dTripsLabel": "cest",
-    "video3dEta": "zbývá {t}"
+    "video3dEta": "zbývá {t}",
+    "video3dApply": "Použít"
 }

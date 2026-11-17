@@ -1806,5 +1806,6 @@
     "video3dTravellers": {"one": "{n} resenär", "other": "{n} resenärer"},
     "video3dTravellersLabel": "resenärer",
     "video3dTripsLabel": "resor",
-    "video3dEta": "{t} kvar"
+    "video3dEta": "{t} kvar",
+    "video3dApply": "Verkställ"
 }

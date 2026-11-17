@@ -1803,5 +1803,6 @@
     "video3dTravellers": {"one": "{n} reisija", "other": "{n} reisijat"},
     "video3dTravellersLabel": "reisijat",
     "video3dTripsLabel": "reisi",
-    "video3dEta": "veel {t}"
+    "video3dEta": "veel {t}",
+    "video3dApply": "Rakenda"
 }

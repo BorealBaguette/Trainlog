@@ -1806,5 +1806,6 @@
     "video3dTravellers": {"one": "{n} viajero", "other": "{n} viajeros"},
     "video3dTravellersLabel": "viajeros",
     "video3dTripsLabel": "viajes",
-    "video3dEta": "faltan {t}"
+    "video3dEta": "faltan {t}",
+    "video3dApply": "Aplicar"
 }

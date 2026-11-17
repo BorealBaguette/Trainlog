@@ -1800,5 +1800,6 @@
     "video3dTravellers": {"one": "{n} yolcu", "other": "{n} yolcu"},
     "video3dTravellersLabel": "yolcu",
     "video3dTripsLabel": "yolculuk",
-    "video3dEta": "{t} kaldı"
+    "video3dEta": "{t} kaldı",
+    "video3dApply": "Uygula"
 }

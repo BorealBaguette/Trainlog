@@ -1791,5 +1791,6 @@
     "video3dTravellers": {"one": "{n} utazó", "other": "{n} utazó"},
     "video3dTravellersLabel": "utazó",
     "video3dTripsLabel": "út",
-    "video3dEta": "még {t}"
+    "video3dEta": "még {t}",
+    "video3dApply": "Alkalmaz"
 }

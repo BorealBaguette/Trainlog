@@ -1791,5 +1791,6 @@
     "video3dTravellers": {"other": "旅行者 {n} 人"},
     "video3dTravellersLabel": "旅行者",
     "video3dTripsLabel": "旅程",
-    "video3dEta": "残り {t}"
+    "video3dEta": "残り {t}",
+    "video3dApply": "適用"
 }

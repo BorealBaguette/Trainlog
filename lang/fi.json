@@ -1804,5 +1804,6 @@
     "video3dTravellers": {"one": "{n} matkustaja", "other": "{n} matkustajaa"},
     "video3dTravellersLabel": "matkustajaa",
     "video3dTripsLabel": "matkaa",
-    "video3dEta": "{t} jäljellä"
+    "video3dEta": "{t} jäljellä",
+    "video3dApply": "Käytä"
 }

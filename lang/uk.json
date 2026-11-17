@@ -1821,5 +1821,6 @@
     "video3dTravellers": {"one": "{n} мандрівник", "few": "{n} мандрівники", "many": "{n} мандрівників", "other": "{n} мандрівника"},
     "video3dTravellersLabel": "мандрівників",
     "video3dTripsLabel": "поїздок",
-    "video3dEta": "залишилось {t}"
+    "video3dEta": "залишилось {t}",
+    "video3dApply": "Застосувати"
 }

@@ -1815,5 +1815,6 @@
     "video3dTravellers": {"one": "{n} Reisende/r", "other": "{n} Reisende"},
     "video3dTravellersLabel": "Reisende",
     "video3dTripsLabel": "Fahrten",
-    "video3dEta": "noch {t}"
+    "video3dEta": "noch {t}",
+    "video3dApply": "Übernehmen"
 }

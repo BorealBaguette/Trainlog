@@ -1821,5 +1821,6 @@
     "video3dTravellers": {"one": "{n} putnik", "few": "{n} putnika", "other": "{n} putnika"},
     "video3dTravellersLabel": "putnika",
     "video3dTripsLabel": "putovanja",
-    "video3dEta": "još {t}"
+    "video3dEta": "još {t}",
+    "video3dApply": "Primijeni"
 }

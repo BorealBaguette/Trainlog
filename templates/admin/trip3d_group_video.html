@@ -41,6 +41,10 @@
   #v-play { background: var(--v-btn); color: var(--v-fg); }
   #v-render { background: var(--v-accent); color: #fff; }
   #v-panel button:disabled { opacity: .5; cursor: default; }
+  /* Options changed but not applied yet, and the button that applies them */
+  #v-panel .v-pending { outline: 2px solid #f0a020; outline-offset: 1px; }
+  #v-apply { background: var(--v-btn); color: var(--v-fg); }
+  #v-apply:not(:disabled) { background: #f0a020; color: #1a1a1a; }
   #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
   #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
   #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
@@ -88,6 +92,7 @@
       <div style="flex:1"><label>{{ video3dMaxSize }}</label>
         <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
     </div>
+    <button id="v-apply" disabled>{{ video3dApply }}</button>
     <button id="v-play">▶ {{ video3dPreview }}</button>
     <button id="v-render">⬇ {{ video3dRender }}</button>
     <div id="v-bar"><div></div></div>
@@ -123,14 +128,10 @@ const TAG_NAME = {{ (tag_description if tag_uuid else none) | tojson }};
 // The background chosen for this page (?bg=, not saved), else the user's own
 const BG = new URLSearchParams(location.search).get('bg');
 const TILESERVER = BG || {{ tileserver | tojson }};
-// Choosing another reloads the page with it: the terrain and the route are laid over the map's
-// style, which a background swap in place would lose
+// Another one reloads the page (on Apply): the terrain and the route are laid over the map's
+// style, which a background swap in place would lose. The length asked for rides along (?len=)
 document.getElementById('v-bg').value = BG || '';
-document.getElementById('v-bg').addEventListener('change', e => {
-  const url = new URL(location.href);
-  if (e.target.value) url.searchParams.set('bg', e.target.value); else url.searchParams.delete('bg');
-  location.href = url.toString();
-});
+const LEN = new URLSearchParams(location.search).get('len');
 const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const DEM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
@@ -916,14 +917,37 @@ async function setup() {
     Object.assign(ov, overview()); Object.assign(ovEnd, overview(true));
     show(0, true);
   };
-  lenSel.addEventListener('change', applySettings);
-  const onFormat = () => {
-    $custom.hidden = sizeSel.value !== 'custom';
+  // The options take effect on Apply, not as they change: those changed are marked until then,
+  // and Apply rebuilds once (or reloads the page, for another background)
+  if (LEN) lenSel.value = LEN;
+  const bgSel = document.getElementById('v-bg'), $apply = document.getElementById('v-apply');
+  const chosen = () => ({ len: lenSel.value, size: sizeSel.value, w: $w.value, h: $h.value, bg: bgSel.value });
+  let applied = chosen();
+  const markPending = () => {
+    const now = chosen(), custom = now.size === 'custom';
+    const changed = { 'v-len': now.len !== applied.len, 'v-size': now.size !== applied.size,
+      'v-w': custom && now.w !== applied.w, 'v-h': custom && now.h !== applied.h, 'v-bg': now.bg !== applied.bg };
+    for (const [id, c] of Object.entries(changed)) document.getElementById(id).classList.toggle('v-pending', c);
+    $apply.disabled = !Object.values(changed).some(Boolean);
+  };
+  for (const el of [lenSel, sizeSel, $w, $h, bgSel]) { el.addEventListener('input', markPending); el.addEventListener('change', markPending); }
+  sizeSel.addEventListener('change', () => { $custom.hidden = sizeSel.value !== 'custom'; });
+  $apply.addEventListener('click', () => {
+    const now = chosen();
+    if (now.bg !== applied.bg) {
+      const url = new URL(location.href);
+      if (now.bg) url.searchParams.set('bg', now.bg); else url.searchParams.delete('bg');
+      if (now.len) url.searchParams.set('len', now.len); else url.searchParams.delete('len');
+      const [w, h] = format();
+      url.hash = `${w}x${h}`;
+      location.href = url.toString();
+      return;
+    }
     applySettings();
     location.hash = `${W}x${H}`;
-  };
-  sizeSel.addEventListener('change', onFormat);
-  $w.addEventListener('change', onFormat); $h.addEventListener('change', onFormat);
+    applied = now;
+    markPending();
+  });
   applySettings();
   status(T.ready, 0);
   uncover();
@@ -1030,6 +1054,7 @@ async function setup() {
       status(fill(T.failed, { e: e.message }));
     } finally {
       buttons.forEach(b => (b.disabled = false));
+      markPending();
       show(0, true);
     }
   });

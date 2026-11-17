@@ -1836,5 +1836,6 @@
     "video3dTravellers": {"one": "{n} podróżny", "few": "{n} podróżnych", "many": "{n} podróżnych", "other": "{n} podróżnego"},
     "video3dTravellersLabel": "podróżnych",
     "video3dTripsLabel": "podróży",
-    "video3dEta": "pozostało {t}"
+    "video3dEta": "pozostało {t}",
+    "video3dApply": "Zastosuj"
 }

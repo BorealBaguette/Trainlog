@@ -1793,5 +1793,6 @@
     "video3dTravellers": {"other": "여행자 {n}명"},
     "video3dTravellersLabel": "여행자",
     "video3dTripsLabel": "여정",
-    "video3dEta": "{t} 남음"
+    "video3dEta": "{t} 남음",
+    "video3dApply": "적용"
 }

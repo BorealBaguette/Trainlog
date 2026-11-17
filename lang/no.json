@@ -1806,5 +1806,6 @@
     "video3dTravellers": {"one": "{n} reisende", "other": "{n} reisende"},
     "video3dTravellersLabel": "reisende",
     "video3dTripsLabel": "reiser",
-    "video3dEta": "{t} igjen"
+    "video3dEta": "{t} igjen",
+    "video3dApply": "Bruk"
 }

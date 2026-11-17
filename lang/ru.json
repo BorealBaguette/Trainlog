@@ -1821,5 +1821,6 @@
     "video3dTravellers": {"one": "{n} путешественник", "few": "{n} путешественника", "many": "{n} путешественников", "other": "{n} путешественника"},
     "video3dTravellersLabel": "путешественников",
     "video3dTripsLabel": "поездок",
-    "video3dEta": "осталось {t}"
+    "video3dEta": "осталось {t}",
+    "video3dApply": "Применить"
 }
