@@ -1070,9 +1070,12 @@ function buildRouteTimelineHtml(wps, route) {
       + (times ? '<small class="rt-time">' + esc(times) + '</small>' : '') + '</li>';
   }
   var last = wps.length - 1;
-  // The trip's own start and end, when it has them: a stop's times win where there are some
+  // The trip's own start and end, when it has them: a stop's times win where there are some.
+  // The form always fills newTripStart from the precise fields, which default to now, so
+  // it only counts when the trip is timed precisely (or comes without a precision).
+  var precise = !newTrip.precision || newTrip.precision === 'preciseDates';
   function tripTime(v, planned) {
-    if (v && v.length === 16) return v.slice(11);
+    if (precise && v && v.length === 16) return v.slice(11);
     return /^\d{1,2}:\d{2}$/.test(planned || '') ? planned : '';
   }
   function toMinutes(t) { var p = t.split(':'); return +p[0] * 60 + +p[1]; }
