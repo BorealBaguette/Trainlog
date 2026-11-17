@@ -8,13 +8,10 @@ from flask import make_response
 # Import these from wherever they currently live in your project
 # Adjust imports to match your structure.
 from src.router_regions import all_in_region
-from src.graphhopper import convert_graphhopper_to_osrm     # example
+from src.graphhopper import convert_graphhopper_to_osrm, decode_polyline
 
-# The new (GraphHopper) rail router. TRAIN_GH_ELEVATION asks it for track heights as
-# well, which only a router imported with elevation answers (any other refuses the
-# request); a test instance can stand in through TRAIN_GH_URL.
+# The new (GraphHopper) rail router; a test instance can stand in through TRAIN_GH_URL.
 TRAIN_GH_URL = os.environ.get("TRAIN_GH_URL", "https://train-gh.srv.trainlog.me").rstrip("/")
-TRAIN_GH_ELEVATION = os.environ.get("TRAIN_GH_ELEVATION", "").lower() in ("1", "true", "yes")
 # road_environment: where the route runs in a tunnel or over a bridge, kept with the trip
 # (src/track_profile.py).
 GH_DETAILS = ["electrified", "distance", "time", "road_environment"]
@@ -60,6 +57,55 @@ def filter_conditions(query):
         gauge = int(get("gauge"))
         conditions.append(f"gauge != 0 && (gauge < {gauge - GAUGE_TOLERANCE} || gauge > {gauge + GAUGE_TOLERANCE})")
     return conditions, max_speed
+
+
+def with_road_environment(data, args):
+    """An OSRM answer with its tunnels as details.road_environment, the shape the rail router
+    gives ([start, end, kind] over the path's points, end shared with the next start), so a
+    saved trip keeps them (src/track_profile.py). OSRM tags the road leaving each junction
+    of its steps with classes, "tunnel" among them; those junctions are placed on the route's
+    points in order. Left as it is without steps or geometry."""
+    def decode(geometry):
+        if isinstance(geometry, dict):
+            return [(lat, lng) for lng, lat in geometry["coordinates"]]
+        return decode_polyline(geometry, precision=6 if "polyline6" in args else 5)
+
+    try:
+        route = data["routes"][0]
+        steps = [step for leg in route["legs"] for step in leg["steps"]]
+        # The points the client draws and saves: the route's overview when it asked for one,
+        # else (the routing machine's overview=false) every step's geometry end to end,
+        # repeated points included, as it joins them
+        if route.get("geometry"):
+            points = decode(route["geometry"])
+        else:
+            points = [p for step in steps for p in decode(step["geometry"])]
+        junctions = [(it["location"], "tunnel" in it.get("classes", []))
+                     for step in steps for it in step.get("intersections", [])]
+    except (KeyError, IndexError, TypeError, ValueError):
+        return data
+    n = len(points)
+    if n < 2 or not junctions:
+        return data
+    kinds = ["road"] * (n - 1)
+    at = 0
+    placed = []
+    for (lng, lat), tunnel in junctions:
+        window = range(at, min(n, at + 500))
+        at = min(window, key=lambda i: (points[i][0] - lat) ** 2 + ((points[i][1] - lng) * 0.5) ** 2)
+        placed.append((at, tunnel))
+    for (i, tunnel), (j, _) in zip(placed, placed[1:] + [(n - 1, False)]):
+        if tunnel:
+            for k in range(i, j):
+                kinds[k] = "tunnel"
+    ranges = []
+    for k, kind in enumerate(kinds):
+        if ranges and ranges[-1][2] == kind:
+            ranges[-1][1] = k + 1
+        else:
+            ranges.append([k, k + 1, kind])
+    route.setdefault("details", {})["road_environment"] = ranges
+    return data
 
 
 def forward_routing_core(routingType, path, flask_request, extra_args=None, use_new_router=None, public_fallback=True):
@@ -182,10 +228,6 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
 
         details = "".join(f"&details={d}" for d in GH_DETAILS)
         full_url = f"{base_url}/route?{point_params}&type=json&profile={gh_profile}{details}"
-        if TRAIN_GH_ELEVATION:
-            # Plain coordinates: the encoded polyline turns three-dimensional with
-            # elevation, which the clients don't read (src/graphhopper.py splits it).
-            full_url += "&elevation=true&points_encoded=false"
         if waypoint_modes:
             full_url += f"&waypoint_modes={waypoint_modes}"
 
@@ -203,9 +245,6 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
             "ch.disable": True,
             "custom_model": {"priority": [{"if": c, "multiply_by": "0"} for c in filters]},
         }
-        if TRAIN_GH_ELEVATION:
-            body["elevation"] = True
-            body["points_encoded"] = False
         if max_speed:
             # limit_to only ever lowers speeds
             body["custom_model"]["speed"] = [{"if": "true", "limit_to": str(max_speed)}]
@@ -217,17 +256,22 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
     TIMEOUT = (3, 8)
 
     # Behavior per type
+    # OSRM routes come with their steps, whose junction classes tell the tunnels
+    def osrm_url(base_url):
+        url = build_url(base_url)
+        return url if "steps=" in url else url + ("&" if "?" in url else "?") + "steps=true"
+
     if routingType == "bus" and not public_fallback:
         try:
-            response = requests.get(build_url(base), timeout=TIMEOUT)
-            return make_response(response.json(), response.status_code)
+            response = requests.get(osrm_url(base), timeout=TIMEOUT)
+            return make_response(with_road_environment(response.json(), args), response.status_code)
         except (requests.RequestException, ValueError) as e:
             return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
 
     if routingType == "bus":
         routers_fallback_base = "https://routing.openstreetmap.de/routed-car"
         try:
-            response = requests.get(build_url(base), timeout=(3, 5))
+            response = requests.get(osrm_url(base), timeout=(3, 5))
             if response.status_code != 200:
                 raise Exception("Non-200 response")
 
@@ -235,11 +279,11 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
             if data.get("status") == "NoRoute":
                 raise Exception("Router responded with NoRoute")
 
-            return make_response(data, return_code)
+            return make_response(with_road_environment(data, args), return_code)
         except Exception:
-            fallback_url = build_url(routers_fallback_base)
+            fallback_url = osrm_url(routers_fallback_base)
             try:
-                return make_response(requests.get(fallback_url, timeout=TIMEOUT).json(), 235)
+                return make_response(with_road_environment(requests.get(fallback_url, timeout=TIMEOUT).json(), args), 235)
             except requests.RequestException as e:
                 return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
 
@@ -256,8 +300,12 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
             return {"code": "NoRoute", "message": "No route matches these filters"}
         return convert_graphhopper_to_osrm(gh_json)
 
-    # All other types: just proxy text
+    # All other types (OSRM routers): their answer, with its tunnels
     try:
-        return requests.get(build_url(base), timeout=TIMEOUT).text
+        response = requests.get(osrm_url(base), timeout=TIMEOUT)
     except requests.RequestException as e:
         return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
+    try:
+        return make_response(with_road_environment(response.json(), args), response.status_code)
+    except ValueError:
+        return response.text

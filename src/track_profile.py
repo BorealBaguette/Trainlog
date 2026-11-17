@@ -1,11 +1,10 @@
-"""Track heights for the 3D trip view, cleaned up from what the rail router returns.
+"""Track heights for the 3D trip view, cleaned up from the ground under the path.
 
-The router (OpenRailRouting with Skadi elevation) gives one height per path point,
-sampled from ~30 m terrain tiles, plus the tunnel/bridge stretches of the route
-(GraphHopper's road_environment detail, as [start index, end index, kind] ranges). Its
-heights are right overall but noisy on open track: a line on a ledge cut into a steep
-valley side samples the slope around it. It also straightens a tunnel only between the
-points where other track joins, so a tunnel with a switch inside comes out bent.
+Each saved path that follows the ground stores the terrain's height at its points
+(src/terrain.py, Mapterhorn) and, when a router drew it, its tunnel/bridge stretches
+(GraphHopper's road_environment detail, or the same read off an OSRM router's steps, as
+[start index, end index, kind] ranges). The ground's heights are right on open track but
+not in a tunnel or on a bridge, which cross under or over it.
 
 So, from those raw inputs:
   1. tunnel and bridge stretches close together are joined into one structure, and each
@@ -13,9 +12,7 @@ So, from those raw inputs:
   2. a route that starts or ends inside a tunnel starts or ends at an underground
      station, set a fixed depth below the ground there (the terrain only knows the
      surface, and OSM does not record depths);
-  3. spikes go (a running median over distance), then the profile is held to the
-     steepest gradient trains of that kind climb, as the midpoint of the tightest
-     profiles that never climb faster than that above and below the heights;
+  3. spikes go (a running median over distance), then a moving average evens the rest;
   4. structures are straightened again between their now smoothed ends.
 """
 
@@ -23,9 +20,8 @@ import json
 from bisect import bisect_left, bisect_right
 from math import asin, cos, radians, sin, sqrt
 
-# Steepest sustained gradient per trip type: adhesion main lines stay under ~4 %, the
-# steepest (Flåmsbana 5.5 %, Bernina 7 %) set the cap. None = no cap (cable-hauled).
-MAX_GRADE = {"train": 0.07, "rail": 0.07, "metro": 0.08, "tram": 0.10, "funicular": None}
+from src.terrain import ground_heights
+
 # Tunnel/bridge runs this close are one structure: a switch or crossover inside a tunnel
 # splits the router's run where untagged track joins.
 JOIN_GAP_M = 60
@@ -33,43 +29,52 @@ JOIN_GAP_M = 60
 UNDERGROUND_END_DEPTH_M = 15
 # Width of the running median that removes single-tile spikes.
 MEDIAN_WINDOW_M = 300
+# Width of the moving average that evens out what is left.
+AVERAGE_WINDOW_M = 150
 
 STRUCTURES = ("tunnel", "bridge")
 
 
-def track_from_details(details, point_count):
-    """(altitude, track_env) JSON strings to store with a path the rail router drew, from
-    the `details` that came with it: `elevation` (one raw height per point, see
-    src/graphhopper.py) and `road_environment`. Each is None unless it fits the saved
-    path: a path the user changed after routing (a freehand stretch, say) no longer has
-    the router's points, and its heights and ranges would land on the wrong places."""
+# Trips whose path follows the ground: they store its heights (src/terrain.py) and, when a
+# router drew them, their tunnel/bridge stretches. Flights keep their recorded altitude.
+TRACK_TYPES = ("train", "tram", "metro", "funicular", "rail", "bus", "car", "walk", "cycle",
+               "scooter", "e_scooter", "ferry", "aerialway", "ski")
+
+
+def track_env_from_details(details, point_count):
+    """The router's tunnel/bridge stretches as a track_env JSON string, from the `details`
+    that came with the path (`road_environment`: the rail router's, or what src/routing.py
+    reads off an OSRM router's steps); None unless they fit the saved path: a path the
+    user changed after routing (a freehand stretch, say) no longer has the router's
+    points, and the ranges would land on the wrong places."""
     if not isinstance(details, dict) or not point_count:
-        return None, None
-    elevation = details.get("elevation")
-    altitude = None
-    if (
-        isinstance(elevation, list)
-        and len(elevation) == point_count
-        and all(isinstance(v, (int, float)) or v is None for v in elevation)
-        and any(v is not None for v in elevation)
-    ):
-        altitude = json.dumps(elevation)
+        return None
     env = details.get("road_environment")
-    track_env = None
     # The router's ranges cover its whole path, so the last one ending on the last point
     # says the saved path still is that path.
-    if isinstance(env, list) and env and isinstance(env[-1], list) and env[-1][1:2] == [point_count - 1]:
-        ranges = []
-        for item in env:
-            if not (isinstance(item, list) and len(item) == 3):
-                return altitude, None
-            start, end, kind = item
-            if not (isinstance(start, int) and isinstance(end, int) and 0 <= start <= end < point_count):
-                return altitude, None
-            if kind in ("tunnel", "bridge", "ferry"):
-                ranges.append([start, end, kind])
-        track_env = json.dumps(ranges)
-    return altitude, track_env
+    if not (isinstance(env, list) and env and isinstance(env[-1], list) and env[-1][1:2] == [point_count - 1]):
+        return None
+    ranges = []
+    for item in env:
+        if not (isinstance(item, list) and len(item) == 3):
+            return None
+        start, end, kind = item
+        if not (isinstance(start, int) and isinstance(end, int) and 0 <= start <= end < point_count):
+            return None
+        if kind in ("tunnel", "bridge", "ferry"):
+            ranges.append([start, end, kind])
+    return json.dumps(ranges)
+
+
+def track_from_route(details, path):
+    """(altitude, track_env) JSON strings to store with a path that follows the ground: the
+    heights the ground has under it (src/terrain.py, the same data the 3D view draws), None
+    when no terrain could be read, and the router's tunnel/bridge stretches, if any.
+    path: the saved points, as {"lat", "lng"} or [lat, lng]."""
+    points = [[p["lat"], p["lng"]] if isinstance(p, dict) else p for p in path]
+    ground = ground_heights(points)
+    altitude = json.dumps(ground) if any(v is not None for v in ground) else None
+    return altitude, track_env_from_details(details, len(points))
 
 
 def cumulative_distances(coords):
@@ -108,7 +113,7 @@ def _straighten(z, dist, runs):
             z[i] = z[s] + (z[e] - z[s]) * t
 
 
-def _fill_gaps(values):
+def fill_gaps(values):
     """Heights with None filled by interpolation along the index, or None if all missing."""
     known = [i for i, v in enumerate(values) if v is not None]
     if not known:
@@ -134,30 +139,23 @@ def _running_median(z, dist, window):
     return out
 
 
-def _grade_limited(z, dist, grade):
-    """Midpoint of the lowest profile never steeper than `grade` that stays above z and
-    the highest that stays below it. Both bounds hold the gradient, so their mean does."""
-    n = len(z)
-    upper, lower = list(z), list(z)
-    for i in range(1, n):
-        step = grade * (dist[i] - dist[i - 1])
-        upper[i] = max(upper[i], upper[i - 1] - step)
-        lower[i] = min(lower[i], lower[i - 1] + step)
-    for i in range(n - 2, -1, -1):
-        step = grade * (dist[i + 1] - dist[i])
-        upper[i] = max(upper[i], upper[i + 1] - step)
-        lower[i] = min(lower[i], lower[i + 1] + step)
-    return [(u + l) / 2 for u, l in zip(upper, lower)]
+def _moving_average(z, dist, window):
+    half = window / 2
+    out = []
+    for d in dist:
+        lo, hi = bisect_left(dist, d - half), bisect_right(dist, d + half)
+        out.append(sum(z[lo:hi]) / (hi - lo))
+    return out
 
 
-def smooth_profile(coords, altitude, env, trip_type):
+def smooth_profile(coords, altitude, env):
     """Cleaned track heights (metres, one per point), or None without usable heights.
 
     coords: [[lat, lng], ...]; altitude: raw heights parallel to coords (None allowed);
     env: road_environment ranges [[start, end, kind], ...] on the same points."""
     if not coords or not altitude or len(altitude) != len(coords):
         return None
-    z = _fill_gaps(altitude)
+    z = fill_gaps(altitude)
     if z is None:
         return None
     dist = cumulative_distances(coords)
@@ -176,9 +174,7 @@ def smooth_profile(coords, altitude, env, trip_type):
     _straighten(z, dist, runs)
 
     z = _running_median(z, dist, MEDIAN_WINDOW_M)
-    grade = MAX_GRADE.get(trip_type, MAX_GRADE["train"])
-    if grade:
-        z = _grade_limited(z, dist, grade)
+    z = _moving_average(z, dist, AVERAGE_WINDOW_M)
     # Smoothing pulls the route's ends towards their neighbours; an underground end
     # keeps its depth.
     for i, v in pinned.items():

@@ -14,7 +14,6 @@ from src.utils import admin_required, getUser, has_current_trip, lang, owner_req
 from .country_shapes import country_shapes_at, country_shapes_json, country_shapes_page
 from .operators import operators_api_blueprint
 from .trainsets import trainsets_admin_blueprint
-from .trip3d import trip3d_json, trip3d_page
 from .wagons import wagons_admin_blueprint
 
 logger = logging.getLogger(__name__)
@@ -121,19 +120,6 @@ def country_shapes_data():
 @owner_required
 def country_shapes_lookup():
     return country_shapes_at()
-
-
-@admin_blueprint.route("/trip3d")
-@admin_blueprint.route("/trip3d/<int:trip_id>")
-@owner_required
-def trip3d(trip_id=None):
-    return trip3d_page(trip_id)
-
-
-@admin_blueprint.route("/trip3d/<int:trip_id>.json")
-@owner_required
-def trip3d_data(trip_id):
-    return trip3d_json(trip_id)
 
 
 @admin_blueprint.route("/station_explorer")

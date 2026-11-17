@@ -187,6 +187,7 @@ from src.api.news import news_blueprint
 from src.sql import news as news_sql
 from src.api.og import og_blueprint, og_image_url, plan_og_image_url
 from src.api.tag_share import tag_share_blueprint
+from src.api.trip3d import trip3d_blueprint
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
@@ -293,7 +294,7 @@ from src.trips import (
     get_current_trip_id,
 )
 from src.paths import Path, coords_to_ewkt, fetch_raw_path, geom_geojson_to_coords
-from src.track_profile import track_from_details
+from src.track_profile import TRACK_TYPES, track_from_route
 from src.trips.freehand_transform import (
     apply_to_trip,
     purge_expired_backups,
@@ -384,6 +385,7 @@ app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
 app.register_blueprint(tag_share_blueprint)
+app.register_blueprint(trip3d_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
@@ -960,12 +962,11 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
 
     user_id = User.query.filter_by(username=username).first().uid
 
-    # The rail router's track heights and tunnel/bridge stretches, when it drew this path
-    # (they come in `details`, see src/graphhopper.py). A caller's own altitude (an FR24
-    # or GPX track) wins.
+    # The ground's heights under a path that follows it and the router's tunnel/bridge
+    # stretches (src/track_profile.py). A caller's own altitude (an FR24 or GPX track) wins.
     track_env = None
-    if trip_type in ("train", "tram", "metro", "funicular", "rail"):
-        route_altitude, track_env = track_from_details(newTrip.get("details"), len(newPath))
+    if trip_type in TRACK_TYPES:
+        route_altitude, track_env = track_from_route(newTrip.get("details"), newPath)
         if altitude is None:
             altitude = route_altitude
 
@@ -4965,6 +4966,16 @@ def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
     )
 
 
+# The trips' video (templates/admin/trip3d_video.html): like the poster, for one's own trips
+@app.route("/public/trip/<tripIds>/video")
+@app.route("/public/tag/<tagId>/video")
+@app.route("/public/ticket/<ticketId>/video")
+def public_trip_video(tripIds=None, tagId=None, ticketId=None):
+    return render_public_trip_page(
+        tripIds, tagId, ticketId, template="admin/trip3d_video.html", owner_only=True
+    )
+
+
 # Pseudo-tags: every trip in a year, month, ISO week or day, matched on local
 # departure time. Nothing is stored — the list is rebuilt on each request, so
 # these pages stay current without cluttering the tag list.
@@ -7714,6 +7725,12 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
     # plain metadata edits, where update_trip's COALESCE preserves the stored one.
     trip.altitude = formData.get("altitude") or None
     trip.timestamps = formData.get("timestamps") or None
+    # A re-drawn path that follows the ground gets its heights and tunnel/bridge stretches
+    # afresh, as a new trip does: the stored ones are about the old path's points
+    trip.track_env = None
+    if "path" in formData and original_trip.type in TRACK_TYPES:
+        route_altitude, trip.track_env = track_from_route(details_parsed, path)
+        trip.altitude = trip.altitude or route_altitude
 
     return trip
 

@@ -80,10 +80,8 @@ var routeTimeDetail = null;
 // the details whose ranges cover exactly its points (pickRouteDetails).
 var recentRouteDetails = [];
 
-// Points a router answer's details are about: their ranges end on its last point, and the
-// heights are one per point.
+// Points a router answer's details are about: their ranges end on its last point.
 function detailsPointCount(details) {
-  if (Array.isArray(details.elevation)) return details.elevation.length;
   var end = -1;
   Object.keys(details).forEach(function(key) {
     var ranges = details[key];
@@ -198,7 +196,7 @@ document.addEventListener('toggle', function (e) {
         if (self._requestUrl.includes('/forwardRouting/bus/')) {
           busRouterCode = self.status;
         }
-        if (self.status === 200) {
+        if (self.status >= 200 && self.status < 300) {  // the bus routers answer 23x
           // Check if this is an OSRM routing request
           try {
             var response = JSON.parse(self.responseText);

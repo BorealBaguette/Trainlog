@@ -1,6 +1,3 @@
-import math
-
-
 def convert_graphhopper_to_osrm(gh_response):
     """Convert GraphHopper response to OSRM format for compatibility"""
     if not gh_response.get('paths'):
@@ -9,25 +6,7 @@ def convert_graphhopper_to_osrm(gh_response):
         return {"code": "NoRoute", "message": gh_response.get("message") or "No route found"}
    
     path = gh_response['paths'][0]
-
-    # With elevation the router is asked for plain coordinates ([lng, lat, height]): its
-    # encoded polyline would turn three-dimensional, which the clients don't read. Encode
-    # them back to the usual 2D polyline and pass the heights on in details.elevation,
-    # one per point, as electrified's ranges are (src/track_profile.py stores them).
-    points = path.get('points')
-    if isinstance(points, dict):
-        coords = points.get('coordinates') or []
-        path['points'] = encode_polyline([(c[1], c[0]) for c in coords])
-        if any(len(c) > 2 for c in coords):
-            if not isinstance(path.get('details'), dict):
-                path['details'] = {}
-            path['details']['elevation'] = [round(c[2], 1) if len(c) > 2 else None for c in coords]
-    snapped = path.get('snapped_waypoints')
-    if isinstance(snapped, dict):
-        path['snapped_waypoints'] = encode_polyline(
-            [(c[1], c[0]) for c in snapped.get('coordinates') or []]
-        )
-
+   
     # Decode the main route polyline
     encoded_points = path.get('points', '')
     
@@ -115,25 +94,6 @@ def convert_graphhopper_to_osrm(gh_response):
     }
    
     return osrm_response
-
-def encode_polyline(coordinates, precision=5):
-    """Encode (lat, lng) pairs as a polyline string, the inverse of decode_polyline.
-    Every point is kept, repeated ones included, so per-point details stay aligned."""
-    factor = 10 ** precision
-    out = []
-    prev_lat = prev_lng = 0
-    for lat, lng in coordinates:
-        # Halves round up, as GraphHopper's encoder (Java's Math.round) does
-        ilat, ilng = math.floor(lat * factor + 0.5), math.floor(lng * factor + 0.5)
-        for delta in (ilat - prev_lat, ilng - prev_lng):
-            value = ~(delta << 1) if delta < 0 else delta << 1
-            while value >= 0x20:
-                out.append(chr((0x20 | (value & 0x1f)) + 63))
-                value >>= 5
-            out.append(chr(value + 63))
-        prev_lat, prev_lng = ilat, ilng
-    return "".join(out)
-
 
 def decode_polyline(encoded, precision=5):
     """Decode a polyline string into a list of lat/lng tuples."""
