@@ -15,6 +15,7 @@ from src.pg import pg_session
 from src.track_profile import TRACK_TYPES, cumulative_distances, fill_gaps, smooth_profile
 from src.trip_selections import parse_trip_ids
 from src.users import User
+from src.api.trainset import public_trainset_info
 from src.utils import get_user_id, getUser, has_current_trip, lang, owner
 
 trip3d_blueprint = Blueprint("trip3d", __name__)
@@ -54,7 +55,10 @@ def timetable_stops(waypoints_json):
 TRIP_QUERY = """
     SELECT t.trip_id, t.user_id, t.origin_station, t.destination_station, t.trip_type,
            t.start_datetime, t.end_datetime, t.utc_start_datetime, t.utc_end_datetime, t.waypoints, t.visibility,
-           ST_AsGeoJSON(p.geom) AS geojson, p.altitude, p.track_env,
+           ST_AsGeoJSON(p.geom) AS geojson, p.altitude, p.track_env, t.line_name, t.material_type,
+           t.material_type_advanced,
+           -- An aircraft's type code as its name ("A20N" → "Airbus A320neo"), as the trip card does
+           (SELECT concat_ws(' ', a.manufacturer, a.model) FROM airliners a WHERE a.iata = t.material_type LIMIT 1) AS airframe_name,
            -- The first operator's logo, the one in use on the trip's day
            (SELECT l.logo_url FROM trip_operators o JOIN operator_logos l ON l.operator_id = o.operator_id
             WHERE o.trip_id = t.trip_id AND l.logo_url IS NOT NULL
@@ -128,6 +132,8 @@ def _payload(row, user=None):
             "end": _local(row["end_datetime"]),
             "utc": [_epoch_ms(row["utc_start_datetime"]), _epoch_ms(row["utc_end_datetime"])],
             "operator_logo": row["operator_logo"],
+            "line": row["line_name"] or None,
+            "vehicle": row["airframe_name"] or row["material_type"] or None,
             "user": user,
         },
         "stops": timetable_stops(row["waypoints"]),
@@ -161,11 +167,17 @@ def trips_video_json(trip_ids):
     rows = sorted(rows, key=lambda r: (r["utc_start_datetime"] or r["start_datetime"] or datetime.min, r["trip_id"]))
     owners = {uid: User.query.filter_by(uid=uid).first() for uid in {row["user_id"] for row in rows}}
     trips = []
-    for row in rows:
-        trip = _payload(row, owners[row["user_id"]].username if owners[row["user_id"]] else None)
-        # The owner's premium membership, shown on their video's Trainlog chip
-        trip["trip"]["premium"] = bool(owners[row["user_id"]] and owners[row["user_id"]].premium)
-        trips.append(trip)
+    with pg_session() as pg:
+        for row in rows:
+            owner_user = owners[row["user_id"]]
+            trip = _payload(row, owner_user.username if owner_user else None)
+            # The owner's premium membership, shown on their video's Trainlog chip
+            trip["trip"]["premium"] = bool(owner_user and owner_user.premium)
+            # The train's cars when its exact composition was saved, as its trip page shows
+            # them (the owner's own trainsets included), with each drawing's credit
+            info = public_trainset_info(pg, row["material_type_advanced"], owner_user.username) if owner_user else None
+            trip["trip"]["units"] = (info or {}).get("units", [])
+            trips.append(trip)
     return jsonify({"trips": trips})
 
 

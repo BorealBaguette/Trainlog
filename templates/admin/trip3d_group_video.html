@@ -66,7 +66,7 @@
       <div style="flex:1"><label>{{ video3dFormat }}</label>
         <select id="v-size" class="form-select form-select-sm">
           <option value="1920x1080" selected>1080p</option><option value="1280x720">720p</option>
-          <option value="1080x1080">{{ video3dSquare }}</option><option value="1080x1920">{{ video3dVertical }}</option>
+          <option value="720x720">{{ video3dSquare }}</option><option value="1080x1920">{{ video3dVertical }}</option>
           <option value="custom">{{ video3dCustom }}</option></select></div>
     </div>
     <div id="v-res" style="color:#9da7b3;font-size:.75rem;margin-top:-4px"></div>
@@ -134,9 +134,9 @@ document.getElementById('v-bg').addEventListener('change', e => {
 const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const DEM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
-// The site's colours per trip type (as on its maps); metro brightened to read on the terrain
-const COLOR = { train: '#52b0fe', tram: '#a2d7ff', metro: '#3d8bff', funicular: '#6495ed', rail: '#7ec8ff',
-  bus: '#9f4bbb', ferry: '#1e1e7c', car: '#a68fcd', cycle: '#6e211a', walk: '#e88c00', aerialway: '#afcf3b', air: '#40b91f', ski: '#b8e6f0' };
+// The site's colours per trip type, from its own list (as on its maps, every type there);
+// metro brightened to read on the terrain
+const COLOR = { ...Object.fromEntries(MapLibreUtils.MapConfig.transportTypes.map(t => [t.id, t.color])), metro: '#3d8bff' };
 const FPS = 30;
 THREE.ColorManagement.enabled = false;
 
@@ -1046,7 +1046,8 @@ function mergeTrips(list) {
     const off = out.coords.length;
     if (i) {
       const prev = list[i - 1], at = prev.coords[prev.coords.length - 1];
-      if (prev.trip.user === t.trip.user) out.stops.push({ name: (prev.trip.destination || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), lng: at[0], lat: at[1],
+      // A change named after where the next trip leaves from (the airport, not the shuttle's stop)
+      if (prev.trip.user === t.trip.user) out.stops.push({ name: (t.trip.origin || prev.trip.destination || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), lng: at[0], lat: at[1],
         arr: prev.trip.end?.slice(-5), dep: t.trip.start?.slice(-5), major: true, transfer: true });
       out.gaps.push(off - 1);
     }

@@ -66,7 +66,7 @@
       <div style="flex:1"><label>{{ video3dFormat }}</label>
         <select id="v-size" class="form-select form-select-sm">
           <option value="1920x1080" selected>1080p</option><option value="1280x720">720p</option>
-          <option value="1080x1080">{{ video3dSquare }}</option><option value="1080x1920">{{ video3dVertical }}</option>
+          <option value="720x720">{{ video3dSquare }}</option><option value="1080x1920">{{ video3dVertical }}</option>
           <option value="custom">{{ video3dCustom }}</option></select></div>
     </div>
     <div id="v-res" style="color:#9da7b3;font-size:.75rem;margin-top:-4px"></div>
@@ -106,7 +106,7 @@ import * as THREE from 'three';
 const T = {{ {'tunnel': video3dTunnel, 'bridge': video3dBridge, 'altitude': video3dAltitude, 'distance': video3dDistance,
   'highest': video3dHighest, 'cruise': video3dCruise, 'descent': video3dDescent, 'climb': video3dClimb,
   'ready': video3dReady, 'terrain': video3dTerrain, 'rendering': video3dRendering,
-  'done': video3dDone, 'eta': video3dEta, 'preview': video3dPreview, 'failed': video3dFailed, 'auto': video3dAuto, 'stops': motisStops, 'tunnels': video3dTunnels,
+  'done': video3dDone, 'eta': video3dEta, 'licensedToTrainlog': licensedToTrainlog, 'preview': video3dPreview, 'failed': video3dFailed, 'auto': video3dAuto, 'stops': motisStops, 'tunnels': video3dTunnels,
   'transfers': video3dTransfers, 'inTunnels': video3dInTunnels} | tojson }};
 const LANG = {{ (langId or 'en') | tojson }};
 // A premium member's videos say so under the name, with the site's premium gem: the trips'
@@ -135,6 +135,45 @@ document.getElementById('v-bg').addEventListener('change', e => {
 const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
+// The train's cars, as its trip page draws them (static/js/wagon_img.js), and their credits
+const WAGONS = {{ url_for('static', filename='images/wagons') | tojson }};
+const wagonSrc = u => {
+  const ext = u.image_ext || 'gif', side = u._side || 'L', t = u.image_type;
+  if (t === 'sides') return `${WAGONS}/${u.image}${side === 'R' ? '_R' : '_L'}.${ext}`;
+  if (t === 'sides_L' || t === 'sides_R') return `${WAGONS}/${u.image}_${t.slice(-1)}.${ext}`;
+  return `${WAGONS}/${u.image}.${ext}`;
+};
+const wagonImages = {};
+const wagonImage = u => {
+  if (!u.image) return null;
+  const src = wagonSrc(u);
+  if (!wagonImages[src]) {
+    const img = wagonImages[src] = new Image();
+    img.onload = () => { img.ready = true; };
+    img.onerror = () => { img.failed = true; };
+    img.src = src;
+  }
+  return wagonImages[src];
+};
+// "© names (licence) · source", grouped by licence, as the trip page credits a composition;
+// an author given as a Trainlog or wiki user page shown by name
+const authorName = a => (a.match(/^https?:\/\/[^/]+\/public\/(.+)$/) || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i) || [, a])[1];
+const wagonCredit = units => {
+  const order = [], byLicense = {}, sources = [];
+  for (const u of units) {
+    if (u.source && !sources.includes(u.source)) sources.push(u.source);
+    if (!u.author && !u.license) continue;
+    const lic = u.license || '';
+    if (!byLicense[lic]) { order.push(lic); byLicense[lic] = []; }
+    for (const part of (u.author || '').split(',').map(x => x.trim().replace(/^\/+|\/+$/g, '')).filter(Boolean))
+      if (!byLicense[lic].includes(authorName(part))) byLicense[lic].push(authorName(part));
+  }
+  const parts = order.map(lic => {
+    const names = byLicense[lic].join(', '), label = lic === 'TRAINLOG_LICENSED' ? T.licensedToTrainlog : lic;
+    return names && label ? `© ${names} (${label})` : names ? `© ${names}` : label;
+  });
+  return [...parts, ...sources].join(' · ');
+};
 const STATIC = {{ url_for('static', filename='') | tojson }};
 // The operators' logos, as the site shows them
 const operatorLogos = {};
@@ -164,9 +203,9 @@ const flagImage = code => {
   return flagImages[code].ready ? flagImages[code] : null;
 };
 const DEM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
-// The site's colours per trip type (as on its maps); metro brightened to read on the terrain
-const COLOR = { train: '#52b0fe', tram: '#a2d7ff', metro: '#3d8bff', funicular: '#6495ed', rail: '#7ec8ff',
-  bus: '#9f4bbb', ferry: '#1e1e7c', car: '#a68fcd', cycle: '#6e211a', walk: '#e88c00', aerialway: '#afcf3b', air: '#40b91f', ski: '#b8e6f0' };
+// The site's colours per trip type, from its own list (as on its maps, every type there);
+// metro brightened to read on the terrain
+const COLOR = { ...Object.fromEntries(MapLibreUtils.MapConfig.transportTypes.map(t => [t.id, t.color])), metro: '#3d8bff' };
 const FPS = 30;
 THREE.ColorManagement.enabled = false;
 
@@ -221,11 +260,11 @@ map.setSky({ 'sky-color': '#7fb2e6', 'horizon-color': '#e9eef4', 'fog-color': '#
 
 const logo = new Image();
 logo.src = LOGO;
-// An image halved step by step down to the size drawn (tinted if asked): one drawImage straight
+// An image halved step by step down to the size drawn (inverted if asked): one drawImage straight
 // from 900 px to ~170 px skips most source pixels and leaves the edges jagged
 const shrunk = {};
-function shrink(img, w, tint) {
-  const key = `${img.src || img.id} ${w} ${tint}`;
+function shrink(img, w, invert = false) {
+  const key = `${img.src || img.id} ${w} ${invert}`;
   if (shrunk[key]) return shrunk[key];
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
   let src = img, sw = iw, sh = ih;
@@ -240,7 +279,13 @@ function shrink(img, w, tint) {
   const g = out.getContext('2d');
   g.imageSmoothingQuality = 'high';
   g.drawImage(src, 0, 0, out.width, out.height);
-  if (tint) { g.globalCompositeOperation = 'source-in'; g.fillStyle = tint; g.fillRect(0, 0, out.width, out.height); }
+  // Inverted for a dark background: black turns white and white black, so the white details
+  // drawn inside an icon (a car's windows) stay visible rather than vanishing in a white fill
+  if (invert) {
+    const px = g.getImageData(0, 0, out.width, out.height), v = px.data;
+    for (let i = 0; i < v.length; i += 4) { v[i] = 255 - v[i]; v[i + 1] = 255 - v[i + 1]; v[i + 2] = 255 - v[i + 2]; }
+    g.putImageData(px, 0, 0);
+  }
   return (shrunk[key] = out);
 }
 // The trip types' icons, for the station chip
@@ -274,7 +319,10 @@ async function setup() {
   const total = dist[last] || 1;
   const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
   const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
-    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo }));
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo, line: t.line, vehicle: t.vehicle, units: t.units }));
+  tripSpans.forEach(t => t.units.forEach(wagonImage));
+  // Every drawing the video shows, for the end card's credits
+  const allUnits = tripSpans.flatMap(t => t.units);
   tripSpans.forEach(t => operatorLogo(t.logo));
   tripSpans.forEach(t => t.flags.forEach(flagImage));
   data.countries.forEach(([, c]) => flagImage(c));
@@ -713,7 +761,7 @@ async function setup() {
     // The view spans about 6 s of travel at that leg's own speed (at least 500 m): a walk
     // between two trains is seen up close, the trains from further out
     zm = movingAverage(ss.map((s, i) => chaseZoom(s)
-      + Math.min(16, Math.max(9, Math.log2(40075016 * cosLat / (512 * Math.max(500, 6 * sp[i]) / W))))), GT, 5);
+      + Math.min(16, Math.max(3, Math.log2(40075016 * cosLat / (512 * Math.max(500, 6 * sp[i]) / W))))), GT, 5);
     // A second pass of each: the two make a gentle bell rather than a box, so turns start
     // and end without a kink
     [cLng, cLat] = [movingAverage(cLng, GT, 3.5), movingAverage(cLat, GT, 3.5)];
@@ -728,7 +776,9 @@ async function setup() {
         far = Math.max(far, Math.hypot((pos[j].lng - cLng[i]) * cosLat, pos[j].lat - cLat[i]) * 111320);
       return Math.log2(40075016 * cosLat / (512 * Math.max(1, 3 * far) / W));
     });
-    const capped = zm.map((z, i) => Math.max(9, Math.min(z, need[i])));
+    // No floor at zoom 9 any more: a small frame covers fewer pixels, and a fast flight in it
+    // needs a wider view than that to stay in
+    const capped = zm.map((z, i) => Math.max(3, Math.min(z, need[i])));
     zm = movingAverage(movingAverage(runningMin(capped, GT, 4), GT, 2), GT, 2);
     // The height the camera looks at, over about 10 s, so it only drifts with the big climbs
     // and descents instead of bobbing over every bump
@@ -1066,6 +1116,65 @@ async function setup() {
       g2.globalAlpha = 1;
     }
 
+    // The train itself, when its exact composition was saved: its cars to scale, right-aligned
+    // above the profile strip, with their credit; only in a frame wide enough for it (1280 px)
+    const now = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
+    if (W >= 1280 && now.units.length && f.title < 0.99 && f.card < 0.99) {
+      // Drawn once each car's picture has loaded or failed to; a car without one (no drawing,
+      // or its file missing) is drawn as a plain car of typical length, so the train keeps its
+      // true length
+      const states = now.units.map(c => ({ c, img: wagonImage(c) }));
+      const cars = states.every(x => !x.img || x.img.ready || x.img.failed)
+        ? states.map(x => (x.img && x.img.ready ? x : { c: x.c, img: null })) : [];
+      if (cars.length) {
+        // On one scale in metres (10 px a metre for drawings without their own), a car about
+        // 34 px tall, smaller to fit the width of the profile strip under it, but never under
+        // about 22 px: a longer train shows from its front and fades out towards its back
+        // A car's length and height in metres: from its drawing, else a 20 m coach 3.6 m high
+        const dims = ({ c, img }) => (img ? [img.naturalWidth / (c.px_per_meter || 10), img.naturalHeight / (c.px_per_meter || 10)] : [20, 3.6]);
+        const metres = cars.reduce((a, car) => a + dims(car)[0], 0);
+        const room = W - 2 * pad, perMetre = Math.max(22 * u / 4, Math.min(34 * u / 4, room / metres));
+        const sizes = cars.map(car => ({ img: car.img, w: dims(car)[0] * perMetre, h: dims(car)[1] * perMetre }));
+        const trainW = sizes.reduce((a, x) => a + x.w, 0), shownW = Math.min(trainW, room);
+        const trainH = Math.max(...sizes.map(x => x.h));
+        // Drawn apart, so the fade at a cut-off back touches nothing else
+        const strip = document.createElement('canvas');
+        strip.width = Math.ceil(shownW); strip.height = Math.ceil(trainH);
+        const sg = strip.getContext('2d');
+        let x = 0;
+        for (const { img, w, h } of sizes) {
+          if (x >= shownW) break;
+          if (img) {
+            // Pixel art kept crisp when drawn larger, smoothed when smaller
+            sg.imageSmoothingEnabled = h < img.naturalHeight;
+            sg.drawImage(img, x, trainH - h, w, h);
+          } else {
+            sg.beginPath(); sg.roundRect(x + 1, trainH - h, w - 2, h * 0.9, h * 0.15);
+            sg.fillStyle = 'rgba(205,212,220,0.95)'; sg.fill();
+          }
+          x += w;
+        }
+        if (trainW > shownW) {
+          const fade = Math.min(120 * u, shownW / 3), grad = sg.createLinearGradient(shownW - fade, 0, shownW, 0);
+          grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,1)');
+          sg.globalCompositeOperation = 'destination-out'; sg.fillStyle = grad; sg.fillRect(shownW - fade, 0, fade, trainH);
+        }
+        const bottom = H - pad - 128 * u - 14 * u, top = bottom - trainH;
+        g2.globalAlpha = (1 - f.title) * (1 - f.card);
+        g2.save(); g2.shadowColor = 'rgba(0,0,0,0.45)'; g2.shadowBlur = 6 * u; g2.shadowOffsetY = 2 * u;
+        g2.drawImage(strip, Math.round(W - pad - shownW), Math.round(top));
+        g2.restore();
+        const credit = wagonCredit(now.units);
+        if (credit) {
+          g2.font = font(500, 13); g2.textAlign = 'right'; g2.textBaseline = 'alphabetic'; g2.fillStyle = 'rgba(255,255,255,0.85)';
+          g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
+          g2.fillText(credit, W - pad, top - 6 * u);
+          g2.shadowBlur = 0; g2.textAlign = 'left';
+        }
+        g2.globalAlpha = 1;
+      }
+    }
+
     // Stations: only those the video halts at (with the ends and connections), each shown on
     // the journey's clock rather than by distance, so nothing pops with a change of speed: in
     // over 0.8 s from 4 s before the train reaches it, out 1.5 s after it leaves. Its label
@@ -1098,7 +1207,7 @@ async function setup() {
           const b = 30 * u;
           roundRect(p.x - b / 2, p.y - b / 2, b, b, 8 * u); g2.fillStyle = COLOR[typeAfter(st)] || color; g2.fill();
           g2.lineWidth = 3 * u; g2.strokeStyle = '#fff'; g2.stroke();
-          const iw = Math.round(20 * u), img = shrink(icon, iw, '#ffffff');
+          const iw = Math.round(20 * u), img = shrink(icon, iw, true);
           g2.drawImage(img, Math.round(p.x - iw / 2), Math.round(p.y - img.height / 2));
         } else {
           g2.beginPath(); g2.arc(p.x, p.y, 8 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
@@ -1162,7 +1271,7 @@ async function setup() {
       // A station shows the icon of the trip leaving it (arriving, at the last)
       const icon = chipFor.stop && typeIcon(typeAfter(chipFor.stop));
       if (icon) {
-        const iw = Math.round(28 * u), img = shrink(icon, iw, change ? '#ffffff' : '#141a22');
+        const iw = Math.round(28 * u), img = shrink(icon, iw, change);
         g2.drawImage(img, Math.round(cx + 24 * u - iw / 2), Math.round(cy + ch / 2 - img.height / 2));
       } else chipIcon(chipFor.stop ? 'station' : inT ? 'tunnel' : 'bridge', cx + 24 * u, cy + ch / 2, 9 * u);
       g2.fillStyle = dark || change ? '#fff' : '#141a22'; g2.textBaseline = 'middle'; g2.fillText(label, cx + (chipFor.stop ? 46 : 40) * u, cy + ch / 2 + 1);
@@ -1179,7 +1288,7 @@ async function setup() {
       // The type icon beside the title, and under them one line: the flag (in the icon's
       // column), the operator's logo on a light chip (the logos are made for a white page),
       // then the time; the line starts below the icon, however tall the icon is
-      const icon = cornerIcon && shrink(cornerIcon, iconW, '#ffffff');
+      const icon = cornerIcon && shrink(cornerIcon, iconW, true);
       const iy = icon ? Math.round(pad + 30 * u - corner.px * u * 0.8 - (icon.height - corner.px * u) / 2) : 0;
       if (icon) g2.drawImage(icon, Math.round(pad), iy);
       const trip = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
@@ -1219,6 +1328,22 @@ async function setup() {
       // The time keeps the title's shadow, to read over any map
       g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
       if (clock) { g2.font = font(700, 30); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fillText(clock, clockX, below); }
+      // Then the line and the vehicle (a flight's aircraft by name), dimmer, cut short to fit
+      const extra = [trip.line, trip.vehicle].filter(Boolean).join(' · ');
+      if (extra) {
+        g2.font = font(700, 30);
+        // The same space either side of the separating dot
+        const gap = 9 * u, base = clockMid + 22 * u * 0.36;
+        let after = clockX + (clock ? g2.measureText(clock).width + gap : 0);
+        g2.font = font(600, 22); g2.fillStyle = 'rgba(255,255,255,0.78)';
+        if (clock) { g2.fillText('·', after, base); after += g2.measureText('·').width + gap; }
+        const room = W * 0.5 - after;
+        let text = extra;
+        while (text.length > 2 && g2.measureText(text).width > room) text = text.slice(0, -2).trimEnd() + '…';
+        // Centred on the time's digits, as the flag and the logo are (its own digits stand
+        // about 0.36 of its size above its baseline)
+        if (room > 30 * u) g2.fillText(text, after, base);
+      }
       g2.shadowBlur = 0; g2.globalAlpha = 1;
     }
     if (f.title > 0.01) {
@@ -1264,6 +1389,19 @@ async function setup() {
         g2.font = font(800, 40); g2.fillStyle = '#fff'; g2.fillText(v, x, cy + 182 * u);
         g2.font = font(500, 19); g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.fillText(l, x, cy + 215 * u);
       });
+      // The credits of every train drawing shown, under the card, wrapped over a few lines
+      const credits = W >= 1280 && wagonCredit(allUnits);
+      if (credits) {
+        g2.font = font(500, 14); g2.fillStyle = 'rgba(255,255,255,0.8)';
+        g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
+        const lines = [];
+        for (const word of credits.split(' ')) {
+          const line = lines.length ? `${lines[lines.length - 1]} ${word}` : word;
+          if (lines.length && g2.measureText(line).width <= cw) lines[lines.length - 1] = line; else lines.push(word);
+        }
+        lines.slice(0, 4).forEach((l, i) => g2.fillText(l, W / 2, cy + ch + (28 + i * 20) * u));
+        g2.shadowBlur = 0;
+      }
       g2.textAlign = 'left'; g2.globalAlpha = 1;
     }
     // Trainlog and the map's credits, always
@@ -1482,7 +1620,8 @@ function mergeTrips(list) {
     const off = out.coords.length;
     if (i) {
       const prev = list[i - 1], at = prev.coords[prev.coords.length - 1];
-      out.stops.push({ name: (prev.trip.destination || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), lng: at[0], lat: at[1],
+      // A change named after where the next trip leaves from (the airport, not the shuttle's stop)
+      out.stops.push({ name: (t.trip.origin || prev.trip.destination || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), lng: at[0], lat: at[1],
         arr: prev.trip.end?.slice(-5), dep: t.trip.start?.slice(-5), major: true, transfer: true, at: off - 1 });
       out.gaps.push(off - 1);
     }
@@ -1498,7 +1637,7 @@ function mergeTrips(list) {
     out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
       name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
       real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)],
-      logo: t.trip.operator_logo });
+      logo: t.trip.operator_logo, line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [] });
   });
   return out;
 }
