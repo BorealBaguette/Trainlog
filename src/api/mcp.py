@@ -37,6 +37,7 @@ from flask.sessions import SecureCookieSession
 from werkzeug.exceptions import HTTPException
 
 from src.api import mcp_form as form
+from src.api import mcp_wagons
 from src.api.motis import TRANSIT_MODES, departures_payload
 from src.consts import TripTypes
 from src.currency import get_available_currencies
@@ -316,8 +317,8 @@ def _trip_write_schema(plan=False, update=False):
     return props
 
 
-def _build_tools() -> list:
-    return [
+def _build_tools(user) -> list:
+    return (mcp_wagons.TOOLS if mcp_wagons.allowed(user) else []) + [
         # ── lookups ─────────────────────────────────────────────────────────
         {
             "name": "search_stations",
@@ -1362,6 +1363,8 @@ def _call_tool(name: str, args: dict, user) -> str:
         return out(_search_wagons(args))
     if name == "list_tags":
         return out(_list_tags(user))
+    if name in mcp_wagons.NAMES and mcp_wagons.allowed(user):
+        return out(mcp_wagons.call(name, args))
     if name == "list_tickets":
         return out(_list_tickets(user))
     if name == "list_friends":
@@ -1661,7 +1664,7 @@ MAX_BATCH = 20
 DESTRUCTIVE_TOOLS = {
     "delete_trip", "update_trip", "delete_plan", "update_plan", "delete_plan_trip",
     "update_plan_trip", "delete_plan_cost", "update_plan_cost", "import_trips_to_plan",
-}
+} | mcp_wagons.DESTRUCTIVE
 IDEMPOTENT_TOOLS = {"reorder_plan_trips", "assign_trip_cost", "update_plan", "update_plan_cost"}
 
 
@@ -1714,7 +1717,7 @@ def _handle_rpc(msg: dict, user) -> dict | None:
         return ok({})
 
     if method == "tools/list":
-        return ok({"tools": [{**t, "annotations": _annotations(t["name"])} for t in _build_tools()]})
+        return ok({"tools": [{**t, "annotations": _annotations(t["name"])} for t in _build_tools(user)]})
 
     if method == "tools/call":
         params = msg.get("params", {})
