@@ -466,7 +466,9 @@ async function setup() {
       if (dd < bestD) { bestD = dd; best = k; }
     }
     if (bestD < 500 && (!stops.length || d[best] > stops[stops.length - 1].d)) {
-      stops.push({ ...st, d: d[best], name: (st.name || '').replace(/\s+(stasjon|station|holdeplass)$/i, '') });
+      // Drawn on the line where the train halts, not at the timetable's own point for the
+      // stop (a station's centre or entrance, up to 500 m off the track)
+      stops.push({ ...st, lng: S[best].lng, lat: S[best].lat, d: d[best], name:(st.name || '').replace(/\s+(stasjon|station|holdeplass)$/i, '') });
     }
   }
   // The departure and arrival stations too, for the markers, ticks and chips (the journey
