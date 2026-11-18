@@ -129,17 +129,13 @@
         text-decoration: none;
     }
 
-    /* Trainset strip (MLG images) */
-    .ts-strip { gap: 2px; }
+    /* Trainset strip (MLG images): no gap, the cars of a rake touch */
+    .ts-strip { gap: 0; }
     /* Compact strips (several sets on one page — the wagon-artist leaderboard) */
     .compo-container.compo-compact { padding: 10px 8px; border-radius: 6px; }
-    .compo-compact .ts-strip { gap: 0; }
     /* Smaller type, but keep the pill's side padding — text flush against the
        background edge reads as clipped. */
     .compo-compact .ts-nom { font-size: 0.52rem; padding: 1px 4px; }
-    /* Public views draw the cars smaller (normalizeStrip target ~20px), where a 2px
-       gap reads as a visible break in the rake — tighten it to 1px. */
-    .publicTrainset .ts-strip { gap: 1px; }
     .ts-unit img { max-height: 70px; image-rendering: pixelated; display: block; }
     /* A car's column must be exactly as wide as its image, so the images touch and
        read as one train — a rake has no gaps between its cars. In flow, a name wider
