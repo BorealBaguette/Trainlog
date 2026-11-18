@@ -1206,6 +1206,18 @@ async function setup() {
     g2.restore();
   }
   const labelSide = new Map();
+  // A point of the line on screen, at the height it is drawn at and through the matrix three.js
+  // drew it with (map.project put it on MapLibre's own ground, off our lifted, smoothed line)
+  const lineOnScreen = s => {
+    const c = Math.max(0, Math.min(total, s));
+    let k = Math.max(0, d.findIndex(v => v > c) - 1);
+    if (c >= total || k > P.length - 2) k = P.length - 2;
+    const t = Math.max(0, Math.min(1, (c - d[k]) / ((d[k + 1] - d[k]) || 1)));
+    const v = new THREE.Vector3(lerp(P[k][0], P[k + 1][0], t), lerp(P[k][1], P[k + 1][1], t), lerp(P[k][2], P[k + 1][2], t))
+      .applyMatrix4(camera.projectionMatrix);
+    return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H };
+  };
+
   function drawHud(f) {
     g2.clearRect(0, 0, W, H);
     const pad = 44 * scale, u = scale;
@@ -1360,7 +1372,7 @@ async function setup() {
       for (const st of stationTimes.keys()) {
         const a = stationAlpha(st);
         if (a <= 0) { labelSide.delete(st); continue; }
-        visible.push({ st, a, p: map.project([st.lng, st.lat]) });
+        visible.push({ st, a, p: lineOnScreen(st.d) });
       }
       // Clipped above the profile strip
       g2.save();
@@ -1385,7 +1397,7 @@ async function setup() {
         // The side picked once, across from the route: beside a line running up the screen,
         // above one running across it
         if (!labelSide.has(st)) {
-          const q = map.project(pointAt(st.d + 300)), r = map.project(pointAt(st.d - 300));
+          const q = lineOnScreen(st.d + 300), r = lineOnScreen(st.d - 300);
           const across = Math.abs(q.x - r.x) > Math.abs(q.y - r.y);
           labelSide.set(st, across ? 'above' : (q.x + r.x) / 2 > p.x ? 'left' : 'right');
         }
@@ -1625,6 +1637,9 @@ async function setup() {
     // the profile strip, so the train never runs under the strip
     map.jumpTo({ ...f.cam, padding: { top: 120 * scale, bottom: stripRoom * scale, left: 0, right: 0 } });
     drawRoute(f.s, f.headOn, metresPerPx(f.cam.zoom), f.whole);
+    // Drawn now, so the markers are placed with this frame's camera, not the last one's (they
+    // lagged behind the line and slid off it as the camera moved)
+    map.redraw();
     drawHud(f);
     return f;
   }
