@@ -212,7 +212,9 @@ def arc_trips_api(username):
 
 
 # IATA city codes of the cities served by several airports, for the airport graph's optional
-# "group by city". Only groupings IATA itself makes (Beauvais is Paris, Newark is New York).
+# "group by city". Expanded to include some gaps in IATA's scheme. Not totally comprehensive
+# but should cover the vast majority of use cases. Uses the code of the largest airport when
+# an IATA code does not exist.
 IATA_CITY_CODES = {
     "PAR": ("Paris", ["CDG", "ORY", "BVA", "LBG"]),
     "LON": ("London", ["LHR", "LGW", "STN", "LTN", "LCY", "SEN"]),
@@ -220,7 +222,7 @@ IATA_CITY_CODES = {
     "WAS": ("Washington", ["IAD", "DCA", "BWI"]),
     "CHI": ("Chicago", ["ORD", "MDW"]),
     "HOU": ("Houston", ["IAH", "HOU"]),
-    "DFW": ("Dallas", ["DFW", "DAL"]),
+    "DFW": ("Dallas", ["DFW", "DAL", "DTX"]),
     "YTO": ("Toronto", ["YYZ", "YTZ"]),
     "MEX": ("Mexico City", ["MEX", "NLU"]),
     "SAO": ("São Paulo", ["GRU", "CGH", "VCP"]),
@@ -247,6 +249,24 @@ IATA_CITY_CODES = {
     "TPE": ("Taipei", ["TPE", "TSA"]),
     "BKK": ("Bangkok", ["BKK", "DMK"]),
     "JKT": ("Jakarta", ["CGK", "HLP"]),
+    "YMQ": ("Montreal", ["YUL", "YHU", "YMX"]), 
+    "KUL": ("Kuala Lumpur", ["KUL", "SZB"]), 
+    "SIN": ("Singapore", ["SIN", "XSP"]), 
+    "IGU": ("Iguazu", ["IGU", "IGR"]), 
+    "CTU": ("Chengdu", ["CTU", "TFU"]), 
+    "WAW": ("Warsaw", ["WAW", "WMI"]), 
+    "MIA": ("Miami", ["MIA", "FLL", "OPF", "FXE"]),
+    "ORL": ("Orlando", ["MCO", "SFB", "ORL"]),
+    "LAX": ("Los Angeles", ["LAX", "BUR", "LGB", "SNA", "ONT"]),
+    "SFO": ("San Francisco", ["SFO", "OAK", "SJC"]),
+    "SYD": ("Sydney", ["SYD", "WSI"]),
+    "MEL": ("Melbourne", ["MEL", "MEB", "AVV"]),
+    "BFS": ("Belfast", ["BFS", "BHD"]),
+    "GLA": ("Glasgow", ["GLA", "PIK"]),
+    "VCE": ("Venice", ["VCE", "TSF"]),
+    "BOM": ("Mumbai", ["BOM", "NMI"]),
+    "JNB": ("Johannesburg", ["JNB", "HLA"]),
+    "THR": ("Tehran", ["THR", "IKA"]),
 }
 _CITY_OF_AIRPORT = {iata: city for city, (_, members) in IATA_CITY_CODES.items() for iata in members}
 
