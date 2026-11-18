@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
+from flask import current_app, jsonify, request
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.datastructures import FileStorage
 
 from src.api.admin import wagons as admin
@@ -20,6 +22,7 @@ from src.utils import external_url, owner
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 SNAPSHOT_ROOT = Path("backup/mcp/wagons")
+UPLOAD_TTL = 3600
 
 _IMAGE_DESC = "GIF/PNG as base64 (a data: URI is fine) or an http(s) URL to fetch."
 
@@ -82,8 +85,29 @@ TOOLS = [
         },
     },
     {
+        "name": "upload_wagon_image",
+        "description": (
+            "Preferred way to set a wagon's image from a file you have: returns a URL, "
+            "valid one hour, to send the GIF/PNG to with an HTTP PUT (e.g. `curl -T "
+            "file.gif <url>`) from your sandbox, so the image never has to be written out "
+            "in a tool call. Side 'L' or 'R' for a side view, '' for a plain image. "
+            "If the sandbox can't reach the URL, use set_wagon_image instead."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "wagon": {"type": "string"},
+                "side": {"type": "string", "enum": ["", "L", "R"]},
+            },
+            "required": ["wagon", "side"],
+        },
+    },
+    {
         "name": "set_wagon_image",
-        "description": "Replace a wagon drawing's image: side 'L' or 'R' for a side view, '' for a plain image.",
+        "description": (
+            "Replace a wagon drawing's image: side 'L' or 'R' for a side view, '' for a "
+            "plain image. Takes the image inline, so prefer upload_wagon_image for files."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -179,20 +203,47 @@ def _snapshot(tool, wname):
     return folder
 
 
-def call(name, args):
-    if name not in DESTRUCTIVE:
-        return _call(name, args)
-    folder = _snapshot(name, args.get("wagon"))
+def _snapshotted(tool, wname, change):
+    folder = _snapshot(tool, wname)
     try:
-        return _call(name, args)
+        return change()
     except Exception:
         # Nothing changed, so nothing to recover.
         shutil.rmtree(folder, ignore_errors=True)
         raise
 
 
-def _call(name, args):
+def _signer():
+    return URLSafeTimedSerializer(current_app.secret_key, salt="mcp-wagon-image")
 
+
+def upload(token):
+    """PUT/POST target of upload_wagon_image's URL; the signed token is the auth."""
+    try:
+        target = _signer().loads(token, max_age=UPLOAD_TTL)
+    except BadSignature:
+        return jsonify({"error": "invalid or expired upload URL"}), 403
+    f = request.files.get("file")
+    data = f.read() if f else request.get_data()
+    if not data:
+        return jsonify({"error": "empty body"}), 400
+    if len(data) > MAX_IMAGE_BYTES:
+        return jsonify({"error": "image is larger than 5 MB"}), 413
+    try:
+        saved = _snapshotted("upload_wagon_image", target["w"], lambda: admin.replace_image(
+            target["w"], target["s"], FileStorage(io.BytesIO(data), filename="upload")))
+    except (ValueError, LookupError) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(saved)
+
+
+def call(name, args):
+    if name in DESTRUCTIVE:
+        return _snapshotted(name, args.get("wagon"), lambda: _call(name, args))
+    return _call(name, args)
+
+
+def _call(name, args):
     if name == "get_wagon":
         return _get(args.get("wagon"))
 
@@ -225,6 +276,15 @@ def _call(name, args):
         if not admin.apply_updates(wname, admin.clean_updates(fields)):
             raise ValueError("Wagon not found.")
         return _get(wname)
+
+    if name == "upload_wagon_image":
+        wname, side = args.get("wagon"), (args.get("side") or "").upper()
+        if side not in ("", "L", "R"):
+            raise ValueError("side must be '', 'L' or 'R'")
+        _get(wname)
+        url = external_url("mcp.wagon_image_upload",
+                           token=_signer().dumps({"w": wname, "s": side}))
+        return {"url": url, "expires_in_s": UPLOAD_TTL, "example": f"curl -fsS -T image.gif '{url}'"}
 
     if name == "set_wagon_image":
         side = (args.get("side") or "").upper()

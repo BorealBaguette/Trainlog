@@ -1743,6 +1743,11 @@ def _handle_rpc(msg: dict, user) -> dict | None:
 # ── Flask route ───────────────────────────────────────────────────────────────
 
 
+@blueprint.route("/wagon-image/<token>", methods=["PUT", "POST"])
+def wagon_image_upload(token):
+    return mcp_wagons.upload(token)
+
+
 @blueprint.route("", methods=["POST"])
 def handle():
     user = _auth()
