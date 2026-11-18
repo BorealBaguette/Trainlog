@@ -4,7 +4,7 @@ gave when they were saved (paths.altitude and paths.track_env, see src/track_pro
 the poster, only the viewer's own trips."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, abort, jsonify, render_template, request, session, url_for
@@ -26,10 +26,26 @@ def _local(value):
     return value.strftime("%Y-%m-%dT%H:%M") if isinstance(value, datetime) else None
 
 
-def timetable_stops(waypoints_json):
+def delay_at(row):
+    """The trip's delay (seconds) at a UTC moment of its timetable: its departure delay at the
+    start, its arrival delay at the end, and between them in proportion to the scheduled time
+    (an intermediate stop's own delay is not known). A missing delay counts as none."""
+    dep, arr = row["departure_delay"] or 0, row["arrival_delay"] or 0
+    t0, t1 = row["utc_start_datetime"], row["utc_end_datetime"]
+
+    def at(utc):
+        if not (isinstance(t0, datetime) and isinstance(t1, datetime)) or t1 <= t0:
+            return dep
+        f = min(1.0, max(0.0, (utc - t0) / (t1 - t0)))
+        return dep + (arr - dep) * f
+
+    return at
+
+
+def timetable_stops(waypoints_json, delay=lambda utc: 0):
     """The trip's intermediate timetable stops, in order: name, place and local arrival and
-    departure ("HH:MM"), for the video's station markers and clock. Routing points without
-    a stop are left out."""
+    departure ("HH:MM", as actually run when the trip has delays, see delay_at), for the
+    video's station markers and clock. Routing points without a stop are left out."""
     try:
         waypoints = json.loads(waypoints_json) if isinstance(waypoints_json, str) else (waypoints_json or [])
     except ValueError:
@@ -43,9 +59,11 @@ def timetable_stops(waypoints_json):
 
         def local(value):
             try:
-                return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).astimezone(tz).strftime("%H:%M")
+                utc = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
             except (TypeError, ValueError):
                 return None
+            utc += timedelta(seconds=delay(utc))
+            return utc.replace(tzinfo=timezone.utc).astimezone(tz).strftime("%H:%M")
 
         out.append({"name": stop.get("name"), "lat": stop["lat"], "lng": stop["lng"],
                     "arr": local(stop.get("arr")), "dep": local(stop.get("dep"))})
@@ -55,6 +73,7 @@ def timetable_stops(waypoints_json):
 TRIP_QUERY = """
     SELECT t.trip_id, t.user_id, t.origin_station, t.destination_station, t.trip_type,
            t.start_datetime, t.end_datetime, t.utc_start_datetime, t.utc_end_datetime, t.waypoints, t.visibility,
+           t.departure_delay, t.arrival_delay,
            ST_AsGeoJSON(p.geom) AS geojson, p.altitude, p.track_env, t.line_name, t.material_type,
            t.material_type_advanced,
            -- An aircraft's type code as its name ("A20N" → "Airbus A320neo"), as the trip card does
@@ -115,9 +134,17 @@ def _epoch_ms(value):
     return int(value.replace(tzinfo=timezone.utc).timestamp() * 1000) if isinstance(value, datetime) else None
 
 
+def _shift(value, seconds):
+    """A datetime moved by a delay in seconds (None stays None)."""
+    return value + timedelta(seconds=seconds) if isinstance(value, datetime) and seconds else value
+
+
 def _payload(row, user=None):
     """A trip's path ([lng, lat]), its raw and cleaned heights, its tunnel/bridge ranges,
-    its times and its timetable stops, and who took it (for a tag of several travellers)."""
+    its times and its timetable stops, and who took it (for a tag of several travellers).
+    The times are the ones actually run: the departure and arrival delays added, the stops'
+    times shifted along (see delay_at)."""
+    dep, arr = row["departure_delay"] or 0, row["arrival_delay"] or 0
     coords = geom_geojson_to_coords(row["geojson"])  # [[lat, lng], ...]
     air = row["trip_type"] == "air"
     raw = row["altitude"] if row["trip_type"] in TRACK_TYPES or air else None
@@ -128,15 +155,15 @@ def _payload(row, user=None):
             "origin": row["origin_station"],
             "destination": row["destination_station"],
             "type": row["trip_type"],
-            "start": _local(row["start_datetime"]),
-            "end": _local(row["end_datetime"]),
-            "utc": [_epoch_ms(row["utc_start_datetime"]), _epoch_ms(row["utc_end_datetime"])],
+            "start": _local(_shift(row["start_datetime"], dep)),
+            "end": _local(_shift(row["end_datetime"], arr)),
+            "utc": [_epoch_ms(_shift(row["utc_start_datetime"], dep)), _epoch_ms(_shift(row["utc_end_datetime"], arr))],
             "operator_logo": row["operator_logo"],
             "line": row["line_name"] or None,
             "vehicle": row["airframe_name"] or row["material_type"] or None,
             "user": user,
         },
-        "stops": timetable_stops(row["waypoints"]),
+        "stops": timetable_stops(row["waypoints"], delay_at(row)),
         "coords": [[lng, lat] for lat, lng in coords],
         "raw": raw,
         # A flight's recorded altitude is its height as flown, not to be smoothed
