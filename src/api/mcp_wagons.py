@@ -8,10 +8,9 @@ import binascii
 import csv
 import io
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-import requests
 from flask import current_app, jsonify, request
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.datastructures import FileStorage
@@ -23,8 +22,11 @@ from src.utils import external_url, owner
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 SNAPSHOT_ROOT = Path("backup/mcp/wagons")
 UPLOAD_TTL = 3600
+# Writes allowed per 24 h, so a runaway client or a leaked token can only do bounded,
+# recoverable damage (each write leaves a snapshot behind).
+DAILY_WRITES = 200
 
-_IMAGE_DESC = "GIF/PNG as base64 (a data: URI is fine) or an http(s) URL to fetch."
+_IMAGE_DESC = "GIF/PNG as base64 (a data: URI is fine)."
 
 _META = {
     "label": {"type": "string"},
@@ -138,18 +140,10 @@ def allowed(user) -> bool:
 
 
 def _image(value: str) -> FileStorage:
-    if value.startswith(("http://", "https://")):
-        try:
-            r = requests.get(value, timeout=20, stream=True)
-            r.raise_for_status()
-            data = r.raw.read(MAX_IMAGE_BYTES + 1, decode_content=True)
-        except requests.RequestException as e:
-            raise ValueError(f"could not fetch the image: {e}")
-    else:
-        try:
-            data = base64.b64decode(value.split(",", 1)[-1], validate=True)
-        except (binascii.Error, ValueError):
-            raise ValueError("image is neither an http(s) URL nor valid base64")
+    try:
+        data = base64.b64decode(value.split(",", 1)[-1], validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("image is not valid base64")
     if len(data) > MAX_IMAGE_BYTES:
         raise ValueError("image is larger than 5 MB")
     return FileStorage(io.BytesIO(data), filename="upload")
@@ -177,6 +171,13 @@ def _get(wname):
     w["usage"] = {"trips": trips.get(wname, 0), "users": len(users.get(wname, ())),
                   "trainsets": sets.get(wname, 0)}
     return w
+
+
+def _check_cap():
+    since = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d-%H%M%S")
+    recent = sum(1 for d in SNAPSHOT_ROOT.glob("*/*") if d.name[:15] >= since)
+    if recent >= DAILY_WRITES:
+        raise ValueError(f"wagon write limit reached ({DAILY_WRITES} per 24 h)")
 
 
 def _snapshot(tool, wname):
@@ -223,6 +224,10 @@ def upload(token):
         target = _signer().loads(token, max_age=UPLOAD_TTL)
     except BadSignature:
         return jsonify({"error": "invalid or expired upload URL"}), 403
+    try:
+        _check_cap()
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 429
     f = request.files.get("file")
     data = f.read() if f else request.get_data()
     if not data:
@@ -238,6 +243,8 @@ def upload(token):
 
 
 def call(name, args):
+    if name in DESTRUCTIVE or name == "create_wagon":
+        _check_cap()
     if name in DESTRUCTIVE:
         return _snapshotted(name, args.get("wagon"), lambda: _call(name, args))
     return _call(name, args)
@@ -268,6 +275,8 @@ def _call(name, args):
                                        base, image_type, sides)
         except FileExistsError as e:
             raise ValueError(str(e))
+        # Records what was added, and counts it towards DAILY_WRITES.
+        _snapshot("create_wagon", wname)
         return _get(wname)
 
     if name == "update_wagon":

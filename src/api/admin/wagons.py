@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import re
@@ -8,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
+from PIL import Image, UnidentifiedImageError
 
 from src.pg import pg_session
 from src.utils import admin_required
@@ -177,15 +179,40 @@ def _detect_ext(f) -> str:
     raise ValueError("not a valid GIF or PNG file")
 
 
+_MAX_PIXELS = 20_000_000
+
+
+def _reencode(data: bytes, ext: str) -> bytes:
+    """
+    Rebuild the image from its pixels alone, so whatever else the uploaded file
+    carried (trailing data, metadata, a second format hidden in it) never reaches
+    the users who download it. Only the first frame of an animated GIF is kept.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            if im.width * im.height > _MAX_PIXELS:
+                raise ValueError("image is too large")
+            frame = im.copy()
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise ValueError("not a valid GIF or PNG file")
+    transparency = frame.info.get("transparency")
+    frame.info = {}
+    out = io.BytesIO()
+    frame.save(out, format=ext.upper(),
+               **({"transparency": transparency} if transparency is not None else {}))
+    return out.getvalue()
+
+
 def _save_image(f, rel_path_noext: str) -> str:
-    """Validate and save an uploaded GIF/PNG under WAGONS_ROOT, appending the detected
-    extension to rel_path_noext. Returns the extension ('gif' | 'png')."""
+    """Validate, re-encode and save an uploaded GIF/PNG under WAGONS_ROOT, appending
+    the detected extension to rel_path_noext. Returns the extension ('gif' | 'png')."""
     ext = _detect_ext(f)
+    data = _reencode(f.read(), ext)
     rel_path = f"{rel_path_noext}.{ext}"
     target = (WAGONS_ROOT / rel_path).resolve()
     target.relative_to(WAGONS_ROOT)          # path-traversal guard
     target.parent.mkdir(parents=True, exist_ok=True)
-    f.save(str(target))
+    target.write_bytes(data)
     return ext
 
 
