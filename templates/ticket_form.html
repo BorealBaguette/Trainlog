@@ -399,14 +399,17 @@ var openTicketForm = (function () {
     function loadOperators() {
         if (operatorPills) return;
         var staticUrl = {{ url_for('static', filename='')|tojson }};
+        var plain = { plainToggle: true,
+                      plainLabel: {{ operatorPlainText|default('Edit as plain text')|tojson }},
+                      pillsLabel: {{ operatorPillsMode|default('Back to operator list')|tojson }} };
         var operatorsLoaded = $.get({{ url_for('getManAndOps', username=username, station_type='train')|tojson }}, function (manAndOps) {
-            operatorPills = operatorPillsInput($('#ticketOperator'), $('#ticketOperatorSearch'), $('#ticketOperatorPills'), manAndOps, staticUrl, 'train');
-            secondaryPills = operatorPillsInput($('#ticketSecondary'), $('#ticketSecondarySearch'), $('#ticketSecondaryPills'), manAndOps, staticUrl, 'train');
+            operatorPills = operatorPillsInput($('#ticketOperator'), $('#ticketOperatorSearch'), $('#ticketOperatorPills'), manAndOps, staticUrl, 'train', plain);
+            secondaryPills = operatorPillsInput($('#ticketSecondary'), $('#ticketSecondarySearch'), $('#ticketSecondaryPills'), manAndOps, staticUrl, 'train', plain);
         });
         // A brand may be any operator too, searched only when asked for from the menu.
         $.when($.get({{ url_for('tickets.ticket_products', username=username)|tojson }}), operatorsLoaded).done(function (products, operators) {
             productPills = operatorPillsInput($('#ticketProduct'), $('#ticketProductSearch'), $('#ticketProductPills'), products[0], staticUrl, 'train',
-                { more: operators[0], moreLabel: {{ ticketSearchOperators|tojson }} });
+                $.extend({ more: operators[0], moreLabel: {{ ticketSearchOperators|tojson }} }, plain));
         });
     }
 

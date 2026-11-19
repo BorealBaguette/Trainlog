@@ -51,7 +51,12 @@ def _upstream_style():
         try:
             resp = requests.get(f"{tiles_url()}/style.json", timeout=10)
             resp.raise_for_status()
-            _cache["style"] = resp.json()
+            style = resp.json()
+            # Upstream marks sources as MLT and Martin converts only when the request's Accept
+            # header asks for it; our tile cache (trainlog_orm nginx, warm.sh) holds MVT only
+            for source in style.get("sources", {}).values():
+                source.pop("encoding", None)
+            _cache["style"] = style
         except (requests.RequestException, ValueError):
             # Keep serving the last good style; retry on the next request
             if _cache["style"] is None:

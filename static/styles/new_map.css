@@ -678,6 +678,19 @@
     opacity: 0.75;
 }
 
+.control-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.control-check input {
+    accent-color: var(--train);
+}
+
 .year-spread-toggle {
     padding: 0 2px;
     border: 0;
