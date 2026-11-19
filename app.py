@@ -3380,6 +3380,23 @@ def signup():
     ]
 
     if request.method == "POST":
+        # API clients (the mobile app) post with ?raw=1 and get JSON back instead
+        # of a flash message and a redirect, like /login/?raw=1
+        raw = request.args.get("raw") == "1"
+        # They also say which language they speak, as the session they start
+        # here has not picked one up from a page yet
+        requested_lang = (request.form.get("locale") or "").strip()
+        lang_key = (
+            requested_lang if raw and requested_lang in lang else session["userinfo"]["lang"]
+        )
+        user_lang = lang[lang_key]
+
+        def signup_failed(message, code, status):
+            if raw:
+                return jsonify({"error": message, "code": code}), status
+            flash(message)
+            return redirect(url_for("signup"))
+
         # The hidden "website" field is a honeypot: people never see it, form
         # fillers fill it in
         if request.form.get("website"):
@@ -3394,36 +3411,27 @@ def signup():
                 getIp(request),
                 getRequestData(request),
             )
-            flash(lang[session["userinfo"]["lang"]]["captchaFailed"])
-            return redirect(url_for("signup"))
+            return signup_failed(user_lang["captchaFailed"], captcha_error, 403)
 
-        username = request.form["username"]
-        password = request.form["password"]
-        email = request.form["email"]
+        username = (request.form.get("username") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        email = (request.form.get("email") or "").strip()
 
         # Regular expression for validating an Email
         regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
 
         if not (username and password and email):
-            flash(lang[session["userinfo"]["lang"]]["signupCantEmpty"])
-            return redirect(url_for("signup"))
+            return signup_failed(user_lang["signupCantEmpty"], "missing_fields", 400)
         elif not re.match(regex, email):
-            flash(lang[session["userinfo"]["lang"]]["invalidEmail"])
-            return redirect(url_for("signup"))
+            return signup_failed(user_lang["invalidEmail"], "invalid_email", 400)
         elif any(c in username for c in ('@', '.', '<', '>')):
-            flash(lang[session["userinfo"]["lang"]]["usernameNoEmail"])
-            return redirect(url_for("signup"))
+            return signup_failed(user_lang["usernameNoEmail"], "invalid_username", 400)
         elif username in unauthorised_usernames:
-            flash(
-                lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(
-                    u=username, a=email
-                )
+            return signup_failed(
+                user_lang["usernameNotAvailable"].format(u=username, a=email),
+                "not_available",
+                409,
             )
-            return redirect(url_for("signup"))
-        else:
-            username = username.strip()
-            password = password.strip()
-            email = email.strip()
 
         # Returns salted pwd hash in format : method$salt$hashedvalue
         hashed_pwd = generate_password_hash(password, "scrypt")
@@ -3432,46 +3440,57 @@ def signup():
             username=username,
             pass_hash=hashed_pwd,
             email=email,
-            lang=lang[session["userinfo"]["lang"]]["langId"],
+            lang=user_lang["langId"],
         )
         authDb.session.add(new_user)
 
         try:
             authDb.session.commit()
+        except sqlalchemy.exc.IntegrityError as e:
+            print(e)
+            authDb.session.rollback()
+            return signup_failed(
+                user_lang["usernameNotAvailable"].format(u=username, a=email),
+                "not_available",
+                409,
+            )
+
+        try:
             ip_details = getIpDetails(getIp(request))
             location = f"{ip_details['city']}, {get_flag_emoji(ip_details['country'])}"
             sendOwnerEmail(
                 "Nouvel Utilisateur",
-                "Nom d'utilisateur : {} <br> Localisation (ip) : {} <br> Email :{} <br> Locale: {} <br> Langue assignée: {}".format(
+                "Nom d'utilisateur : {} <br> Localisation (ip) : {} <br> Email :{} <br> Locale: {} <br> Langue assignée: {} <br> Source: {}".format(
                     username,
                     location,
                     email,
                     request.accept_languages,
-                    lang[session["userinfo"]["lang"]][session["userinfo"]["lang"]],
+                    user_lang[lang_key],
+                    "app" if raw else "web",
                 ),
             )
+        except Exception:
+            # The account exists: a failed notification must not report a failed signup
+            logger.exception("Could not send the new user notification")
 
-            # Nothing published before they joined is news to them: without a row
-            # they'd count every item since the news_visits migration as unread
-            with pg_session() as pg:
-                pg.execute(news_sql.upsert_news_visit(), {"username": username})
+        # Nothing published before they joined is news to them: without a row
+        # they'd count every item since the news_visits migration as unread
+        with pg_session() as pg:
+            pg.execute(news_sql.upsert_news_visit(), {"username": username})
 
-            # Log the user in by setting the session variables
-            session[username] = True
-            session["logged_in"] = username
-            session["logged_in_user_id"] = new_user.uid
+        # Log the user in by setting the session variables
+        session[username] = True
+        session["logged_in"] = username
+        session["logged_in_user_id"] = new_user.uid
 
-            # Straight to their (empty) map, whose welcome card points at the first trip
-            return redirect(url_for("user_home", username=username))
+        if raw:
+            # Same long-lived session and language as a /login/?raw=1
+            session.permanent = True
+            changeLang(new_user.lang, session)
+            return jsonify({"username": username}), 200
 
-        except sqlalchemy.exc.IntegrityError as e:
-            print(e)
-            flash(
-                lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(
-                    u=username, a=email
-                )
-            )
-            return redirect(url_for("signup"))
+        # Straight to their (empty) map, whose welcome card points at the first trip
+        return redirect(url_for("user_home", username=username))
 
     return render_template(
         "signup.html",
