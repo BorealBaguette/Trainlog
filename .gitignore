@@ -23,3 +23,4 @@ server.js
 venv/
 country_percent/countries/preprocessed/
 databases/cache/
+backup/

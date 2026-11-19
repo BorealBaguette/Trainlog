@@ -109,7 +109,8 @@
   }
 
   // The trip's named, timed stops: [{ name, lat, lng, arr, dep, tz, ... }], times in ms with
-  // the delays included, the same as the position is worked out from.
+  // the delays included, the same as the position is worked out from. Those are estimates
+  // at stops without a live time, so what to display is arrShown and depShown.
   function timedStops(trip) {
     var depDelay = Number(trip.departure_delay || 0) * 1000;
     var arrDelay = Number(trip.arrival_delay || 0) * 1000;
@@ -119,8 +120,10 @@
       var lat = wp.lat != null ? wp.lat : s.lat, lng = wp.lng != null ? wp.lng : s.lng;
       var times = stopTimes(s, n, stops.length, depDelay, arrDelay);
       if (!s.name || !times || outside(times, w) || lat == null || lng == null) return;
+      var shown = stopTimes(s, n, stops.length, 0, 0);
       out.push({
         name: s.name, lat: lat, lng: lng, arr: times.arr, dep: times.dep, tz: s.tz || null,
+        arrShown: shown.arr, depShown: shown.dep,
         // as timetabled, and the platform and country, for showing what changed
         arrSched: toMs(s.arr), depSched: toMs(s.dep),
         platform: s.platform || null, platformRt: s.platform_rt || null, cc: s.cc || null

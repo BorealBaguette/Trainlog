@@ -106,6 +106,8 @@ async function initializeMapLibre(options = {}) {
         styleUrl = null,
         preserveDrawingBuffer = false,
         pixelRatio = null,
+        // e.g. { antialias: true } for a page drawing its own 3D lines (admin/trip3d)
+        canvasContextAttributes = null,
         darken
     } = options;
 
@@ -124,7 +126,8 @@ async function initializeMapLibre(options = {}) {
         zoom: zoom,
         doubleClickZoom: false,
         preserveDrawingBuffer: preserveDrawingBuffer,
-        ...(pixelRatio ? { pixelRatio } : {})
+        ...(pixelRatio ? { pixelRatio } : {}),
+        ...(canvasContextAttributes ? { canvasContextAttributes } : {})
     });
 
     map._tlOptions = { styleUrl, userLanguage, useGlobe, tileserver, darken };

@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import re
@@ -8,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
+from PIL import Image, UnidentifiedImageError
 
 from src.pg import pg_session
 from src.utils import admin_required
@@ -177,15 +179,40 @@ def _detect_ext(f) -> str:
     raise ValueError("not a valid GIF or PNG file")
 
 
+_MAX_PIXELS = 20_000_000
+
+
+def _reencode(data: bytes, ext: str) -> bytes:
+    """
+    Rebuild the image from its pixels alone, so whatever else the uploaded file
+    carried (trailing data, metadata, a second format hidden in it) never reaches
+    the users who download it. Only the first frame of an animated GIF is kept.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            if im.width * im.height > _MAX_PIXELS:
+                raise ValueError("image is too large")
+            frame = im.copy()
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise ValueError("not a valid GIF or PNG file")
+    transparency = frame.info.get("transparency")
+    frame.info = {}
+    out = io.BytesIO()
+    frame.save(out, format=ext.upper(),
+               **({"transparency": transparency} if transparency is not None else {}))
+    return out.getvalue()
+
+
 def _save_image(f, rel_path_noext: str) -> str:
-    """Validate and save an uploaded GIF/PNG under WAGONS_ROOT, appending the detected
-    extension to rel_path_noext. Returns the extension ('gif' | 'png')."""
+    """Validate, re-encode and save an uploaded GIF/PNG under WAGONS_ROOT, appending
+    the detected extension to rel_path_noext. Returns the extension ('gif' | 'png')."""
     ext = _detect_ext(f)
+    data = _reencode(f.read(), ext)
     rel_path = f"{rel_path_noext}.{ext}"
     target = (WAGONS_ROOT / rel_path).resolve()
     target.relative_to(WAGONS_ROOT)          # path-traversal guard
     target.parent.mkdir(parents=True, exist_ok=True)
-    f.save(str(target))
+    target.write_bytes(data)
     return ext
 
 
@@ -262,20 +289,17 @@ def list_wagons():
                     "recordsFiltered": filtered, "data": data})
 
 
-@wagons_admin_blueprint.route("<string:wname>", methods=["PUT"])
-@admin_required
-def update_wagon(wname: str):
-    """Bulk-update any editable fields from a JSON body."""
-    data = request.get_json(silent=True) or {}
+def clean_updates(data: dict) -> dict:
+    """The editable fields of `data`, validated and coerced; raises ValueError."""
     updates = {k: v for k, v in data.items() if k in _EDITABLE_FIELDS}
     if not updates:
-        return jsonify({"error": "no valid fields"}), 400
+        raise ValueError("no valid fields")
 
     if "image_type" in updates and updates["image_type"] not in _VALID_IMAGE_TYPES:
-        return jsonify({"error": "invalid image_type"}), 400
+        raise ValueError("invalid image_type")
 
     if "image_ext" in updates and updates["image_ext"] not in _VALID_IMAGE_EXTS:
-        return jsonify({"error": "invalid image_ext"}), 400
+        raise ValueError("invalid image_ext")
 
     if "gauge" in updates:
         g = updates["gauge"]
@@ -285,7 +309,7 @@ def update_wagon(wname: str):
             try:
                 updates["gauge"] = int(g)
             except (ValueError, TypeError):
-                return jsonify({"error": "gauge must be an integer"}), 400
+                raise ValueError("gauge must be an integer")
 
     if "px_per_meter" in updates:
         p = updates["px_per_meter"]
@@ -295,22 +319,38 @@ def update_wagon(wname: str):
             try:
                 updates["px_per_meter"] = float(p)
             except (ValueError, TypeError):
-                return jsonify({"error": "px_per_meter must be a number"}), 400
+                raise ValueError("px_per_meter must be a number")
             if updates["px_per_meter"] <= 0:
-                return jsonify({"error": "px_per_meter must be positive"}), 400
+                raise ValueError("px_per_meter must be positive")
 
     # Coerce empty strings → NULL for text fields
     for k, v in updates.items():
         if k != "gauge" and isinstance(v, str) and v.strip() == "":
             updates[k] = None
+    return updates
 
+
+def apply_updates(wname: str, updates: dict) -> bool:
+    """Write already-cleaned updates; False if the wagon does not exist."""
     with pg_session() as pg:
         if not pg.execute("SELECT 1 FROM wagons WHERE name = :n", {"n": wname}).fetchone():
-            return jsonify({"error": "not found"}), 404
+            return False
         sets = ", ".join(f"{k} = :{k}" for k in updates)
-        updates["_name"] = wname
-        pg.execute(f"UPDATE wagons SET {sets} WHERE name = :_name", updates)
+        pg.execute(f"UPDATE wagons SET {sets} WHERE name = :_name",
+                   {**updates, "_name": wname})
+    return True
 
+
+@wagons_admin_blueprint.route("<string:wname>", methods=["PUT"])
+@admin_required
+def update_wagon(wname: str):
+    """Bulk-update any editable fields from a JSON body."""
+    try:
+        updates = clean_updates(request.get_json(silent=True) or {})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if not apply_updates(wname, updates):
+        return jsonify({"error": "not found"}), 404
     return "", 204
 
 
@@ -348,44 +388,48 @@ def update_wagon_field(wname: str, field: str):
     return "", 204
 
 
-@wagons_admin_blueprint.route("<string:wname>/image-file", methods=["POST"])
-@admin_required
-def upload_wagon_image(wname: str):
-    """Replace an existing wagon's image file(s).
-    Form fields: file (required), side ('', 'L', or 'R').
-    """
-    side = request.form.get("side", "").strip().upper()
-    f    = request.files.get("file")
-    if not f:
-        return jsonify({"error": "file required"}), 400
-
+def replace_image(wname: str, side: str, f) -> dict:
+    """Replace one view ('', 'L' or 'R') of an existing wagon; raises LookupError if
+    there is no such wagon, ValueError for a bad file or a wagon with no image path."""
     with pg_session() as pg:
         row = pg.execute(
             "SELECT image FROM wagons WHERE name = :n", {"n": wname}
         ).fetchone()
-        if not row:
-            return jsonify({"error": "not found"}), 404
-        image_path = row["image"]
-
+    if not row:
+        raise LookupError("not found")
+    image_path = row["image"]
     if not image_path:
-        return jsonify({"error": "wagon has no image path — set one first"}), 400
+        raise ValueError("wagon has no image path — set one first")
 
     rel_noext = f"{image_path}_L" if side == "L" else \
                 f"{image_path}_R" if side == "R" else \
                 image_path
-
-    try:
-        ext = _save_image(f, rel_noext)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    ext = _save_image(f, rel_noext)
 
     with pg_session() as pg:
         pg.execute(
             "UPDATE wagons SET image_ext = :e WHERE name = :n",
             {"e": ext, "n": wname},
         )
+    return {"saved": f"{rel_noext}.{ext}", "image_ext": ext}
 
-    return jsonify({"saved": f"{rel_noext}.{ext}", "image_ext": ext}), 200
+
+@wagons_admin_blueprint.route("<string:wname>/image-file", methods=["POST"])
+@admin_required
+def upload_wagon_image(wname: str):
+    """Replace an existing wagon's image file(s).
+    Form fields: file (required), side ('', 'L', or 'R').
+    """
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "file required"}), 400
+    try:
+        saved = replace_image(wname, request.form.get("side", "").strip().upper(), f)
+    except LookupError:
+        return jsonify({"error": "not found"}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(saved), 200
 
 
 _SIDE_LABEL = {"_L": "L view", "_R": "R view"}
@@ -643,6 +687,20 @@ def create_wagon():
             return jsonify({"error": "units must be a list"}), 400
         return _create_split(base_fields, image_type, cuts, units)
 
+    try:
+        name = insert_wagon(label, name_in, base_fields, image_type,
+                            _uploaded_sides(image_type))
+    except FileExistsError as e:
+        return jsonify({"error": str(e)}), 409
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"name": name, "label": label}), 201
+
+
+def insert_wagon(label: str, name_in: str, base_fields: dict, image_type: str,
+                 sides: list[tuple[str, object]]) -> str:
+    """Save the (suffix, file) views and insert one wagon; returns its name.
+    Raises FileExistsError for a taken explicit name, ValueError for a bad file."""
     # PK / image base path: explicit if given, otherwise derived from the label.
     # An explicit name must be free — silently suffixing it would surprise the caller.
     with pg_session() as pg:
@@ -651,7 +709,7 @@ def create_wagon():
             if pg.execute(
                 "SELECT 1 FROM wagons WHERE name = :n", {"n": name}
             ).fetchone():
-                return jsonify({"error": f'name "{name}" already exists'}), 409
+                raise FileExistsError(f'name "{name}" already exists')
         else:
             name = _unique_name(pg, _sanitize_name(label))
 
@@ -661,14 +719,14 @@ def create_wagon():
     # detected extension wins for the row (defaulting to 'gif' if nothing was uploaded).
     errors = []
     image_ext = "gif"
-    for suffix, f in _uploaded_sides(image_type):
+    for suffix, f in sides:
         try:
             image_ext = _save_image(f, f"{image_path}{suffix}")
         except ValueError as e:
             errors.append(f"{_SIDE_LABEL.get(suffix, 'file')}: {e}")
 
     if errors:
-        return jsonify({"error": "; ".join(errors)}), 400
+        raise ValueError("; ".join(errors))
 
     with pg_session() as pg:
         pg.execute(
@@ -689,8 +747,7 @@ def create_wagon():
                 "image_ext":  image_ext,
             },
         )
-
-    return jsonify({"name": name, "label": label}), 201
+    return name
 
 
 @wagons_admin_blueprint.route("<string:wname>", methods=["DELETE"])
