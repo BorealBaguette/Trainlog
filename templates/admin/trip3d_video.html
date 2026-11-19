@@ -342,11 +342,11 @@ async function setup() {
   const total = dist[last] || 1;
   const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
   const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
-    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start, end: t.end, utc: t.utc }));
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logos: t.logos, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start, end: t.end, utc: t.utc }));
   tripSpans.forEach(t => t.units.forEach(wagonImage));
   // Every drawing the video shows, for the end card's credits
   const allUnits = tripSpans.flatMap(t => t.units);
-  tripSpans.forEach(t => operatorLogo(t.logo));
+  tripSpans.forEach(t => t.logos.forEach(operatorLogo));
   tripSpans.forEach(t => t.flags.forEach(flagImage));
   data.countries.forEach(([, c]) => flagImage(c));
   // The country at s (metres along the line): of the runs the server read along each path
@@ -1231,8 +1231,8 @@ async function setup() {
     const cornerIcon = typeIcon(S[Math.min(S.length - 2, pointAt(f.s).k)].type);
     const iconW = cornerIcon ? Math.round(corner.px * 1.3 * u) : 0, textX = pad + (iconW ? iconW + 12 * u : 0);
     const cornerRight = textX + Math.max(...corner.lines.map(l => g2.measureText(l).width));
-    // The current trip's operator logo, beside the clock
-    const opLogo = operatorLogo((tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]).logo);
+    // The current trip's operators' logos, beside the clock
+    const opLogos = (tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]).logos.map(operatorLogo).filter(Boolean);
     // Below 900 px wide, the logo's train alone
     const compact = W < 900, brand = brandLayout(u, compact), logoW = brand.w;
     // Vignette, for depth and to seat the text
@@ -1498,7 +1498,7 @@ async function setup() {
       const flag = icon && flagImage(countryAt(f.s) || trip.flags[f.s < (trip.from + trip.to) / 2 ? 0 : 1] || trip.flags[0]);
       // The flag as tall as the logo's chip (34 px), at its own width (Firefox gives these SVGs
       // no size: 3:2 then), left-aligned with the icons above; a wide one pushes the logo along
-      const lh = 22 * u, cpad = 6 * u, ch = opLogo ? lh + 2 * cpad : 0;
+      const lh = 22 * u, cpad = 6 * u, ch = opLogos.length ? lh + 2 * cpad : 0;
       const fh = flag ? Math.round(lh + 2 * cpad) : 0;
       const fw = flag ? Math.round(fh * (flag.naturalWidth && flag.naturalHeight ? flag.naturalWidth / flag.naturalHeight : 1.5)) : 0;
       const rowX = Math.max(textX, flag ? pad + fw + 10 * u : 0);
@@ -1521,11 +1521,14 @@ async function setup() {
         roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
       }
       let clockX = rowX;
-      if (opLogo) {
-        const lw = Math.min(130 * u, lh * opLogo.naturalWidth / (opLogo.naturalHeight || 1)), cy = Math.round(clockMid - ch / 2);
+      if (opLogos.length) {
+        // On one chip, side by side
+        const gap = 10 * u, cy = Math.round(clockMid - ch / 2);
+        const imgs = opLogos.map(l => shrink(l, Math.max(1, Math.round(Math.min(130 * u, lh * l.naturalWidth / (l.naturalHeight || 1))))));
+        const lw = imgs.reduce((w, img) => w + img.width, 0) + gap * (imgs.length - 1);
         box(rowX, cy, lw + 2 * cpad, ch, 8 * u, 'rgba(255,255,255,0.92)');
-        const img = shrink(opLogo, Math.max(1, Math.round(lw)));
-        g2.drawImage(img, Math.round(rowX + cpad), Math.round(cy + (ch - img.height) / 2));
+        let x = rowX + cpad;
+        for (const img of imgs) { g2.drawImage(img, Math.round(x), Math.round(cy + (ch - img.height) / 2)); x += img.width + gap; }
         clockX = rowX + lw + 2 * cpad + 12 * u;
       }
       const clock = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s);
@@ -2000,7 +2003,7 @@ function mergeTrips(list) {
     out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
       name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
       real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)],
-      logo: t.trip.operator_logo, line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start,
+      logos: t.trip.operator_logos || [], line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start,
       end: t.trip.end, utc: t.trip.utc });
   });
   return out;
