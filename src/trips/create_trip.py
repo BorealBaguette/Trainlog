@@ -80,19 +80,21 @@ def create_trip(trip: Trip, pg_session=None):
             # raw_geom is the untouched GPS trace (GPX imports only), preserved
             # alongside the possibly routed/cleaned geom.
             pg.execute(
-                "INSERT INTO paths (trip_id, geom, altitude, timestamps, raw_geom)"
+                "INSERT INTO paths (trip_id, geom, altitude, timestamps, raw_geom, track_env)"
                 " VALUES (:trip_id, ST_GeomFromEWKT(:ewkt),"
                 " CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb),"
-                " ST_GeomFromEWKT(:raw_ewkt))"
+                " ST_GeomFromEWKT(:raw_ewkt), CAST(:track_env AS jsonb))"
                 " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
                 " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps,"
-                " raw_geom = COALESCE(EXCLUDED.raw_geom, paths.raw_geom)",
+                " raw_geom = COALESCE(EXCLUDED.raw_geom, paths.raw_geom),"
+                " track_env = EXCLUDED.track_env",
                 {
                     "trip_id": trip.trip_id,
                     "ewkt": ewkt,
                     "altitude": getattr(trip, "altitude", None),
                     "timestamps": getattr(trip, "timestamps", None),
                     "raw_ewkt": raw_ewkt,
+                    "track_env": getattr(trip, "track_env", None),
                 },
             )
 
