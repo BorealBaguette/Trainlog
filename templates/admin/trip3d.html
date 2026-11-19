@@ -1,0 +1,603 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<link href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+} }
+</script>
+
+<style>
+  html, body { overflow: hidden; }
+  #t3-wrap { position: relative; height: calc(100vh - 70px); display: flex; flex-direction: column; }
+  #t3-map { flex: 1; min-height: 0; }
+  #t3-panel { position: absolute; top: 12px; left: 12px; z-index: 2; width: 300px; max-width: calc(100% - 24px);
+    background: var(--bs-body-bg); border-radius: 8px; padding: 8px 10px; font-size: .85rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+  #t3-panel select { font-size: .8rem; }
+  #t3-title { font-weight: 600; margin: 6px 0 2px; }
+  #t3-note { color: var(--bs-secondary-color); font-size: .75rem; }
+  .t3-legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: .75rem; }
+  .t3-legend span::before { content: ""; display: inline-block; width: 18px; height: 0; margin-right: 4px;
+    vertical-align: middle; border-top: 3px solid #52b0fe; }
+  .t3-legend .bridge::before { box-shadow: 0 0 0 2px #888; }
+  .t3-legend .tunnel::before { border-top-width: 2px; border-top-style: dashed; opacity: .85; }
+  .t3-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: .75rem; }
+  .t3-ramp { height: 8px; margin-top: 4px; border-radius: 4px;
+    background: linear-gradient(to right, #1a9641, #d9ef8b, #fdae61, #d7191c, #67001f); }
+  .t3-ramp-ends { display: flex; justify-content: space-between; font-size: .7rem; color: var(--bs-secondary-color); }
+  #t3-profile { height: 190px; flex-shrink: 0; border-top: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg); position: relative; }
+  #t3-profile svg { width: 100%; height: 100%; display: block; }
+  #t3-tip { position: absolute; top: 6px; pointer-events: none; font-size: .75rem; padding: 2px 6px;
+    background: rgba(0,0,0,.75); color: #fff; border-radius: 4px; white-space: nowrap; display: none; }
+  .t3-axis { font-size: 10px; fill: var(--bs-secondary-color); }
+</style>
+
+<div id="t3-wrap">
+  <div id="t3-map"></div>
+  <div id="t3-panel">
+    <div id="t3-title"></div>
+    <div id="t3-note">Loading…</div>
+    <div class="t3-legend"><span>open</span><span class="bridge">bridge</span><span class="tunnel">tunnel</span></div>
+    <label class="t3-row"><input id="t3-raw" type="checkbox"> raw router heights in the profile</label>
+    <label class="t3-row"><input id="t3-alt" type="checkbox"> colour by altitude</label>
+    <div id="t3-alt-legend" hidden><div class="t3-ramp"></div><div class="t3-ramp-ends"><span id="t3-alt-lo"></span><span id="t3-alt-hi"></span></div></div>
+    <label class="t3-row"><input id="t3-depth" type="checkbox"> show tunnels through the mountain</label>
+    <div class="t3-row">MapLibre + three.js · <a href="{{ urls.giro }}">Giro3D</a> · <a href="{{ urls.video }}">🎬 Video</a></div>
+  </div>
+  <div id="t3-profile"><svg id="t3-svg"></svg><div id="t3-tip"></div></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+
+const DATA_URL = {{ url_for('trip3d.trips_json') | tojson }};
+// The trips asked for in the body (a tag's ids are too many for a URL)
+const fetchTrips = () => fetch(DATA_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ids: {{ tripIds | tojson }} }) });
+const TILESERVER = {{ tileserver | tojson }};
+// Mapterhorn: Copernicus 30 m worldwide, national lidar models on top (Norway at 1 m), in
+// Terrarium encoding, 512 px tiles to zoom 16
+const TERRARIUM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+const TILE = 512;
+const TERRAIN_ATTRIBUTION = '<a href="https://mapterhorn.com/attribution" target="_blank">© Mapterhorn</a>';
+const COLOR = { train: '#52b0fe', tram: '#a2d7ff', metro: '#004595', funicular: '#6495ed', rail: '#7ec8ff' };
+// Colours as given, as MapLibre draws them
+THREE.ColorManagement.enabled = false;
+
+
+// ── The map: the site's own style, on terrain at 1:1 ─────────────────────────────
+// MapLibre draws the map itself (labels stay upright and face the camera), and the
+// route is drawn by three.js inside it, with MapLibre's own camera and depth buffer.
+const map = await MapLibreUtils.initializeMapLibre({
+  container: 't3-map', tileserver: TILESERVER, useGlobe: false, center: [8, 60], zoom: 5,
+  canvasContextAttributes: { antialias: true },
+});
+await new Promise(r => map.loaded() ? r() : map.once('load', r));
+const dem = { type: 'raster-dem', tiles: [TERRARIUM], encoding: 'terrarium', tileSize: TILE, maxzoom: 16,
+              attribution: TERRAIN_ATTRIBUTION };
+map.addSource('t3-terrain', dem);
+map.addSource('t3-hillshade', { ...dem, attribution: undefined });
+const dark = DARK_BACKGROUNDS.includes(map._currentTileserver?.split('.').pop());
+const firstSymbol = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+map.addLayer({ id: 't3-hillshade', type: 'hillshade', source: 't3-hillshade', paint: dark
+  ? { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#000000',
+      'hillshade-highlight-color': 'rgba(255,255,255,0.18)', 'hillshade-accent-color': 'rgba(0,0,0,0.35)' }
+  : { 'hillshade-exaggeration': 0.3, 'hillshade-shadow-color': 'rgba(60,50,40,0.6)',
+      'hillshade-highlight-color': 'rgba(255,255,255,0.5)', 'hillshade-accent-color': 'rgba(60,50,40,0.3)' }
+}, firstSymbol);
+map.setTerrain({ source: 't3-terrain', exaggeration: 1 });
+if (map.setSky) map.setSky(dark
+  ? { 'sky-color': '#0b1320', 'horizon-color': '#2a3442', 'fog-color': '#1b222c',
+      'sky-horizon-blend': 0.5, 'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.7 }
+  : { 'sky-color': '#9cc6f0', 'horizon-color': '#e8eef5', 'fog-color': '#e3e8ee',
+      'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.7 });
+
+await showTrip();
+
+async function showTrip() {
+  const res = await fetchTrips();
+  if (!res.ok) { document.getElementById('t3-title').textContent = 'Trip not found'; return; }
+  // A trip page's trips: the view shows the first
+  const loaded = await res.json(), data = loaded.trips ? loaded.trips[0] : loaded;
+  const coords = data.coords;
+  document.getElementById('t3-title').textContent = `${data.trip.origin} → ${data.trip.destination}`;
+  document.getElementById('t3-note').textContent = data.height
+    ? `${coords.length} points, ${(data.env || []).filter(r => r[2] === 'tunnel').length} tunnel stretches`
+    : 'No track heights stored for this trip.';
+
+  // Each segment i→i+1 takes the kind of the range holding both ends; runs of one kind
+  const kind = new Array(Math.max(coords.length - 1, 0)).fill('open');
+  for (const [s, e, k] of data.env || []) for (let i = s; i < e; i++) kind[i] = k;
+  const runs = [];
+  for (let i = 0; i < kind.length; i++) {
+    const last = runs[runs.length - 1];
+    if (last && last.kind === kind[i] && last.e === i) last.e = i + 1;
+    else runs.push({ kind: kind[i], s: i, e: i + 1 });
+  }
+  const color = COLOR[data.trip.type] || COLOR.train;
+  const dist = [0];
+  for (let i = 1; i < coords.length; i++) dist.push(dist[i - 1] + haversine(coords[i - 1], coords[i]));
+  const total = dist[dist.length - 1] || 1;
+  const lastIdx = coords.length - 1;
+  const ground = await groundHeights(coords, total);
+  // The router's heights come from a surface model (SRTM: tree tops, roofs), a few metres
+  // above the bare ground these terrain tiles show; shifted by their median gap on open
+  // track, so the track lies on this ground (Holmenkollen sat ~5 m up in the forest).
+  // A flight's altitude is as recorded (FR24 or a GPS track), never below the ground: FR24
+  // gives 0 for an aircraft on the ground, wherever the airport is
+  const air = data.trip.type === 'air';
+  if (air && data.height) data.height = data.height.map((h, i) => Math.max(h, ground[i] ?? h));
+  const gaps = [];
+  if (data.height && !air) data.height.forEach((h, i) => { if (kind[Math.min(i, kind.length - 1)] === 'open' && ground[i] != null) gaps.push(h - ground[i]); });
+  if (gaps.length) {
+    gaps.sort((a, b) => a - b);
+    const shift = gaps[gaps.length >> 1];
+    data.height = data.height.map(h => h - shift);
+    if (data.raw) data.raw = data.raw.map(h => (h == null ? h : h - shift));
+  }
+  const heights = coords.map((_, i) => data.height ? data.height[i] : (ground[i] ?? 0));
+
+  const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+  map.fitBounds(bounds, { padding: 60, pitch: 55, duration: 0 });
+
+  // Toggles
+  const altInput = document.getElementById('t3-alt'), depthInput = document.getElementById('t3-depth');
+  try { altInput.checked = localStorage.getItem('t3-alt') === '1'; } catch (e) { /* no storage */ }
+  try { depthInput.checked = localStorage.getItem('t3-depth') !== '0'; } catch (e) { depthInput.checked = true; }
+  const hLo = Math.min(...heights), hHi = Math.max(...heights);
+  document.getElementById('t3-alt-lo').textContent = `${Math.round(hLo)} m`;
+  document.getElementById('t3-alt-hi').textContent = `${Math.round(hHi)} m`;
+  const RAMP = ['#1a9641', '#d9ef8b', '#fdae61', '#d7191c', '#67001f'].map(c => new THREE.Color(c));
+  const altColor = h => {
+    const t = Math.max(0, Math.min(1, (h - hLo) / ((hHi - hLo) || 1))) * (RAMP.length - 1);
+    const i = Math.min(RAMP.length - 2, Math.floor(t));
+    return RAMP[i].clone().lerp(RAMP[i + 1], t - i);
+  };
+  const showAltLegend = () => { document.getElementById('t3-alt-legend').hidden = !altInput.checked; };
+  showAltLegend();
+
+  // ── three.js in MapLibre ─────────────────────────────────────────────────────
+  // Positions in metres around the route's middle (x east, y north, z up), so 32-bit
+  // floats stay precise; each point is placed from its own Web Mercator position, so the
+  // scale change with latitude along a long route is exact.
+  const origin = maplibregl.MercatorCoordinate.fromLngLat(bounds.getCenter(), 0);
+  const unit = origin.meterInMercatorCoordinateUnits();
+  const localAt = (lngLat, alt) => {
+    const m = maplibregl.MercatorCoordinate.fromLngLat(lngLat, alt);
+    return [(m.x - origin.x) / unit, -(m.y - origin.y) / unit, m.z / unit];
+  };
+  const local = (i, alt) => localAt(coords[i], alt);
+  const toMercator = new THREE.Matrix4().makeTranslation(origin.x, origin.y, 0)
+    .scale(new THREE.Vector3(unit, -unit, unit));
+  const scene = new THREE.Scene(), camera = new THREE.Camera(), group = new THREE.Group();
+  scene.add(group);
+  const lineMaterials = new Set();
+  let renderer = null;
+  map.addLayer({
+    id: 't3-three', type: 'custom', renderingMode: '3d',
+    onAdd: (m, gl) => {
+      renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true });
+      renderer.autoClear = false;
+    },
+    render: (gl, args) => {
+      camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix).multiply(toMercator);
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      for (const mt of lineMaterials) mt.resolution.set(gl.drawingBufferWidth, gl.drawingBufferHeight);
+      renderer.resetState();
+      renderer.render(scene, camera);
+    },
+  });
+
+  // The ground as MapLibre draws it now; off-screen or not loaded yet, the same tiles as
+  // read for the profile
+  const surface = i => {
+    const z = map.queryTerrainElevation(coords[i]);
+    return z ? z : (ground[i] ?? heights[i]);
+  };
+  const px = devicePixelRatio || 1;
+  // Wins ties with the terrain mesh it lies on
+  const onTop = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 };
+  let metresPerPx = 1;  // at the view's centre, set as the route is built
+  // Lines of one style are gathered and drawn as a single mesh (flushLines): one draw call
+  // per style rather than one per tunnel, bridge or pier
+  const buckets = new Map();
+  function line(points, colors, opts) {
+    const key = JSON.stringify(opts);
+    let b = buckets.get(key);
+    if (!b) buckets.set(key, b = { opts, pos: [], col: [] });
+    for (let i = 0; i + 1 < points.length; i++) {
+      b.pos.push(...points[i], ...points[i + 1]);
+      b.col.push(...colors[i], ...colors[i + 1]);
+    }
+  }
+  function flushLines() {
+    for (const { opts, pos, col } of buckets.values()) {
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(pos);
+      geometry.setColors(col);
+      const material = new LineMaterial({ vertexColors: true, linewidth: opts.width * px, transparent: true,
+        opacity: opts.opacity ?? 1, dashed: !!opts.dashed,
+        // Dash lengths are along the line in metres: given in screen pixels at the current zoom
+        dashSize: (opts.dash || [14, 9])[0] * metresPerPx, gapSize: (opts.dash || [14, 9])[1] * metresPerPx,
+        depthWrite: opts.depthWrite ?? true, depthFunc: opts.depthFunc ?? THREE.LessEqualDepth,
+        ...(opts.onTop ? onTop : {}) });
+      lineMaterials.add(material);
+      const l = new LineSegments2(geometry, material);
+      if (opts.dashed) l.computeLineDistances();
+      l.frustumCulled = false;
+      l.renderOrder = opts.order ?? 0;
+      group.add(l);
+    }
+    buckets.clear();
+  }
+  // A short open stretch between two structures across a dip (a dam or a ledge over the
+  // gorge between two tunnels, Kjosfossen) is carried at their level: the terrain model is
+  // too coarse to hold it and would drop the track into the gorge. Only where the ground
+  // falls below both ends: on a slope (a funicular between two tunnels) the track follows
+  // the ground, and a straight line would float off it.
+  const carried = r => {
+    const { kind: kd, s, e } = runs[r];
+    if (kd !== 'open' || r === 0 || r === runs.length - 1) return false;
+    if (runs[r - 1].kind === 'open' || runs[r + 1].kind === 'open' || dist[e] - dist[s] >= 300) return false;
+    const floor = Math.min(surface(s), surface(e)) - 8;
+    for (let i = s + 1; i < e; i++) if (surface(i) < floor) return true;
+    return false;
+  };
+  const base = new THREE.Color(color), lift = 1.5;
+  // Track behind a hill, seen through it: faint and solid, drawn only where the terrain is
+  // in front (tunnels are told apart by their dashes). The see-through passes are drawn
+  // first (order 0): "where something is in front" would otherwise count our own track
+  // too, and paint a deep tunnel over the track above it. Drawn first, they are covered by
+  // the visible track, which only the terrain can hide.
+  const ghost = (p, c) => line(p, c, { width: 2.5, opacity: 0.35, depthFunc: THREE.GreaterDepth, depthWrite: false, order: 0 });
+  // The outline in the map's opposite: white on a dark style, near-black on a light one
+  const outline = dark ? [1, 1, 1] : [0.12, 0.13, 0.15];
+  // Heights each tunnel or bridge segment is drawn at, [start, end], for the hover pin;
+  // open track lies on the terrain
+  const segZ = [];
+
+  function buildRoute() {
+    for (const child of [...group.children]) { child.geometry.dispose(); child.material.dispose(); group.remove(child); }
+    lineMaterials.clear();
+    segZ.length = 0;
+    const keepZ = (s, e, z) => { for (let i = s; i < e; i++) segZ[i] = [z(i), z(i + 1)]; };
+    const byAlt = altInput.checked;
+    const mPerPx = 40075016 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** map.getZoom());
+    metresPerPx = mPerPx;
+    const step = Math.min(100, Math.max(5, 6 * mPerPx));
+    // Only what is in view gains from it: elsewhere the router's points do
+    const view = map.getBounds();
+    const inView = i => view.contains(coords[i]) || view.contains(coords[i + 1]);
+    const colorsFor = (s, e) => {
+      const out = [];
+      for (let i = s; i <= e; i++) out.push(byAlt ? altColor(heights[i]).toArray() : base.toArray());
+      return out;
+    };
+    const pts = (s, e, z) => { const out = []; for (let i = s; i <= e; i++) out.push(local(i, z(i))); return out; };
+    const segs = (list, color, opacity, depthFunc) => {
+      for (const [a, b] of list) line([a, b], [color, color], { width: 1, opacity, depthFunc, depthWrite: false });
+    };
+    for (let r = 0; r < runs.length; r++) {
+      const { kind: kd, s, e } = runs[r];
+      const straight = (zs, ze) => i => zs + (ze - zs) * (dist[i] - dist[s]) / ((dist[e] - dist[s]) || 1);
+      if (kd === 'tunnel') {
+        if (!depthInput.checked) continue;
+        // Straight between its portals; a route starting or ending inside one does so
+        // in an underground station. Dashed where the mountain hides it.
+        // Its ends at the height of the track they join (lifted as it is), unless the route
+        // starts or ends underground. Between them a smooth curve rather than a straight
+        // line: it leaves each portal at the gradient of the track arriving there (over its
+        // last ~50 m), so the line doesn't break at the mouth, then eases into the tunnel's
+        // own. Those end gradients stay within 0.08 of the tunnel's mean, so a steep hillside
+        // approach can't throw the curve about; and the tunnel stays in the rock, at least
+        // 8 m under the ground above it (less within 80 m of a portal, where it surfaces).
+        const z0 = s === 0 ? surface(s) - 15 : surface(s) + lift;
+        const z1 = e === lastIdx ? surface(e) - 15 : surface(e) + lift;
+        const L = (dist[e] - dist[s]) || 1, mean = (z1 - z0) / L;
+        const approach = (i, dir) => {
+          let j = i;
+          while (j + dir >= 0 && j + dir <= lastIdx && Math.abs(dist[j] - dist[i]) < 50) j += dir;
+          if (j === i) return mean;
+          const m = ((surface(i) + lift) - (surface(j) + lift)) / (dist[i] - dist[j]);
+          return Math.max(mean - 0.08, Math.min(mean + 0.08, m));
+        };
+        const m0 = s === 0 ? mean : approach(s, -1), m1 = e === lastIdx ? mean : approach(e, 1);
+        const z = i => {
+          const t = (dist[i] - dist[s]) / L, t2 = t * t, t3 = t2 * t;
+          const curve = (2 * t3 - 3 * t2 + 1) * z0 + (t3 - 2 * t2 + t) * L * m0 + (-2 * t3 + 3 * t2) * z1 + (t3 - t2) * L * m1;
+          const cover = 8 * Math.min(1, (dist[i] - dist[s]) / 80, (dist[e] - dist[i]) / 80);
+          return Math.min(curve, surface(i) + lift - cover);
+        };
+        keepZ(s, e, z);
+        const p = pts(s, e, z), c = colorsFor(s, e);
+        // A dotted line, whole from portal to portal: cut into dashes here (14 px on, 12 off
+        // at this zoom: the outline's round ends take 3.5 px of each gap, so a shorter one
+        // closed up into a continuous line), each a solid outline with the core on it, so every dash has its
+        // outline all round. Drawn regardless of the terrain: a shallow tunnel keeps
+        // crossing the coarse terrain mesh, and splitting it by what hides it left bare
+        // strips of core and bitten dashes.
+        for (const [dp, dc] of dashes(p, c, 14 * mPerPx, 12 * mPerPx)) {
+          line(dp, dc.map(() => outline), { width: 7, opacity: 0.85, depthFunc: THREE.AlwaysDepth, depthWrite: false, order: 3 });
+          line(dp, dc, { width: 4, depthFunc: THREE.AlwaysDepth, depthWrite: false, order: 4 });
+        }
+      } else if (kd === 'bridge' || carried(r)) {
+        // Straight between its ends, above the ground; bridges on piers
+        const z = straight(surface(s) + lift, surface(e) + lift);
+        keepZ(s, e, z);
+        const p = pts(s, e, z);
+        line(p, colorsFor(s, e).map(() => outline), { width: 7, order: 1, depthWrite: false, onTop: true });
+        line(p, colorsFor(s, e), { width: 4, order: 2, onTop: true });
+        ghost(p, colorsFor(s, e));
+        if (kd === 'bridge') {
+          const piers = [];
+          let next = dist[s] + 20;
+          for (let i = s + 1; i < e; i++) {
+            if (dist[i] < next) continue;
+            if (z(i) - surface(i) > 3) piers.push([local(i, z(i)), local(i, surface(i))]);
+            next = dist[i] + 40;
+          }
+          segs(piers, [0.6, 0.62, 0.66], 0.9, THREE.LessEqualDepth);
+        }
+      } else if (air) {
+        // A flight at its recorded altitude, with a faint line down to the ground every so
+        // often to show how high it is
+        const z = i => heights[i] + lift;
+        keepZ(s, e, z);
+        const p = pts(s, e, z), c = colorsFor(s, e);
+        line(p, c.map(() => outline), { width: 7, order: 1, depthWrite: false });
+        line(p, c, { width: 4, order: 2 });
+        ghost(p, c);
+        const drops = [];
+        let next = dist[s];
+        for (let i = s; i <= e; i++) {
+          if (dist[i] < next) continue;
+          if (z(i) - surface(i) > 30) drops.push([local(i, z(i)), local(i, surface(i))]);
+          next = dist[i] + total / 60;
+        }
+        segs(drops, [0.6, 0.62, 0.66], 0.5, THREE.LessEqualDepth);
+      } else {
+        // On the ground as drawn, subdivided (about every 6 screen pixels in view) so it
+        // follows the terrain between the router's points, but smoothed along the line: the
+        // 1 m lidar terrain shows every gully and stream the railway crosses on a culvert or
+        // an embankment (not bridges in the data), and following it point by point dipped
+        // into each. A 200 m running median drops dips and bumps shorter than ~100 m, a
+        // 100 m moving average evens the rest; the run's ends keep the ground's height so
+        // they meet the bridges and tunnels around them.
+        const lls = [], dd = [], hh = [], fb = [];
+        for (let i = s; i < e; i++) {
+          const n = inView(i) ? Math.max(1, Math.ceil((dist[i + 1] - dist[i]) / step)) : 1;
+          for (let j = 0; j < n; j++) {
+            const t = j / n;
+            lls.push([coords[i][0] + (coords[i + 1][0] - coords[i][0]) * t, coords[i][1] + (coords[i + 1][1] - coords[i][1]) * t]);
+            dd.push(dist[i] + (dist[i + 1] - dist[i]) * t);
+            const h = heights[i] + (heights[i + 1] - heights[i]) * t;
+            hh.push(h);
+            fb.push((ground[i] ?? h) + ((ground[i + 1] ?? h) - (ground[i] ?? h)) * t);
+          }
+        }
+        lls.push(coords[e]); dd.push(dist[e]); hh.push(heights[e]); fb.push(ground[e] ?? heights[e]);
+        const raw = lls.map((q, k) => map.queryTerrainElevation(q) || fb[k]);
+        const zs = movingAverage(runningMedian(raw, dd, 200), dd, 100);
+        zs[0] = raw[0]; zs[zs.length - 1] = raw[raw.length - 1];
+        const p = lls.map((q, k) => localAt(q, zs[k] + lift));
+        const c = hh.map(h => (byAlt ? altColor(h).toArray() : base.toArray()));
+        line(p, c.map(() => outline), { width: 7, order: 1, depthWrite: false, onTop: true });
+        line(p, c, { width: 4, order: 2, onTop: true });
+        ghost(p, c);
+      }
+    }
+    flushLines();
+    map.triggerRepaint();
+  }
+  buildRoute();
+
+  // Sharper terrain tiles load as the view settles: put the route back on them, once
+  // the map is idle rather than as each tile arrives
+  let stale = false;
+  map.on('moveend', () => { stale = true; });
+  map.on('sourcedata', e => { if (e.sourceId === 't3-terrain' && e.tile) stale = true; });
+  map.on('idle', () => { if (stale) { stale = false; buildRoute(); } });
+  depthInput.addEventListener('change', () => {
+    try { localStorage.setItem('t3-depth', depthInput.checked ? '1' : '0'); } catch (e) { /* no storage */ }
+    buildRoute();
+  });
+  altInput.addEventListener('change', () => {
+    try { localStorage.setItem('t3-alt', altInput.checked ? '1' : '0'); } catch (e) { /* no storage */ }
+    showAltLegend();
+    buildRoute();
+  });
+
+  // ── Profile ──────────────────────────────────────────────────────────────────
+  // The hover pin: a dot of fixed screen size at the height the track is drawn, seen
+  // through the rock in a tunnel
+  const dot = document.createElement('canvas');
+  dot.width = dot.height = 64;
+  const ctx = dot.getContext('2d');
+  ctx.beginPath(); ctx.arc(32, 32, 26, 0, 2 * Math.PI);
+  ctx.fillStyle = '#e11'; ctx.fill(); ctx.lineWidth = 9; ctx.strokeStyle = '#fff'; ctx.stroke();
+  const pin = new THREE.Points(
+    new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)),
+    new THREE.PointsMaterial({ map: new THREE.CanvasTexture(dot), size: 16 * px, sizeAttenuation: false,
+      transparent: true, depthTest: false, depthWrite: false }));
+  pin.frustumCulled = false;
+  pin.renderOrder = 10;
+  pin.visible = false;
+  scene.add(pin);
+  const lerp = (a, b, t) => (a == null || b == null) ? (a ?? b) : a + (b - a) * t;
+  drawProfile();
+  document.getElementById('t3-raw').addEventListener('change', drawProfile);
+  window.addEventListener('resize', drawProfile);
+
+  function drawProfile() {
+    const svg = document.getElementById('t3-svg');
+    const W = svg.clientWidth, H = svg.clientHeight, L = 44, R = 10, T = 10, B = 20;
+    const showRaw = document.getElementById('t3-raw').checked;
+    const series = [ground, data.height, showRaw ? data.raw : null].filter(Boolean);
+    const all = series.flat().filter(v => v !== null && v !== undefined);
+    if (!all.length) { svg.innerHTML = ''; return; }
+    let lo = Math.min(...all), hi = Math.max(...all);
+    const pad = Math.max(10, (hi - lo) * 0.08); lo -= pad; hi += pad;
+    const X = d => L + d / total * (W - L - R), Y = h => T + (hi - h) / (hi - lo) * (H - T - B);
+    const path = vals => {
+      let p = '', pen = false;
+      vals.forEach((v, i) => {
+        if (v === null || v === undefined) { pen = false; return; }
+        p += `${pen ? 'L' : 'M'}${X(dist[i]).toFixed(1)},${Y(v).toFixed(1)}`; pen = true;
+      });
+      return p;
+    };
+    let out = '';
+    for (const [s, e, k] of data.env || []) {
+      if (k !== 'tunnel' && k !== 'bridge') continue;
+      out += `<rect x="${X(dist[s])}" y="${T}" width="${Math.max(1, X(dist[e]) - X(dist[s]))}" height="${H - T - B}"
+              fill="${k === 'tunnel' ? 'rgba(80,80,80,.18)' : 'rgba(82,176,254,.12)'}"/>`;
+    }
+    // The ground above the track, then the track itself
+    const g = path(ground);
+    if (g) out += `<path d="${g}" fill="none" stroke="#8a6d3b" stroke-width="1.5"/>`;
+    if (showRaw && data.raw) out += `<path d="${path(data.raw)}" fill="none" stroke="#999" stroke-width="1"/>`;
+    if (data.height) out += `<path d="${path(data.height)}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+    const step = h => { const p = 10 ** Math.floor(Math.log10(h)); return [1, 2, 5, 10].map(m => m * p).find(s => h / s <= 5); };
+    const hs = step(hi - lo);
+    for (let h = Math.ceil(lo / hs) * hs; h <= hi; h += hs)
+      out += `<line x1="${L}" x2="${W - R}" y1="${Y(h)}" y2="${Y(h)}" stroke="currentColor" stroke-opacity=".08"/>
+              <text class="t3-axis" x="${L - 4}" y="${Y(h) + 3}" text-anchor="end">${h} m</text>`;
+    const ds = step(total / 1000);
+    for (let d = 0; d <= total / 1000; d += ds)
+      out += `<text class="t3-axis" x="${X(d * 1000)}" y="${H - 6}" text-anchor="middle">${d} km</text>`;
+    out += `<line id="t3-cursor" y1="${T}" y2="${H - B}" stroke="#e11" stroke-width="1" visibility="hidden"/>`;
+    svg.innerHTML = out;
+
+    svg.onmousemove = ev => {
+      const rect = svg.getBoundingClientRect(), x = ev.clientX - rect.left;
+      const d = Math.max(0, Math.min(total, (x - L) / (W - L - R) * total));
+      // The segment i → j holding d, and how far along it
+      let i = Math.max(0, dist.findIndex(v => v > d) - 1);
+      if (d >= total) i = Math.max(0, lastIdx - 1);
+      const j = Math.min(i + 1, lastIdx);
+      const t = dist[j] > dist[i] ? (d - dist[i]) / (dist[j] - dist[i]) : 0;
+      const ll = [lerp(coords[i][0], coords[j][0], t), lerp(coords[i][1], coords[j][1], t)];
+      const trackH = data.height ? lerp(data.height[i], data.height[j], t) : null;
+      const groundH = lerp(ground[i], ground[j], t);
+      const cursor = document.getElementById('t3-cursor');
+      cursor.setAttribute('x1', X(d)); cursor.setAttribute('x2', X(d)); cursor.setAttribute('visibility', 'visible');
+      const k = i < kind.length ? kind[i] : kind[kind.length - 1];
+      const tip = document.getElementById('t3-tip');
+      tip.style.display = 'block';
+      tip.style.left = Math.min(X(d) + 8, W - 190) + 'px';
+      tip.textContent = `${(d / 1000).toFixed(1)} km · track ${trackH != null ? Math.round(trackH) + ' m' : '–'}`
+        + ` · ground ${groundH != null ? Math.round(groundH) + ' m' : '–'}${k !== 'open' ? ' · ' + k : ''}`;
+      const z = segZ[i]
+        ? lerp(segZ[i][0], segZ[i][1], t)
+        : (map.queryTerrainElevation(ll) || (groundH ?? lerp(heights[i], heights[j], t))) + lift;
+      pin.position.set(...localAt(ll, z));
+      pin.visible = true;
+      map.triggerRepaint();
+    };
+    svg.onmouseleave = () => {
+      document.getElementById('t3-cursor')?.setAttribute('visibility', 'hidden');
+      document.getElementById('t3-tip').style.display = 'none';
+      pin.visible = false;
+      map.triggerRepaint();
+    };
+  }
+}
+
+function runningMedian(z, d, window) {
+  return z.map((_, i) => {
+    let lo = i, hi = i;
+    while (lo > 0 && d[i] - d[lo - 1] <= window / 2) lo--;
+    while (hi < z.length - 1 && d[hi + 1] - d[i] <= window / 2) hi++;
+    const part = z.slice(lo, hi + 1).sort((a, b) => a - b);
+    return part[part.length >> 1];
+  });
+}
+
+function movingAverage(z, d, window) {
+  return z.map((_, i) => {
+    let sum = 0, n = 0;
+    for (let k = i; k >= 0 && d[i] - d[k] <= window / 2; k--) { sum += z[k]; n++; }
+    for (let k = i + 1; k < z.length && d[k] - d[i] <= window / 2; k++) { sum += z[k]; n++; }
+    return sum / n;
+  });
+}
+
+// A polyline ([x, y, z] points, with a colour each) cut into dashes `on` long with `off`
+// between them, along its length: [[points, colours], ...]
+function dashes(points, colors, on, off) {
+  const out = [];
+  let cur = null, phase = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i], b = points[i + 1];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    let t = 0;
+    while (t < len) {
+      const inDash = phase < on, left = (inDash ? on : on + off) - phase;
+      const step = Math.min(left, len - t);
+      const at = u => a.map((v, k) => v + (b[k] - v) * u / (len || 1));
+      if (inDash) {
+        if (!cur) { cur = [[at(t)], [colors[i]]]; out.push(cur); }
+        cur[0].push(at(t + step));
+        cur[1].push(colors[i]);
+      }
+      t += step;
+      phase += step;
+      if (phase >= on && inDash) cur = null;
+      if (phase >= on + off) phase = 0;
+    }
+  }
+  return out;
+}
+
+function haversine([lng1, lat1], [lng2, lat2]) {
+  const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2
+    + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lng2 - lng1) * r / 2) ** 2;
+  return 12742000 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// The ground along the route, read straight from the terrain tiles (the profile needs it
+// inside tunnels too, where the track runs below it). The most detailed zoom that keeps a
+// long route to a few dozen tiles.
+async function groundHeights(points, length) {
+  const midLat = points[Math.floor(points.length / 2)][1] * Math.PI / 180;
+  let z = 13;
+  while (z > 6 && length / (40075016 / 2 ** z * Math.cos(midLat)) * 1.5 > 60) z--;
+  const n = 2 ** z, tiles = new Map();
+  const where = points.map(([lng, lat]) => {
+    const x = (lng + 180) / 360 * n;
+    const y = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+    const key = `${Math.floor(x)}/${Math.floor(y)}`;
+    if (!tiles.has(key)) tiles.set(key, null);
+    return { key, px: Math.min(TILE - 1, Math.floor((x % 1) * TILE)), py: Math.min(TILE - 1, Math.floor((y % 1) * TILE)) };
+  });
+  await Promise.all([...tiles.keys()].map(async key => {
+    try {
+      const [x, y] = key.split('/');
+      const blob = await (await fetch(TERRARIUM.replace('{z}', z).replace('{x}', x).replace('{y}', y))).blob();
+      const img = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(TILE, TILE), ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      tiles.set(key, ctx.getImageData(0, 0, TILE, TILE).data);
+    } catch (e) { /* a missing tile leaves gaps in the ground line */ }
+  }));
+  return where.map(({ key, px, py }) => {
+    const d = tiles.get(key);
+    if (!d) return null;
+    const o = (py * TILE + px) * 4;
+    return d[o] * 256 + d[o + 1] + d[o + 2] / 256 - 32768;
+  });
+}
+</script>
+
+{% endblock %}

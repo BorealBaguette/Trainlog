@@ -81,6 +81,7 @@ class Trip:
         route_source="router",
         seat_car=None,
         raw_path=None,
+        track_env=None,
     ):
         self.trip_id = trip_id
         self.username = username
@@ -135,6 +136,9 @@ class Trip:
         # vertices): altitude in metres, timestamps in epoch seconds.
         self.altitude = altitude
         self.timestamps = timestamps
+        # Tunnel/bridge stretches on the same vertices (JSON string, migration 0098):
+        # the rail router's road_environment, kept with its track heights in altitude.
+        self.track_env = track_env
         # How the route was produced: 'router' | 'freehand' | 'gpx' | 'gpx_routed' | 'fr24'.
         self.route_source = route_source
         # Untouched GPS trace this trip was built from (GPX imports only), kept

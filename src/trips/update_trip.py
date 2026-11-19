@@ -82,23 +82,25 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
             coords = [[c["lat"], c["lng"]] for c in coords]
         ewkt = coords_to_ewkt(coords)
         if ewkt is not None:
-            # The 3D flight track (altitude/timestamps) must stay aligned with the
-            # geometry. If the route itself was (re-)imported/edited (formData carries
-            # a "path"), replace the track with whatever came with it — fresh FR24
-            # arrays, or NULL for a GPX/manual path (clears the now-stale track).
-            # A metadata-only edit reuses the existing geometry, so leave it intact.
+            # The 3D track (altitude/timestamps, tunnel/bridge stretches) must stay aligned
+            # with the geometry. If the route itself was (re-)imported/edited (formData
+            # carries a "path"), replace it with whatever came with it — fresh FR24 arrays,
+            # the ground's heights and the router's stretches, or NULL (clears the now-stale
+            # track). A metadata-only edit reuses the existing geometry, so leave it intact.
             if formData is not None and "path" in formData:
                 pg.execute(
-                    "INSERT INTO paths (trip_id, geom, altitude, timestamps)"
+                    "INSERT INTO paths (trip_id, geom, altitude, timestamps, track_env)"
                     " VALUES (:trip_id, ST_GeomFromEWKT(:ewkt),"
-                    " CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb))"
+                    " CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb), CAST(:track_env AS jsonb))"
                     " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
-                    " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
+                    " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps,"
+                    " track_env = EXCLUDED.track_env",
                     {
                         "trip_id": trip_id,
                         "ewkt": ewkt,
                         "altitude": getattr(trip, "altitude", None),
                         "timestamps": getattr(trip, "timestamps", None),
+                        "track_env": getattr(trip, "track_env", None),
                     },
                 )
             else:
