@@ -182,7 +182,7 @@
 .publicVehicle .vehiclePhotoContainer img { display: block; width: 100%; height: auto; }
 .publicVehicle .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
 </style>
-<link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <style>
@@ -693,6 +693,18 @@ body.markers-hidden .marker-numbered {
           <i class="fa-solid fa-image"></i> {{ poster }}
         </a>
         {% endif %}
+        {# The trips' video, beside the poster and under the same rule; for alpha users while new #}
+        {% set video_url = (url_for('public_trip_video', tagId=tag_uuid) if tag_uuid else (url_for('public_trip_video', tripIds=tripIdsParam) if tripIds else None)) if own_trips and is_alpha and not period_args else None %}
+        {% if video_url %}
+        <a class="tripActionBtn" href="{{ video_url }}">
+          <i class="fa-solid fa-film"></i> Video
+        </a>
+        {% endif %}
+        {% if video_url and tripIds and not tag_uuid %}
+        <a class="tripActionBtn" href="{{ url_for('trip3d.view', tripIds=tripIdsParam) }}">
+          <i class="fa-solid fa-mountain"></i> 3D
+        </a>
+        {% endif %}
         {# Same idea as Ride along, for a shared plan: save an independent copy
            into your own plans. #}
         {% if plan_copy_url %}
@@ -811,7 +823,7 @@ function planValidate() {
 
 <div id="snackbar">{{copyLink}}</div>
 
-<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/trip_progress.js') }}"></script>
@@ -1952,12 +1964,12 @@ function addCurrentStops(trips) {
             r.appendChild(timeCell(actual, sched, p.tz));
             box.appendChild(r);
         };
-        const same = Math.abs(p.arr - p.dep) < 60000;
+        const same = Math.abs(p.arrShown - p.depShown) < 60000;
         if (same) {
-            row(labels.departure, p.dep, p.depSched);
+            row(labels.departure, p.depShown, p.depSched);
         } else {
-            row(labels.arrival, p.arr, p.arrSched);
-            row(labels.departure, p.dep, p.depSched);
+            row(labels.arrival, p.arrShown, p.arrSched);
+            row(labels.departure, p.depShown, p.depSched);
         }
 
         const plat = p.platformRt || p.platform;

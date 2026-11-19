@@ -187,6 +187,7 @@ from src.api.news import news_blueprint
 from src.sql import news as news_sql
 from src.api.og import og_blueprint, og_image_url, plan_og_image_url
 from src.api.tag_share import tag_share_blueprint
+from src.api.trip3d import trip3d_blueprint
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
@@ -293,6 +294,7 @@ from src.trips import (
     get_current_trip_id,
 )
 from src.paths import Path, coords_to_ewkt, fetch_raw_path, geom_geojson_to_coords
+from src.track_profile import TRACK_TYPES, track_from_route
 from src.trips.freehand_transform import (
     apply_to_trip,
     purge_expired_backups,
@@ -383,6 +385,7 @@ app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
 app.register_blueprint(tag_share_blueprint)
+app.register_blueprint(trip3d_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
@@ -420,6 +423,7 @@ if matomo_config:
             token_auth=token_auth,
             ignored_routes=["/static/<path:filename>"],
         )
+        matomo.client_dimension_id = matomo_config.get("client_dimension_id")
 
 
 def getLoggedUserCurrency():
@@ -958,6 +962,14 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
 
     user_id = User.query.filter_by(username=username).first().uid
 
+    # The ground's heights under a path that follows it and the router's tunnel/bridge
+    # stretches (src/track_profile.py). A caller's own altitude (an FR24 or GPX track) wins.
+    track_env = None
+    if trip_type in TRACK_TYPES:
+        route_altitude, track_env = track_from_route(newTrip.get("details"), newPath)
+        if altitude is None:
+            altitude = route_altitude
+
     trip = Trip(
         username=username,
         user_id=user_id,
@@ -1004,6 +1016,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         timestamps=timestamps,
         route_source=newTrip.get("route_source") or "router",
         raw_path=raw_path,
+        track_env=track_env,
     )
 
     create_trip(trip)
@@ -3192,11 +3205,15 @@ def update_tag(username, tag_id):
 
 
 @app.route("/u/<username>/get_all_tags")
-@login_required
+@public_required
 def get_all_tags(username):
     with pg_session() as pg:
-        tags = pg.execute(get_tags_query(), {"username": username}).fetchall()
-    return jsonify(tags=[dict(tag._mapping) for tag in tags])
+        tags = [dict(tag._mapping) for tag in pg.execute(get_tags_query(), {"username": username})]
+    if not (session.get(username) or session.get(owner)):
+        # Visitors get the tags to label trips with, not every trip in them (private ones included).
+        for tag in tags:
+            del tag["trip_ids"]
+    return jsonify(tags=tags)
 
 
 @app.route("/u/<username>/bulkChangeVisibility")
@@ -4946,6 +4963,16 @@ def public_trip(tripIds=None, tagId=None, ticketId=None):
 def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
     return render_public_trip_page(
         tripIds, tagId, ticketId, template="public/trip_poster.html", owner_only=True
+    )
+
+
+# The trips' video (templates/admin/trip3d_video.html): like the poster, for one's own trips
+@app.route("/public/trip/<tripIds>/video")
+@app.route("/public/tag/<tagId>/video")
+@app.route("/public/ticket/<ticketId>/video")
+def public_trip_video(tripIds=None, tagId=None, ticketId=None):
+    return render_public_trip_page(
+        tripIds, tagId, ticketId, template="admin/trip3d_video.html", owner_only=True
     )
 
 
@@ -7266,6 +7293,32 @@ def build_form_data_from_trip(trip):
     return form
 
 
+def _drop_live_stop_data(waypoints):
+    """Strips, in place, what a list of waypoints holds of the run its stops were
+    taken from. A copy is almost always another day or time, so another train: its
+    stops keep their timetable, not that train's live times and platforms, nor the
+    run they came from (the stops dialog then finds the new one on Refresh)."""
+    for wp in waypoints:
+        stop = wp.get("stop") if isinstance(wp, dict) else None
+        if isinstance(stop, dict):
+            for field in ("arr_rt", "dep_rt", "platform_rt", "trip"):
+                stop.pop(field, None)
+
+
+def _as_copy(trip):
+    """A trip's columns as its copy starts from — what the copy page shows
+    (edit_copy_trip): no delays, and stops without the copied run's live data."""
+    trip = {**trip, "departure_delay": None, "arrival_delay": None}
+    try:
+        waypoints = json.loads(trip.get("waypoints") or "null")
+    except (TypeError, ValueError):
+        return trip
+    if isinstance(waypoints, list):
+        _drop_live_stop_data(waypoints)
+        trip["waypoints"] = json.dumps(waypoints, ensure_ascii=False)
+    return trip
+
+
 def _read_patch_payload(payload):
     """The caller's fields, spelled as the trip row holds them: JSON arrays
     serialised, and null meaning "clear" just as an empty form field does."""
@@ -7297,7 +7350,11 @@ def patchTrip(username):
     UTC counterparts are derived here and ignored if sent. The trip type is not
     patchable, no more than it is through updateTrip.
 
-    Responds with the columns that were applied and any key not recognised.
+    With `copy` true, the trip is left as it is and the patch is applied to a new
+    copy of it instead, as the copy page saves one (see apply_trip_patch).
+
+    Responds with the columns that were applied and any key not recognised, and
+    the id of the trip written (the new one, for a copy).
     """
     if request.method != "POST":
         return ""
@@ -7309,6 +7366,7 @@ def patchTrip(username):
         return jsonify({"error": "Expected an object of trip fields"}), 400
 
     uid = payload.pop("uid", None)
+    copy = payload.pop("copy", False) in (True, "true", "1", 1)
     try:
         trip_id = int(payload.pop("trip_id", uid))
     except (TypeError, ValueError):
@@ -7317,15 +7375,20 @@ def patchTrip(username):
     # Aborts 404 if the trip is missing or is not the caller's.
     check_current_user_owns_trip(trip_id)
     try:
-        return jsonify(apply_trip_patch(trip_id, payload))
+        return jsonify(apply_trip_patch(trip_id, payload, copy=copy))
     except ValueError as e:
         return jsonify({"error": f"Invalid date: {e}"}), 400
 
 
-def apply_trip_patch(trip_id, payload):
+def apply_trip_patch(trip_id, payload, copy=False):
     """patchTrip's edit of a trip the caller owns: `payload` in `trips` column terms
     (see patchTrip). Returns {trip_id, patched, ignored}; ValueError for a date that
-    doesn't parse. The MCP's update_trip edits trips through it too."""
+    doesn't parse. The MCP's update_trip edits trips through it too.
+
+    With `copy`, the trip is duplicated and the patch written to the copy, which
+    starts from what the copy page shows (_as_copy) and otherwise keeps every column
+    of the trip. The result then names the copy, with `copied_from` the trip. A copy
+    the patch could not be written to is deleted again."""
     stored = get_trip_pg(trip_id)
 
     patched = _read_patch_payload(payload)
@@ -7335,6 +7398,12 @@ def apply_trip_patch(trip_id, payload):
     known = set(stored) | {_camel_case(c) for c in stored} | set(ROUTE_FIELDS)
     ignored = sorted(set(patched) - known)
     trip = {**stored, **patched}
+    if copy:
+        # After the patch, so stops sent with a redrawn route lose their live data
+        # too, as the copy page's do; delays the caller sets are its own.
+        trip = _as_copy(trip)
+        trip.update({k: patched[k] for k in ("departure_delay", "arrival_delay")
+                     if k in patched})
 
     formData = build_form_data_from_trip(trip)
 
@@ -7347,10 +7416,27 @@ def apply_trip_patch(trip_id, payload):
         for field in ROUTE_MEASUREMENTS:
             formData[field] = _as_form_value(trip[field])
 
-    new_trip = update_trip_values_from_form_data(trip_id, formData)
-    update_trip(trip_id, new_trip, formData)
+    if not copy:
+        new_trip = update_trip_values_from_form_data(trip_id, formData)
+        update_trip(trip_id, new_trip, formData)
+        return {"trip_id": trip_id, "patched": sorted(patched), "ignored": ignored}
 
-    return {"trip_id": trip_id, "patched": sorted(patched), "ignored": ignored}
+    # The copy carries the trip's path and 3D track; the form rendered from the trip
+    # carries every other column (platforms, power, CO2 override… which the
+    # duplicate itself leaves out).
+    copy_id = duplicate_trip(trip_id)
+    try:
+        new_trip = update_trip_values_from_form_data(copy_id, formData)
+        update_trip(copy_id, new_trip, formData)
+    except Exception:
+        delete_trip(copy_id, stored["username"])
+        raise
+    return {
+        "trip_id": copy_id,
+        "copied_from": trip_id,
+        "patched": sorted(patched),
+        "ignored": ignored,
+    }
 
 
 def check_current_user_owns_trip(trip_id):
@@ -7639,6 +7725,12 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
     # plain metadata edits, where update_trip's COALESCE preserves the stored one.
     trip.altitude = formData.get("altitude") or None
     trip.timestamps = formData.get("timestamps") or None
+    # A re-drawn path that follows the ground gets its heights and tunnel/bridge stretches
+    # afresh, as a new trip does: the stored ones are about the old path's points
+    trip.track_env = None
+    if "path" in formData and original_trip.type in TRACK_TYPES:
+        route_altitude, trip.track_env = track_from_route(details_parsed, path)
+        trip.altitude = trip.altitude or route_altitude
 
     return trip
 
@@ -9594,6 +9686,7 @@ def get_trips_api_internal(username, is_public=False):
     )
 
     is_friend = current_user_is_friend_with(username)
+    hide_price = is_public and not (session.get(username) or session.get(owner))
 
     # Sorting parameters
     sort_column = request.form.get("order[0][column]", type=int, default=3)
@@ -9610,6 +9703,8 @@ def get_trips_api_internal(username, is_public=False):
     if custom_sort_field and custom_sort_field in SORT_FIELD_EXPRS:
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
+    if hide_price and sort_column_name == "price":
+        sort_column_name = "temporal"
 
     # Now-anchor: with upcoming trips folded in, the descending timeline runs
     # [far future … now … oldest past], so its first page is the most distant plan —
@@ -9687,10 +9782,11 @@ def get_trips_api_internal(username, is_public=False):
         # The countries column is JSON keyed by code, matched on the quoted, upper-case
         # code so that "NO" does not find every trip with a "nonelec" split.
         terms.append(f"COALESCE(countries, '') LIKE :{param}_country")
-        terms.append(
-            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ANY(FilteredTrips.ticket_ids)"
-            f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
-        )
+        if not hide_price:
+            terms.append(
+                "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ANY(FilteredTrips.ticket_ids)"
+                f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
+            )
         terms.append(
             "EXISTS (SELECT 1 FROM tags_associations fta JOIN tags ft ON fta.tag_id = ft.uid"
             f" WHERE fta.trip_id = FilteredTrips.uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
@@ -9913,9 +10009,10 @@ def get_trips_api_internal(username, is_public=False):
                 trip["vessel_name"] = names.get(trip["uid"])
 
     # If public, remove price information
-    if is_public:
+    if hide_price:
         for trip in trip_dicts:
-            trip.pop("price", None)
+            for field in share_view.PRICE_FIELDS:
+                trip.pop(field, None)
 
     # Format trips for display
     trip_list = [formatTrip(trip) for trip in trip_dicts]
@@ -10413,18 +10510,28 @@ def delete_account(username):
     The form fields are named delete_confirm_secret/delete_confirm_phrase
     rather than password/username on purpose: a real name="password" input
     gets its own save/fill prompt from the browser no matter what autocomplete
-    hints say, which fights the whole point of a confirmation step."""
+    hints say, which fights the whole point of a confirmation step.
+
+    API clients (the mobile app) pass ?raw=1, like /login, to get JSON instead
+    of a flash + redirect: 200 {"deleted": true}, or 400 {"error":
+    "confirm_mismatch"} / 403 {"error": "wrong_password"}. The same two checks
+    apply in both modes."""
+    raw = request.args.get("raw") == "1"
     user = User.query.filter_by(username=username).first()
-    user_lang = lang[session["userinfo"]["lang"]]
+    user_lang = lang[session.get("userinfo", {}).get("lang", "en")]
 
     password = request.form.get("delete_confirm_secret", "")
     confirm_username = request.form.get("delete_confirm_phrase", "").strip()
 
     if confirm_username != username:
+        if raw:
+            return jsonify({"deleted": False, "error": "confirm_mismatch"}), 400
         flash(user_lang["deleteAccountConfirmMismatch"], "error")
         return redirect(url_for("user_settings", username=username))
 
     if not password or not check_password_hash(user.pass_hash, password):
+        if raw:
+            return jsonify({"deleted": False, "error": "wrong_password"}), 403
         flash(user_lang["deleteAccountWrongPassword"], "error")
         return redirect(url_for("user_settings", username=username))
 
@@ -10433,6 +10540,8 @@ def delete_account(username):
 
     session.pop(username, None)
     session.pop("logged_in", None)
+    if raw:
+        return jsonify({"deleted": True})
     flash(user_lang["deleteAccountSuccess"], "success")
     return redirect(url_for("login"))
 
@@ -10564,19 +10673,17 @@ def public_trips(username, time=None):
 
 
 
-@app.route("/u/<username>/<edit_copy_type>/<tripId>")
+@app.route("/u/<username>/<any(edit, copy):edit_copy_type>/<tripId>")
 def edit_copy_trip(username, tripId, edit_copy_type):
     """
     Edit or copy trip details
     """
+    # Not <int:tripId>: templates build the link with a placeholder id and fill it in JS.
+    if not tripId.isdigit():
+        abort(404)
     user_obj = User.query.filter_by(username=username).first()
     colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
 
-    if "edit" in request.path:
-        edit_copy_type = "edit"
-    elif "copy" in request.path:
-        edit_copy_type = "copy"
-        
     from_app = request.args.get('fromApp') == 'true'
 
     trip = get_trip_pg(tripId)
@@ -10651,14 +10758,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     if edit_copy_type == "copy":
         tripDepartureDelay = ""
         tripArrivalDelay = ""
-        # A copy is almost always another day or time, so another train: its stops keep
-        # their timetable, not that train's live times and platforms, nor the run they
-        # came from (the stops dialog then finds the new one on Refresh).
-        for wp in stored:
-            stop = wp.get("stop") if isinstance(wp, dict) else None
-            if isinstance(stop, dict):
-                for field in ("arr_rt", "dep_rt", "platform_rt", "trip"):
-                    stop.pop(field, None)
+        _drop_live_stop_data(stored)
         waypoint_meta = _waypoint_meta(stored)
     else:
         tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""

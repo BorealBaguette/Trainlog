@@ -11,6 +11,7 @@ from src.quai import forget_station_merges, quai_station, station_merges
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
+from .country_shapes import country_shapes_at, country_shapes_json, country_shapes_page
 from .operators import operators_api_blueprint
 from .trainsets import trainsets_admin_blueprint
 from .wagons import wagons_admin_blueprint
@@ -101,6 +102,24 @@ def trainsets_admin():
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],
     )
+
+
+@admin_blueprint.route("/country_shapes")
+@owner_required
+def country_shapes():
+    return country_shapes_page()
+
+
+@admin_blueprint.route("/country_shapes.geojson")
+@owner_required
+def country_shapes_data():
+    return country_shapes_json()
+
+
+@admin_blueprint.route("/country_shapes/at")
+@owner_required
+def country_shapes_lookup():
+    return country_shapes_at()
 
 
 @admin_blueprint.route("/station_explorer")
