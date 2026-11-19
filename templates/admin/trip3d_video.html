@@ -1,0 +1,2220 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include (nav if nav is defined else "bootstrap/navigation.html") %}
+
+<link href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.min.js"></script>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+} }
+</script>
+
+<style>
+  html, body { overflow: hidden; }
+  /* The site's light or dark theme (the user's setting), through Bootstrap's own colours */
+  #v-wrap { --v-bg: var(--bs-tertiary-bg); --v-fg: var(--bs-body-color); --v-dim: var(--bs-secondary-color);
+    --v-btn: var(--bs-secondary-bg); --v-accent: #2f81f7;
+    height: calc(100vh - 70px); display: flex; gap: 14px; padding: 14px; background: var(--v-bg); box-sizing: border-box; }
+  #v-stage-box { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+  /* Over the frame while the map, the trips and the terrain load (it can take a while) */
+  #v-loading { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: var(--v-bg); color: var(--v-fg); font-size: .95rem; }
+  #v-loading i { font-size: 2rem; color: var(--v-accent); }
+  #v-loading.v-done { display: none; }
+  #v-stage { position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: #000; }
+  #v-scale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #v-map { position: absolute; left: 0; top: 0; pointer-events: none; }
+  #v-hud { position: absolute; left: 0; top: 0; pointer-events: none; }
+  /* The video draws its own credits; the map's buttons have no place in it */
+  #v-map .maplibregl-control-container, #v-map > div[style*="monospace"] { display: none; }
+  #v-panel { width: 290px; flex-shrink: 0; color: var(--v-fg); font-size: .85rem; display: flex; flex-direction: column; gap: 10px; }
+  #v-panel h5 { margin: 0; font-weight: 700; }
+  #v-panel select, #v-panel input { width: 100%; }
+  #v-panel .v-row { display: flex; gap: 8px; align-items: center; }
+  #v-panel label { color: var(--v-dim); font-size: .75rem; margin-bottom: 2px; display: block; }
+  #v-panel button { border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 600; cursor: pointer; }
+  #v-play { background: var(--v-btn); color: var(--v-fg); }
+  #v-render { background: var(--v-accent); color: #fff; }
+  #v-panel button:disabled { opacity: .5; cursor: default; }
+  /* Options changed but not applied yet, and the button that applies them */
+  #v-panel .v-pending { outline: 2px solid #f0a020; outline-offset: 1px; }
+  #v-apply { background: var(--v-btn); color: var(--v-fg); }
+  #v-apply:not(:disabled) { background: #f0a020; color: #1a1a1a; }
+  #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
+  #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
+  #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
+  /* Phones: the frame on top, the controls under it, the page scrolling */
+  @media (max-width: 800px) {
+    html, body { overflow: auto; }
+    #v-wrap { flex-direction: column; height: auto !important; padding: 10px; }
+    #v-stage-box { flex: none; height: 60vh; }
+    #v-panel { width: 100%; padding-bottom: 20px; }
+  }
+</style>
+
+<div id="v-wrap">
+  <div id="v-stage-box">
+    <div id="v-stage"><div id="v-scale"><div id="v-map"></div><canvas id="v-hud"></canvas></div></div>
+    <div id="v-loading"><i class="fa-solid fa-circle-notch fa-spin"></i><div id="v-loading-text">Loading…</div></div>
+  </div>
+  <div id="v-panel">
+    <h5>{{ video3dTitle }}</h5>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ video3dDuration }}</label>
+        <input id="v-len" type="number" min="15" max="3600" step="1" class="form-control form-control-sm" placeholder="{{ video3dAuto.replace('{n}', '…') }}"></div>
+      <div style="flex:1"><label>{{ video3dFormat }}</label>
+        <select id="v-size" class="form-select form-select-sm">
+          <option value="1920x1080" selected>1080p</option><option value="1280x720">720p</option>
+          <option value="720x720">{{ video3dSquare }}</option><option value="1080x1920">{{ video3dVertical }}</option>
+          <option value="custom">{{ video3dCustom }}</option></select></div>
+    </div>
+    <div id="v-res" style="color:#9da7b3;font-size:.75rem;margin-top:-4px"></div>
+    <div class="v-row" id="v-custom" hidden>
+      <div style="flex:1"><label>{{ video3dWidth }}</label><input id="v-w" type="number" min="128" max="3840" step="2" value="1920" class="form-control form-control-sm"></div>
+      <div style="flex:1"><label>{{ video3dHeight }}</label><input id="v-h" type="number" min="128" max="3840" step="2" value="1080" class="form-control form-control-sm"></div>
+    </div>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ tilesetLabel }}</label>
+        <select id="v-bg" class="form-select form-select-sm">
+          <option value="">{{ posterLabelDefault }}</option>
+          <optgroup label="Trainlog"><option value="trainlog-light">Trainlog Rail Light</option><option value="trainlog-rail">Trainlog Rail Dark</option><option value="dark-train">Trainlog Dark</option></optgroup>
+          <optgroup label="OpenFreeMap"><option value="ofm-liberty">Liberty</option><option value="ofm-bright">Bright</option><option value="ofm-positron">Positron</option></optgroup>
+          <optgroup label="Jawg"><option value="jawg-streets-v2">Streets V2</option><option value="jawg-lagoon-v2">Lagoon V2</option><option value="jawg-terrain">{{ tileserver_jawg_terrain }}</option><option value="jawg-sunny">{{ tileserver_jawg_sunny }}</option><option value="jawg-light">{{ tileserver_jawg_light }}</option><option value="jawg-dark">{{ tileserver_jawg_dark }}</option></optgroup>
+          <optgroup label="OpenStreetMap"><option value="osm">{{ tileserver_default }}</option><option value="de">{{ tileserver_de }}</option><option value="fr">{{ tileserver_fr }}</option></optgroup>
+        </select></div>
+    </div>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ video3dMusic }}</label>
+        <input id="v-music" type="file" accept="audio/*" class="form-control form-control-sm">
+        <div id="v-music-trim" hidden style="margin-top: 6px">
+          <canvas id="v-wave" style="display: block; width: 100%; height: 56px; cursor: grab; border-radius: 6px; background: var(--v-btn); touch-action: none"></canvas>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px">
+            <div id="v-music-info" style="flex: 1; color: var(--v-dim); font-size: .75rem"></div>
+            <button id="v-music-fit" type="button" style="padding: 3px 8px; font-size: .75rem; background: var(--v-btn); color: var(--v-fg)">{{ video3dFitMusic }}</button>
+          </div>
+        </div>
+        <div style="color: var(--v-dim); font-size: .7rem; margin-top: 3px">{{ video3dMusicRights }}</div></div>
+    </div>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ video3dMaxSize }}</label>
+        <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
+    </div>
+    <button id="v-apply" disabled>{{ video3dApply }}</button>
+    <button id="v-play">▶ {{ video3dPreview }}</button>
+    <button id="v-render">⬇ {{ video3dRender }}</button>
+    <div id="v-bar"><div></div></div>
+    <div id="v-status">Loading…</div>
+  </div>
+</div>
+
+<script type="module">
+// A video of a trip on the 3D terrain: the camera follows the train from above, the route
+// drawing itself behind it at its real heights (never draped: bridges stand over their
+// valleys, tunnels run through the mountain as an outlined dotted line), with the trip's
+// profile along the bottom. Rendered frame by frame, each once its terrain has loaded, and
+// encoded to MP4 in the browser (WebCodecs), so it plays smoothly however slow the render.
+import * as THREE from 'three';
+// The page's language: its words, and its numbers and dates
+const T = {{ {'tunnel': video3dTunnel, 'bridge': video3dBridge, 'altitude': video3dAltitude, 'distance': video3dDistance,
+  'highest': video3dHighest, 'cruise': video3dCruise, 'descent': video3dDescent, 'climb': video3dClimb,
+  'ready': video3dReady, 'terrain': video3dTerrain, 'rendering': video3dRendering,
+  'done': video3dDone, 'eta': video3dEta, 'licensedToTrainlog': licensedToTrainlog, 'preview': video3dPreview, 'failed': video3dFailed, 'auto': video3dAuto, 'stops': motisStops, 'tunnels': video3dTunnels,
+  'transfers': video3dTransfers, 'inTunnels': video3dInTunnels} | tojson }};
+const LANG = {{ (langId or 'en') | tojson }};
+// A premium member's videos say so under the name, with the site's premium gem: the trips'
+// owner's membership, once the trips are in
+let PREMIUM = false;
+const fill = (text, values) => Object.entries(values).reduce((t, [k, v]) => t.replace(`{${k}}`, v), text);
+const plural = (forms, n) => fill(forms[new Intl.PluralRules(LANG).select(n)] ?? forms.other, { n });
+
+// The trip page's trips (its /video link); a tag's video is named after the tag
+const DATA_URL = {{ url_for('trip3d.trips_json') | tojson }};
+// The trips asked for in the body (a tag's ids are too many for a URL)
+const fetchTrips = () => fetch(DATA_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ids: {{ tripIds | tojson }} }) });
+const TAG_NAME = {{ (tag_description if tag_uuid else none) | tojson }};
+// The background chosen for this page (?bg=, not saved), else the user's own
+const BG = new URLSearchParams(location.search).get('bg');
+const TILESERVER = BG || {{ tileserver | tojson }};
+// Another one reloads the page (on Apply): the terrain and the route are laid over the map's
+// style, which a background swap in place would lose. The other options ride along in the
+// address too (?len=, ?mb=, ?size=)
+document.getElementById('v-bg').value = BG || '';
+const LEN = new URLSearchParams(location.search).get('len');
+const MB = new URLSearchParams(location.search).get('mb');
+if (MB) document.getElementById('v-mb').value = MB;
+const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
+const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
+const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
+// The train's cars, as its trip page draws them (static/js/wagon_img.js), and their credits
+const WAGONS = {{ url_for('static', filename='images/wagons') | tojson }};
+const wagonSrc = u => {
+  const ext = u.image_ext || 'gif', side = u._side || 'L', t = u.image_type;
+  if (t === 'sides') return `${WAGONS}/${u.image}${side === 'R' ? '_R' : '_L'}.${ext}`;
+  if (t === 'sides_L' || t === 'sides_R') return `${WAGONS}/${u.image}_${t.slice(-1)}.${ext}`;
+  return `${WAGONS}/${u.image}.${ext}`;
+};
+const wagonImages = {};
+const wagonImage = u => {
+  if (!u.image) return null;
+  const src = wagonSrc(u);
+  if (!wagonImages[src]) {
+    const img = wagonImages[src] = new Image();
+    img.onload = () => { img.ready = true; };
+    img.onerror = () => { img.failed = true; };
+    img.src = src;
+  }
+  return wagonImages[src];
+};
+// "© names (licence) · source", grouped by licence, as the trip page credits a composition;
+// an author given as a Trainlog or wiki user page shown by name
+const authorName = a => (a.match(/^https?:\/\/[^/]+\/public\/(.+)$/) || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i) || [, a])[1];
+const wagonCredit = units => {
+  const order = [], byLicense = {}, sources = [];
+  for (const u of units) {
+    if (u.source && !sources.includes(u.source)) sources.push(u.source);
+    if (!u.author && !u.license) continue;
+    const lic = u.license || '';
+    if (!byLicense[lic]) { order.push(lic); byLicense[lic] = []; }
+    for (const part of (u.author || '').split(',').map(x => x.trim().replace(/^\/+|\/+$/g, '')).filter(Boolean))
+      if (!byLicense[lic].includes(authorName(part))) byLicense[lic].push(authorName(part));
+  }
+  const parts = order.map(lic => {
+    const names = byLicense[lic].join(', '), label = lic === 'TRAINLOG_LICENSED' ? T.licensedToTrainlog : lic;
+    return names && label ? `© ${names} (${label})` : names ? `© ${names}` : label;
+  });
+  return [...parts, ...sources].join(' · ');
+};
+const STATIC = {{ url_for('static', filename='') | tojson }};
+// The operators' logos, as the site shows them
+const operatorLogos = {};
+const operatorLogo = path => {
+  if (!path) return null;
+  if (!operatorLogos[path]) {
+    const img = operatorLogos[path] = new Image();
+    img.onload = () => { img.ready = true; };
+    img.src = STATIC + path;
+  }
+  return operatorLogos[path].ready ? operatorLogos[path] : null;
+};
+// A station name's flag emoji as its country code ("🇬🇧 Aviemore" → "gb"), drawn from the
+// site's flag images: canvas cannot draw flag emoji everywhere (Windows shows two letters)
+const flagCode = name => {
+  const m = (name || '').match(/\p{Regional_Indicator}{2}/u);
+  return m ? [...m[0]].map(c => String.fromCharCode(c.codePointAt(0) - 0x1F1E6 + 97)).join('') : null;
+};
+const flagImages = {};
+const flagImage = code => {
+  if (!code) return null;
+  if (!flagImages[code]) {
+    const img = flagImages[code] = new Image();
+    img.onload = () => { img.ready = true; };
+    img.src = `${FLAGS}${code}.svg`;
+  }
+  return flagImages[code].ready ? flagImages[code] : null;
+};
+const DEM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+// The site's colours per trip type, from its own list (as on its maps, every type there);
+// metro brightened to read on the terrain
+const COLOR = { ...Object.fromEntries(MapLibreUtils.MapConfig.transportTypes.map(t => [t.id, t.color])), metro: '#3d8bff' };
+const FPS = 30;
+THREE.ColorManagement.enabled = false;
+
+const $status = document.getElementById('v-status'), $bar = document.querySelector('#v-bar div');
+const status = (text, pct) => {
+  $status.textContent = text;
+  if (pct != null) $bar.style.width = `${pct}%`;
+  document.getElementById('v-loading-text').textContent = text;
+};
+// The loading cover goes once the first frame is drawn (or stays, with the reason, if none can be)
+const uncover = () => document.getElementById('v-loading').classList.add('v-done');
+const stuck = text => { status(text); document.querySelector('#v-loading i').className = 'fa-solid fa-triangle-exclamation'; };
+
+// ── Stage: the map at the video's own size, shown scaled to fit ─────────────────────
+let [W, H] = [1920, 1080];
+const $stage = document.getElementById('v-stage'), $scale = document.getElementById('v-scale');
+const $map = document.getElementById('v-map'), hud = document.getElementById('v-hud'), g2 = hud.getContext('2d');
+function layoutStage() {
+  // The page fills the window below the navbar; on a phone it scrolls instead (CSS)
+  const wrap = document.getElementById('v-wrap');
+  wrap.style.height = window.matchMedia('(max-width: 800px)').matches ? '' : `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
+  const box = document.getElementById('v-stage-box').getBoundingClientRect();
+  const s = Math.min(box.width / W, box.height / H);
+  $stage.style.width = `${W * s}px`; $stage.style.height = `${H * s}px`;
+  $scale.style.transform = `scale(${s})`;
+  for (const el of [$map, hud]) { el.style.width = `${W}px`; el.style.height = `${H}px`; }
+  hud.width = W; hud.height = H;
+}
+layoutStage();
+window.addEventListener('resize', layoutStage);
+
+const map = await MapLibreUtils.initializeMapLibre({
+  container: 'v-map', tileserver: TILESERVER, useGlobe: false, center: [8, 60], zoom: 5, pixelRatio: 1,
+  canvasContextAttributes: { antialias: true, preserveDrawingBuffer: true },
+});
+await new Promise(r => map.loaded() ? r() : map.once('load', r));
+map.setMaxPitch(80);
+const dem = { type: 'raster-dem', tiles: [DEM], encoding: 'terrarium', tileSize: 512, maxzoom: 16,
+  attribution: '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>' };
+map.addSource('v-terrain', dem);
+map.addSource('v-hillshade', { ...dem, attribution: undefined });
+const firstSymbol = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+map.addLayer({ id: 'v-hillshade', type: 'hillshade', source: 'v-hillshade', paint: {
+  'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(50,40,30,0.65)',
+  'hillshade-highlight-color': 'rgba(255,255,255,0.45)', 'hillshade-accent-color': 'rgba(50,40,30,0.3)' } }, firstSymbol);
+map.setTerrain({ source: 'v-terrain', exaggeration: 1 });
+// The camera's focus height is ours (smoothed along the route), not the terrain's under it
+// at each frame, which bobbed the view over every bump
+map.setCenterClampedToGround?.(false);
+map.setSky({ 'sky-color': '#7fb2e6', 'horizon-color': '#e9eef4', 'fog-color': '#dfe6ee',
+  'sky-horizon-blend': 0.55, 'horizon-fog-blend': 0.55, 'fog-ground-blend': 0.6 });
+
+const logo = new Image();
+logo.src = LOGO;
+// An image halved step by step down to the size drawn (inverted if asked): one drawImage straight
+// from 900 px to ~170 px skips most source pixels and leaves the edges jagged
+const shrunk = {};
+function shrink(img, w, invert = false) {
+  const key = `${img.src || img.id} ${w} ${invert}`;
+  if (shrunk[key]) return shrunk[key];
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  let src = img, sw = iw, sh = ih;
+  while (sw / 2 >= w) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(sw / 2); c.height = Math.round(sh / 2);
+    c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    [src, sw, sh] = [c, c.width, c.height];
+  }
+  const out = document.createElement('canvas');
+  out.width = w; out.height = Math.round(w * ih / iw);
+  const g = out.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, 0, 0, out.width, out.height);
+  // Inverted for a dark background: black turns white and white black, so the white details
+  // drawn inside an icon (a car's windows) stay visible rather than vanishing in a white fill
+  if (invert) {
+    const px = g.getImageData(0, 0, out.width, out.height), v = px.data;
+    for (let i = 0; i < v.length; i += 4) { v[i] = 255 - v[i]; v[i + 1] = 255 - v[i + 1]; v[i + 2] = 255 - v[i + 2]; }
+    g.putImageData(px, 0, 0);
+  }
+  return (shrunk[key] = out);
+}
+// The trip types' icons, for the station chip
+const typeIcons = {};
+const typeIcon = type => {
+  if (!typeIcons[type]) {
+    typeIcons[type] = new Image();
+    typeIcons[type].src = `${TRIP_LOGOS}${type}.png`;
+  }
+  const img = typeIcons[type];
+  return img.complete && img.naturalWidth ? img : null;
+};
+
+await document.fonts.load('900 20px "Font Awesome 6 Free"', '\uf4d7').catch(() => {});
+// A failure (trips not found or not one's own, a map that will not load) stays on the cover
+await setup().catch(e => stuck(`${e.message || e}`));
+
+async function setup() {
+  const loaded = await (await fetchTrips()).json();
+  const legs = (loaded.trips || [loaded]).filter(t => t.coords?.length > 1);
+  PREMIUM = legs.length > 0 && legs.every(t => t.trip.premium);
+  if (!legs.length) { stuck('Nothing to show: no trip with a path.'); return; }
+  const data = mergeTrips(legs);
+  const coords = data.coords, n = coords.length, last = n - 1;
+  // Longitudes made continuous along the way: a flight over the date line went from +178° to
+  // -122° and was drawn the long way round the world (MapLibre draws beyond ±180° on the next
+  // copy of it)
+  for (let i = 1; i < n; i++) {
+    while (coords[i][0] - coords[i - 1][0] > 180) coords[i][0] -= 360;
+    while (coords[i][0] - coords[i - 1][0] < -180) coords[i][0] += 360;
+  }
+  const color = COLOR[data.trip.type] || COLOR.train;
+  const kindAt = new Array(Math.max(n - 1, 0)).fill('open');
+  for (const [s, e, k] of data.env || []) for (let i = s; i < e; i++) kindAt[i] = k;
+  for (const g of data.gaps) kindAt[g] = 'gap';
+  const dist = [0];
+  for (let i = 1; i < n; i++) dist.push(dist[i - 1] + haversine(coords[i - 1], coords[i]));
+  const total = dist[last] || 1;
+  const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
+  const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logos: t.logos, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start, end: t.end, utc: t.utc }));
+  tripSpans.forEach(t => t.units.forEach(wagonImage));
+  // Every drawing the video shows, for the end card's credits
+  const allUnits = tripSpans.flatMap(t => t.units);
+  tripSpans.forEach(t => t.logos.forEach(operatorLogo));
+  tripSpans.forEach(t => t.flags.forEach(flagImage));
+  data.countries.forEach(([, c]) => flagImage(c));
+  // The country at s (metres along the line): of the runs the server read along each path
+  const countryAt = s => {
+    let lo = 0, hi = dist.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (dist[m] <= s) lo = m; else hi = m - 1; }
+    let c = null;
+    for (const [i, code] of data.countries) { if (i <= lo) c = code; else break; }
+    return c;
+  };
+
+  // ── The track line, every ~20 m ────────────────────────────────────────────────
+  // Open track on the ground smoothed along the line (a 200 m median bridges culverts and
+  // gullies, a 100 m average evens the rest); tunnels and bridges straight from end to end.
+  status(T.terrain);
+  // The trip each point of the line belongs to (a hop between two trips, to the one before)
+  const tripOf = i => Math.max(0, data.spans.findIndex(t => i < t.e));
+  const S = [], at = [];
+  for (let i = 0; i < last; i++) {
+    at[i] = S.length;
+    const m = kindAt[i] === 'gap' ? 1 : Math.max(1, Math.ceil((dist[i + 1] - dist[i]) / (data.types[i] === 'air' ? 300 : 20)));
+    for (let j = 0; j < m; j++) {
+      const t = j / m;
+      S.push({ lng: lerp(coords[i][0], coords[i + 1][0], t), lat: lerp(coords[i][1], coords[i + 1][1], t),
+        d: lerp(dist[i], dist[i + 1], t), kind: kindAt[i], h: lerp(data.height[i], data.height[i + 1], t), type: data.types[i], trip: tripOf(i) });
+    }
+  }
+  at[last] = S.length;
+  S.push({ lng: coords[last][0], lat: coords[last][1], d: total, kind: kindAt[last - 1] || 'open', h: data.height[last], type: data.types[last], trip: tripOf(last) });
+  new Set(data.types).forEach(typeIcon);
+  const d = S.map(p => p.d);
+  // Flights read the ground under them apart, at their own coarser zoom
+  const isAir = S.map(p => p.type === 'air');
+  const flown = tripSpans.filter(t => t.type === 'air').reduce((a, t) => a + t.to - t.from, 0);
+  const ridden = total - flown - gapSpans.reduce((a, g) => a + g.to - g.from, 0);
+  const ground = S.map(p => p.h);
+  for (const air of [false, true]) {
+    const ks = S.map((_, k) => k).filter(k => isAir[k] === air);
+    if (!ks.length) continue;
+    const got = await groundHeights(ks.map(k => [S[k].lng, S[k].lat]));
+    ks.forEach((k, i) => { ground[k] = got[i] ?? (air ? 0 : S[k].h); });
+  }
+  // The terrain around the route, for the camera to keep it out of its way
+  const terrainAt = await terrainSampler(S, ridden + flown);
+  // A ferry is at sea level, whatever its line crosses (a sound, the land at either end)
+  for (let k = 0; k < S.length; k++) if (S[k].type === 'ferry') ground[k] = 0;
+  let z = movingAverage(runningMedian(ground, d, 200), d, 100);
+  const runs = [];
+  for (let i = 0; i < kindAt.length; i++) {
+    const r = runs[runs.length - 1];
+    if (r && r.kind === kindAt[i] && r.e === i) r.e = i + 1; else runs.push({ kind: kindAt[i], s: i, e: i + 1 });
+  }
+  for (const { kind, s, e } of runs) {
+    if (kind === 'open') continue;
+    const a = at[s], b = at[e];
+    const za = z[a] - (kind === 'tunnel' && s === 0 ? 15 : 0), zb = z[b] - (kind === 'tunnel' && e === last ? 15 : 0);
+    for (let k = a; k <= b; k++) z[k] = za + (zb - za) * (d[k] - d[a]) / ((d[b] - d[a]) || 1);
+  }
+  // Tunnels and bridges run straight from end to end; a light average over the whole line
+  // rounds the corners where they meet the open track
+  z = movingAverage(z, d, 150);
+  // The smoothed line as it is, for the climb and descent (the ground's own bumps, brought back
+  // just below, would each count)
+  const zSmooth = z.slice();
+  // Smoothing cuts under a ridge or a convex slope (a ski run): on the ground, never below it
+  z = z.map((v, k) => (S[k].kind === 'tunnel' || isAir[k] || ground[k] == null ? v : Math.max(v, ground[k])));
+  const LIFT = 3;
+  z = z.map(v => v + LIFT);
+  // Flights at their recorded altitude, else a plain climb, cruise and descent
+  for (const t of tripSpans) {
+    if (t.type !== 'air') continue;
+    const ks = S.map((_, k) => k).filter(k => isAir[k] && d[k] >= t.from - 1 && d[k] <= t.to + 1);
+    if (!ks.length) continue;
+    const L = (t.to - t.from) || 1, g0 = ground[ks[0]], g1 = ground[ks[ks.length - 1]];
+    const ramp = Math.min(L / 2, 180000), cruise = Math.min(11000, L * 0.06);
+    for (const k of ks) {
+      const x = d[k] - t.from, e = Math.min(1, Math.min(x, L - x) / ramp);
+      z[k] = (t.real ? Math.max(S[k].h, ground[k]) : g0 + (g1 - g0) * x / L + cruise * e * e * (3 - 2 * e)) + LIFT;
+    }
+  }
+
+  // Facts for the cards and the chips
+  const tunnels = runs.filter(r => r.kind === 'tunnel').map(r => ({ from: dist[r.s], to: dist[r.e], s: r.s, e: r.e }));
+  nameTunnels(tunnels, coords);
+  const bridges = runs.filter(r => r.kind === 'bridge').map(r => ({ from: dist[r.s], to: dist[r.e] }));
+  const tunnelLen = tunnels.reduce((a, t) => a + t.to - t.from, 0);
+  const zr = z.map(v => v - LIFT);
+  // A distance as people write it: one decimal under 100 km, whole km above, with the
+  // language's thousands separator
+  const kmText = km => `${km.toLocaleString(LANG, { maximumFractionDigits: km < 100 ? 1 : 0, minimumFractionDigits: km < 100 ? 1 : 0 })} km`;
+  // No height to speak of (a sea crossing): no profile strip, nor heights on the end card
+  const flat = maxOf(zr) - minOf(zr) < 10;
+  const stripRoom = flat ? 60 : 128 + 44 + 16;
+  // Climb and descent as tracking apps count them: on the smoothed line, a rise or a drop only
+  // once it passes 10 m (each 20 m sample's small ups and downs otherwise doubled the totals);
+  // flights left out, unless there is nothing else: then the flight's own climb and descent
+  const allAir = isAir.every(Boolean);
+  let climb = 0, descent = 0, ref = null;
+  for (let k = 0; k < zSmooth.length; k++) {
+    if (isAir[k] && !allAir) { ref = null; continue; }
+    const v = allAir ? zr[k] : zSmooth[k];
+    if (ref == null) ref = v;
+    else if (v - ref >= 10) { climb += v - ref; ref = v; }
+    else if (ref - v >= 10) { descent += ref - v; ref = v; }
+  }
+  // Timetable stops placed on the line (the nearest point of it, in order), and the time of
+  // day along it: between the trip's start, each stop's arrival and departure and its end,
+  // interpolated by distance
+  const stops = [];
+  // A change sits where its two trips meet; a trip's stop at its nearest point along that
+  // trip (along the whole route, a ski day's runs past the same station all matched)
+  for (const st of data.stops || []) {
+    let best = 0, bestD = Infinity;
+    if (st.at != null) { best = at[st.at]; bestD = 0; }
+    else for (let k = at[st.within[0]]; k <= at[st.within[1]]; k++) {
+      const dd = haversine([st.lng, st.lat], [S[k].lng, S[k].lat]);
+      if (dd < bestD) { bestD = dd; best = k; }
+    }
+    if (bestD < 500 && (!stops.length || d[best] > stops[stops.length - 1].d)) {
+      // Drawn on the line where the train halts, not at the timetable's own point for the
+      // stop (a station's centre or entrance, up to 500 m off the track)
+      stops.push({ ...st, lng: S[best].lng, lat: S[best].lat, d: d[best], name:(st.name || '').replace(/\s+(stasjon|station|holdeplass)$/i, '') });
+    }
+  }
+  // The departure and arrival stations too, for the markers, ticks and chips (the journey
+  // already starts and ends at rest, so they add no wait)
+  const plain = n => (n || '').replace(/\p{Regional_Indicator}{2}\s*/gu, '').replace(/\s+(stasjon|station|holdeplass)$/i, '');
+  const stations = [
+    { name: plain(data.trip.origin), lng: coords[0][0], lat: coords[0][1], d: 0, dep: data.trip.start?.slice(-5), major: true },
+    ...stops,
+    { name: plain(data.trip.destination), lng: coords[last][0], lat: coords[last][1], d: total, arr: data.trip.end?.slice(-5), major: true },
+  ];
+  const minutes = hm => (hm ? Number(hm.slice(-5, -3)) * 60 + Number(hm.slice(-2)) : null);
+  // The clock on real time, shown in local time. Each trip's departure and arrival are pinned to
+  // their UTC instants, so it runs forwards and at true speed across time zones (on local hours
+  // alone, a Pacific crossing ran too fast one way and backwards the other); a timetable stop's
+  // local hour is turned to UTC with its trip's departure offset. Shown in the departure's local
+  // time on a trip's first half and the arrival's on its second. A trip without UTC times keeps
+  // its local times, at no offset
+  const localMs = iso => Date.parse(`${iso.slice(0, 16)}:00Z`);
+  for (const t of tripSpans) {
+    t.offIn = t.utc?.[0] != null && t.start ? localMs(t.start) - t.utc[0] : 0;
+    t.offOut = t.utc?.[1] != null && t.end ? localMs(t.end) - t.utc[1] : t.offIn;
+  }
+  const tripAt = s => tripSpans.find(t => s <= t.to) || tripSpans[tripSpans.length - 1];
+  const offsetAt = s => { const t = tripAt(s); return s < (t.from + t.to) / 2 ? t.offIn : t.offOut; };
+  const anchors = [];
+  for (const t of tripSpans) {
+    if (t.start) anchors.push({ d: t.from, ms: localMs(t.start) - t.offIn });
+    if (t.end) anchors.push({ d: t.to, ms: localMs(t.end) - t.offOut });
+  }
+  anchors.sort((a, b) => a.d - b.d);
+  for (const st of stops.filter(st => !st.transfer)) {
+    const t = tripAt(st.d), before = anchors.filter(a => a.d <= st.d).pop();
+    for (const hm of [st.arr, st.dep].filter(Boolean)) {
+      if (!before || !t.start) continue;
+      // That hour on the trip's local day, then on the next days until it comes after the time before
+      let ms = localMs(`${t.start.slice(0, 10)}T${hm}`) - t.offIn;
+      while (ms < before.ms) ms += 86400000;
+      anchors.push({ d: st.d, ms });
+    }
+  }
+  anchors.sort((a, b) => a.d - b.d || a.ms - b.ms);
+  const realAt = s => {
+    if (anchors.length < 2) return null;
+    let i = anchors.findIndex(a => a.d >= s);
+    if (i <= 0) i = s <= anchors[0].d ? 0 : anchors.length - 1;
+    const b = anchors[i], a = anchors[Math.max(0, i - 1)];
+    return a === b || b.d === a.d ? b.ms : a.ms + (b.ms - a.ms) * (s - a.d) / (b.d - a.d);
+  };
+  const localAt = s => { const ms = realAt(s); return ms == null ? null : new Date(ms + offsetAt(s)); };
+  const clockAt = s => {
+    const t = localAt(s);
+    return t && `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
+  };
+  // The local date at s ("YYYY-MM-DD"); and whether the journey spans several days, then dated
+  const dayAt = s => localAt(s)?.toISOString().slice(0, 10) ?? null;
+  const multiDay = dayAt(0) !== dayAt(total);
+  const dateText = (day, opts) => new Date(`${day}T00:00:00Z`).toLocaleDateString(LANG, { ...opts, timeZone: 'UTC' });
+  const dateOf = (iso, year) => new Date(iso).toLocaleDateString(LANG, { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
+  const day = data.trip.start ? dateOf(data.trip.start, true) : null;
+  // The end's date too when the journey runs over several days
+  const endDay = data.trip.end && data.trip.end.slice(0, 10) !== data.trip.start?.slice(0, 10) ? dateOf(data.trip.end) + ' ' : '';
+
+  // Heights from the ground trips only: a flight's cruise is not the journey's highest point
+  const onGround = zr.filter((_, k) => !isAir[k]);
+  const facts = { km: (total - gapSpans.reduce((a, g) => a + g.to - g.from, 0)) / 1000, flownKm: flown / 1000,
+    tunnels: tunnels.length, tunnelKm: tunnelLen / 1000, bridges: bridges.length,
+    top: onGround.length ? maxOf(onGround) : null, cruise: flown ? maxOf(zr.filter((_, k) => isAir[k])) : null, climb, descent };
+
+  // ── three.js inside MapLibre ───────────────────────────────────────────────────
+  const lngs = S.map(p => p.lng), lats = S.map(p => p.lat);
+  const bounds = new maplibregl.LngLatBounds([minOf(lngs), minOf(lats)], [maxOf(lngs), maxOf(lats)]);
+  const origin = maplibregl.MercatorCoordinate.fromLngLat(bounds.getCenter(), 0);
+  const unit = origin.meterInMercatorCoordinateUnits();
+  const local = (lng, lat, alt) => {
+    const m = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], alt);
+    return [(m.x - origin.x) / unit, -(m.y - origin.y) / unit, m.z / unit];
+  };
+  const P = S.map((p, k) => local(p.lng, p.lat, z[k]));
+  // The ground under a flight, for the curtain hanging from it
+  const G = S.map((p, k) => (isAir[k] ? local(p.lng, p.lat, ground[k]) : null));
+  const toMercator = new THREE.Matrix4().makeTranslation(origin.x, origin.y, 0).scale(new THREE.Vector3(unit, -unit, unit));
+  const scene = new THREE.Scene(), camera = new THREE.Camera(), group = new THREE.Group();
+  scene.add(group);
+  let renderer = null;
+  map.addLayer({
+    id: 'v-route', type: 'custom', renderingMode: '3d',
+    onAdd: (m, gl) => { renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true }); renderer.autoClear = false; },
+    render: (gl, args) => {
+      camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix).multiply(toMercator);
+      renderer.resetState();
+      renderer.render(scene, camera);
+    },
+  });
+
+  // Each trip in its own type's colour
+  const typeColors = {};
+  const typeColor = type => (typeColors[type] ??= new THREE.Color(COLOR[type] || color));
+  // Inside a tunnel the trip's own colour, much darker: the same line underground, still telling
+  // one trip from another (a slate common to all made every tunnel look like a faded line)
+  const tunnelColors = {};
+  const tunnelColor = type => (tunnelColors[type] ??= typeColor(type).clone().lerp(new THREE.Color('#141a22'), 0.78));
+  const C = new THREE.Color(color), WHITE = new THREE.Color('#ffffff'), DARK = new THREE.Color('#141a22');
+  // The route ahead, faint grey
+  const AHEAD = new THREE.Color('#6e7b8a');
+  // Glowing head: a dot of fixed size on screen, drawn over everything, in the colour of the
+  // trip it is on
+  const glows = {};
+  const glowFor = type => {
+    if (glows[type]) return glows[type];
+    const c = COLOR[type] || color, glow = document.createElement('canvas');
+    glow.width = glow.height = 128;
+    const gx = glow.getContext('2d'), grad = gx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.22, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.3, c); grad.addColorStop(0.55, hexA(c, 0.35)); grad.addColorStop(1, hexA(c, 0));
+    gx.fillStyle = grad; gx.fillRect(0, 0, 128, 128);
+    return (glows[type] = new THREE.CanvasTexture(glow));
+  };
+  const head = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)),
+    new THREE.PointsMaterial({ map: glowFor(data.types[0]), size: 54, sizeAttenuation: false, transparent: true, depthTest: false, depthWrite: false }));
+  head.renderOrder = 1e9;
+  head.frustumCulled = false;
+
+  // The route at progress s (metres): travelled in colour with an outline, ahead faint;
+  // tunnels as dashes of `dash` metres, outlined, always drawn
+  // A flat strip `width` metres wide lying along a polyline (its sides level), mitred at
+  // the bends, so it foreshortens like paint on the ground instead of facing the camera
+  // A flight's curtain: strongest under the line, fading to nothing at the ground, with a
+  // thin stake down every 15 km, so its height reads as depth rather than a flat tint
+  function curtain(ks, rgb, opacity, order) {
+    if (ks.length < 2) return;
+    const pos = [], col = [], idx = [], stakes = [];
+    let next = d[ks[0]];
+    ks.forEach((k, i) => {
+      pos.push(...P[k], ...G[k]);
+      col.push(rgb.r, rgb.g, rgb.b, opacity, rgb.r, rgb.g, rgb.b, 0);
+      if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+      if (d[k] >= next) { stakes.push(...P[k], ...G[k]); next = d[k] + 15000; }
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    geometry.setIndex(idx);
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide,
+      transparent: true, depthTest: false, depthWrite: false }));
+    mesh.renderOrder = order;
+    mesh.frustumCulled = false;
+    group.add(mesh);
+    const lines = new THREE.BufferGeometry();
+    lines.setAttribute('position', new THREE.Float32BufferAttribute(stakes, 3));
+    const stake = new THREE.LineSegments(lines, new THREE.LineBasicMaterial({ color: rgb, transparent: true,
+      opacity: Math.min(1, opacity * 1.6), depthTest: false, depthWrite: false }));
+    stake.renderOrder = order;
+    stake.frustumCulled = false;
+    group.add(stake);
+  }
+  // Flat on the ground plane; `upright` stands it on edge (a flight seen side-on stays thick)
+  // Lines on the ground lifted by a few pixels' worth of metres (set each frame by drawRoute):
+  // zoomed out, MapLibre draws the terrain from coarse tiles that fill valley floors, so a road
+  // along a valley sank under it and showed only as its faint see-through copy
+  let lineLift = 0;
+  function ribbon(points, width, rgb, order, { opacity = 1, upright = false, xray = false } = {}) {
+    if (points.length < 2) return;
+    const pos = [], idx = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)];
+      let nx = -(b[1] - a[1]), ny = b[0] - a[0];
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len; ny /= len;
+      const h = width / 2, p = points[i];
+      if (upright) pos.push(p[0], p[1], p[2] + h, p[0], p[1], p[2] - h);
+      else pos.push(p[0] + nx * h, p[1] + ny * h, p[2], p[0] - nx * h, p[1] - ny * h, p[2]);
+      if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+    }
+    // Round joins where the line turns sharply (a hairpin): the strip's corners there
+    // pinch or splay, and a disc over the bend closes it
+    if (!upright) for (let i = 1; i + 1 < points.length; i++) {
+      const a = points[i - 1], p = points[i], b = points[i + 1];
+      const t1 = Math.atan2(p[1] - a[1], p[0] - a[0]), t2 = Math.atan2(b[1] - p[1], b[0] - p[0]);
+      if (Math.abs(((t2 - t1 + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < Math.PI / 5) continue;
+      const c = pos.length / 3, h = width / 2;
+      pos.push(p[0], p[1], p[2]);
+      for (let j = 0; j <= 12; j++) {
+        pos.push(p[0] + Math.cos(Math.PI * j / 6) * h, p[1] + Math.sin(Math.PI * j / 6) * h, p[2]);
+        if (j) idx.push(c, c + j, c + j + 1);
+      }
+    }
+    // Rounded ends: a half disc past each end (where runs meet, the two overlap into a round
+    // join; the outline's, wider, draws the rim around the core's)
+    if (!upright) for (const [p, q] of [[points[0], points[1]], [points[points.length - 1], points[points.length - 2]]]) {
+      const back = Math.atan2(p[1] - q[1], p[0] - q[0]), c = pos.length / 3, h = width / 2;
+      pos.push(p[0], p[1], p[2]);
+      for (let j = 0; j <= 10; j++) {
+        const a = back - Math.PI / 2 + Math.PI * j / 10;
+        pos.push(p[0] + Math.cos(a) * h, p[1] + Math.sin(a) * h, p[2]);
+        if (j) idx.push(c, c + j, c + j + 1);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geometry.setIndex(idx);
+    // Where the terrain hides it (behind a mountain), a faint copy shows through; where it
+    // is in sight, the line itself, tested against the terrain (offset so it wins the ties
+    // with the ground it lies on). `xray`: drawn whole over everything (a tunnel, inside
+    // the mountain by nature)
+    const draw = (depthTest, alpha, ord) => {
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: rgb, side: THREE.DoubleSide,
+        transparent: alpha < 1, opacity: alpha, depthTest, depthWrite: false,
+        polygonOffset: depthTest, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+      mesh.renderOrder = ord;
+      // Tunnels too, or they no longer met the road at their portals
+      if (!upright) mesh.position.z = lineLift;
+      mesh.frustumCulled = false;
+      group.add(mesh);
+    };
+    // A tunnel in the same layer as the line it belongs to (one line, coloured differently),
+    // drawn whole as it runs inside the mountain
+    if (xray) draw(false, opacity, order + 100000);
+    else { draw(false, opacity * 0.3, order); draw(true, opacity, order + 100000); }
+  }
+
+  // The route at progress s (metres), `px` metres to a pixel at the focus: ahead a grey
+  // strip; behind, a dark outline strip under the whole route, then the core, the track's
+  // colour on open line and dark in tunnels. Runs of one kind as separate polylines.
+  // whole: the opening's overview, the whole route faint, flights included
+  function drawRoute(s, showHead, px, whole = false) {
+    lineLift = 5 * px;
+    for (const c of [...group.children]) { if (c !== head) { c.geometry.dispose(); c.material?.dispose?.(); } group.remove(c); }
+    const cut = s >= total ? S.length - 1 : Math.max(0, d.findIndex(v => v > s) - 1);
+    const t = s >= total ? 1 : (s - d[cut]) / ((d[cut + 1] - d[cut]) || 1);
+    const here = s >= total ? P[S.length - 1] : P[cut].map((v, i) => v + (P[cut + 1][i] - v) * t);
+    const runsOf = (from, to, lead, tail) => {
+      const out = [];
+      let cur = null;
+      for (let k = from; k <= to; k++) {
+        const sk = S[Math.min(k, S.length - 2)], tunnel = sk.kind === 'tunnel', gap = sk.kind === 'gap', type = sk.type, trip = sk.trip;
+        if (!cur || cur.tunnel !== tunnel || cur.gap !== gap || cur.type !== type || cur.trip !== trip) {
+          // Joined to the run before it, unless that was the hop between two trips
+          cur = { tunnel, gap, type, trip, ks: [], pts: cur && !cur.gap ? [cur.pts[cur.pts.length - 1]] : [] };
+          out.push(cur);
+        }
+        cur.pts.push(P[k]); cur.ks.push(k);
+      }
+      if (lead && out.length) out[0].pts.unshift(lead);
+      if (tail && out.length) out[out.length - 1].pts.push(tail);
+      return out;
+    };
+    const behind = runsOf(0, cut, null, s < total ? here : null), ahead = runsOf(cut + 1, S.length - 1, s < total ? here : null, null);
+    // The hop between two trips is not drawn
+    // A flight hangs a see-through curtain to the ground, so its height reads at a glance
+    // A flight's shadow on the ground under it, then its curtain
+    // A flight ahead is not drawn at all: its straight line stood out over the whole map
+    for (const r of behind) if (r.type === 'air') ribbon(r.ks.map(k => G[k]), 5 * px, DARK, 0, { opacity: 0.35 });
+    for (const r of behind) if (r.type === 'air') curtain(r.ks, typeColor('air'), 0.45, 0);
+    for (const r of ahead) if (!r.gap && (r.type !== 'air' || whole)) ribbon(r.pts, 3 * px, AHEAD, 1, { xray: r.tunnel });
+    // Each trip on its own layer, a later one over an earlier (its outline cutting across it, never
+    // merging), so where a journey goes back over itself, both passes read
+    for (const r of behind) if (!r.gap) {
+      const layer = 10 + r.trip * 2;
+      ribbon(r.pts, 10 * px, DARK, layer, { xray: r.tunnel });
+      ribbon(r.pts, 6 * px, r.tunnel ? tunnelColor(r.type) : typeColor(r.type), layer + 1, { xray: r.tunnel });
+    }
+    // A flight's line also stood on edge, so it keeps its thickness seen from the side
+    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 10 * px, DARK, 10 + r.trip * 2, { upright: true });
+    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 6 * px, typeColor('air'), 11 + r.trip * 2, { upright: true });
+    if (showHead) {
+      head.position.set(...here);
+      head.material.map = glowFor(S[Math.min(cut, S.length - 2)].type);
+      head.updateMatrixWorld(true);
+      group.add(head);
+    }
+    map.triggerRepaint();
+  }
+
+  // ── The camera ─────────────────────────────────────────────────────────────────
+  // Heading along the line: the direction from 300 m behind to 900 m ahead, averaged over
+  // a kilometre, so the camera swings smoothly round curves and hairpins
+  const pointAt = s => {
+    const c = Math.max(0, Math.min(total, s));
+    let k = Math.max(0, d.findIndex(v => v > c) - 1);
+    if (c >= total) k = S.length - 2;
+    const t = (c - d[k]) / ((d[k + 1] - d[k]) || 1);
+    return { lng: lerp(S[k].lng, S[k + 1].lng, t), lat: lerp(S[k].lat, S[k + 1].lat, t), k };
+  };
+  const bearingTo = (a, b) => {
+    const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+    const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+    return Math.atan2(y, x);
+  };
+  const heading = s => {
+    let sx = 0, sy = 0;
+    for (let o = -500; o <= 500; o += 100) {
+      const b = bearingTo(pointAt(s + o - 300), pointAt(s + o + 900));
+      sx += Math.cos(b); sy += Math.sin(b);
+    }
+    return Math.atan2(sy, sx) * 180 / Math.PI;
+  };
+  // Pull back a little over tunnels and bridges, so the mountain or the valley shows
+  const near = (list, s, reach) => list.reduce((m, t) => Math.max(m, s > t.from - reach && s < t.to + reach
+    ? Math.min(1, (Math.min(s - (t.from - reach), t.to + reach - s)) / reach) : 0), 0);
+  let scale = Math.min(W, H) / 1080;
+  // Pull-backs over structures; the base zoom comes from the speed (smoothCamera)
+  const chaseZoom = s => -0.45 * near(tunnels, s, 600) - 0.3 * near(bridges, s, 300);
+  // The camera's path worked out every 0.05 s of the journey, then averaged over seconds of
+  // video (3.5 s for the aim point, 5 s for turns and zoom), so it moves the same way whatever
+  // the trip's or the video's length; rebuilt when the length changes
+  const GS = 0.05;
+  let GT = [], cLng, cLat, hx, hy, zm, el, airy;
+  const cosLat = Math.cos(bounds.getCenter().lat * Math.PI / 180);
+  // The camera's side. On a sustained slope it faces uphill, the mountain behind the train,
+  // whichever way the train goes (a ski day's runs up and down would otherwise swing it round
+  // every run): the uphill direction, weighted by the steepness, averaged over 15 s, pulls the
+  // view from the direction of travel the more it holds. Then, of the bearings up to 100°
+  // either way of that, the nearest whose camera sees the train over the terrain behind it.
+  // Worked out every 0.2 s, then turned to over seconds like any other turn
+  const turnToSlope = aim => {
+    const R = Math.PI / 180, step = 4, idx = [];
+    for (let i = 0; i < GT.length; i += step) idx.push(i);
+    const near = i => {
+      const p = aim[i], kx = 1 / (111320 * Math.cos(p.lat * R)), ky = 1 / 111320;
+      return (b, t) => terrainAt(p.lng + Math.sin(b) * t * kx, p.lat + Math.cos(b) * t * ky);
+    };
+    // Uphill at the train, as a vector as long as the slope is steep (full at 30 %)
+    const ups = idx.map(i => {
+      if (airy[i] > 0.5) return [0, 0];
+      const at = near(i), g = (a, b) => (a != null && b != null ? (a - b) / 300 : 0);
+      const gx = g(at(Math.PI / 2, 150), at(-Math.PI / 2, 150)), gy = g(at(0, 150), at(Math.PI, 150));
+      const up = Math.atan2(gx, gy), steep = Math.min(1, Math.hypot(gx, gy) / 0.3);
+      return [Math.cos(up) * steep, Math.sin(up) * steep];
+    });
+    const spread = values => GT.map((_, i) => {
+      const k = Math.min(values.length - 1, Math.floor(i / step)), u = (i % step) / step;
+      return lerp(values[k], values[Math.min(values.length - 1, k + 1)], u);
+    });
+    const ux = movingAverage(movingAverage(spread(ups.map(v => v[0])), GT, 15), GT, 15);
+    const uy = movingAverage(movingAverage(spread(ups.map(v => v[1])), GT, 15), GT, 15);
+    // The base direction: travel on the flat, uphill on a slope that holds. The pull goes
+    // from none to full over a narrow band, so the view seldom sits halfway, where travel
+    // straight downhill and uphill would cancel out
+    const pull = i => Math.max(0, Math.min(1, (Math.hypot(ux[i], uy[i]) - 0.15) / 0.2));
+    [hx, hy] = [hx.map((x, i) => x * (1 - pull(i)) + ux[i] / (Math.hypot(ux[i], uy[i]) || 1) * pull(i)),
+      hy.map((y, i) => y * (1 - pull(i)) + uy[i] / (Math.hypot(ux[i], uy[i]) || 1) * pull(i))];
+    // Then the nearest bearing to it that sees the train over the terrain
+    const offsets = idx.map(i => {
+      if (airy[i] > 0.5) return 0;
+      const p = aim[i], e = el[i], h = Math.atan2(hy[i], hx[i]), at = near(i);
+      const mpp = 40075016 * cosLat / (512 * 2 ** zm[i]), reach = 1.5 * H * mpp * Math.sin(62 * R);
+      let best = 0, bestScore = Infinity;
+      for (let o = -100; o <= 100; o += 20) {
+        const b = h + o * R;
+        // Highest the terrain rises between the camera and the train, against the 28° the
+        // camera looks down at it from (a few degrees spare)
+        let rise = -Infinity;
+        for (let k = 1; k <= 10; k++) {
+          const t = reach * k / 10, z = at(b + Math.PI, t);
+          if (z != null) rise = Math.max(rise, Math.atan2(z - e, t) / R);
+        }
+        const score = Math.max(0, rise - 22) + Math.abs(o) / 25;
+        if (score < bestScore) { bestScore = score; best = o; }
+      }
+      return best * R;
+    });
+    const off = spread(offsets);
+    const ox = movingAverage(movingAverage(off.map(Math.cos), GT, 5), GT, 5);
+    const oy = movingAverage(movingAverage(off.map(Math.sin), GT, 5), GT, 5);
+    [hx, hy] = [hx.map((x, i) => x * ox[i] - hy[i] * oy[i]), hy.map((y, i) => y * ox[i] + hx[i] * oy[i])];
+  };
+  const smoothCamera = () => {
+    GT = [];
+    for (let t = 0; t < JOURNEY; t += GS) GT.push(t);
+    GT.push(JOURNEY);
+    const ss = GT.map(t => journeyAt(t).s), sp = GT.map(legSpeed);
+    // In flight, the speed of the moment rather than the leg's mean: slow at take-off and landing,
+    // the view comes close (8 km at least) to watch the climb; at cruise it opens on the route
+    const pace = ss.map((s, i) => (isAir[pointAt(s).k]
+      ? Math.max(8000 / 6, Math.abs(ss[Math.min(GT.length - 1, i + 1)] - ss[Math.max(0, i - 1)]) / (2 * GS))
+      : sp[i]));
+    // Centred on the train itself: a point ahead of it put it low on the screen, under the
+    // profile strip, whenever the camera faced up a slope while the train came down it
+    const aim = ss.map(s => pointAt(s));
+    cLng = movingAverage(aim.map(p => p.lng), GT, 3.5); cLat = movingAverage(aim.map(p => p.lat), GT, 3.5);
+    const hd = ss.map(s => heading(s) * Math.PI / 180);
+    hx = movingAverage(hd.map(Math.cos), GT, 5); hy = movingAverage(hd.map(Math.sin), GT, 5);
+    // The view spans about 6 s of travel at that leg's own speed (at least 500 m): a walk
+    // between two trains is seen up close, the trains from further out
+    zm = movingAverage(ss.map((s, i) => chaseZoom(s)
+      + Math.min(16, Math.max(3, Math.log2(40075016 * cosLat / (512 * Math.max(500, 6 * pace[i]) / W))))), GT, 5);
+    // A second pass of each: the two make a gentle bell rather than a box, so turns start
+    // and end without a kink
+    [cLng, cLat] = [movingAverage(cLng, GT, 3.5), movingAverage(cLat, GT, 3.5)];
+    [hx, hy, zm] = [movingAverage(hx, GT, 5), movingAverage(hy, GT, 5), movingAverage(zm, GT, 5)];
+    // The smoothed aim cuts corners: wherever the train, within 1.5 s either side, strays more
+    // than a third of the view's width from the centre, pull back until it is in; the lowest
+    // zoom held over 4 s, then softened, so the pull-back eases in and out, never undershooting
+    const pos = ss.map(s => pointAt(s)), reach = Math.round(1.5 / GS);
+    const need = GT.map((_, i) => {
+      let far = 0;
+      for (let j = Math.max(0, i - reach); j <= Math.min(GT.length - 1, i + reach); j++)
+        far = Math.max(far, Math.hypot((pos[j].lng - cLng[i]) * cosLat, pos[j].lat - cLat[i]) * 111320);
+      return Math.log2(40075016 * cosLat / (512 * Math.max(1, 3 * far) / W));
+    });
+    // No floor at zoom 9 any more: a small frame covers fewer pixels, and a fast flight in it
+    // needs a wider view than that to stay in
+    const capped = zm.map((z, i) => Math.max(3, Math.min(z, need[i])));
+    zm = movingAverage(movingAverage(runningMin(capped, GT, 4), GT, 2), GT, 2);
+    // The height the camera looks at, over about 10 s, so it only drifts with the big climbs
+    // and descents instead of bobbing over every bump
+    const elRaw = aim.map(p => zr[p.k]);
+    el = movingAverage(movingAverage(elRaw, GT, 10), GT, 10);
+    // In flight the camera swings to the side and tilts up, to show the climb and descent
+    airy = movingAverage(movingAverage(ss.map(s => (isAir[pointAt(s).k] ? 1 : 0)), GT, 4), GT, 4);
+    turnToSlope(aim);
+  };
+  // The camera at a time of the journey
+  const chase = t => {
+    const c = Math.max(0, Math.min(JOURNEY, t)), k = Math.min(GT.length - 2, Math.floor(c / GS));
+    const u = (c - GT[k]) / ((GT[k + 1] - GT[k]) || 1);
+    return { center: [lerp(cLng[k], cLng[k + 1], u), lerp(cLat[k], cLat[k + 1], u)], zoom: lerp(zm[k], zm[k + 1], u),
+      elevation: lerp(el[k], el[k + 1], u),
+      pitch: 62 + 14 * lerp(airy[k], airy[k + 1], u),
+      bearing: Math.atan2(lerp(hy[k], hy[k + 1], u), lerp(hx[k], hx[k + 1], u)) * 180 / Math.PI + 65 * lerp(airy[k], airy[k + 1], u) };
+  };
+  const overview = (north = false) => {
+    // Fitted from straight above, within the margins the frames keep clear for the title and
+    // the profile strip (show()), then tilted, a little further out for the tilt to fit: fitted
+    // tilted, the near end (the start, often) fell under the strip
+    // North up, as a map: the dive then turns the shortest way to the camera's heading at the
+    // start, while it closes in
+    const facing = 0;
+    const m = Math.min(W, H) * 0.08;
+    const cam = map.cameraForBounds(bounds, { bearing: facing,
+      padding: { top: 120 * scale + m, bottom: stripRoom * scale + m, left: m, right: m } });
+    return { center: [cam.center.lng, cam.center.lat], zoom: cam.zoom - 0.4, pitch: north ? 40 : 45, bearing: facing,
+      elevation: zr.reduce((a, v) => a + v, 0) / zr.length };
+  };
+  // From one camera to another, the centre moving in step with the zoom (as a fly-to does):
+  // a straight blend of both let the target drift across the screen while the zoom closed in
+  const mix = (a, b, t) => {
+    const db = ((b.bearing - a.bearing + 540) % 360) - 180, zoom = lerp(a.zoom, b.zoom, t);
+    const span = 2 ** -a.zoom - 2 ** -b.zoom;
+    const w = Math.abs(span) > 1e-12 ? (2 ** -a.zoom - 2 ** -zoom) / span : t;
+    return { center: [lerp(a.center[0], b.center[0], w), lerp(a.center[1], b.center[1], w)],
+      zoom, pitch: lerp(a.pitch, b.pitch, t), bearing: a.bearing + db * t,
+      elevation: lerp(a.elevation, b.elevation, t) };
+  };
+  const ease = t => t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+
+  // ── Timeline ───────────────────────────────────────────────────────────────────
+  // Overview with the title, a dive to the start, the journey, a pull back to the overview
+  // with the trip's numbers
+  const INTRO = 3.2, DIVE = 2.4, BACK = 2.4, OUTRO = 3.6;
+  let JOURNEY = 30 - INTRO - DIVE - BACK - OUTRO;
+  // The opening overview along the journey; the closing one north up, as on a map
+  const ov = overview(), ovEnd = overview(true);
+  function frameAt(t) {
+    let cam, s, title = 0, card = 0, headOn = true, dwell = null, speed = legSpeed(JOURNEY), jt = JOURNEY;
+    if (t < INTRO) {
+      const u = t / INTRO;
+      cam = { ...ov, zoom: ov.zoom - 0.15 + 0.15 * u };
+      s = 0; jt = 0; headOn = t > 1.2;
+      // Full from the very first frame (the one apps show as the video's thumbnail), fading out
+      title = Math.min(1, (INTRO - t) / 0.6);
+    } else if (t < INTRO + DIVE) {
+      const u = ease((t - INTRO) / DIVE);
+      cam = mix(ov, chase(0), u); s = 0; speed = legSpeed(0); jt = 0;
+    } else if (t < INTRO + DIVE + JOURNEY) {
+      ({ s, dwell } = journeyAt(t - INTRO - DIVE));
+      cam = chase(t - INTRO - DIVE); speed = legSpeed(t - INTRO - DIVE); jt = t - INTRO - DIVE;
+    } else if (t < INTRO + DIVE + JOURNEY + BACK) {
+      const u = ease((t - INTRO - DIVE - JOURNEY) / BACK);
+      cam = mix(chase(JOURNEY), { ...ovEnd, bearing: -3 }, u); s = total;
+    } else {
+      const u = (t - INTRO - DIVE - JOURNEY - BACK) / OUTRO;
+      cam = { ...ovEnd, bearing: -3 + 3 * Math.min(1, u * 1.5) }; s = total; card = Math.min(1, u / 0.18); headOn = false;
+    }
+    return { cam, s, title, card, headOn, dwell, speed, jt, whole: t < INTRO + DIVE / 2 };
+  }
+  const duration = () => INTRO + DIVE + JOURNEY + BACK + OUTRO;
+
+  // The journey's timing: legs between the stations it halts at, each starting and ending at
+  // rest (eased, their time shared by distance), and a wait at each
+  let plan = [], halting = new Set(), nearby = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [];
+  const planJourney = () => {
+    // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
+    // first, then the stops the timetable waits longest at; the train runs through the rest
+    const dwellOf = st => (st.arr && st.dep ? (minutes(st.dep) - minutes(st.arr) + 1440) % 1440 : 0);
+    // A tram, metro or bus stops every few hundred metres: it runs through them, halting only
+    // at changes. Elsewhere the halts are kept apart (at least half an even share of the line
+    // between two), or the first stops, all alike, took every halt and the rest of the trip none
+    const maxHalts = Math.floor(JOURNEY / 4), minGap = total / (maxHalts + 1) / 2;
+    const urban = new Set(['tram', 'metro', 'bus']);
+    const halts = [];
+    for (const st of [...stops].filter(st => st.major || !urban.has(typeAfter(st)))
+      .sort((a, b) => (b.major ? 1 : 0) - (a.major ? 1 : 0) || dwellOf(b) - dwellOf(a) || a.d - b.d)) {
+      if (halts.length >= maxHalts) break;
+      if (halts.some(h => Math.abs(h.d - st.d) < minGap)) continue;
+      halts.push(st);
+    }
+    halts.sort((a, b) => a.d - b.d);
+    // Each stop run through named on the chip of the nearest halt or end: the 5 closest to it,
+    // then how many more
+    const named = [stations[0], ...halts, stations[stations.length - 1]], passed = new Map();
+    for (const st of stops.filter(st => !halts.includes(st))) {
+      const h = named.reduce((x, y) => (Math.abs(y.d - st.d) < Math.abs(x.d - st.d) ? y : x));
+      passed.set(h, [...(passed.get(h) || []), st]);
+    }
+    nearby = new Map([...passed].map(([h, list]) => {
+      list.sort((a, b) => Math.abs(a.d - h.d) - Math.abs(b.d - h.d));
+      return [h, { list: list.slice(0, 5), more: list.length - 5 }];
+    }));
+    const wait = Math.min(0.5, JOURNEY * 0.15 / Math.max(1, halts.length));
+    halting = new Set(halts);
+    // The hops between trips: crossed in HOP seconds each, whatever their length
+    const HOP = 1.5, hops = gapSpans;
+    const cuts = [...new Set([0, ...halts.map(st => st.d), ...hops.flatMap(g => [g.from, g.to]), total])].sort((a, b) => a - b);
+    const isHop = (a, b) => hops.some(g => a >= g.from - 1 && b <= g.to + 1);
+    const riding = total - hops.reduce((a, g) => a + g.to - g.from, 0);
+    // A transfer holds twice as long as a stop on the way
+    const waitOf = st => (st.transfer ? 2 * wait : wait);
+    const moving = Math.max(1, JOURNEY - halts.reduce((a, st) => a + waitOf(st), 0) - hops.length * HOP);
+    // The share of the moving time for the stretch a..b: each trip by the square root of the
+    // time it took (by distance when a trip has no times), split within it by distance. The
+    // root keeps the long trips longer without the short ones flashing past
+    const timed = tripSpans.every(t => t.minutes);
+    const weight = t => (timed ? Math.sqrt(t.minutes) : Math.sqrt(t.to - t.from));
+    const allWeight = tripSpans.reduce((x, t) => x + weight(t), 0);
+    const share = (a, b) => {
+      const t = tripSpans.find(t => a >= t.from - 1 && b <= t.to + 1);
+      if (!t || !allWeight) return (b - a) / (riding || 1);
+      return weight(t) / allWeight * (b - a) / ((t.to - t.from) || 1);
+    };
+    plan = [];
+    let t = 0;
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const a = cuts[i], b = cuts[i + 1], dt = isHop(a, b) ? HOP : moving * share(a, b);
+      plan.push({ t0: t, t1: t + dt, s0: a, s1: b, air: !isHop(a, b) && isAir[pointAt((a + b) / 2).k] });
+      t += dt;
+      const halt = halts.find(st => Math.abs(st.d - b) < 1);
+      if (halt && i + 1 < cuts.length - 1) { plan.push({ t0: t, t1: t + waitOf(halt), s0: b, s1: b, stop: halt }); t += waitOf(halt); }
+    }
+    // A flight's time: its climb and its descent (under 8000 m) a quarter and more
+    // each, being what is worth watching, the cruise the rest (45 %) going by fast; within the
+    // climb and the descent, the lower the slower. Shared by time rather than by distance, as a
+    // steep climb is short and a descent long. The camera, following the pace, comes close for both
+    for (const leg of plan) {
+      if (!leg.air) continue;
+      const ks = [];
+      for (let k = 0; k < S.length; k++) if (d[k] >= leg.s0 && d[k] <= leg.s1) ks.push(k);
+      if (ks.length < 3) continue;
+      const heights = ks.map(k => zr[k] - ground[k]), top = maxOf(heights) || 1;
+      const low = heights.map(h => 1 - Math.max(0, Math.min(1, h / top)));
+      // The top of the climb and the start of the descent: 8000 m (90 % of the top for a lower
+      // flight), not 90 % of the top, which a step climb reaches only an ocean later; a flight
+      // without a level cruise turns at its highest point
+      const level = Math.min(0.9 * top, 8000);
+      let up = heights.findIndex(h => h >= level), down = heights.length - 1 - [...heights].reverse().findIndex(h => h >= level);
+      if (up < 0 || down <= up) up = down = heights.indexOf(top);
+      const parts = up === down ? [[0, up, 0.5], [up, ks.length - 1, 0.5]]
+        : [[0, up, 0.275], [up, down, 0.45], [down, ks.length - 1, 0.275]];
+      const c = new Array(ks.length).fill(0);
+      let start = 0;
+      for (const [i0, i1, share] of parts) {
+        const climbing = share < 0.45, steps = [];
+        for (let i = i0 + 1; i <= i1; i++) steps.push((d[ks[i]] - d[ks[i - 1]]) * (climbing ? 1 + 20 * low[i] ** 2 : 1));
+        const sum = steps.reduce((x, v) => x + v, 0) || 1;
+        let acc = start;
+        for (let i = i0 + 1; i <= i1; i++) { acc += steps[i - i0 - 1] / sum * share; c[i] = acc; }
+        start += share;
+      }
+      leg.table = { c, ss: ks.map(k => d[k]) };
+    }
+    // When each trip starts and ends on the journey's clock, for its train sliding in and out
+    const timeAt = s => {
+      const leg = plan.find(p => !p.stop && s <= p.s1 + 0.5) || plan[plan.length - 1];
+      return leg.s1 > leg.s0 ? leg.t0 + (Math.min(Math.max(s, leg.s0), leg.s1) - leg.s0) / (leg.s1 - leg.s0) * (leg.t1 - leg.t0) : leg.t0;
+    };
+    for (const t of tripSpans) { t.tIn = timeAt(t.from); t.tOut = timeAt(t.to); }
+    // Where the date changes on the journey's clock, for the day's name over the map
+    let day = dayAt(0);
+    dayChanges = [];
+    // and where the clock moves to another time zone, for its own highlight
+    zoneChanges = [];
+    let zone = offsetAt(0);
+    for (let t = 0.1; t <= JOURNEY; t += 0.1) {
+      const s = journeyAt(t).s, now = dayAt(s), off = offsetAt(s);
+      if (now && now !== day) { dayChanges.push({ t, day: now }); day = now; }
+      if (off !== zone) { zoneChanges.push({ t }); zone = off; }
+    }
+    // When the train reaches and leaves each station shown
+    stationTimes = new Map();
+    for (const st of stations) {
+      if (!st.major && !halting.has(st)) continue;
+      const leg = plan.find(p => !p.stop && p.s1 >= st.d - 1) || plan[plan.length - 1];
+      const arr = st.d <= 1 ? 0 : leg.t1, wait = plan.find(p => p.stop === st);
+      stationTimes.set(st, { arr, dep: st.d >= total - 1 ? JOURNEY : wait ? wait.t1 : arr });
+    }
+  };
+  // The mean speed (m/s of video) of the leg running at time t; at a halt, the leg before it
+  const legSpeed = t => {
+    const i = Math.max(0, plan.findIndex(p => t <= p.t1));
+    const leg = plan[i].stop ? plan[i - 1] || plan[i + 1] : plan[i];
+    return leg && leg.t1 > leg.t0 ? (leg.s1 - leg.s0) / (leg.t1 - leg.t0) : total / Math.max(1, JOURNEY);
+  };
+  const journeyAt = t => {
+    const leg = plan.find(p => t <= p.t1) || plan[plan.length - 1];
+    if (leg.stop) return { s: leg.s0, dwell: leg.stop };
+    const T = (leg.t1 - leg.t0) || 1, x = Math.max(0, Math.min(T, t - leg.t0));
+    // A flight along its time table (planJourney): slow low down, fast at cruise
+    if (leg.table) {
+      const { c, ss } = leg.table, u = x / T;
+      let lo = 0, hi = c.length - 1;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (c[m] <= u) lo = m; else hi = m; }
+      return { s: lerp(ss[lo], ss[hi], (u - c[lo]) / ((c[hi] - c[lo]) || 1)), dwell: null };
+    }
+    // Pull away and brake over a short ramp, cruising in between: a smoothstep over the
+    // whole leg peaks at 1.5x the mean speed, this at barely above it
+    const r = Math.min(0.6, T / 3), v = 1 / (T - r);
+    const f = x < r ? v * x * x / (2 * r) : x > T - r ? 1 - v * (T - x) ** 2 / (2 * r) : v * (x - r / 2);
+    return { s: leg.s0 + (leg.s1 - leg.s0) * f, dwell: null };
+  };
+
+  // ── HUD ────────────────────────────────────────────────────────────────────────
+  // A recorded track has a name but no destination
+  const name = TAG_NAME || (data.trip.destination ? `${data.trip.origin} → ${data.trip.destination}` : data.trip.origin).replace(/\p{Regional_Indicator}{2}\s*/gu, '');
+  const font = (w, px) => `${w} ${Math.max(10, Math.round(px * scale))}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  // Font Awesome glyphs (the page's stylesheet), drawn ahead of the numbers
+  const FA = { route: '\uf4d7', plane: '\uf072', tunnel: '\uf557', mountain: '\uf6fc', up: '\ue098', down: '\ue097',
+    calendar: '\uf133', stop: '\uf3c5', transfer: '\uf362' };
+  const transfers = stops.filter(st => st.transfer).length, onWay = stops.length - transfers;
+  // The trip leaving a station (the last one arriving, at the end)
+  const typeAfter = st => (tripSpans.find(t => t.to > st.d + 1) || tripSpans[tripSpans.length - 1]).type;
+  const typeBefore = st => ([...tripSpans].reverse().find(t => t.from < st.d - 1) || tripSpans[0]).type;
+  // A station's own mark, from the trips on either side: an airport (landing at the journey's
+  // end), a helipad, a port, a station building, a stop's sign; others show the type icon of
+  // the trip leaving it
+  const stationMark = st => {
+    const types = [typeBefore(st), typeAfter(st)];
+    if (types.includes('air')) return st.d >= total - 1 ? '\uf5af' : '\uf5b0';
+    if (types.includes('helicopter')) return '\ue502';
+    if (types.includes('ferry')) return '\uf13d';
+    if (types.some(t => ['train', 'rail', 'metro', 'funicular'].includes(t))) return 'station';
+    if (types.some(t => ['bus', 'tram'].includes(t))) return 'stop';
+    return null;
+  };
+  // A mark centred on x, y, about 2r across, in fill on a bg background
+  function drawMark(mark, x, y, r, fill, bg) {
+    g2.save(); g2.fillStyle = fill; g2.strokeStyle = fill;
+    if (mark === 'station') {
+      g2.beginPath(); g2.moveTo(x - r, y - 0.2 * r); g2.lineTo(x, y - r); g2.lineTo(x + r, y - 0.2 * r);
+      g2.lineTo(x + 0.8 * r, y - 0.2 * r); g2.lineTo(x + 0.8 * r, y + r); g2.lineTo(x - 0.8 * r, y + r);
+      g2.lineTo(x - 0.8 * r, y - 0.2 * r); g2.closePath(); g2.fill();
+      // The clock in the gable and the arched door
+      g2.fillStyle = bg;
+      g2.beginPath(); g2.arc(x, y - 0.3 * r, 0.26 * r, 0, Math.PI * 2); g2.fill();
+      g2.beginPath(); g2.moveTo(x - 0.28 * r, y + r); g2.lineTo(x - 0.28 * r, y + 0.45 * r);
+      g2.arc(x, y + 0.45 * r, 0.28 * r, Math.PI, 0); g2.lineTo(x + 0.28 * r, y + r); g2.closePath(); g2.fill();
+      g2.lineWidth = 0.08 * r; g2.lineCap = 'round';
+      g2.beginPath(); g2.moveTo(x, y - 0.44 * r); g2.lineTo(x, y - 0.3 * r); g2.lineTo(x + 0.12 * r, y - 0.3 * r); g2.stroke();
+    } else if (mark === 'stop') {
+      g2.lineWidth = 0.2 * r; g2.lineCap = 'round';
+      g2.beginPath(); g2.moveTo(x, y - 0.2 * r); g2.lineTo(x, y + 0.9 * r); g2.moveTo(x - 0.35 * r, y + 0.9 * r); g2.lineTo(x + 0.35 * r, y + 0.9 * r); g2.stroke();
+      g2.beginPath(); g2.arc(x, y - 0.45 * r, 0.55 * r, 0, Math.PI * 2); g2.fill();
+      g2.fillStyle = bg; g2.beginPath(); g2.arc(x, y - 0.45 * r, 0.3 * r, 0, Math.PI * 2); g2.fill();
+    } else {
+      g2.font = faFont(r * 1.6 / scale); g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(mark, x, y);
+    }
+    g2.restore();
+  }
+  const faFont = px => `900 ${Math.round(px * scale)}px "Font Awesome 6 Free"`;
+  // A centred line of [glyph, text] parts, the glyphs a touch smaller and dimmer
+  // Too wide for the frame: smaller, down to 3/4, then the last parts left out
+  function iconLine(parts, x, y, px, weight) {
+    const maxW = W - 2 * 32 * scale;
+    const measure = (ps, size) => {
+      g2.font = font(weight, size); const widths = ps.map(([, t]) => g2.measureText(t).width);
+      g2.font = faFont(size * 0.8); const iw = ps.map(([icon]) => g2.measureText(icon).width);
+      const sp = 0.35 * size * scale, between = 1.1 * size * scale;
+      return { widths, iw, sp, between, total: ps.reduce((a, _, i) => a + iw[i] + sp + widths[i], 0) + between * (ps.length - 1) };
+    };
+    let m = measure(parts, px);
+    for (let k = 1; k <= 4 && m.total > maxW; k++) m = measure(parts, (px = px * 0.93));
+    while (m.total > maxW && parts.length > 1) m = measure((parts = parts.slice(0, -1)), px);
+    const { widths, iw, sp, between } = m;
+    let at = x - m.total / 2;
+    const fill = g2.fillStyle;
+    g2.textAlign = 'left';
+    parts.forEach(([icon, t], i) => {
+      g2.font = faFont(px * 0.8); g2.fillText(icon, at, y); at += iw[i] + sp;
+      g2.font = font(weight, px); g2.fillStyle = fill; g2.fillText(t, at, y); at += widths[i] + between;
+    });
+    g2.textAlign = 'center';
+  }
+  const zLo = Math.min(minOf(zr), minOf(ground)), zHi = Math.max(maxOf(zr), maxOf(ground));
+  function roundRect(x, y, w, h, r) { g2.beginPath(); g2.roundRect(x, y, w, h, r); }
+  // Trainlog.me as on the poster: the train, "Trainlog" with a grey ".me" and the tagline, on
+  // a light chip; below 900 px wide, the train alone on it
+  const BRAND_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  const brandLayout = (u, compact) => {
+    const L = { icon: 40 * u, pad: 9 * u, gap: 9 * u, name: 20 * u, tag: 11 * u, compact };
+    if (compact) return { ...L, w: L.icon + 2 * L.pad, h: L.icon + 2 * L.pad };
+    g2.font = `800 ${L.name}px ${BRAND_FONT}`;
+    const nameW = g2.measureText('Trainlog.me').width;
+    g2.font = `italic ${L.tag}px ${BRAND_FONT}`;
+    let tagW = g2.measureText(PREMIUM ? 'Premium' : 'Your online train diary').width;
+    if (PREMIUM) { g2.font = `900 ${L.tag}px "Font Awesome 6 Free"`; tagW += g2.measureText('\uf3a5 ').width; }
+    return { ...L, w: L.pad + L.icon + L.gap + Math.max(nameW, tagW) + 1.5 * L.pad,
+      h: Math.max(L.icon, L.name * 1.15 + L.tag) + 2 * L.pad };
+  };
+  function drawBrand(x, y, L) {
+    g2.save();
+    g2.shadowColor = 'rgba(0,0,0,0.22)'; g2.shadowBlur = 10 * scale; g2.shadowOffsetY = 2 * scale;
+    roundRect(x, y, L.w, L.h, 12 * scale); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fill();
+    g2.restore();
+    const icon = shrink(logo, Math.round(L.icon));
+    g2.drawImage(icon, Math.round(x + L.pad), Math.round(y + (L.h - icon.height) / 2));
+    if (L.compact) return;
+    const tx = x + L.pad + L.icon + L.gap, ty = y + (L.h - (L.name * 1.15 + L.tag)) / 2;
+    g2.textAlign = 'left'; g2.textBaseline = 'alphabetic';
+    g2.font = `800 ${L.name}px ${BRAND_FONT}`; g2.fillStyle = '#1a1a1a';
+    g2.fillText('Trainlog', tx, ty + L.name * 0.85);
+    const tw = g2.measureText('Trainlog').width;
+    g2.font = `700 ${L.name}px ${BRAND_FONT}`; g2.fillStyle = '#666666';
+    g2.fillText('.me', tx + tw, ty + L.name * 0.85);
+    const tagY = ty + L.name * 1.15 + L.tag * 0.85;
+    if (PREMIUM) {
+      g2.font = `900 ${L.tag}px "Font Awesome 6 Free"`; g2.fillStyle = '#F39C12';
+      g2.fillText('\uf3a5', tx, tagY);
+      const gw = g2.measureText('\uf3a5 ').width;
+      g2.font = `italic 700 ${L.tag}px ${BRAND_FONT}`;
+      g2.fillText('Premium', tx + gw, tagY);
+    } else {
+      g2.font = `italic ${L.tag}px ${BRAND_FONT}`; g2.fillStyle = '#8a8a8a';
+      g2.fillText('Your online train diary', tx, tagY);
+    }
+  }
+  // A title fitted to maxW: shrunk from `size` down to `min`, then on two lines (broken at
+  // the arrow if it has one, else at the middle space), then cut short with "…"
+  function fitTitle(text, maxW, weight, size, min) {
+    const fits = (lines, px) => { g2.font = font(weight, px); return lines.every(l => g2.measureText(l).width <= maxW); };
+    for (let px = size; px >= min; px -= 2) if (fits([text], px)) return { lines: [text], px };
+    let lines = [text];
+    const arrow = text.indexOf(' → ');
+    if (arrow > 0) lines = [text.slice(0, arrow), text.slice(arrow + 1)];
+    else {
+      const spaces = [...text.matchAll(/ /g)].map(m => m.index);
+      if (spaces.length) {
+        const mid = spaces.reduce((a, b) => (Math.abs(b - text.length / 2) < Math.abs(a - text.length / 2) ? b : a));
+        lines = [text.slice(0, mid), text.slice(mid + 1)];
+      }
+    }
+    for (let px = size; px >= min; px -= 2) if (fits(lines, px)) return { lines, px };
+    g2.font = font(weight, min);
+    return { lines: lines.map(l => {
+      if (g2.measureText(l).width <= maxW) return l;
+      while (l.length > 3 && g2.measureText(l + '…').width > maxW) l = l.slice(0, -1);
+      return l + '…';
+    }), px: min };
+  }
+  // The chip's icon, in the route's colour: a train front for a station, a portal for a
+  // tunnel, a deck on arches for a bridge
+  function chipIcon(kind, x, y, r) {
+    g2.save();
+    g2.strokeStyle = color; g2.fillStyle = color; g2.lineWidth = r * 0.28; g2.lineCap = 'round'; g2.lineJoin = 'round';
+    if (kind === 'station') {
+      roundRect(x - r * 0.7, y - r, r * 1.4, r * 1.6, r * 0.45); g2.fill();
+      g2.fillStyle = 'rgba(255,255,255,0.9)'; g2.fillRect(x - r * 0.45, y - r * 0.7, r * 0.9, r * 0.5);
+      g2.beginPath(); g2.arc(x - r * 0.35, y + r * 0.3, r * 0.14, 0, Math.PI * 2); g2.arc(x + r * 0.35, y + r * 0.3, r * 0.14, 0, Math.PI * 2); g2.fill();
+      g2.beginPath(); g2.moveTo(x - r * 0.5, y + r * 0.95); g2.lineTo(x - r * 0.75, y + r * 1.15);
+      g2.moveTo(x + r * 0.5, y + r * 0.95); g2.lineTo(x + r * 0.75, y + r * 1.15); g2.stroke();
+    } else if (kind === 'tunnel') {
+      g2.beginPath(); g2.moveTo(x - r, y + r * 0.8); g2.lineTo(x - r, y); g2.arc(x, y, r, Math.PI, 0); g2.lineTo(x + r, y + r * 0.8);
+      g2.closePath(); g2.fill();
+      g2.fillStyle = '#141a22';
+      g2.beginPath(); g2.moveTo(x - r * 0.55, y + r * 0.8); g2.lineTo(x - r * 0.55, y + r * 0.1); g2.arc(x, y + r * 0.1, r * 0.55, Math.PI, 0);
+      g2.lineTo(x + r * 0.55, y + r * 0.8); g2.closePath(); g2.fill();
+    } else {
+      g2.beginPath(); g2.moveTo(x - r * 1.1, y - r * 0.35); g2.lineTo(x + r * 1.1, y - r * 0.35); g2.stroke();
+      g2.beginPath();
+      for (const c of [-0.55, 0.55]) { g2.moveTo(x + (c - 0.45) * r, y + r * 0.8); g2.arc(x + c * r, y + r * 0.8, r * 0.45, Math.PI, 0); }
+      g2.stroke();
+      g2.beginPath(); g2.moveTo(x - r * 1.0, y - r * 0.35); g2.lineTo(x - r * 1.0, y + r * 0.8); g2.moveTo(x + r * 1.0, y - r * 0.35);
+      g2.lineTo(x + r * 1.0, y + r * 0.8); g2.moveTo(x, y - r * 0.35); g2.lineTo(x, y + r * 0.8); g2.stroke();
+    }
+    g2.restore();
+  }
+  const labelSide = new Map();
+  // A point of the line on screen, at the height it is drawn at and through the matrix three.js
+  // drew it with (map.project put it on MapLibre's own ground, off our lifted, smoothed line)
+  const lineOnScreen = s => {
+    const c = Math.max(0, Math.min(total, s));
+    let k = Math.max(0, d.findIndex(v => v > c) - 1);
+    if (c >= total || k > P.length - 2) k = P.length - 2;
+    const t = Math.max(0, Math.min(1, (c - d[k]) / ((d[k + 1] - d[k]) || 1)));
+    const v = new THREE.Vector3(lerp(P[k][0], P[k + 1][0], t), lerp(P[k][1], P[k + 1][1], t), lerp(P[k][2], P[k + 1][2], t))
+      .applyMatrix4(camera.projectionMatrix);
+    return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H };
+  };
+
+  function drawHud(f) {
+    g2.clearRect(0, 0, W, H);
+    const pad = 44 * scale, u = scale;
+    // The corner title's room, worked out first so the chip can keep clear of it
+    // With several trips, the one under way: its own origin and destination
+    const current = tripSpans.length > 1 && (tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]);
+    const corner = fitTitle(current ? current.name : name, W * 0.34, 800, 34, 22);
+    const dateRow = multiDay ? 30 * u : 0;
+    g2.font = font(800, corner.px);
+    // The current trip's type icon before it, white
+    const cornerIcon = typeIcon(S[Math.min(S.length - 2, pointAt(f.s).k)].type);
+    const iconW = cornerIcon ? Math.round(corner.px * 1.3 * u) : 0, textX = pad + (iconW ? iconW + 12 * u : 0);
+    const cornerRight = textX + Math.max(...corner.lines.map(l => g2.measureText(l).width));
+    // The current trip's operators' logos, beside the clock
+    const opLogos = (tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]).logos.map(operatorLogo).filter(Boolean);
+    // Below 900 px wide, the logo's train alone
+    const compact = W < 900, brand = brandLayout(u, compact), logoW = brand.w;
+    // Vignette, for depth and to seat the text
+    const vg = g2.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.28)');
+    g2.fillStyle = vg; g2.fillRect(0, 0, W, H);
+
+    // Profile strip with the distance and height, during the trip
+    const strip = 1 - f.card;
+    if (!flat && strip > 0.01 && f.title < 0.99) {
+      g2.globalAlpha = strip * (1 - f.title);
+      const x = pad, h = 128 * u, y = H - pad - h, w = W - 2 * pad;
+      roundRect(x, y, w, h, 16 * u); g2.fillStyle = 'rgba(12,16,22,0.62)'; g2.fill();
+      const cx = x + 210 * u, cw = w - 210 * u - 24 * u, cy = y + 18 * u, ch = h - 36 * u;
+      const X = v => cx + v / total * cw, Y = v => cy + (zHi - v) / ((zHi - zLo) || 1) * ch;
+      for (const t of tunnels) { g2.fillStyle = 'rgba(255,255,255,0.08)'; g2.fillRect(X(t.from), cy, Math.max(1, X(t.to) - X(t.from)), ch); }
+      for (const st of stations) { g2.fillStyle = st.d <= f.s ? '#fff' : 'rgba(255,255,255,0.45)'; g2.fillRect(X(st.d) - 1 * u, cy + ch - 10 * u, 2 * u, 10 * u); }
+      g2.beginPath(); g2.moveTo(X(0), cy + ch);
+      ground.forEach((v, k) => g2.lineTo(X(d[k]), Y(v))); g2.lineTo(X(total), cy + ch); g2.closePath();
+      const gg = g2.createLinearGradient(0, cy, 0, cy + ch); gg.addColorStop(0, 'rgba(176,150,110,0.55)'); gg.addColorStop(1, 'rgba(176,150,110,0.08)');
+      g2.fillStyle = gg; g2.fill();
+      const trackPath = upto => { g2.beginPath(); let started = false;
+        for (let k = 0; k < zr.length && d[k] <= upto; k++) { g2[started ? 'lineTo' : 'moveTo'](X(d[k]), Y(zr[k])); started = true; } };
+      trackPath(total); g2.strokeStyle = 'rgba(255,255,255,0.35)'; g2.lineWidth = 2 * u; g2.stroke();
+      // The part travelled, each trip in its type's colour (a change starts a new stroke)
+      g2.lineWidth = 3.5 * u; g2.lineJoin = 'round';
+      for (let k = 0, run = null; k < zr.length && d[k] <= f.s; k++) {
+        const type = S[Math.min(k, S.length - 2)].type;
+        if (!run || run !== type) {
+          if (run) { g2.lineTo(X(d[k]), Y(zr[k])); g2.stroke(); }
+          run = type; g2.beginPath(); g2.moveTo(X(d[k]), Y(zr[k])); g2.strokeStyle = COLOR[type] || color;
+        } else g2.lineTo(X(d[k]), Y(zr[k]));
+        if (k + 1 >= zr.length || d[k + 1] > f.s) g2.stroke();
+      }
+      const here = pointAt(f.s), hz = lerp(zr[here.k], zr[here.k + 1], (f.s - d[here.k]) / ((d[here.k + 1] - d[here.k]) || 1));
+      g2.beginPath(); g2.arc(X(f.s), Y(hz), 6 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
+      g2.lineWidth = 3 * u; g2.strokeStyle = COLOR[S[here.k].type] || color; g2.stroke();
+      g2.fillStyle = '#fff'; g2.font = font(700, 40); g2.textBaseline = 'alphabetic';
+      g2.fillText(`${(f.s / 1000).toFixed(1)} km`, x + 24 * u, y + 60 * u);
+      g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.font = font(500, 22);
+      g2.fillText(fill(T.altitude, { n: Math.round(hz) }), x + 24 * u, y + 96 * u);
+      g2.globalAlpha = 1;
+    }
+
+    // The train itself, when its exact composition was saved: its cars to scale, right-aligned
+    // above the profile strip, with their credit; only in a frame wide enough for it (1280 px)
+    const now = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
+    if (W >= 1280 && now.units.length && f.title < 0.99 && f.card < 0.99) {
+      // Drawn once each car's picture has loaded or failed to; a car without one (no drawing,
+      // or its file missing) is drawn as a plain car of typical length, so the train keeps its
+      // true length
+      const states = now.units.map(c => ({ c, img: wagonImage(c) }));
+      const cars = states.every(x => !x.img || x.img.ready || x.img.failed)
+        ? states.map(x => (x.img && x.img.ready ? x : { c: x.c, img: null })) : [];
+      if (cars.length) {
+        // On one scale in metres (10 px a metre for drawings without their own), a car about
+        // 34 px tall, smaller to fit the width of the profile strip under it, but never under
+        // about 22 px: a longer train shows from its front and fades out towards its back
+        // A car's length and height in metres: from its drawing, else a 20 m coach 3.6 m high
+        const dims = ({ c, img }) => (img ? [img.naturalWidth / (c.px_per_meter || 10), img.naturalHeight / (c.px_per_meter || 10)] : [20, 3.6]);
+        const metres = cars.reduce((a, car) => a + dims(car)[0], 0);
+        const room = W - 2 * pad, perMetre = Math.max(22 * u / 4, Math.min(34 * u / 4, room / metres));
+        const sizes = cars.map(car => ({ img: car.img, w: dims(car)[0] * perMetre, h: dims(car)[1] * perMetre }));
+        const trainW = sizes.reduce((a, x) => a + x.w, 0), shownW = Math.min(trainW, room);
+        const trainH = Math.max(...sizes.map(x => x.h));
+        // The whole train drawn apart, then placed: a long one is cut at the strip's right end
+        // (where it fades out), so on its way in and out the rest of it passes into view
+        const strip = document.createElement('canvas');
+        strip.width = Math.ceil(trainW); strip.height = Math.ceil(trainH);
+        const sg = strip.getContext('2d');
+        let x = 0;
+        for (const { img, w, h } of sizes) {
+          if (img) {
+            // Pixel art kept crisp when drawn larger, smoothed when smaller
+            sg.imageSmoothingEnabled = h < img.naturalHeight;
+            sg.drawImage(img, x, trainH - h, w, h);
+          } else {
+            sg.beginPath(); sg.roundRect(x + 1, trainH - h, w - 2, h * 0.9, h * 0.15);
+            sg.fillStyle = 'rgba(205,212,220,0.95)'; sg.fill();
+          }
+          x += w;
+        }
+        const bottom = H - pad - (flat ? 0 : 128 * u + 14 * u), top = bottom - trainH;
+        // A passing train: in from the right as its trip starts, on out to the left as it ends,
+        // over a fifth of the trip's time on screen each (1.5 to 3 s, at most half of a short
+        // trip), so one train is gone before the next comes
+        const onScreen = now.tOut - now.tIn, rest = W - pad - shownW;
+        const slide = Math.min(onScreen / 2, Math.max(1.5, Math.min(3, onScreen * 0.2)));
+        const k01 = v => Math.max(0, Math.min(1, v));
+        const kIn = k01((f.jt - now.tIn) / slide), kOut = k01((f.jt - (now.tOut - slide)) / slide);
+        const dx = (1 - kIn) ** 3 * (W + 20 * u - rest) - kOut ** 3 * (rest + trainW + 20 * u);
+        let shown = strip, sx = Math.round(rest + dx);
+        if (trainW > room) {
+          // Cut at the strip's right end with a fade, on a frame-wide row so it stays put there
+          // while the train moves through it
+          const row = document.createElement('canvas');
+          row.width = W; row.height = strip.height;
+          const rg = row.getContext('2d'), edge = W - pad, fade = Math.min(120 * u, room / 3);
+          rg.drawImage(strip, sx, 0);
+          rg.globalCompositeOperation = 'destination-out';
+          const grad = rg.createLinearGradient(edge - fade, 0, edge, 0);
+          grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,1)');
+          rg.fillStyle = grad; rg.fillRect(edge - fade, 0, fade, row.height);
+          rg.fillStyle = '#000'; rg.fillRect(edge, 0, W - edge, row.height);
+          shown = row; sx = 0;
+        }
+        g2.globalAlpha = (1 - f.title) * (1 - f.card);
+        g2.save(); g2.shadowColor = 'rgba(0,0,0,0.45)'; g2.shadowBlur = 6 * u; g2.shadowOffsetY = 2 * u;
+        g2.drawImage(shown, sx, Math.round(top));
+        g2.restore();
+        const credit = wagonCredit(now.units);
+        // The credit with the train, fading as it comes and goes
+        g2.globalAlpha *= 1 - Math.min(1, Math.abs(dx) / Math.max(1, shownW * 0.5));
+        if (credit) {
+          g2.font = font(500, 13); g2.textAlign = 'right'; g2.textBaseline = 'alphabetic'; g2.fillStyle = 'rgba(255,255,255,0.85)';
+          g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
+          g2.fillText(credit, W - pad, top - 6 * u);
+          g2.shadowBlur = 0; g2.textAlign = 'left';
+        }
+        g2.globalAlpha = 1;
+      }
+    }
+
+    // Stations: only those the video halts at (with the ends and connections), each shown on
+    // the journey's clock rather than by distance, so nothing pops with a change of speed: in
+    // over 0.8 s from 4 s before the train reaches it, out 1.5 s after it leaves. Its label
+    // takes a side when it appears and keeps it
+    const speed = f.speed, jt = f.jt;
+    const clamp01 = v => Math.max(0, Math.min(1, v));
+    const stationAlpha = st => {
+      const tt = stationTimes.get(st);
+      // None ahead before the train sets off: the start alone while it waits there
+      return tt ? clamp01((jt - Math.max(tt.arr - 4, tt.arr > 0 ? 0.2 : -1)) / 0.8) * clamp01((tt.dep + 1.5 - jt) / 0.8) : 0;
+    };
+    if (f.card < 0.5 && f.title < 0.5) {
+      const visible = [];
+      for (const st of stationTimes.keys()) {
+        const a = stationAlpha(st);
+        if (a <= 0) { labelSide.delete(st); continue; }
+        visible.push({ st, a, p: lineOnScreen(st.d) });
+      }
+      // Clipped above the profile strip
+      g2.save();
+      g2.beginPath(); g2.rect(0, 0, W, H - pad - 136 * u); g2.clip();
+      g2.font = font(700, 22);
+      const taken = [], th = 26 * u;
+      for (const { st, a, p } of visible) {
+        g2.globalAlpha = a * (1 - f.card);
+        // A transfer: a badge in the colour of the trip it changes to, with its icon; a stop
+        // on the way (and the ends): a white dot
+        const mark = st.transfer && stationMark(st), icon = st.transfer && !mark && typeIcon(typeAfter(st));
+        if (mark || icon) {
+          const b = 30 * u, bg = COLOR[typeAfter(st)] || color;
+          roundRect(p.x - b / 2, p.y - b / 2, b, b, 8 * u); g2.fillStyle = bg; g2.fill();
+          g2.lineWidth = 3 * u; g2.strokeStyle = '#fff'; g2.stroke();
+          if (mark) drawMark(mark, p.x, p.y, 10 * u, '#fff', bg);
+          else {
+            const iw = Math.round(20 * u), img = shrink(icon, iw, true);
+            g2.drawImage(img, Math.round(p.x - iw / 2), Math.round(p.y - img.height / 2));
+          }
+        } else {
+          g2.beginPath(); g2.arc(p.x, p.y, 8 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
+          g2.lineWidth = 3.5 * u; g2.strokeStyle = '#141a22'; g2.stroke();
+        }
+        // The side picked once, across from the route: beside a line running up the screen,
+        // above one running across it
+        if (!labelSide.has(st)) {
+          const q = lineOnScreen(st.d + 300), r = lineOnScreen(st.d - 300);
+          const across = Math.abs(q.x - r.x) > Math.abs(q.y - r.y);
+          labelSide.set(st, across ? 'above' : (q.x + r.x) / 2 > p.x ? 'left' : 'right');
+        }
+        const tw = g2.measureText(st.name).width, side = labelSide.get(st), gap = (st.transfer ? 22 : 14) * u;
+        const box = { w: tw, h: th, x: side === 'above' ? p.x - tw / 2 : side === 'right' ? p.x + gap : p.x - gap - tw,
+          y: side === 'above' ? p.y - gap - th : p.y - th / 2 };
+        // Two at once only if apart; else the one appearing later waits
+        if (!taken.some(o => box.x < o.x + o.w + 6 * u && o.x < box.x + box.w + 6 * u && box.y < o.y + o.h && o.y < box.y + box.h)) {
+          taken.push(box);
+          g2.textAlign = 'left'; g2.textBaseline = 'top';
+          g2.shadowColor = 'rgba(0,0,0,0.75)'; g2.shadowBlur = 8 * u;
+          g2.lineWidth = 4 * u; g2.strokeStyle = 'rgba(20,26,34,0.9)'; g2.lineJoin = 'round';
+          g2.strokeText(st.name, box.x, box.y + 2 * u);
+          g2.shadowBlur = 0; g2.fillStyle = '#fff'; g2.fillText(st.name, box.x, box.y + 2 * u);
+        }
+      }
+      g2.restore();
+      g2.globalAlpha = 1; g2.textBaseline = 'alphabetic';
+    }
+
+    // A chip while in a tunnel or on a bridge
+    // Only for a structure on screen for at least 1.5 s at the video's speed: a shorter one
+    // just flashed it; fading over the first and last fifth of its time
+    const lasts = t => (t.to - t.from) / speed >= 1.5;
+    const inT = tunnels.find(t => f.s > t.from && f.s < t.to && lasts(t)), inB = bridges.find(t => f.s > t.from && f.s < t.to && lasts(t));
+    // Passing a station shows it instead, with its time, for about 1.6 s around it
+    // Only for the ends, connections and the stops the train waits at (not each bus stop passed)
+    // The chip names the station from 0.8 s before the train arrives until 0.8 s after it leaves
+    const atStop = [...stationTimes].find(([, tt]) => jt > tt.arr - 0.8 && jt < tt.dep + 0.8)?.[0];
+    const chipFor = atStop ? { from: atStop.d - speed * 0.8, to: atStop.d + speed * 0.8, stop: atStop } : inT || inB;
+    let chipBox = null;
+    if (chipFor && f.card < 0.5 && f.title < 0.5) {
+      const len = chipFor.to - chipFor.from, size = len >= 1000 ? (len / 1000).toFixed(1) + ' km' : Math.round(len) + ' m';
+      const stopLabel = st => (st.transfer ? `${st.name.toUpperCase()} · ${st.arr || ''} → ${st.dep || ''}`
+        : `${st.name.toUpperCase()} · ${st.dep || st.arr || ''}`.replace(/ · $/, ''));
+      const near = chipFor.stop && nearby.get(chipFor.stop);
+      const parts = chipFor.stop ? [chipFor.stop, ...(near?.list || [])].sort((a, b) => a.d - b.d).map(stopLabel) : null;
+      if (near?.more > 0) parts.push(`+${near.more}`);
+      const label = parts ? parts.join('  /  ')
+        : chipFor.name ? `${chipFor.name.toUpperCase()}${/tunnel|tunel|túnel|galleri/i.test(chipFor.name) ? '' : ` ${T.tunnel.toUpperCase()}`} · ${size}`
+        : `${(inT ? T.tunnel : T.bridge).toUpperCase()} · ${size}`;
+      const edge = Math.min(len / 5, speed * 0.4), tt = chipFor.stop && stationTimes.get(chipFor.stop);
+      const fade = tt ? Math.min(clamp01((jt - (tt.arr - 0.8)) / 0.3), clamp01((tt.dep + 0.8 - jt) / 0.3))
+        : Math.min(1, (f.s - chipFor.from) / edge, (chipFor.to - f.s) / edge);
+      g2.globalAlpha = Math.max(0, fade);
+      g2.font = font(700, 24);
+      const roomL = cornerRight + 24 * u, roomR = W - pad - logoW - 24 * u;
+      // Several stations wider than the room at the top: on two lines, split where they are most
+      // even, and smaller if still wider than the frame
+      let lines = [label];
+      if (parts && parts.length > 1 && g2.measureText(label).width + 64 * u > roomR - roomL) {
+        const split = k => [parts.slice(0, k).join('  /  '), parts.slice(k).join('  /  ')];
+        const widest = ls => Math.max(...ls.map(l => g2.measureText(l).width));
+        let best = 1;
+        for (let k = 2; k < parts.length; k++) if (widest(split(k)) < widest(split(best))) best = k;
+        lines = split(best);
+      }
+      let px = 24;
+      const fit = (W - 2 * pad - 64 * u) / Math.max(...lines.map(l => g2.measureText(l).width));
+      if (fit < 1) g2.font = font(700, (px = Math.max(14, 24 * fit)));
+      // Centred in the room between the corner title and the logo, else below the title
+      const lineH = px * 1.25 * u, tw = Math.max(...lines.map(l => g2.measureText(l).width));
+      const cw = tw + 64 * u, ch = 50 * u + (lines.length - 1) * lineH;
+      let cx = Math.max(roomL, Math.min((W - cw) / 2, roomR - cw)), cy = pad;
+      if (cx + cw > roomR) { cx = pad; cy = pad + dateRow + (corner.lines.length * corner.px * 1.15 + 60) * u; }
+      // A transfer's chip in the colour of the trip it changes to, white on it
+      const dark = inT && !chipFor.stop, change = chipFor.stop?.transfer;
+      chipBox = { x: cx, y: cy, w: cw, h: ch };
+      roundRect(cx, cy, cw, ch, 25 * u);
+      g2.fillStyle = change ? COLOR[typeAfter(chipFor.stop)] || color : dark ? 'rgba(20,26,34,0.82)' : 'rgba(255,255,255,0.88)'; g2.fill();
+      if (change) { g2.lineWidth = 2.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.9)'; g2.stroke(); }
+      // A station shows its own glyph, else the icon of the trip leaving it (arriving, at the last)
+      const mark = chipFor.stop && stationMark(chipFor.stop), icon = chipFor.stop && !mark && typeIcon(typeAfter(chipFor.stop));
+      if (mark) drawMark(mark, cx + 24 * u, cy + ch / 2, 13 * u, change ? '#fff' : '#141a22', change ? COLOR[typeAfter(chipFor.stop)] || color : '#fff');
+      else if (icon) {
+        const iw = Math.round(28 * u), img = shrink(icon, iw, change);
+        g2.drawImage(img, Math.round(cx + 24 * u - iw / 2), Math.round(cy + ch / 2 - img.height / 2));
+      } else chipIcon(chipFor.stop ? 'station' : inT ? 'tunnel' : 'bridge', cx + 24 * u, cy + ch / 2, 9 * u);
+      g2.fillStyle = dark || change ? '#fff' : '#141a22'; g2.textBaseline = 'middle';
+      lines.forEach((l, i) => g2.fillText(l, cx + (chipFor.stop ? 46 : 40) * u, cy + ch / 2 + 1 + (i - (lines.length - 1) / 2) * lineH));
+      g2.globalAlpha = 1;
+    }
+
+    // Trip name in the corner during the journey, large over the opening
+    if (f.title < 0.99 && f.card < 0.99) {
+      g2.globalAlpha = (1 - f.title) * (1 - f.card);
+      g2.textBaseline = 'alphabetic'; g2.fillStyle = '#fff';
+      g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
+      g2.font = font(800, corner.px);
+      // On a journey of several days, its date above the title; as a new day starts, it turns
+      // warm and grows a little for 2.5 s, then settles back
+      if (dateRow) {
+        const today = dayAt(f.s), change = dayChanges.find(c => f.jt >= c.t && f.jt < c.t + 2.5);
+        const glow = change ? Math.max(0, Math.min(1, (f.jt - change.t) / 0.3, (change.t + 2.5 - f.jt) / 0.8)) : 0;
+        g2.font = font(700, 20 + 4 * glow);
+        g2.fillStyle = glow ? `rgba(255,${Math.round(255 - 46 * glow)},${Math.round(255 - 153 * glow)},0.95)` : 'rgba(255,255,255,0.85)';
+        // Its day and month names capitalised ("Mercredi 15 Février")
+        const date = today && dateText(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+        if (date) g2.fillText(date, textX, pad + 14 * u);
+        // A calendar in the icon column, as the trip's type icon and flag are below it
+        if (today && iconW) {
+          g2.font = faFont(18 + 3 * glow); g2.textAlign = 'center';
+          g2.fillText(FA.calendar, pad + iconW / 2, pad + 14 * u);
+          g2.textAlign = 'left';
+        }
+        g2.font = font(800, corner.px); g2.fillStyle = '#fff';
+      }
+      corner.lines.forEach((l, i) => g2.fillText(l, textX, pad + dateRow + (30 + i * corner.px * 1.15) * u));
+      // The type icon beside the title, and under them one line: the flag (in the icon's
+      // column), the operator's logo on a light chip (the logos are made for a white page),
+      // then the time; the line starts below the icon, however tall the icon is
+      const icon = cornerIcon && shrink(cornerIcon, iconW, true);
+      const iy = icon ? Math.round(pad + dateRow + 30 * u - corner.px * u * 0.8 - (icon.height - corner.px * u) / 2) : 0;
+      if (icon) g2.drawImage(icon, Math.round(pad), iy);
+      const trip = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
+      // The flag of the country the train is in, changing at the border; for a trip without
+      // countries read along it, its origin's then its destination's
+      const flag = icon && flagImage(countryAt(f.s) || trip.flags[f.s < (trip.from + trip.to) / 2 ? 0 : 1] || trip.flags[0]);
+      // The flag as tall as the logo's chip (34 px), at its own width (Firefox gives these SVGs
+      // no size: 3:2 then), left-aligned with the icons above; a wide one pushes the logo along
+      const lh = 22 * u, cpad = 6 * u, ch = opLogos.length ? lh + 2 * cpad : 0;
+      const fh = flag ? Math.round(lh + 2 * cpad) : 0;
+      const fw = flag ? Math.round(fh * (flag.naturalWidth && flag.naturalHeight ? flag.naturalWidth / flag.naturalHeight : 1.5)) : 0;
+      const rowX = Math.max(textX, flag ? pad + fw + 10 * u : 0);
+      // The line's middle: under the title, and clear of the icon by 10 px (the time's digits
+      // stand about 0.36 of its size above its baseline)
+      const titleBase = pad + dateRow + (30 + (corner.lines.length - 1) * corner.px * 1.15) * u;
+      const clockMid = Math.max(titleBase + 42 * u - 30 * u * 0.36, icon ? iy + icon.height + 10 * u + Math.max(fh, ch) / 2 : 0);
+      const below = clockMid + 30 * u * 0.36;
+      // The flag and the chip carry the shadow; what is drawn on them does not
+      const box = (x, y, w, h, r, fill) => {
+        g2.save(); g2.shadowColor = 'rgba(0,0,0,0.35)'; g2.shadowBlur = 8 * u; g2.shadowOffsetY = 2 * u;
+        roundRect(x, y, w, h, r); g2.fillStyle = fill; g2.fill();
+        g2.restore();
+      };
+      g2.shadowBlur = 0;
+      if (flag) {
+        const fy = Math.round(clockMid - fh / 2);
+        box(pad, fy, fw, fh, 4 * u, '#fff');
+        g2.save(); roundRect(pad, fy, fw, fh, 4 * u); g2.clip(); g2.drawImage(flag, pad, fy, fw, fh); g2.restore();
+        roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
+      }
+      let clockX = rowX;
+      if (opLogos.length) {
+        // On one chip, side by side
+        const gap = 10 * u, cy = Math.round(clockMid - ch / 2);
+        const imgs = opLogos.map(l => shrink(l, Math.max(1, Math.round(Math.min(130 * u, lh * l.naturalWidth / (l.naturalHeight || 1))))));
+        const lw = imgs.reduce((w, img) => w + img.width, 0) + gap * (imgs.length - 1);
+        box(rowX, cy, lw + 2 * cpad, ch, 8 * u, 'rgba(255,255,255,0.92)');
+        let x = rowX + cpad;
+        for (const img of imgs) { g2.drawImage(img, Math.round(x), Math.round(cy + (ch - img.height) / 2)); x += img.width + gap; }
+        clockX = rowX + lw + 2 * cpad + 12 * u;
+      }
+      const clock = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s);
+      // The time keeps the title's shadow, to read over any map
+      g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
+      // Turning warm and a little larger for 2.5 s as it moves to another time zone
+      const zoneChange = zoneChanges.find(c => f.jt >= c.t && f.jt < c.t + 2.5);
+      const zoneGlow = zoneChange ? Math.max(0, Math.min(1, (f.jt - zoneChange.t) / 0.3, (zoneChange.t + 2.5 - f.jt) / 0.8)) : 0;
+      if (clock) {
+        g2.font = font(700, 30 + 4 * zoneGlow);
+        g2.fillStyle = zoneGlow ? `rgba(255,${Math.round(255 - 46 * zoneGlow)},${Math.round(255 - 153 * zoneGlow)},0.95)` : 'rgba(255,255,255,0.92)';
+        g2.fillText(clock, clockX, below);
+        g2.font = font(700, 30);
+      }
+      // Then the line and the vehicle (a flight's aircraft by name), dimmer, cut short to fit
+      const extra = [trip.line, trip.vehicle].filter(Boolean).join(' · ');
+      if (extra) {
+        g2.font = font(700, 30);
+        // The same space either side of the separating dot
+        const gap = 9 * u, base = clockMid + 22 * u * 0.36;
+        let after = clockX + (clock ? g2.measureText(clock).width + gap : 0);
+        g2.font = font(600, 22); g2.fillStyle = 'rgba(255,255,255,0.78)';
+        if (clock) { g2.fillText('·', after, base); after += g2.measureText('·').width + gap; }
+        // Stopping short of a chip at the top reaching down to this line
+        const ends = [chipBox].filter(b => b && b.x > after && b.y < clockMid + 16 * u && b.y + b.h > clockMid - 16 * u).map(b => b.x - 12 * u);
+        const room = Math.min(W * 0.5, ...ends) - after;
+        let text = extra;
+        while (text.length > 2 && g2.measureText(text).width > room) text = text.slice(0, -2).trimEnd() + '…';
+        // Centred on the time's digits, as the flag and the logo are (its own digits stand
+        // about 0.36 of its size above its baseline)
+        if (room > 30 * u) g2.fillText(text, after, base);
+      }
+      g2.shadowBlur = 0; g2.globalAlpha = 1;
+    }
+    if (f.title > 0.01) {
+      g2.globalAlpha = f.title;
+      g2.fillStyle = 'rgba(8,12,18,0.35)'; g2.fillRect(0, 0, W, H);
+      g2.textAlign = 'center'; g2.fillStyle = '#fff'; g2.shadowColor = 'rgba(0,0,0,0.6)'; g2.shadowBlur = 24 * u;
+      const big = fitTitle(name, W - 4 * pad, 800, 76, 44), lh = big.px * 1.12 * u;
+      g2.font = font(800, big.px);
+      const top = H / 2 - 10 * u - (big.lines.length - 1) * lh / 2;
+      big.lines.forEach((l, i) => g2.fillText(l, W / 2, top + i * lh));
+      const shift = (big.lines.length - 1) * lh / 2;
+      // The lines under it shadowed as dark as the title, to read over any map
+      g2.shadowColor = 'rgba(0,0,0,0.85)'; g2.shadowBlur = 16 * u; g2.font = font(600, 30); g2.fillStyle = 'rgba(255,255,255,0.95)';
+      iconLine([[FA.route, kmText(facts.km)], facts.flownKm && [FA.plane, kmText(facts.flownKm)],
+        facts.tunnels && [FA.tunnel, plural(T.tunnels, facts.tunnels)], facts.top != null && !flat && [FA.mountain, `${Math.round(facts.top)} m`]].filter(Boolean),
+        W / 2, H / 2 + 46 * u + shift, 30, 600);
+      if (day) {
+        g2.font = font(500, 26); g2.fillStyle = 'rgba(255,255,255,0.88)';
+        iconLine([[FA.calendar, `${day} · ${data.trip.start.slice(-5)} → ${endDay}${(data.trip.end || '').slice(-5)}`],
+          onWay && [FA.stop, plural(T.stops, onWay)], transfers && [FA.transfer, plural(T.transfers, transfers)]].filter(Boolean), W / 2, H / 2 + 92 * u + shift, 26, 500);
+      }
+      g2.shadowBlur = 0; g2.textAlign = 'left'; g2.globalAlpha = 1;
+    }
+    if (f.card > 0.01) {
+      g2.globalAlpha = f.card;
+      const stats = [[kmText(facts.km), T.distance, FA.route],
+        // Tunnels only when there are some
+        facts.tunnels && [kmText(facts.tunnelKm), `${plural(T.inTunnels, facts.tunnels)} (${Math.round(facts.tunnelKm / ((facts.km - facts.flownKm) || 1) * 100)} %)`, FA.tunnel],
+        facts.top != null ? [`${Math.round(facts.top)} m`, T.highest, FA.mountain] : [`${Math.round(facts.cruise)} m`, T.cruise, FA.plane],
+        [`${Math.round(facts.descent)} m`, T.descent, FA.down], [`${Math.round(facts.climb)} m`, T.climb, FA.up]].filter(Boolean);
+      // Heights only where there are some
+      if (flat) stats.splice(0, stats.length, ...stats.filter(([, , icon]) => ![FA.mountain, FA.down, FA.up, FA.plane].includes(icon)));
+      // A narrow frame keeps the first three
+      if (W < 900) stats.length = 3;
+      const cw = Math.min(W - 2 * pad, 1100 * u), ch = 300 * u, cx = (W - cw) / 2, cy = (H - ch) / 2;
+      roundRect(cx, cy, cw, ch, 22 * u); g2.fillStyle = 'rgba(12,16,22,0.78)'; g2.fill();
+      g2.textAlign = 'center'; g2.fillStyle = '#fff'; g2.textBaseline = 'alphabetic';
+      const head = fitTitle(name, cw - 60 * u, 800, 40, 24);
+      g2.font = font(800, head.px);
+      head.lines.forEach((l, i) => g2.fillText(l, W / 2, cy + (head.lines.length > 1 ? 52 : 70) * u + i * head.px * 1.1 * u));
+      const colW = cw / stats.length;
+      stats.forEach(([v, l, icon], i) => {
+        const x = cx + colW * (i + 0.5);
+        g2.font = faFont(26); g2.fillStyle = color; g2.fillText(icon, x, cy + 132 * u);
+        g2.font = font(800, 40); g2.fillStyle = '#fff'; g2.fillText(v, x, cy + 182 * u);
+        g2.font = font(500, 19); g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.fillText(l, x, cy + 215 * u);
+      });
+      // The credits of every train drawing shown, under the card, wrapped over a few lines
+      const credits = W >= 1280 && wagonCredit(allUnits);
+      if (credits) {
+        g2.font = font(500, 14); g2.fillStyle = 'rgba(255,255,255,0.8)';
+        g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
+        const lines = [];
+        for (const word of credits.split(' ')) {
+          const line = lines.length ? `${lines[lines.length - 1]} ${word}` : word;
+          if (lines.length && g2.measureText(line).width <= cw) lines[lines.length - 1] = line; else lines.push(word);
+        }
+        lines.slice(0, 4).forEach((l, i) => g2.fillText(l, W / 2, cy + ch + (28 + i * 20) * u));
+        g2.shadowBlur = 0;
+      }
+      g2.textAlign = 'left'; g2.globalAlpha = 1;
+    }
+    // Trainlog and the map's credits, always
+    if (logo.complete && logo.naturalWidth) drawBrand(Math.round(W - pad - brand.w), Math.round(pad - 4 * u), brand);
+    g2.font = font(400, 13); g2.fillStyle = 'rgba(255,255,255,0.75)'; g2.textAlign = 'right'; g2.textBaseline = 'alphabetic';
+    g2.fillText('© OpenStreetMap contributors · © Mapterhorn · MapLibre', W - 12 * u, H - 10 * u);
+    g2.textAlign = 'left';
+  }
+
+  // ── Playing and rendering ──────────────────────────────────────────────────────
+  const metresPerPx = zoom => 40075016 * Math.cos(bounds.getCenter().lat * Math.PI / 180) / (512 * 2 ** zoom);
+  // poster: the opening overview under the full title card, shown until played or rendered
+  function show(t, poster = false) {
+    const f = frameAt(t);
+    if (poster) { f.title = 1; f.headOn = false; }
+    // The aim point centred in the open part of the picture: under the title and chip, above
+    // the profile strip, so the train never runs under the strip
+    map.jumpTo({ ...f.cam, padding: { top: 120 * scale, bottom: stripRoom * scale, left: 0, right: 0 } });
+    drawRoute(f.s, f.headOn, metresPerPx(f.cam.zoom), f.whole);
+    // Drawn now, so the markers are placed with this frame's camera, not the last one's (they
+    // lagged behind the line and slid off it as the camera moved)
+    map.redraw();
+    drawHud(f);
+    return f;
+  }
+  const lenSel = document.getElementById('v-len'), sizeSel = document.getElementById('v-size');
+  const $custom = document.getElementById('v-custom'), $w = document.getElementById('v-w'), $h = document.getElementById('v-h');
+  // Custom sizes kept even (the encoders want it), 128 to 3840 px a side
+  const side = el => 2 * Math.round(Math.max(128, Math.min(3840, Number(el.value) || 1080)) / 2);
+  const format = () => (sizeSel.value === 'custom' ? [side($w), side($h)] : sizeSel.value.split('x').map(Number));
+  // A size in the address (?size=1280x720; #1280x720 in older links) picked on load: its
+  // preset, else as a custom one
+  const sizeAsked = (new URLSearchParams(location.search).get('size') || location.hash.slice(1)).match(/^(\d+)x(\d+)$/);
+  if (sizeAsked) {
+    const v = `${sizeAsked[1]}x${sizeAsked[2]}`;
+    if ([...sizeSel.options].some(o => o.value === v)) sizeSel.value = v;
+    else { sizeSel.value = 'custom'; [$w.value, $h.value] = [sizeAsked[1], sizeAsked[2]]; $custom.hidden = false; }
+  }
+  // The default length follows the journey, so the pace stays about the same from one video
+  // to the next: 1.6 s per square root of each trip's minutes (or km), plus its halts and hops
+  const autoLength = () => {
+    const timed = tripSpans.every(t => t.minutes);
+    const ride = tripSpans.reduce((x, t) => x + 1.6 * Math.sqrt(timed ? t.minutes : (t.to - t.from) / 1000), 0);
+    const journey = ride + Math.min(stops.length, Math.floor(ride / 4)) * 0.5 + gapSpans.length * 1.5;
+    return Math.round(Math.max(20, journey + INTRO + DIVE + BACK + OUTRO));
+  };
+  // Empty: the length follows the journey; else the seconds asked for (at least 15)
+  lenSel.placeholder = fill(T.auto, { n: autoLength() });
+  const asked = () => Math.max(15, Math.min(3600, Math.round(Number(lenSel.value))));
+  const applySettings = () => {
+    JOURNEY = (lenSel.value === '' ? autoLength() : asked()) - INTRO - DIVE - BACK - OUTRO;
+    [W, H] = format();
+    scale = Math.min(W, H) / 1080;
+    document.getElementById('v-res').textContent = `${W} × ${H} px · ${FPS} fps · ${Math.round(JOURNEY + INTRO + DIVE + BACK + OUTRO)} s`;
+    planJourney();
+    smoothCamera();
+    layoutStage();
+    map.resize();
+    Object.assign(ov, overview()); Object.assign(ovEnd, overview(true));
+    show(0, true);
+    window.redrawMusic?.();
+  };
+  // The options take effect on Apply, not as they change: those changed are marked until then,
+  // and Apply rebuilds once (or reloads the page, for another background)
+  if (LEN) lenSel.value = LEN;
+  const bgSel = document.getElementById('v-bg'), $apply = document.getElementById('v-apply');
+  const $mb = document.getElementById('v-mb');
+  const chosen = () => ({ len: lenSel.value, size: sizeSel.value, w: $w.value, h: $h.value, bg: bgSel.value, mb: $mb.value });
+  let applied = chosen();
+  const markPending = () => {
+    const now = chosen(), custom = now.size === 'custom';
+    const changed = { 'v-len': now.len !== applied.len, 'v-size': now.size !== applied.size,
+      'v-w': custom && now.w !== applied.w, 'v-h': custom && now.h !== applied.h, 'v-bg': now.bg !== applied.bg,
+      'v-mb': now.mb !== applied.mb };
+    for (const [id, c] of Object.entries(changed)) document.getElementById(id).classList.toggle('v-pending', c);
+    $apply.disabled = !Object.values(changed).some(Boolean);
+  };
+  for (const el of [lenSel, sizeSel, $w, $h, bgSel, $mb]) { el.addEventListener('input', markPending); el.addEventListener('change', markPending); }
+  sizeSel.addEventListener('change', () => { $custom.hidden = sizeSel.value !== 'custom'; });
+  $apply.addEventListener('click', () => {
+    const now = chosen();
+    // Every option in the address alike (?size=&len=&bg=&mb=), so a link keeps the video as set
+    const url = new URL(location.href), [w, h] = format();
+    for (const [key, value] of [['size', `${w}x${h}`], ['len', now.len], ['bg', now.bg], ['mb', now.mb]]) {
+      if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+    }
+    url.hash = '';
+    if (now.bg !== applied.bg) { location.href = url.toString(); return; }
+    // The size limit alone is only read on rendering: nothing to rebuild for it
+    if (['len', 'size', 'w', 'h'].some(k => now[k] !== applied[k])) applySettings();
+    history.replaceState(null, '', url.toString());
+    applied = now;
+    markPending();
+  });
+  applySettings();
+  status(T.ready, 0);
+  uncover();
+
+  let playing = null;
+  // Music from the user's own device, mixed in here and never sent anywhere: faded in over the
+  // opening and out over the end, looped when shorter than the video
+  const $music = document.getElementById('v-music');
+  const fadeIn = () => 1.5, fadeOut = () => 2.5;
+  let musicFile = null, musicAudio = null, musicBuffer = null, musicOffset = 0, peaks = [];
+  // Its waveform, the part the video uses (as long as the video) highlighted and dragged along
+  // it, the rest dimmed; with the track's length against the video's
+  const $trim = document.getElementById('v-music-trim'), $wave = document.getElementById('v-wave');
+  const $info = document.getElementById('v-music-info');
+  const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const drawWave = () => {
+    $trim.hidden = !musicBuffer;
+    if (!musicBuffer) return;
+    const w = Math.max(1, Math.round($wave.clientWidth * devicePixelRatio)), h = Math.round(56 * devicePixelRatio);
+    $wave.width = w; $wave.height = h;
+    const g = $wave.getContext('2d'), len = musicBuffer.duration, video = duration();
+    musicOffset = Math.max(0, Math.min(musicOffset, Math.max(0, len - video)));
+    if (peaks.length !== w) {
+      const data = musicBuffer.getChannelData(0), per = Math.max(1, Math.floor(data.length / w));
+      peaks = Array.from({ length: w }, (_, i) => {
+        let m = 0;
+        for (let j = i * per, end = Math.min(data.length, j + per); j < end; j += 4) m = Math.max(m, Math.abs(data[j]));
+        return m;
+      });
+    }
+    const x0 = musicOffset / len * w, x1 = Math.min(len, musicOffset + video) / len * w;
+    g.fillStyle = 'rgba(47,129,247,0.18)'; g.fillRect(x0, 0, x1 - x0, h);
+    for (let x = 0; x < w; x++) {
+      // Inside the window, as loud as it will play: the fades show as the bars' ramps
+      const inside = x >= x0 && x <= x1, gainHere = inside ? musicGain(x / w * len - musicOffset) : 1;
+      const bar = Math.max(1, peaks[x] * gainHere * (h - 6));
+      g.fillStyle = x >= x0 && x <= x1 ? '#2f81f7' : 'rgba(139,148,158,0.45)';
+      g.fillRect(x, (h - bar) / 2, 1, bar);
+    }
+    g.strokeStyle = '#2f81f7'; g.lineWidth = 2 * devicePixelRatio; g.strokeRect(x0 + 1, 1, Math.max(2, x1 - x0 - 2), h - 2);
+    $info.textContent = `♪ ${mmss(len)} · ▶ ${mmss(video)} · ${mmss(musicOffset)} → ${mmss(Math.min(len, musicOffset + video))}${len < video ? ' ↻' : ''}`;
+  };
+  window.redrawMusic = drawWave;
+  // The video made as long as the track (15 s to an hour), the whole of it played
+  document.getElementById('v-music-fit').addEventListener('click', () => {
+    if (!musicBuffer) return;
+    lenSel.value = Math.max(15, Math.min(3600, Math.round(musicBuffer.duration)));
+    musicOffset = 0;
+    markPending();
+    $apply.click();
+  });
+  window.addEventListener('resize', drawWave);
+  // Dragging the window along the track (a click centres it there)
+  let drag = null;
+  $wave.addEventListener('pointerdown', e => {
+    if (!musicBuffer) return;
+    const len = musicBuffer.duration, rect = $wave.getBoundingClientRect();
+    const at = (e.clientX - rect.left) / rect.width * len, video = duration();
+    if (at < musicOffset || at > musicOffset + video) musicOffset = at - video / 2;
+    drag = { x: e.clientX, offset: musicOffset, width: rect.width, len };
+    $wave.setPointerCapture(e.pointerId); $wave.style.cursor = 'grabbing';
+    drawWave();
+  });
+  $wave.addEventListener('pointermove', e => {
+    if (!drag) return;
+    musicOffset = drag.offset + (e.clientX - drag.x) / drag.width * drag.len;
+    drawWave();
+  });
+  $wave.addEventListener('pointerup', () => { drag = null; $wave.style.cursor = 'grab'; });
+  $music.addEventListener('change', async () => {
+    musicFile = $music.files[0] || null;
+    if (musicAudio) { musicAudio.pause(); URL.revokeObjectURL(musicAudio.src); }
+    musicAudio = musicFile ? Object.assign(new Audio(URL.createObjectURL(musicFile)), { loop: true }) : null;
+    musicBuffer = null; musicOffset = 0; peaks = [];
+    if (musicFile) {
+      try { musicBuffer = await new AudioContext().decodeAudioData(await musicFile.arrayBuffer()); } catch (e) { status(fill(T.failed, { e: e.message })); }
+    }
+    drawWave();
+  });
+  const musicGain = t => Math.max(0, Math.min(1, t / fadeIn(), (duration() - t) / fadeOut()));
+  document.getElementById('v-play').addEventListener('click', () => {
+    if (playing) { cancelAnimationFrame(playing); playing = null; musicAudio?.pause(); document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+    if (musicAudio) { musicAudio.currentTime = musicOffset; musicAudio.volume = 0; musicAudio.play(); }
+    const start = performance.now();
+    document.getElementById('v-play').textContent = '■ Stop';
+    const tick = () => {
+      const t = (performance.now() - start) / 1000;
+      if (t > duration()) { playing = null; musicAudio?.pause(); document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+      if (musicAudio) musicAudio.volume = musicGain(t);
+      show(t);
+      status(`Preview ${t.toFixed(1)} / ${duration().toFixed(0)} s (tiles may still be loading)`, t / duration() * 100);
+      playing = requestAnimationFrame(tick);
+    };
+    playing = requestAnimationFrame(tick);
+  });
+
+  // Each frame: the camera moved, waited on until its terrain and map have loaded, then
+  // the map and the HUD composited and handed to the encoder with its exact timestamp
+  const settled = () => new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    const timer = setTimeout(finish, 6000);
+    const check = () => { if (map.areTilesLoaded() && !map.isMoving()) { clearTimeout(timer); map.once('render', finish); map.triggerRepaint(); } else map.once('idle', check); };
+    requestAnimationFrame(check);
+  });
+  // Whether an encoding really works: Firefox says yes to some it then fails to configure
+  // (the failure only comes later, through the error callback), so one frame is tried
+  const encodes = async config => {
+    let failed = false;
+    const encoder = new VideoEncoder({ output: () => {}, error: () => { failed = true; } });
+    try {
+      encoder.configure(config);
+      const canvas = new OffscreenCanvas(config.width, config.height), g = canvas.getContext('2d');
+      g.fillStyle = '#123'; g.fillRect(0, 0, config.width, config.height);
+      const frame = new VideoFrame(canvas, { timestamp: 0 });
+      encoder.encode(frame, { keyFrame: true });
+      frame.close();
+      await encoder.flush();
+    } catch (e) { failed = true; }
+    try { encoder.close(); } catch (e) { /* already closed */ }
+    return !failed;
+  };
+  document.getElementById('v-render').addEventListener('click', async () => {
+    if (!('VideoEncoder' in window)) { status('This browser cannot encode video (WebCodecs): use a recent Chrome, Edge or Firefox.'); return; }
+    if (playing) document.getElementById('v-play').click();
+    const buttons = document.querySelectorAll('#v-panel button, #v-panel select, #v-panel input');
+    buttons.forEach(b => (b.disabled = true));
+    try {
+      // The first encoding the browser takes: H.264 High, Main or Baseline at level 4.0 (enough
+      // for 1080p at 30 fps; Firefox refuses higher levels), level 5.1 for larger custom sizes,
+      // else VP9
+      // With a size asked for, the bitrate capped to fit it whatever the length (8 % kept for
+      // the MP4's own overhead), held constant so the encoder cannot overshoot it
+      // The music's encoding: AAC, which every player reads, else Opus (Firefox); none at all
+      // in a browser without either, the video then made silent
+      let audio = null;
+      if (musicFile && 'AudioEncoder' in window) {
+        for (const [codec, m] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+          const c = { codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 };
+          try { if ((await AudioEncoder.isConfigSupported(c)).supported) { audio = { config: c, mux: m }; break; } } catch (e) { /* next */ }
+        }
+      }
+      const mb = Number(document.getElementById('v-mb').value);
+      const cap = mb > 0 ? mb * 1e6 * 8 * 0.92 / duration() - (audio ? 128000 : 0) : Infinity;
+      const base = { width: W, height: H, bitrate: Math.min(W * H >= 1920 * 1080 ? 14e6 : 8e6, cap),
+        bitrateMode: 'constant', framerate: FPS };
+      let config = null, mux = null;
+      for (const [codec, m] of [['avc1.640028', 'avc'], ['avc1.4d0028', 'avc'], ['avc1.42e028', 'avc'], ['avc1.640033', 'avc'], ['vp09.00.40.08', 'vp9'], ['vp09.00.51.08', 'vp9']]) {
+        for (const bitrateMode of ['constant', 'variable']) {
+          const c = { ...base, bitrateMode, codec, ...(m === 'avc' ? { avc: { format: 'avc' } } : {}) };
+          try { if ((await VideoEncoder.isConfigSupported(c)).supported && await encodes(c)) { config = c; mux = m; break; } } catch (e) { /* next */ }
+        }
+        if (config) break;
+      }
+      if (!config) throw new Error('no video encoding (H.264 or VP9) available in this browser');
+      const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), fastStart: 'in-memory',
+        video: { codec: mux, width: W, height: H },
+        ...(audio ? { audio: { codec: audio.mux, sampleRate: 48000, numberOfChannels: 2 } } : {}) });
+      let failure = null;
+      const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { failure = e; } });
+      encoder.configure(config);
+      const frames = Math.round(duration() * FPS), canvas = document.createElement('canvas'), started = performance.now();
+      canvas.width = W; canvas.height = H;
+      const cx = canvas.getContext('2d');
+      for (let i = 0; i < frames; i++) {
+        if (failure) throw failure;
+        if (encoder.state !== 'configured') throw new Error(`the encoder stopped (${config.codec})`);
+        show(i / FPS);
+        await settled();
+        if (failure) throw failure;
+        if (encoder.state !== 'configured') throw new Error(`the encoder stopped (${config.codec})`);
+        cx.drawImage(map.getCanvas(), 0, 0, W, H);
+        cx.drawImage(hud, 0, 0);
+        const frame = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+        encoder.encode(frame, { keyFrame: i % (FPS * 2) === 0 });
+        frame.close();
+        while (encoder.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 10));
+        // Time left at the pace so far, once a few frames have set it
+        const left = (performance.now() - started) / (i + 1) * (frames - i - 1) / 1000;
+        const eta = i >= 10 ? ` · ${fill(T.eta, { t: `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}` })}` : '';
+        status(fill(T.rendering, { i: i + 1, n: frames }) + eta, (i + 1) / frames * 100);
+      }
+      await encoder.flush();
+      if (audio) {
+        // The music rendered to the video's exact length, with its fades, then encoded in
+        // tenth-of-a-second blocks
+        const rate = 48000, length = Math.ceil(duration() * rate), mix = new OfflineAudioContext(2, length, rate);
+        const source = mix.createBufferSource(), gain = mix.createGain();
+        source.buffer = await mix.decodeAudioData(await musicFile.arrayBuffer());
+        source.loop = true;
+        gain.gain.setValueAtTime(0, 0);
+        gain.gain.linearRampToValueAtTime(1, fadeIn());
+        gain.gain.setValueAtTime(1, Math.max(fadeIn(), duration() - fadeOut()));
+        gain.gain.linearRampToValueAtTime(0, duration());
+        source.connect(gain).connect(mix.destination);
+        source.start(0, musicOffset);
+        const mixed = await mix.startRendering(), left = mixed.getChannelData(0), right = mixed.getChannelData(1);
+        let audioFailure = null;
+        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => { audioFailure = e; } });
+        audioEncoder.configure(audio.config);
+        for (let i = 0; i < length; i += rate / 10) {
+          const n = Math.min(rate / 10, length - i), data = new Float32Array(n * 2);
+          data.set(left.subarray(i, i + n), 0); data.set(right.subarray(i, i + n), n);
+          const block = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: n, numberOfChannels: 2,
+            timestamp: Math.round(i / rate * 1e6), data });
+          audioEncoder.encode(block);
+          block.close();
+        }
+        await audioEncoder.flush();
+        if (audioFailure) throw audioFailure;
+      }
+      muxer.finalize();
+      const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'trip'}-${H}p.mp4`;
+      a.click();
+      status(fill(T.done, { n: (blob.size / 1e6).toFixed(1) }) + (musicFile && !audio ? ' (no music: this browser cannot encode audio)' : ''), 100);
+    } catch (e) {
+      status(fill(T.failed, { e: e.message }));
+    } finally {
+      buttons.forEach(b => (b.disabled = false));
+      markPending();
+      show(0, true);
+    }
+  });
+}
+
+// Tunnel names from OpenStreetMap (tunnel:name, or a name that says tunnel; the router only
+// keeps the line's name): one Overpass query for the tunnels longer than 100 m, each given
+// the name of the named tunnel way nearest its middle. Filled in when it answers.
+async function nameTunnels(tunnels, coords) {
+  const long = tunnels.filter(t => t.to - t.from >= 100);
+  if (!long.length) return;
+  const mid = t => coords[Math.round((t.s + t.e) / 2)];
+  const q = `[out:json][timeout:20];(${long.map(t => `way(around:40,${mid(t)[1]},${mid(t)[0]})[railway][tunnel];`).join('')});out tags center;`;
+  // The main server is often at capacity: then a mirror
+  let ways = null;
+  for (const server of ['https://overpass-api.de', 'https://overpass.kumi.systems', 'https://overpass.private.coffee']) {
+    try {
+      const res = await fetch(`${server}/api/interpreter`, { method: 'POST', body: new URLSearchParams({ data: q }) });
+      if (res.ok) { ways = (await res.json()).elements || []; break; }
+    } catch (e) { /* next server */ }
+  }
+  if (!ways) return;
+  try {
+    const named = ways.map(w => ({ c: w.center, name: w.tags['tunnel:name']
+      || (/tunnel|tunel|túnel|galleri|galerie/i.test(w.tags.name || '') ? w.tags.name : null) })).filter(w => w.name && w.c);
+    for (const t of long) {
+      const [lng, lat] = mid(t);
+      let best = null, bestD = Infinity;
+      for (const w of named) {
+        const dd = haversine([lng, lat], [w.c.lon, w.c.lat]);
+        if (dd < bestD) { bestD = dd; best = w; }
+      }
+      if (best && bestD < (t.to - t.from) / 2 + 100) t.name = best.name;
+    }
+  } catch (e) { /* no names: the chips say TUNNEL */ }
+}
+
+// Several trips as one journey, in order: their paths joined (the hop from one trip's end
+// to the next one's start marked as a gap, not drawn), their tunnels and stops shifted along,
+// and each connection a stop with the arrival and departure times
+function mergeTrips(list) {
+  const out = { trip: { ...list[0].trip, destination: list[list.length - 1].trip.destination,
+    end: list[list.length - 1].trip.end }, coords: [], height: [], env: [], stops: [], gaps: [], types: [], countries: [], spans: [] };
+  list.forEach((t, i) => {
+    const off = out.coords.length;
+    if (i) {
+      const prev = list[i - 1], at = prev.coords[prev.coords.length - 1];
+      // A change named after where the next trip leaves from (the airport, not the shuttle's stop)
+      out.stops.push({ name: (t.trip.origin || prev.trip.destination || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), lng: at[0], lat: at[1],
+        arr: prev.trip.end?.slice(-5), dep: t.trip.start?.slice(-5), arrFull: prev.trip.end, depFull: t.trip.start,
+        major: true, transfer: true, at: off - 1 });
+      out.gaps.push(off - 1);
+    }
+    out.coords.push(...t.coords);
+    out.types.push(...t.coords.map(() => t.trip.type));
+    out.height.push(...(t.height || t.coords.map(() => 0)));
+    for (const [s, e, k] of t.env || []) out.env.push([s + off, e + off, k]);
+    for (const [i, c] of t.countries || []) out.countries.push([i + off, c]);
+    // A trip's own stops are looked for along that trip only
+    out.stops.push(...(t.stops || []).map(st => ({ ...st, within: [off, off + t.coords.length - 1] })));
+    // Each trip's points and how long it took, so the video gives it its share of the time
+    const took = t.trip.start && t.trip.end ? (new Date(t.trip.end) - new Date(t.trip.start)) / 60000 : null;
+    out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
+      name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
+      real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)],
+      logos: t.trip.operator_logos || [], line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start,
+      end: t.trip.end, utc: t.trip.utc });
+  });
+  return out;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────────
+function runningMedian(z, d, window) {
+  return z.map((_, i) => {
+    let lo = i, hi = i;
+    while (lo > 0 && d[i] - d[lo - 1] <= window / 2) lo--;
+    while (hi < z.length - 1 && d[hi + 1] - d[i] <= window / 2) hi++;
+    const part = z.slice(lo, hi + 1).sort((a, b) => a - b);
+    return part[part.length >> 1];
+  });
+}
+
+function runningMin(z, d, window) {
+  return z.map((_, i) => {
+    let m = z[i];
+    for (let k = i; k >= 0 && d[i] - d[k] <= window / 2; k--) m = Math.min(m, z[k]);
+    for (let k = i + 1; k < z.length && d[k] - d[i] <= window / 2; k++) m = Math.min(m, z[k]);
+    return m;
+  });
+}
+
+function movingAverage(z, d, window) {
+  return z.map((_, i) => {
+    let sum = 0, n = 0;
+    for (let k = i; k >= 0 && d[i] - d[k] <= window / 2; k--) { sum += z[k]; n++; }
+    for (let k = i + 1; k < z.length && d[k] - d[i] <= window / 2; k++) { sum += z[k]; n++; }
+    return sum / n;
+  });
+}
+
+function lerp(a, b, t) { return (a == null || b == null) ? (a ?? b) : a + (b - a) * t; }
+
+// Smallest and largest of a long array (a spread into Math.min/max overflows the call stack)
+function minOf(values) { let m = Infinity; for (const v of values) if (v < m) m = v; return m; }
+function maxOf(values) { let m = -Infinity; for (const v of values) if (v > m) m = v; return m; }
+
+function hexA(hex, alpha) {
+  const v = parseInt(hex.slice(1), 16);
+  return `rgba(${v >> 16},${(v >> 8) & 255},${v & 255},${alpha})`;
+}
+
+function haversine([lng1, lat1], [lng2, lat2]) {
+  const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2
+    + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lng2 - lng1) * r / 2) ** 2;
+  return 12742000 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// The ground under each [lng, lat], from the same Mapterhorn tiles the map draws, at the
+// most detailed zoom that keeps the route to about 80 tiles
+// Heights anywhere near a route: its tiles and their neighbours, read at a zoom where a tile
+// is wider than the camera's distance to the train, so what is behind the camera is loaded
+async function terrainSampler(S, length) {
+  const TILE = 512, lat0 = S[Math.floor(S.length / 2)].lat * Math.PI / 180;
+  const span = Math.max(500, 6 * length / 30);
+  let z = Math.max(8, Math.min(12, Math.floor(Math.log2(40075016 * Math.cos(lat0) / (1.2 * span)))));
+  const tileXY = (lng, lat, n) => [(((lng + 180) / 360) % 1 + 1) % 1 * n,
+    (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n];
+  let keys;
+  for (;; z--) {
+    keys = new Set();
+    for (const p of S) {
+      const [x, y] = tileXY(p.lng, p.lat, 2 ** z);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) keys.add(`${Math.floor(x) + dx}/${Math.floor(y) + dy}`);
+    }
+    if (keys.size <= 150 || z <= 6) break;
+  }
+  const tiles = new Map();
+  await Promise.all([...keys].map(async key => {
+    try {
+      const [x, y] = key.split('/');
+      const img = await createImageBitmap(await (await fetch(DEM.replace('{z}', z).replace('{x}', x).replace('{y}', y))).blob());
+      const ctx = new OffscreenCanvas(TILE, TILE).getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      tiles.set(key, ctx.getImageData(0, 0, TILE, TILE).data);
+    } catch (e) { /* unknown there */ }
+  }));
+  const n = 2 ** z;
+  return (lng, lat) => {
+    const [x, y] = tileXY(lng, lat, n), t = tiles.get(`${Math.floor(x)}/${Math.floor(y)}`);
+    if (!t) return null;
+    const o = (Math.min(TILE - 1, Math.floor((y % 1) * TILE)) * TILE + Math.min(TILE - 1, Math.floor((x % 1) * TILE))) * 4;
+    return t[o] * 256 + t[o + 1] + t[o + 2] / 256 - 32768;
+  };
+}
+
+async function groundHeights(points) {
+  // The most detailed zoom whose tiles under the points number at most 80: counted, not
+  // guessed from the length (a ski day's dozens of runs share a few tiles)
+  const tileKey = (lng, lat, n) => `${Math.floor((((lng + 180) / 360) % 1 + 1) % 1 * n)}/${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n)}`;
+  let z = 14;
+  while (z > 6) {
+    const keys = new Set();
+    for (const [lng, lat] of points) { keys.add(tileKey(lng, lat, 2 ** z)); if (keys.size > 80) break; }
+    if (keys.size <= 80) break;
+    z--;
+  }
+  // Mapterhorn goes past zoom 12 only where it has a national lidar model: points on a
+  // missing tile are read again two zooms coarser, down to the worldwide ones
+  const out = new Array(points.length).fill(null);
+  let todo = points.map((_, i) => i);
+  for (; todo.length && z >= 6; z -= 2) {
+    const got = await heightsAtZoom(todo.map(i => points[i]), z);
+    todo.forEach((i, j) => { out[i] = got[j]; });
+    todo = todo.filter(i => out[i] == null);
+  }
+  return out;
+}
+
+// Heights at one zoom, null where its tile is missing
+async function heightsAtZoom(points, z) {
+  const TILE = 512, n = 2 ** z, tiles = new Map();
+  const where = points.map(([lng, lat]) => {
+    const x = (((lng + 180) / 360) % 1 + 1) % 1 * n;
+    const y = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+    const key = `${Math.floor(x)}/${Math.floor(y)}`;
+    if (!tiles.has(key)) tiles.set(key, null);
+    return { key, px: Math.min(TILE - 1, Math.floor((x % 1) * TILE)), py: Math.min(TILE - 1, Math.floor((y % 1) * TILE)) };
+  });
+  await Promise.all([...tiles.keys()].map(async key => {
+    try {
+      const [x, y] = key.split('/');
+      const res = await fetch(DEM.replace('{z}', z).replace('{x}', x).replace('{y}', y));
+      if (!res.ok) return;
+      const img = await createImageBitmap(await res.blob());
+      const ctx = new OffscreenCanvas(TILE, TILE).getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      tiles.set(key, ctx.getImageData(0, 0, TILE, TILE).data);
+    } catch (e) { /* missing: read coarser */ }
+  }));
+  return where.map(({ key, px, py }) => {
+    const t = tiles.get(key);
+    if (!t) return null;
+    const o = (py * TILE + px) * 4;
+    return t[o] * 256 + t[o + 1] + t[o + 2] / 256 - 32768;
+  });
+}
+</script>
+
+{% endblock %}

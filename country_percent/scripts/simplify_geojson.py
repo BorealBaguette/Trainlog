@@ -2,9 +2,9 @@
 Simplify a processed GeoJSON file by:
 1. unpacking features of type GeometryCollection,
 2. deleting features of all types except Polygon and Multipolygon,
-3. simplifying polygon outlines with Douglas-Peucker, keeping shared borders,
-4. converting the output to CRS84,
-5. truncating coordinate precision to the cm range,
+3. converting to CRS84,
+4. rounding coordinates to 6 decimals, keeping polygons valid,
+5. simplifying polygon outlines with Douglas-Peucker, keeping shared borders,
 6. recomputing polygon areas,
 7. re-assign new IDs,
 8. failing on very tiny or invalid polygons.
@@ -26,6 +26,7 @@ import os
 import sys
 
 import geopandas as gpd
+import shapely
 from shapely.geometry import LineString, MultiPolygon, Polygon, mapping, shape
 from shapely.validation import explain_validity
 
@@ -42,17 +43,16 @@ def round_area(value):
     return round(value, 2)
 
 
-def truncate_coords(coords):
-    if coords and all(isinstance(item, (int, float)) for item in coords):
-        # a single position
-        assert all(e == 0 for e in coords[3:])
-        return [round(item, 6) for item in coords[:2]]
-    return [truncate_coords(item) for item in coords]
-
-
-def truncate_geometry(geometry):
-    geometry["coordinates"] = truncate_coords(geometry["coordinates"])
-    return geometry
+def truncate_gdf(gdf):
+    # unlike plain rounding, set_precision keeps polygons valid; normalize
+    # fixes the vertex order so that re-runs write the same file
+    gdf["geometry"] = gdf["geometry"].apply(
+        lambda geometry: shapely.normalize(
+            shapely.set_precision(shapely.force_2d(geometry), 1e-6)
+        )
+    )
+    # remove empty polygons
+    return gdf[~gdf["geometry"].is_empty].reset_index(drop=True)
 
 
 def polygons_of(geometry):
@@ -204,6 +204,7 @@ def process(country_code):
         print(f"Geojson file not found for {country_code}")
         return
 
+    print(f"Processing {path}")
     with open(path, "r") as file:
         data = json.load(file)
 
@@ -212,7 +213,11 @@ def process(country_code):
     assert data.get("type") == "FeatureCollection"
 
     # Convert the features to a GeoDataFrame
-    geometries = [shape(feature["geometry"]) for feature in data.get("features", [])]
+    # QGIS leaves `"geometry": null` behind for features without geometry
+    geometries = [
+        shape(feature["geometry"]) if feature["geometry"] else None
+        for feature in data.get("features", [])
+    ]
     gdf = gpd.GeoDataFrame(data["features"], geometry=geometries, crs=input_crs)
 
     # Drop unkown columns
@@ -221,21 +226,20 @@ def process(country_code):
     # Handle different types of features
     gdf = explode_and_filter_geometries(gdf)
 
+    # Truncate coordinates to reduce file size. Truncating before
+    # simplifying makes it keep only rounded points, so that re-running
+    # the script is a no-op.
+    print("Truncating coordinates...")
+    gdf = truncate_gdf(gdf.to_crs(OUTPUT_CRS))
+
     # Transform to Web Mercator for accurate distance calculations
     gdf_mercator = gdf.to_crs(WEB_MERCATOR_CRS)
 
     print("Simplifying...")
     gdf_mercator["geometry"] = simplify_geometries(list(gdf_mercator["geometry"]))
 
-    # Transform to output crs
-    gdf = gdf_mercator.to_crs(OUTPUT_CRS)
-
-    # Truncate coordinates to reduce file size. Areas are computed from
-    # the truncated geometry so that re-running the script is a no-op.
-    print("Truncating coordinates...")
-    gdf["geometry"] = gdf["geometry"].apply(
-        lambda geometry: shape(truncate_geometry(mapping(geometry)))
-    )
+    # round again to drop the float error of the reprojection round trip
+    gdf = truncate_gdf(gdf_mercator.to_crs(OUTPUT_CRS))
 
     print("Calculating areas...")
 

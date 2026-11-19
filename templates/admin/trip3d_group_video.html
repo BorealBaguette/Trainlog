@@ -1,0 +1,1349 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include (nav if nav is defined else "bootstrap/navigation.html") %}
+
+<link href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.min.js"></script>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+} }
+</script>
+
+<style>
+  html, body { overflow: hidden; }
+  /* The site's light or dark theme (the user's setting), through Bootstrap's own colours */
+  #v-wrap { --v-bg: var(--bs-tertiary-bg); --v-fg: var(--bs-body-color); --v-dim: var(--bs-secondary-color);
+    --v-btn: var(--bs-secondary-bg); --v-accent: #2f81f7;
+    height: calc(100vh - 70px); display: flex; gap: 14px; padding: 14px; background: var(--v-bg); box-sizing: border-box; }
+  #v-stage-box { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+  /* Over the frame while the map, the trips and the terrain load (it can take a while) */
+  #v-loading { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: var(--v-bg); color: var(--v-fg); font-size: .95rem; }
+  #v-loading i { font-size: 2rem; color: var(--v-accent); }
+  #v-loading.v-done { display: none; }
+  #v-stage { position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: #000; }
+  #v-scale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #v-map { position: absolute; left: 0; top: 0; pointer-events: none; }
+  #v-hud { position: absolute; left: 0; top: 0; pointer-events: none; }
+  /* The video draws its own credits; the map's buttons have no place in it */
+  #v-map .maplibregl-control-container, #v-map > div[style*="monospace"] { display: none; }
+  #v-panel { width: 290px; flex-shrink: 0; color: var(--v-fg); font-size: .85rem; display: flex; flex-direction: column; gap: 10px; }
+  #v-panel h5 { margin: 0; font-weight: 700; }
+  #v-panel select, #v-panel input { width: 100%; }
+  #v-panel .v-row { display: flex; gap: 8px; align-items: center; }
+  #v-panel label { color: var(--v-dim); font-size: .75rem; margin-bottom: 2px; display: block; }
+  #v-panel button { border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 600; cursor: pointer; }
+  #v-play { background: var(--v-btn); color: var(--v-fg); }
+  #v-render { background: var(--v-accent); color: #fff; }
+  #v-panel button:disabled { opacity: .5; cursor: default; }
+  /* Options changed but not applied yet, and the button that applies them */
+  #v-panel .v-pending { outline: 2px solid #f0a020; outline-offset: 1px; }
+  #v-apply { background: var(--v-btn); color: var(--v-fg); }
+  #v-apply:not(:disabled) { background: #f0a020; color: #1a1a1a; }
+  #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
+  #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
+  #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
+  /* Phones: the frame on top, the controls under it, the page scrolling */
+  @media (max-width: 800px) {
+    html, body { overflow: auto; }
+    #v-wrap { flex-direction: column; height: auto !important; padding: 10px; }
+    #v-stage-box { flex: none; height: 60vh; }
+    #v-panel { width: 100%; padding-bottom: 20px; }
+  }
+</style>
+
+<div id="v-wrap">
+  <div id="v-stage-box">
+    <div id="v-stage"><div id="v-scale"><div id="v-map"></div><canvas id="v-hud"></canvas></div></div>
+    <div id="v-loading"><i class="fa-solid fa-circle-notch fa-spin"></i><div id="v-loading-text">Loading…</div></div>
+  </div>
+  <div id="v-panel">
+    <h5>{{ video3dTitle }}</h5>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ video3dDuration }}</label>
+        <input id="v-len" type="number" min="15" max="3600" step="1" class="form-control form-control-sm" placeholder="{{ video3dAuto.replace('{n}', '…') }}"></div>
+      <div style="flex:1"><label>{{ video3dFormat }}</label>
+        <select id="v-size" class="form-select form-select-sm">
+          <option value="1920x1080" selected>1080p</option><option value="1280x720">720p</option>
+          <option value="720x720">{{ video3dSquare }}</option><option value="1080x1920">{{ video3dVertical }}</option>
+          <option value="custom">{{ video3dCustom }}</option></select></div>
+    </div>
+    <div id="v-res" style="color:#9da7b3;font-size:.75rem;margin-top:-4px"></div>
+    <div class="v-row" id="v-custom" hidden>
+      <div style="flex:1"><label>{{ video3dWidth }}</label><input id="v-w" type="number" min="128" max="3840" step="2" value="1920" class="form-control form-control-sm"></div>
+      <div style="flex:1"><label>{{ video3dHeight }}</label><input id="v-h" type="number" min="128" max="3840" step="2" value="1080" class="form-control form-control-sm"></div>
+    </div>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ tilesetLabel }}</label>
+        <select id="v-bg" class="form-select form-select-sm">
+          <option value="">{{ posterLabelDefault }}</option>
+          <optgroup label="Trainlog"><option value="trainlog-light">Trainlog Rail Light</option><option value="trainlog-rail">Trainlog Rail Dark</option><option value="dark-train">Trainlog Dark</option></optgroup>
+          <optgroup label="OpenFreeMap"><option value="ofm-liberty">Liberty</option><option value="ofm-bright">Bright</option><option value="ofm-positron">Positron</option></optgroup>
+          <optgroup label="Jawg"><option value="jawg-streets-v2">Streets V2</option><option value="jawg-lagoon-v2">Lagoon V2</option><option value="jawg-terrain">{{ tileserver_jawg_terrain }}</option><option value="jawg-sunny">{{ tileserver_jawg_sunny }}</option><option value="jawg-light">{{ tileserver_jawg_light }}</option><option value="jawg-dark">{{ tileserver_jawg_dark }}</option></optgroup>
+          <optgroup label="OpenStreetMap"><option value="osm">{{ tileserver_default }}</option><option value="de">{{ tileserver_de }}</option><option value="fr">{{ tileserver_fr }}</option></optgroup>
+        </select></div>
+    </div>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ video3dMusic }}</label>
+        <input id="v-music" type="file" accept="audio/*" class="form-control form-control-sm">
+        <div id="v-music-trim" hidden style="margin-top: 6px">
+          <canvas id="v-wave" style="display: block; width: 100%; height: 56px; cursor: grab; border-radius: 6px; background: var(--v-btn); touch-action: none"></canvas>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px">
+            <div id="v-music-info" style="flex: 1; color: var(--v-dim); font-size: .75rem"></div>
+            <button id="v-music-fit" type="button" style="padding: 3px 8px; font-size: .75rem; background: var(--v-btn); color: var(--v-fg)">{{ video3dFitMusic }}</button>
+          </div>
+        </div>
+        <div style="color: var(--v-dim); font-size: .7rem; margin-top: 3px">{{ video3dMusicRights }}</div></div>
+    </div>
+    <div class="v-row">
+      <div style="flex:1"><label>{{ video3dMaxSize }}</label>
+        <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
+    </div>
+    <button id="v-apply" disabled>{{ video3dApply }}</button>
+    <button id="v-play">▶ {{ video3dPreview }}</button>
+    <button id="v-render">⬇ {{ video3dRender }}</button>
+    <div id="v-bar"><div></div></div>
+    <div id="v-status">Loading…</div>
+  </div>
+</div>
+
+<script type="module">
+// A video of a trip several people took together (a tag of their trips): everyone moves at
+// once on the real clock, the camera keeping them all in the picture, each route drawing
+// itself behind its traveller, at its real heights (never draped). Rendered frame by frame, each once its terrain has loaded, and
+// encoded to MP4 in the browser (WebCodecs), so it plays smoothly however slow the render.
+import * as THREE from 'three';
+// The page's language: its words, and its numbers and dates
+const T = {{ {'tunnel': video3dTunnel, 'bridge': video3dBridge, 'altitude': video3dAltitude, 'distance': video3dDistance,
+  'highest': video3dHighest, 'cruise': video3dCruise, 'descent': video3dDescent, 'climb': video3dClimb,
+  'noTunnels': video3dNoTunnels, 'ready': video3dReady, 'terrain': video3dTerrain, 'rendering': video3dRendering,
+  'done': video3dDone, 'eta': video3dEta, 'preview': video3dPreview, 'failed': video3dFailed, 'auto': video3dAuto, 'stops': motisStops, 'tunnels': video3dTunnels,
+  'transfers': video3dTransfers, 'inTunnels': video3dInTunnels, 'travellers': video3dTravellers,
+  'travellersLabel': video3dTravellersLabel, 'trips': posterTripCount, 'tripsLabel': video3dTripsLabel} | tojson }};
+const LANG = {{ (langId or 'en') | tojson }};
+// A premium member's videos say so under the name, with the site's premium gem
+const PREMIUM = {{ (is_premium or false) | tojson }};
+const fill = (text, values) => Object.entries(values).reduce((t, [k, v]) => t.replace(`{${k}}`, v), text);
+const plural = (forms, n) => fill(forms[new Intl.PluralRules(LANG).select(n)] ?? forms.other, { n });
+
+// The trip page's trips (its /video link); a tag's video is named after the tag
+const DATA_URL = {{ url_for('trip3d.trips_json') | tojson }};
+// The trips asked for in the body (a tag's ids are too many for a URL)
+const fetchTrips = () => fetch(DATA_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ids: {{ tripIds | tojson }} }) });
+const TAG_NAME = {{ (tag_description if tag_uuid else none) | tojson }};
+// The background chosen for this page (?bg=, not saved), else the user's own
+const BG = new URLSearchParams(location.search).get('bg');
+const TILESERVER = BG || {{ tileserver | tojson }};
+// Another one reloads the page (on Apply): the terrain and the route are laid over the map's
+// style, which a background swap in place would lose. The other options ride along in the
+// address too (?len=, ?mb=, ?size=)
+document.getElementById('v-bg').value = BG || '';
+const LEN = new URLSearchParams(location.search).get('len');
+const MB = new URLSearchParams(location.search).get('mb');
+if (MB) document.getElementById('v-mb').value = MB;
+const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
+const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
+const DEM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+// The site's colours per trip type, from its own list (as on its maps, every type there);
+// metro brightened to read on the terrain
+const COLOR = { ...Object.fromEntries(MapLibreUtils.MapConfig.transportTypes.map(t => [t.id, t.color])), metro: '#3d8bff' };
+const FPS = 30;
+THREE.ColorManagement.enabled = false;
+
+const $status = document.getElementById('v-status'), $bar = document.querySelector('#v-bar div');
+const status = (text, pct) => {
+  $status.textContent = text;
+  if (pct != null) $bar.style.width = `${pct}%`;
+  document.getElementById('v-loading-text').textContent = text;
+};
+// The loading cover goes once the first frame is drawn (or stays, with the reason, if none can be)
+const uncover = () => document.getElementById('v-loading').classList.add('v-done');
+const stuck = text => { status(text); document.querySelector('#v-loading i').className = 'fa-solid fa-triangle-exclamation'; };
+
+// ── Stage: the map at the video's own size, shown scaled to fit ─────────────────────
+let [W, H] = [1920, 1080];
+const $stage = document.getElementById('v-stage'), $scale = document.getElementById('v-scale');
+const $map = document.getElementById('v-map'), hud = document.getElementById('v-hud'), g2 = hud.getContext('2d');
+function layoutStage() {
+  // The page fills the window below the navbar; on a phone it scrolls instead (CSS)
+  const wrap = document.getElementById('v-wrap');
+  wrap.style.height = window.matchMedia('(max-width: 800px)').matches ? '' : `${window.innerHeight - wrap.getBoundingClientRect().top}px`;
+  const box = document.getElementById('v-stage-box').getBoundingClientRect();
+  const s = Math.min(box.width / W, box.height / H);
+  $stage.style.width = `${W * s}px`; $stage.style.height = `${H * s}px`;
+  $scale.style.transform = `scale(${s})`;
+  for (const el of [$map, hud]) { el.style.width = `${W}px`; el.style.height = `${H}px`; }
+  hud.width = W; hud.height = H;
+}
+layoutStage();
+window.addEventListener('resize', layoutStage);
+
+const map = await MapLibreUtils.initializeMapLibre({
+  container: 'v-map', tileserver: TILESERVER, useGlobe: false, center: [8, 60], zoom: 5, pixelRatio: 1,
+  canvasContextAttributes: { antialias: true, preserveDrawingBuffer: true },
+});
+await new Promise(r => map.loaded() ? r() : map.once('load', r));
+map.setMaxPitch(80);
+const dem = { type: 'raster-dem', tiles: [DEM], encoding: 'terrarium', tileSize: 512, maxzoom: 16,
+  attribution: '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>' };
+map.addSource('v-terrain', dem);
+map.addSource('v-hillshade', { ...dem, attribution: undefined });
+const firstSymbol = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+map.addLayer({ id: 'v-hillshade', type: 'hillshade', source: 'v-hillshade', paint: {
+  'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(50,40,30,0.65)',
+  'hillshade-highlight-color': 'rgba(255,255,255,0.45)', 'hillshade-accent-color': 'rgba(50,40,30,0.3)' } }, firstSymbol);
+map.setTerrain({ source: 'v-terrain', exaggeration: 1 });
+// The camera's focus height is ours (smoothed along the route), not the terrain's under it
+// at each frame, which bobbed the view over every bump
+map.setCenterClampedToGround?.(false);
+map.setSky({ 'sky-color': '#7fb2e6', 'horizon-color': '#e9eef4', 'fog-color': '#dfe6ee',
+  'sky-horizon-blend': 0.55, 'horizon-fog-blend': 0.55, 'fog-ground-blend': 0.6 });
+
+const logo = new Image();
+logo.src = LOGO;
+// An image halved step by step down to the size drawn (tinted if asked): one drawImage straight
+// from 900 px to ~170 px skips most source pixels and leaves the edges jagged
+const shrunk = {};
+function shrink(img, w, tint) {
+  const key = `${img.src || img.id} ${w} ${tint}`;
+  if (shrunk[key]) return shrunk[key];
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  let src = img, sw = iw, sh = ih;
+  while (sw / 2 >= w) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(sw / 2); c.height = Math.round(sh / 2);
+    c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    [src, sw, sh] = [c, c.width, c.height];
+  }
+  const out = document.createElement('canvas');
+  out.width = w; out.height = Math.round(w * ih / iw);
+  const g = out.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, 0, 0, out.width, out.height);
+  if (tint) { g.globalCompositeOperation = 'source-in'; g.fillStyle = tint; g.fillRect(0, 0, out.width, out.height); }
+  return (shrunk[key] = out);
+}
+// The trip types' icons, for the station chip
+const typeIcons = {};
+const typeIcon = type => {
+  if (!typeIcons[type]) {
+    typeIcons[type] = new Image();
+    typeIcons[type].src = `${TRIP_LOGOS}${type}.png`;
+  }
+  const img = typeIcons[type];
+  return img.complete && img.naturalWidth ? img : null;
+};
+
+await document.fonts.load('900 20px "Font Awesome 6 Free"', '\uf4d7').catch(() => {});
+// A failure (trips not found or not one's own, a map that will not load) stays on the cover
+await setup().catch(e => stuck(`${e.message || e}`));
+
+async function setup() {
+  const loaded = await (await fetchTrips()).json();
+  // Only trips with times: everyone moves on the real clock
+  const legs = (loaded.trips || [loaded]).filter(t => t.coords?.length > 1 && t.trip.utc?.[0]);
+  if (!legs.length) { stuck('Nothing to show: no trip with a path.'); return; }
+  const data = mergeTrips(legs);
+  const coords = data.coords, n = coords.length, last = n - 1;
+  // Longitudes made continuous along the way: a flight over the date line went from +178° to
+  // -122° and was drawn the long way round the world (MapLibre draws beyond ±180° on the next
+  // copy of it)
+  for (let i = 1; i < n; i++) {
+    while (coords[i][0] - coords[i - 1][0] > 180) coords[i][0] -= 360;
+    while (coords[i][0] - coords[i - 1][0] < -180) coords[i][0] += 360;
+  }
+  const color = COLOR[data.trip.type] || COLOR.train;
+  const kindAt = new Array(Math.max(n - 1, 0)).fill('open');
+  for (const [s, e, k] of data.env || []) for (let i = s; i < e; i++) kindAt[i] = k;
+  for (const g of data.gaps) kindAt[g] = 'gap';
+  const dist = [0];
+  for (let i = 1; i < n; i++) dist.push(dist[i - 1] + haversine(coords[i - 1], coords[i]));
+  const total = dist[last] || 1;
+  const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
+  const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real,
+    user: t.user, start: t.start, r0: t.utc?.[0], r1: Math.max(t.utc?.[1] ?? 0, (t.utc?.[0] ?? 0) + 60000) }));
+
+  // ── The track line, every ~20 m ────────────────────────────────────────────────
+  // Open track on the ground smoothed along the line (a 200 m median bridges culverts and
+  // gullies, a 100 m average evens the rest); tunnels and bridges straight from end to end.
+  status(T.terrain);
+  const S = [], at = [];
+  for (let i = 0; i < last; i++) {
+    at[i] = S.length;
+    const m = kindAt[i] === 'gap' ? 1 : Math.max(1, Math.ceil((dist[i + 1] - dist[i]) / (data.types[i] === 'air' ? 300 : 20)));
+    for (let j = 0; j < m; j++) {
+      const t = j / m;
+      S.push({ lng: lerp(coords[i][0], coords[i + 1][0], t), lat: lerp(coords[i][1], coords[i + 1][1], t),
+        d: lerp(dist[i], dist[i + 1], t), kind: kindAt[i], h: lerp(data.height[i], data.height[i + 1], t), type: data.types[i] });
+    }
+  }
+  at[last] = S.length;
+  S.push({ lng: coords[last][0], lat: coords[last][1], d: total, kind: kindAt[last - 1] || 'open', h: data.height[last], type: data.types[last] });
+  new Set(data.types).forEach(typeIcon);
+  const d = S.map(p => p.d);
+  // Flights read the ground under them apart, at their own coarser zoom
+  const isAir = S.map(p => p.type === 'air');
+  const ground = S.map(p => p.h);
+  for (const air of [false, true]) {
+    const ks = S.map((_, k) => k).filter(k => isAir[k] === air);
+    if (!ks.length) continue;
+    const got = await groundHeights(ks.map(k => [S[k].lng, S[k].lat]));
+    ks.forEach((k, i) => { ground[k] = got[i] ?? (air ? 0 : S[k].h); });
+  }
+  // A ferry is at sea level, whatever its line crosses (a sound, the land at either end)
+  for (let k = 0; k < S.length; k++) if (S[k].type === 'ferry') ground[k] = 0;
+  let z = movingAverage(runningMedian(ground, d, 200), d, 100);
+  const runs = [];
+  for (let i = 0; i < kindAt.length; i++) {
+    const r = runs[runs.length - 1];
+    if (r && r.kind === kindAt[i] && r.e === i) r.e = i + 1; else runs.push({ kind: kindAt[i], s: i, e: i + 1 });
+  }
+  for (const { kind, s, e } of runs) {
+    if (kind === 'open') continue;
+    const a = at[s], b = at[e];
+    const za = z[a] - (kind === 'tunnel' && s === 0 ? 15 : 0), zb = z[b] - (kind === 'tunnel' && e === last ? 15 : 0);
+    for (let k = a; k <= b; k++) z[k] = za + (zb - za) * (d[k] - d[a]) / ((d[b] - d[a]) || 1);
+  }
+  // Tunnels and bridges run straight from end to end; a light average over the whole line
+  // rounds the corners where they meet the open track
+  z = movingAverage(z, d, 150);
+  // Smoothing cuts under a ridge or a convex slope (a ski run): on the ground, never below it
+  z = z.map((v, k) => (S[k].kind === 'tunnel' || isAir[k] || ground[k] == null ? v : Math.max(v, ground[k])));
+  const LIFT = 3;
+  z = z.map(v => v + LIFT);
+  // Flights at their recorded altitude, else a plain climb, cruise and descent
+  for (const t of tripSpans) {
+    if (t.type !== 'air') continue;
+    const ks = S.map((_, k) => k).filter(k => isAir[k] && d[k] >= t.from - 1 && d[k] <= t.to + 1);
+    if (!ks.length) continue;
+    const L = (t.to - t.from) || 1, g0 = ground[ks[0]], g1 = ground[ks[ks.length - 1]];
+    const ramp = Math.min(L / 2, 180000), cruise = Math.min(11000, L * 0.06);
+    for (const k of ks) {
+      const x = d[k] - t.from, e = Math.min(1, Math.min(x, L - x) / ramp);
+      z[k] = (t.real ? Math.max(S[k].h, ground[k]) : g0 + (g1 - g0) * x / L + cruise * e * e * (3 - 2 * e)) + LIFT;
+    }
+  }
+
+  // Facts for the cards
+  const tunnels = runs.filter(r => r.kind === 'tunnel');
+  const zr = z.map(v => v - LIFT);
+  // The travellers, each with their trips in order, and where each trip lies on the line
+  const people = [...new Set(tripSpans.map(t => t.user))];
+  for (const t of tripSpans) {
+    t.k0 = Math.max(0, d.findIndex(v => v >= t.from - 0.01));
+    t.k1 = Math.max(t.k0, d.findIndex((v, k) => k >= t.k0 && v >= t.to - 0.01));
+  }
+  const personSpans = people.map(p => tripSpans.filter(t => t.user === p).sort((a, b) => a.r0 - b.r0));
+  // Busy stretches: whenever anyone is on the move (overlapping trips joined into one)
+  const busy = [];
+  for (const [a, b] of tripSpans.map(t => [t.r0, t.r1]).sort((x, y) => x[0] - y[0])) {
+    const l = busy[busy.length - 1];
+    if (l && a <= l[1]) l[1] = Math.max(l[1], b); else busy.push([a, b]);
+  }
+  // The clock in the local time of a trip (its local start against its UTC one)
+  const offsetOf = t => (t?.start ? Date.parse(`${t.start}:00Z`) - t.r0 : 0);
+  const clockText = (R, t) => {
+    const x = new Date(R + offsetOf(t));
+    return `${x.toLocaleDateString(LANG, { day: 'numeric', month: 'short', timeZone: 'UTC' })} · ${String(x.getUTCHours()).padStart(2, '0')}:${String(x.getUTCMinutes()).padStart(2, '0')}`;
+  };
+  const dateOf = (iso, year) => new Date(iso).toLocaleDateString(LANG, { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
+  const first = tripSpans[0], lastTrip = tripSpans.reduce((a, t) => (t.r1 > a.r1 ? t : a));
+  const fromDay = first.start ? dateOf(first.start, true) : null, toDay = lastTrip.start ? dateOf(lastTrip.start, true) : null;
+  const onGround = zr.filter((_, k) => !isAir[k]);
+  const facts = { km: tripSpans.reduce((a, t) => a + t.to - t.from, 0) / 1000, trips: tripSpans.length, people: people.length,
+    tunnels: tunnels.length, top: onGround.length ? maxOf(onGround) : null };
+
+  // ── three.js inside MapLibre ───────────────────────────────────────────────────
+  const lngs = S.map(p => p.lng), lats = S.map(p => p.lat);
+  const bounds = new maplibregl.LngLatBounds([minOf(lngs), minOf(lats)], [maxOf(lngs), maxOf(lats)]);
+  const origin = maplibregl.MercatorCoordinate.fromLngLat(bounds.getCenter(), 0);
+  const unit = origin.meterInMercatorCoordinateUnits();
+  const local = (lng, lat, alt) => {
+    const m = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], alt);
+    return [(m.x - origin.x) / unit, -(m.y - origin.y) / unit, m.z / unit];
+  };
+  const P = S.map((p, k) => local(p.lng, p.lat, z[k]));
+  // The ground under a flight, for the curtain hanging from it
+  const G = S.map((p, k) => (isAir[k] ? local(p.lng, p.lat, ground[k]) : null));
+  const toMercator = new THREE.Matrix4().makeTranslation(origin.x, origin.y, 0).scale(new THREE.Vector3(unit, -unit, unit));
+  const scene = new THREE.Scene(), camera = new THREE.Camera(), group = new THREE.Group();
+  scene.add(group);
+  let renderer = null;
+  map.addLayer({
+    id: 'v-route', type: 'custom', renderingMode: '3d',
+    onAdd: (m, gl) => { renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true }); renderer.autoClear = false; },
+    render: (gl, args) => {
+      camera.projectionMatrix = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix).multiply(toMercator);
+      renderer.resetState();
+      renderer.render(scene, camera);
+    },
+  });
+
+  // Each trip in its own type's colour
+  const typeColors = {};
+  const typeColor = type => (typeColors[type] ??= new THREE.Color(COLOR[type] || color));
+  // Inside a tunnel the trip's own colour, much darker: the same line underground, still telling
+  // one trip from another (a slate common to all made every tunnel look like a faded line)
+  const tunnelColors = {};
+  const tunnelColor = type => (tunnelColors[type] ??= typeColor(type).clone().lerp(new THREE.Color('#141a22'), 0.78));
+  const C = new THREE.Color(color), WHITE = new THREE.Color('#ffffff'), DARK = new THREE.Color('#141a22');
+  // The route ahead, faint grey
+  const AHEAD = new THREE.Color('#6e7b8a');
+  // Glowing head: a dot of fixed size on screen, drawn over everything, in the colour of the
+  // trip it is on
+  const glows = {};
+  const glowFor = type => {
+    if (glows[type]) return glows[type];
+    const c = COLOR[type] || color, glow = document.createElement('canvas');
+    glow.width = glow.height = 128;
+    const gx = glow.getContext('2d'), grad = gx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.22, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.3, c); grad.addColorStop(0.55, hexA(c, 0.35)); grad.addColorStop(1, hexA(c, 0));
+    gx.fillStyle = grad; gx.fillRect(0, 0, 128, 128);
+    return (glows[type] = new THREE.CanvasTexture(glow));
+  };
+  const head = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)),
+    new THREE.PointsMaterial({ map: glowFor(data.types[0]), size: 54, sizeAttenuation: false, transparent: true, depthTest: false, depthWrite: false }));
+  head.renderOrder = 20;
+  head.frustumCulled = false;
+  const heads = people.map((_, i) => {
+    if (!i) return head;
+    const h = head.clone();
+    h.material = head.material.clone();
+    return h;
+  });
+
+  // The route at progress s (metres): travelled in colour with an outline, ahead faint;
+  // tunnels as dashes of `dash` metres, outlined, always drawn
+  // A flat strip `width` metres wide lying along a polyline (its sides level), mitred at
+  // the bends, so it foreshortens like paint on the ground instead of facing the camera
+  // A flight's curtain: strongest under the line, fading to nothing at the ground, with a
+  // thin stake down every 15 km, so its height reads as depth rather than a flat tint
+  function curtain(ks, rgb, opacity, order) {
+    if (ks.length < 2) return;
+    const pos = [], col = [], idx = [], stakes = [];
+    let next = d[ks[0]];
+    ks.forEach((k, i) => {
+      pos.push(...P[k], ...G[k]);
+      col.push(rgb.r, rgb.g, rgb.b, opacity, rgb.r, rgb.g, rgb.b, 0);
+      if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+      if (d[k] >= next) { stakes.push(...P[k], ...G[k]); next = d[k] + 15000; }
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    geometry.setIndex(idx);
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide,
+      transparent: true, depthTest: false, depthWrite: false }));
+    mesh.renderOrder = order;
+    mesh.frustumCulled = false;
+    group.add(mesh);
+    const lines = new THREE.BufferGeometry();
+    lines.setAttribute('position', new THREE.Float32BufferAttribute(stakes, 3));
+    const stake = new THREE.LineSegments(lines, new THREE.LineBasicMaterial({ color: rgb, transparent: true,
+      opacity: Math.min(1, opacity * 1.6), depthTest: false, depthWrite: false }));
+    stake.renderOrder = order;
+    stake.frustumCulled = false;
+    group.add(stake);
+  }
+  // Flat on the ground plane; `upright` stands it on edge (a flight seen side-on stays thick)
+  // Lines on the ground lifted by a few pixels' worth of metres (set each frame by drawRoute):
+  // zoomed out, MapLibre draws the terrain from coarse tiles that fill valley floors, so a road
+  // along a valley sank under it and showed only as its faint see-through copy
+  let lineLift = 0;
+  function ribbon(points, width, rgb, order, { opacity = 1, upright = false, xray = false } = {}) {
+    if (points.length < 2) return;
+    const pos = [], idx = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)];
+      let nx = -(b[1] - a[1]), ny = b[0] - a[0];
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len; ny /= len;
+      const h = width / 2, p = points[i];
+      if (upright) pos.push(p[0], p[1], p[2] + h, p[0], p[1], p[2] - h);
+      else pos.push(p[0] + nx * h, p[1] + ny * h, p[2], p[0] - nx * h, p[1] - ny * h, p[2]);
+      if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+    }
+    // Round joins where the line turns sharply (a hairpin): the strip's corners there
+    // pinch or splay, and a disc over the bend closes it
+    if (!upright) for (let i = 1; i + 1 < points.length; i++) {
+      const a = points[i - 1], p = points[i], b = points[i + 1];
+      const t1 = Math.atan2(p[1] - a[1], p[0] - a[0]), t2 = Math.atan2(b[1] - p[1], b[0] - p[0]);
+      if (Math.abs(((t2 - t1 + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < Math.PI / 5) continue;
+      const c = pos.length / 3, h = width / 2;
+      pos.push(p[0], p[1], p[2]);
+      for (let j = 0; j <= 12; j++) {
+        pos.push(p[0] + Math.cos(Math.PI * j / 6) * h, p[1] + Math.sin(Math.PI * j / 6) * h, p[2]);
+        if (j) idx.push(c, c + j, c + j + 1);
+      }
+    }
+    // Rounded ends: a half disc past each end (where runs meet, the two overlap into a round
+    // join; the outline's, wider, draws the rim around the core's)
+    if (!upright) for (const [p, q] of [[points[0], points[1]], [points[points.length - 1], points[points.length - 2]]]) {
+      const back = Math.atan2(p[1] - q[1], p[0] - q[0]), c = pos.length / 3, h = width / 2;
+      pos.push(p[0], p[1], p[2]);
+      for (let j = 0; j <= 10; j++) {
+        const a = back - Math.PI / 2 + Math.PI * j / 10;
+        pos.push(p[0] + Math.cos(a) * h, p[1] + Math.sin(a) * h, p[2]);
+        if (j) idx.push(c, c + j, c + j + 1);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geometry.setIndex(idx);
+    // Where the terrain hides it (behind a mountain), a faint copy shows through; where it
+    // is in sight, the line itself, tested against the terrain (offset so it wins the ties
+    // with the ground it lies on). `xray`: drawn whole over everything (a tunnel, inside
+    // the mountain by nature)
+    const draw = (depthTest, alpha, ord) => {
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: rgb, side: THREE.DoubleSide,
+        transparent: alpha < 1, opacity: alpha, depthTest, depthWrite: false,
+        polygonOffset: depthTest, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+      mesh.renderOrder = ord;
+      // Tunnels too, or they no longer met the road at their portals
+      if (!upright) mesh.position.z = lineLift;
+      mesh.frustumCulled = false;
+      group.add(mesh);
+    };
+    // A tunnel in the same layer as the line it belongs to (one line, coloured differently),
+    // drawn whole as it runs inside the mountain
+    if (xray) draw(false, opacity, order + 100000);
+    else { draw(false, opacity * 0.3, order); draw(true, opacity, order + 10); }
+  }
+
+  // The route at progress s (metres), `px` metres to a pixel at the focus: ahead a grey
+  // strip; behind, a dark outline strip under the whole route, then the core, the track's
+  // colour on open line and dark in tunnels. Runs of one kind as separate polylines.
+  function drawRoute(R, showHead, px) {
+    lineLift = 5 * px;
+    for (const c of [...group.children]) { if (!heads.includes(c)) { c.geometry.dispose(); c.material?.dispose?.(); } group.remove(c); }
+    const runsOf = (from, to, lead, tail) => {
+      const out = [];
+      let cur = null;
+      for (let k = from; k <= to; k++) {
+        const sk = S[Math.min(k, S.length - 2)], tunnel = sk.kind === 'tunnel', gap = sk.kind === 'gap', type = sk.type;
+        if (!cur || cur.tunnel !== tunnel || cur.gap !== gap || cur.type !== type) {
+          // Joined to the run before it, unless that was the hop between two trips
+          cur = { tunnel, gap, type, ks: [], pts: cur && !cur.gap ? [cur.pts[cur.pts.length - 1]] : [] };
+          out.push(cur);
+        }
+        cur.pts.push(P[k]); cur.ks.push(k);
+      }
+      if (lead && out.length) out[0].pts.unshift(lead);
+      if (tail && out.length) out[out.length - 1].pts.push(tail);
+      return out;
+    };
+    const behind = [], ahead = [];
+    for (const t of tripSpans) {
+      if (R >= t.r1) behind.push(...runsOf(t.k0, t.k1, null, null));
+      else if (R <= t.r0) ahead.push(...runsOf(t.k0, t.k1, null, null));
+      else {
+        const { cut, here } = cutAt(t.from + (t.to - t.from) * (R - t.r0) / (t.r1 - t.r0));
+        behind.push(...runsOf(t.k0, cut, null, here));
+        ahead.push(...runsOf(cut + 1, t.k1, here, null));
+      }
+    }
+    // The hop between two trips is not drawn; a flight ahead is not drawn at all
+    for (const r of behind) if (r.type === 'air') ribbon(r.ks.map(k => G[k]), 5 * px, DARK, 0, { opacity: 0.35 });
+    for (const r of behind) if (r.type === 'air') curtain(r.ks, typeColor('air'), 0.45, 0);
+    for (const r of ahead) if (!r.gap && r.type !== 'air') ribbon(r.pts, 3 * px, AHEAD, 1, { xray: r.tunnel });
+    for (const r of behind) if (!r.gap) ribbon(r.pts, 10 * px, DARK, 2, { xray: r.tunnel });
+    for (const r of behind) if (!r.gap) ribbon(r.pts, 6 * px, r.tunnel ? tunnelColor(r.type) : typeColor(r.type), 3, { xray: r.tunnel });
+    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 10 * px, DARK, 2, { upright: true });
+    for (const r of behind) if (r.type === 'air') ribbon(r.pts, 6 * px, typeColor('air'), 3, { upright: true });
+    // Each traveller's dot: bright on the move, dimmer while waiting for their next trip
+    if (showHead) whereAll(R).forEach((w, i) => {
+      const h = heads[i];
+      h.position.set(...cutAt(w.s).here);
+      h.material.map = glowFor(w.span.type);
+      h.material.opacity = w.moving ? 1 : 0.6;
+      h.updateMatrixWorld(true);
+      group.add(h);
+    });
+    map.triggerRepaint();
+  }
+  // The point at s (metres along the line): the sample before it and the 3D point
+  const cutAt = s => {
+    const c = Math.max(0, Math.min(total, s));
+    const k = sampleAt(c);
+    const u = Math.min(1, (c - d[k]) / ((d[k + 1] - d[k]) || 1));
+    return { cut: k, here: P[k].map((v, i) => v + (P[k + 1][i] - v) * u) };
+  };
+
+  // ── The camera ─────────────────────────────────────────────────────────────────
+  // The sample at or before c, by halving (the line has hundreds of thousands of samples)
+  const sampleAt = c => {
+    let lo = 0, hi = S.length - 2;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (d[m] <= c) lo = m; else hi = m - 1; }
+    return lo;
+  };
+  const pointAt = s => {
+    const c = Math.max(0, Math.min(total, s));
+    const k = sampleAt(c);
+    const t = (c - d[k]) / ((d[k + 1] - d[k]) || 1);
+    return { lng: lerp(S[k].lng, S[k + 1].lng, t), lat: lerp(S[k].lat, S[k + 1].lat, t), k };
+  };
+  const bearingTo = (a, b) => {
+    const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+    const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+    return Math.atan2(y, x);
+  };
+  let scale = Math.min(W, H) / 1080;
+  // Where each traveller is at the real time R: along their trip under way, else waiting at
+  // the end of their last one (or the start of their first)
+  const whereIs = (spans, R) => {
+    let prev = null;
+    for (const t of spans) {
+      if (R < t.r0) return prev ? { s: prev.to, span: prev, moving: false } : { s: t.from, span: t, moving: false };
+      if (R <= t.r1) return { s: t.from + (t.to - t.from) * (R - t.r0) / (t.r1 - t.r0), span: t, moving: true };
+      prev = t;
+    }
+    return { s: prev.to, span: prev, moving: false };
+  };
+  const whereAll = R => personSpans.map(spans => whereIs(spans, R));
+  // The camera worked out every 0.05 s of the video, then averaged over seconds: centred on
+  // the travellers, wide enough for all of them and for about 6 s of the fastest one's
+  // travel (at least 500 m)
+  const GS = 0.05;
+  let GT = [], cLng, cLat, zm, el;
+  const cosLat = Math.cos(bounds.getCenter().lat * Math.PI / 180);
+  const smoothCamera = () => {
+    GT = [];
+    for (let t = 0; t < JOURNEY; t += GS) GT.push(t);
+    GT.push(JOURNEY);
+    const views = GT.map(t => {
+      const R = realAt(t), b = blockAt(t), all = whereAll(R), pts = all.map(w => pointAt(w.s));
+      const lngs = pts.map(p => p.lng), lats = pts.map(p => p.lat);
+      const dx = (Math.max(...lngs) - Math.min(...lngs)) * 111320 * cosLat, dy = (Math.max(...lats) - Math.min(...lats)) * 111320;
+      // Video metres a second of the fastest traveller on the move
+      const fast = Math.max(0, ...all.filter(w => w.moving).map(w =>
+        (w.span.to - w.span.from) / ((w.span.r1 - w.span.r0) * (b.t1 - b.t0) / ((b.r1 - b.r0) || 1) || 1)));
+      const span = Math.max(500, 6 * Math.min(fast, 1e6), 1.6 * Math.max(dx, dy * W / H * 1.4));
+      return { lng: (Math.max(...lngs) + Math.min(...lngs)) / 2, lat: (Math.max(...lats) + Math.min(...lats)) / 2,
+        zoom: Math.min(16, Math.max(3, Math.log2(40075016 * cosLat / (512 * span / W)))),
+        el: pts.reduce((a, p) => a + zr[p.k], 0) / pts.length };
+    });
+    cLng = movingAverage(movingAverage(views.map(v => v.lng), GT, 3.5), GT, 3.5);
+    cLat = movingAverage(movingAverage(views.map(v => v.lat), GT, 3.5), GT, 3.5);
+    // The widest view held over 3 s, then softened, so a pull-back eases in and out and never
+    // leaves anyone out
+    zm = movingAverage(movingAverage(runningMin(views.map(v => v.zoom), GT, 3), GT, 2), GT, 2);
+    el = movingAverage(movingAverage(views.map(v => v.el), GT, 10), GT, 10);
+  };
+  const chase = t => {
+    const c = Math.max(0, Math.min(JOURNEY, t)), k = Math.min(GT.length - 2, Math.floor(c / GS));
+    const u = (c - GT[k]) / ((GT[k + 1] - GT[k]) || 1);
+    return { center: [lerp(cLng[k], cLng[k + 1], u), lerp(cLat[k], cLat[k + 1], u)], zoom: lerp(zm[k], zm[k + 1], u),
+      elevation: lerp(el[k], el[k + 1], u), pitch: 50, bearing: 0 };
+  };
+  const overview = (north = false) => {
+    // Fitted from straight above, within the margins the frames keep clear for the title
+    // (show()), then tilted, a little further out for the tilt to fit
+    const m = Math.min(W, H) * 0.08;
+    // North up, as the group camera always is, so the dive only zooms and tilts
+    const cam = map.cameraForBounds(bounds, { bearing: 0,
+      padding: { top: 120 * scale + m, bottom: 60 * scale + m, left: m, right: m } });
+    return { center: [cam.center.lng, cam.center.lat], zoom: cam.zoom - 0.4, pitch: north ? 40 : 45, bearing: 0,
+      elevation: zr.reduce((a, v) => a + v, 0) / zr.length };
+  };
+  // From one camera to another, the centre moving in step with the zoom (as a fly-to does):
+  // a straight blend of both let the target drift across the screen while the zoom closed in
+  const mix = (a, b, t) => {
+    const db = ((b.bearing - a.bearing + 540) % 360) - 180, zoom = lerp(a.zoom, b.zoom, t);
+    const span = 2 ** -a.zoom - 2 ** -b.zoom;
+    const w = Math.abs(span) > 1e-12 ? (2 ** -a.zoom - 2 ** -zoom) / span : t;
+    return { center: [lerp(a.center[0], b.center[0], w), lerp(a.center[1], b.center[1], w)],
+      zoom, pitch: lerp(a.pitch, b.pitch, t), bearing: a.bearing + db * t,
+      elevation: lerp(a.elevation, b.elevation, t) };
+  };
+  const ease = t => t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+
+  // ── Timeline ───────────────────────────────────────────────────────────────────
+  // Overview with the title, a dive to the start, the journey, a pull back to the overview
+  // with the trip's numbers
+  const INTRO = 3.2, DIVE = 2.4, BACK = 2.4, OUTRO = 3.6;
+  let JOURNEY = 30 - INTRO - DIVE - BACK - OUTRO;
+  // The opening overview along the journey; the closing one north up, as on a map
+  const ov = overview(), ovEnd = overview(true);
+  function frameAt(t) {
+    let cam, title = 0, card = 0, headOn = true, jt = JOURNEY;
+    if (t < INTRO) {
+      const u = t / INTRO;
+      cam = { ...ov, zoom: ov.zoom - 0.15 + 0.15 * u };
+      jt = 0; headOn = t > 1.2;
+      // Full from the very first frame (the one apps show as the video's thumbnail), fading out
+      title = Math.min(1, (INTRO - t) / 0.6);
+    } else if (t < INTRO + DIVE) {
+      cam = mix(ov, chase(0), ease((t - INTRO) / DIVE)); jt = 0;
+    } else if (t < INTRO + DIVE + JOURNEY) {
+      jt = t - INTRO - DIVE; cam = chase(jt);
+    } else if (t < INTRO + DIVE + JOURNEY + BACK) {
+      cam = mix(chase(JOURNEY), { ...ovEnd, bearing: -3 }, ease((t - INTRO - DIVE - JOURNEY) / BACK));
+    } else {
+      const u = (t - INTRO - DIVE - JOURNEY - BACK) / OUTRO;
+      cam = { ...ovEnd, bearing: -3 + 3 * Math.min(1, u * 1.5) }; card = Math.min(1, u / 0.18); headOn = false;
+    }
+    return { cam, title, card, headOn, jt, R: realAt(jt) };
+  }
+  const duration = () => INTRO + DIVE + JOURNEY + BACK + OUTRO;
+
+  // The video's time against the real one: each busy stretch its share of the time by the
+  // square root of how long it lasted (a long day longer, a short hop still seen), the gaps
+  // between them (nights, days off) crossed in IDLE seconds
+  const IDLE = 0.6;
+  let blocks = [];
+  const planJourney = () => {
+    const weights = busy.map(([a, b]) => Math.sqrt((b - a) / 60000)), all = weights.reduce((x, w) => x + w, 0);
+    const moving = Math.max(1, JOURNEY - IDLE * (busy.length - 1));
+    blocks = [];
+    let t = 0;
+    busy.forEach(([a, b], i) => {
+      if (i) { blocks.push({ t0: t, t1: t + IDLE, r0: busy[i - 1][1], r1: a }); t += IDLE; }
+      const dt = moving * weights[i] / all;
+      blocks.push({ t0: t, t1: t + dt, r0: a, r1: b });
+      t += dt;
+    });
+  };
+  const blockAt = t => blocks.find(b => t <= b.t1) || blocks[blocks.length - 1];
+  const realAt = t => {
+    const b = blockAt(t);
+    return b.r0 + (b.r1 - b.r0) * Math.max(0, Math.min(1, (t - b.t0) / ((b.t1 - b.t0) || 1)));
+  };
+
+  // ── HUD ────────────────────────────────────────────────────────────────────────
+  // A recorded track has a name but no destination
+  const name = TAG_NAME || (data.trip.destination ? `${data.trip.origin} → ${data.trip.destination}` : data.trip.origin).replace(/\p{Regional_Indicator}{2}\s*/gu, '');
+  const font = (w, px) => `${w} ${Math.max(10, Math.round(px * scale))}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  // Font Awesome glyphs (the page's stylesheet), drawn ahead of the numbers
+  const FA = { route: '\uf4d7', plane: '\uf072', tunnel: '\uf557', mountain: '\uf6fc', up: '\ue098', down: '\ue097',
+    calendar: '\uf133', people: '\uf0c0', trips: '\uf03a' };
+  const faFont = px => `900 ${Math.round(px * scale)}px "Font Awesome 6 Free"`;
+  // A centred line of [glyph, text] parts, the glyphs a touch smaller and dimmer
+  // Too wide for the frame: smaller, down to 3/4, then the last parts left out
+  function iconLine(parts, x, y, px, weight) {
+    const maxW = W - 2 * 32 * scale;
+    const measure = (ps, size) => {
+      g2.font = font(weight, size); const widths = ps.map(([, t]) => g2.measureText(t).width);
+      g2.font = faFont(size * 0.8); const iw = ps.map(([icon]) => g2.measureText(icon).width);
+      const sp = 0.35 * size * scale, between = 1.1 * size * scale;
+      return { widths, iw, sp, between, total: ps.reduce((a, _, i) => a + iw[i] + sp + widths[i], 0) + between * (ps.length - 1) };
+    };
+    let m = measure(parts, px);
+    for (let k = 1; k <= 4 && m.total > maxW; k++) m = measure(parts, (px = px * 0.93));
+    while (m.total > maxW && parts.length > 1) m = measure((parts = parts.slice(0, -1)), px);
+    const { widths, iw, sp, between } = m;
+    let at = x - m.total / 2;
+    const fill = g2.fillStyle;
+    g2.textAlign = 'left';
+    parts.forEach(([icon, t], i) => {
+      g2.font = faFont(px * 0.8); g2.fillText(icon, at, y); at += iw[i] + sp;
+      g2.font = font(weight, px); g2.fillStyle = fill; g2.fillText(t, at, y); at += widths[i] + between;
+    });
+    g2.textAlign = 'center';
+  }
+  function roundRect(x, y, w, h, r) { g2.beginPath(); g2.roundRect(x, y, w, h, r); }
+  // Trainlog.me as on the poster: the train, "Trainlog" with a grey ".me" and the tagline, on
+  // a light chip; below 900 px wide, the train alone on it
+  const BRAND_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  const brandLayout = (u, compact) => {
+    const L = { icon: 40 * u, pad: 9 * u, gap: 9 * u, name: 20 * u, tag: 11 * u, compact };
+    if (compact) return { ...L, w: L.icon + 2 * L.pad, h: L.icon + 2 * L.pad };
+    g2.font = `800 ${L.name}px ${BRAND_FONT}`;
+    const nameW = g2.measureText('Trainlog.me').width;
+    g2.font = `italic ${L.tag}px ${BRAND_FONT}`;
+    let tagW = g2.measureText(PREMIUM ? 'Premium' : 'Your online train diary').width;
+    if (PREMIUM) { g2.font = `900 ${L.tag}px "Font Awesome 6 Free"`; tagW += g2.measureText('\uf3a5 ').width; }
+    return { ...L, w: L.pad + L.icon + L.gap + Math.max(nameW, tagW) + 1.5 * L.pad,
+      h: Math.max(L.icon, L.name * 1.15 + L.tag) + 2 * L.pad };
+  };
+  function drawBrand(x, y, L) {
+    g2.save();
+    g2.shadowColor = 'rgba(0,0,0,0.22)'; g2.shadowBlur = 10 * scale; g2.shadowOffsetY = 2 * scale;
+    roundRect(x, y, L.w, L.h, 12 * scale); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fill();
+    g2.restore();
+    const icon = shrink(logo, Math.round(L.icon));
+    g2.drawImage(icon, Math.round(x + L.pad), Math.round(y + (L.h - icon.height) / 2));
+    if (L.compact) return;
+    const tx = x + L.pad + L.icon + L.gap, ty = y + (L.h - (L.name * 1.15 + L.tag)) / 2;
+    g2.textAlign = 'left'; g2.textBaseline = 'alphabetic';
+    g2.font = `800 ${L.name}px ${BRAND_FONT}`; g2.fillStyle = '#1a1a1a';
+    g2.fillText('Trainlog', tx, ty + L.name * 0.85);
+    const tw = g2.measureText('Trainlog').width;
+    g2.font = `700 ${L.name}px ${BRAND_FONT}`; g2.fillStyle = '#666666';
+    g2.fillText('.me', tx + tw, ty + L.name * 0.85);
+    const tagY = ty + L.name * 1.15 + L.tag * 0.85;
+    if (PREMIUM) {
+      g2.font = `900 ${L.tag}px "Font Awesome 6 Free"`; g2.fillStyle = '#F39C12';
+      g2.fillText('\uf3a5', tx, tagY);
+      const gw = g2.measureText('\uf3a5 ').width;
+      g2.font = `italic 700 ${L.tag}px ${BRAND_FONT}`;
+      g2.fillText('Premium', tx + gw, tagY);
+    } else {
+      g2.font = `italic ${L.tag}px ${BRAND_FONT}`; g2.fillStyle = '#8a8a8a';
+      g2.fillText('Your online train diary', tx, tagY);
+    }
+  }
+  // A title fitted to maxW: shrunk from `size` down to `min`, then on two lines (broken at
+  // the arrow if it has one, else at the middle space), then cut short with "…"
+  function fitTitle(text, maxW, weight, size, min) {
+    const fits = (lines, px) => { g2.font = font(weight, px); return lines.every(l => g2.measureText(l).width <= maxW); };
+    for (let px = size; px >= min; px -= 2) if (fits([text], px)) return { lines: [text], px };
+    let lines = [text];
+    const arrow = text.indexOf(' → ');
+    if (arrow > 0) lines = [text.slice(0, arrow), text.slice(arrow + 1)];
+    else {
+      const spaces = [...text.matchAll(/ /g)].map(m => m.index);
+      if (spaces.length) {
+        const mid = spaces.reduce((a, b) => (Math.abs(b - text.length / 2) < Math.abs(a - text.length / 2) ? b : a));
+        lines = [text.slice(0, mid), text.slice(mid + 1)];
+      }
+    }
+    for (let px = size; px >= min; px -= 2) if (fits(lines, px)) return { lines, px };
+    g2.font = font(weight, min);
+    return { lines: lines.map(l => {
+      if (g2.measureText(l).width <= maxW) return l;
+      while (l.length > 3 && g2.measureText(l + '…').width > maxW) l = l.slice(0, -1);
+      return l + '…';
+    }), px: min };
+  }
+  // The chip's icon, in the route's colour: a train front for a station, a portal for a
+  // tunnel, a deck on arches for a bridge
+  function drawHud(f) {
+    g2.clearRect(0, 0, W, H);
+    const pad = 44 * scale, u = scale;
+    const corner = fitTitle(name, W * 0.34, 800, 34, 22);
+    // Below 900 px wide, the logo's train alone
+    const compact = W < 900, brand = brandLayout(u, compact), logoW = brand.w;
+    // Vignette, for depth and to seat the text
+    const vg = g2.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.28)');
+    g2.fillStyle = vg; g2.fillRect(0, 0, W, H);
+
+    // Each traveller's name by their dot; those at the same place (within 30 px) share one
+    // label, so a group travelling together reads as one
+    if (f.card < 0.5 && f.title < 0.5) {
+      const groups = [];
+      whereAll(f.R).forEach((w, i) => {
+        const p = map.project(pointAt(w.s));
+        const near = groups.find(g => Math.hypot(g.x - p.x, g.y - p.y) < 30 * u);
+        if (near) { near.names.push(people[i]); near.moving ||= w.moving; } else groups.push({ x: p.x, y: p.y, names: [people[i]], moving: w.moving });
+      });
+      g2.font = font(700, 22); g2.textAlign = 'left'; g2.textBaseline = 'middle'; g2.lineJoin = 'round';
+      for (const g of groups) {
+        if (g.x < -100 || g.y < -100 || g.x > W + 100 || g.y > H + 100) continue;
+        const label = g.names.join(', ');
+        g2.globalAlpha = (g.moving ? 1 : 0.7) * (1 - f.card);
+        g2.shadowColor = 'rgba(0,0,0,0.75)'; g2.shadowBlur = 8 * u;
+        g2.lineWidth = 4 * u; g2.strokeStyle = 'rgba(20,26,34,0.9)'; g2.strokeText(label, g.x + 22 * u, g.y);
+        g2.shadowBlur = 0; g2.fillStyle = '#fff'; g2.fillText(label, g.x + 22 * u, g.y);
+      }
+      g2.globalAlpha = 1; g2.textBaseline = 'alphabetic';
+    }
+
+    // Trip name in the corner during the journey, large over the opening
+    if (f.title < 0.99 && f.card < 0.99) {
+      g2.globalAlpha = (1 - f.title) * (1 - f.card);
+      g2.textBaseline = 'alphabetic'; g2.fillStyle = '#fff';
+      g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 12 * u;
+      g2.font = font(800, corner.px);
+      corner.lines.forEach((l, i) => g2.fillText(l, pad, pad + (30 + i * corner.px * 1.15) * u));
+      const under = tripSpans.find(t => f.R >= t.r0 && f.R <= t.r1) || tripSpans.find(t => t.r0 >= f.R) || lastTrip;
+      const clock = clockText(f.R, under);
+      const below = pad + (30 + (corner.lines.length - 1) * corner.px * 1.15 + 42) * u;
+      if (clock) { g2.font = font(700, 30); g2.fillStyle = 'rgba(255,255,255,0.92)'; g2.fillText(clock, pad, below); }
+      g2.shadowBlur = 0; g2.globalAlpha = 1;
+    }
+    if (f.title > 0.01) {
+      g2.globalAlpha = f.title;
+      g2.fillStyle = 'rgba(8,12,18,0.35)'; g2.fillRect(0, 0, W, H);
+      g2.textAlign = 'center'; g2.fillStyle = '#fff'; g2.shadowColor = 'rgba(0,0,0,0.6)'; g2.shadowBlur = 24 * u;
+      const big = fitTitle(name, W - 4 * pad, 800, 76, 44), lh = big.px * 1.12 * u;
+      g2.font = font(800, big.px);
+      const top = H / 2 - 10 * u - (big.lines.length - 1) * lh / 2;
+      big.lines.forEach((l, i) => g2.fillText(l, W / 2, top + i * lh));
+      const shift = (big.lines.length - 1) * lh / 2;
+      // The lines under it shadowed as dark as the title, to read over any map
+      g2.shadowColor = 'rgba(0,0,0,0.85)'; g2.shadowBlur = 16 * u; g2.font = font(600, 30); g2.fillStyle = 'rgba(255,255,255,0.95)';
+      iconLine([[FA.people, plural(T.travellers, facts.people)], [FA.route, `${facts.km.toFixed(1)} km`],
+        [FA.trips, plural(T.trips, facts.trips)]], W / 2, H / 2 + 46 * u + shift, 30, 600);
+      if (fromDay) {
+        g2.font = font(500, 26); g2.fillStyle = 'rgba(255,255,255,0.88)';
+        iconLine([[FA.calendar, fromDay === toDay ? fromDay : `${fromDay} → ${toDay}`]], W / 2, H / 2 + 92 * u + shift, 26, 500);
+      }
+      g2.shadowBlur = 0; g2.textAlign = 'left'; g2.globalAlpha = 1;
+    }
+    if (f.card > 0.01) {
+      g2.globalAlpha = f.card;
+      const stats = [[String(facts.people), T.travellersLabel, FA.people], [`${facts.km.toFixed(1)} km`, T.distance, FA.route],
+        [String(facts.trips), T.tripsLabel, FA.trips],
+        facts.top != null ? [`${Math.round(facts.top)} m`, T.highest, FA.mountain] : [String(facts.tunnels), plural(T.tunnels, facts.tunnels).replace(/^\S+\s*/, ''), FA.tunnel]];
+      // A narrow frame keeps the first three
+      if (W < 900) stats.length = 3;
+      const cw = Math.min(W - 2 * pad, 1100 * u), ch = 300 * u, cx = (W - cw) / 2, cy = (H - ch) / 2;
+      roundRect(cx, cy, cw, ch, 22 * u); g2.fillStyle = 'rgba(12,16,22,0.78)'; g2.fill();
+      g2.textAlign = 'center'; g2.fillStyle = '#fff'; g2.textBaseline = 'alphabetic';
+      const head = fitTitle(name, cw - 60 * u, 800, 40, 24);
+      g2.font = font(800, head.px);
+      head.lines.forEach((l, i) => g2.fillText(l, W / 2, cy + (head.lines.length > 1 ? 52 : 70) * u + i * head.px * 1.1 * u));
+      const colW = cw / stats.length;
+      stats.forEach(([v, l, icon], i) => {
+        const x = cx + colW * (i + 0.5);
+        g2.font = faFont(26); g2.fillStyle = '#7ec8ff'; g2.fillText(icon, x, cy + 132 * u);
+        g2.font = font(800, 40); g2.fillStyle = '#fff'; g2.fillText(v, x, cy + 182 * u);
+        g2.font = font(500, 19); g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.fillText(l, x, cy + 215 * u);
+      });
+      g2.textAlign = 'left'; g2.globalAlpha = 1;
+    }
+    // Trainlog and the map's credits, always
+    if (logo.complete && logo.naturalWidth) drawBrand(Math.round(W - pad - brand.w), Math.round(pad - 4 * u), brand);
+    g2.font = font(400, 13); g2.fillStyle = 'rgba(255,255,255,0.75)'; g2.textAlign = 'right'; g2.textBaseline = 'alphabetic';
+    g2.fillText('© OpenStreetMap contributors · © Mapterhorn · MapLibre', W - 12 * u, H - 10 * u);
+    g2.textAlign = 'left';
+  }
+
+  // ── Playing and rendering ──────────────────────────────────────────────────────
+  const metresPerPx = zoom => 40075016 * Math.cos(bounds.getCenter().lat * Math.PI / 180) / (512 * 2 ** zoom);
+  // poster: the opening overview under the full title card, shown until played or rendered
+  function show(t, poster = false) {
+    const f = frameAt(t);
+    if (poster) { f.title = 1; f.headOn = false; }
+    // The aim point centred in the open part of the picture: under the title and chip, above
+    // the profile strip, so the train never runs under the strip
+    map.jumpTo({ ...f.cam, padding: { top: 120 * scale, bottom: 60 * scale, left: 0, right: 0 } });
+    drawRoute(f.R, f.headOn, metresPerPx(f.cam.zoom));
+    drawHud(f);
+    return f;
+  }
+  const lenSel = document.getElementById('v-len'), sizeSel = document.getElementById('v-size');
+  const $custom = document.getElementById('v-custom'), $w = document.getElementById('v-w'), $h = document.getElementById('v-h');
+  // Custom sizes kept even (the encoders want it), 128 to 3840 px a side
+  const side = el => 2 * Math.round(Math.max(128, Math.min(3840, Number(el.value) || 1080)) / 2);
+  const format = () => (sizeSel.value === 'custom' ? [side($w), side($h)] : sizeSel.value.split('x').map(Number));
+  // A size in the address (?size=1280x720; #1280x720 in older links) picked on load: its
+  // preset, else as a custom one
+  const sizeAsked = (new URLSearchParams(location.search).get('size') || location.hash.slice(1)).match(/^(\d+)x(\d+)$/);
+  if (sizeAsked) {
+    const v = `${sizeAsked[1]}x${sizeAsked[2]}`;
+    if ([...sizeSel.options].some(o => o.value === v)) sizeSel.value = v;
+    else { sizeSel.value = 'custom'; [$w.value, $h.value] = [sizeAsked[1], sizeAsked[2]]; $custom.hidden = false; }
+  }
+  // The default length follows the journey, so the pace stays about the same from one video
+  // to the next: 1.6 s per square root of each trip's minutes (or km), plus its halts and hops
+  const autoLength = () => {
+    const ride = busy.reduce((x, [a, b]) => x + 1.6 * Math.sqrt((b - a) / 60000), 0);
+    return Math.round(Math.max(20, ride + IDLE * (busy.length - 1) + INTRO + DIVE + BACK + OUTRO));
+  };
+  // Empty: the length follows the journey; else the seconds asked for (at least 15)
+  lenSel.placeholder = fill(T.auto, { n: autoLength() });
+  const asked = () => Math.max(15, Math.min(3600, Math.round(Number(lenSel.value))));
+  const applySettings = () => {
+    JOURNEY = (lenSel.value === '' ? autoLength() : asked()) - INTRO - DIVE - BACK - OUTRO;
+    [W, H] = format();
+    scale = Math.min(W, H) / 1080;
+    document.getElementById('v-res').textContent = `${W} × ${H} px · ${FPS} fps · ${Math.round(JOURNEY + INTRO + DIVE + BACK + OUTRO)} s`;
+    planJourney();
+    smoothCamera();
+    layoutStage();
+    map.resize();
+    Object.assign(ov, overview()); Object.assign(ovEnd, overview(true));
+    show(0, true);
+    window.redrawMusic?.();
+  };
+  // The options take effect on Apply, not as they change: those changed are marked until then,
+  // and Apply rebuilds once (or reloads the page, for another background)
+  if (LEN) lenSel.value = LEN;
+  const bgSel = document.getElementById('v-bg'), $apply = document.getElementById('v-apply');
+  const $mb = document.getElementById('v-mb');
+  const chosen = () => ({ len: lenSel.value, size: sizeSel.value, w: $w.value, h: $h.value, bg: bgSel.value, mb: $mb.value });
+  let applied = chosen();
+  const markPending = () => {
+    const now = chosen(), custom = now.size === 'custom';
+    const changed = { 'v-len': now.len !== applied.len, 'v-size': now.size !== applied.size,
+      'v-w': custom && now.w !== applied.w, 'v-h': custom && now.h !== applied.h, 'v-bg': now.bg !== applied.bg,
+      'v-mb': now.mb !== applied.mb };
+    for (const [id, c] of Object.entries(changed)) document.getElementById(id).classList.toggle('v-pending', c);
+    $apply.disabled = !Object.values(changed).some(Boolean);
+  };
+  for (const el of [lenSel, sizeSel, $w, $h, bgSel, $mb]) { el.addEventListener('input', markPending); el.addEventListener('change', markPending); }
+  sizeSel.addEventListener('change', () => { $custom.hidden = sizeSel.value !== 'custom'; });
+  $apply.addEventListener('click', () => {
+    const now = chosen();
+    // Every option in the address alike (?size=&len=&bg=&mb=), so a link keeps the video as set
+    const url = new URL(location.href), [w, h] = format();
+    for (const [key, value] of [['size', `${w}x${h}`], ['len', now.len], ['bg', now.bg], ['mb', now.mb]]) {
+      if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+    }
+    url.hash = '';
+    if (now.bg !== applied.bg) { location.href = url.toString(); return; }
+    // The size limit alone is only read on rendering: nothing to rebuild for it
+    if (['len', 'size', 'w', 'h'].some(k => now[k] !== applied[k])) applySettings();
+    history.replaceState(null, '', url.toString());
+    applied = now;
+    markPending();
+  });
+  applySettings();
+  status(T.ready, 0);
+  uncover();
+
+  let playing = null;
+  // Music from the user's own device, mixed in here and never sent anywhere: faded in over the
+  // opening and out over the end, looped when shorter than the video
+  const $music = document.getElementById('v-music');
+  const fadeIn = () => 1.5, fadeOut = () => 2.5;
+  let musicFile = null, musicAudio = null, musicBuffer = null, musicOffset = 0, peaks = [];
+  // Its waveform, the part the video uses (as long as the video) highlighted and dragged along
+  // it, the rest dimmed; with the track's length against the video's
+  const $trim = document.getElementById('v-music-trim'), $wave = document.getElementById('v-wave');
+  const $info = document.getElementById('v-music-info');
+  const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const drawWave = () => {
+    $trim.hidden = !musicBuffer;
+    if (!musicBuffer) return;
+    const w = Math.max(1, Math.round($wave.clientWidth * devicePixelRatio)), h = Math.round(56 * devicePixelRatio);
+    $wave.width = w; $wave.height = h;
+    const g = $wave.getContext('2d'), len = musicBuffer.duration, video = duration();
+    musicOffset = Math.max(0, Math.min(musicOffset, Math.max(0, len - video)));
+    if (peaks.length !== w) {
+      const data = musicBuffer.getChannelData(0), per = Math.max(1, Math.floor(data.length / w));
+      peaks = Array.from({ length: w }, (_, i) => {
+        let m = 0;
+        for (let j = i * per, end = Math.min(data.length, j + per); j < end; j += 4) m = Math.max(m, Math.abs(data[j]));
+        return m;
+      });
+    }
+    const x0 = musicOffset / len * w, x1 = Math.min(len, musicOffset + video) / len * w;
+    g.fillStyle = 'rgba(47,129,247,0.18)'; g.fillRect(x0, 0, x1 - x0, h);
+    for (let x = 0; x < w; x++) {
+      // Inside the window, as loud as it will play: the fades show as the bars' ramps
+      const inside = x >= x0 && x <= x1, gainHere = inside ? musicGain(x / w * len - musicOffset) : 1;
+      const bar = Math.max(1, peaks[x] * gainHere * (h - 6));
+      g.fillStyle = x >= x0 && x <= x1 ? '#2f81f7' : 'rgba(139,148,158,0.45)';
+      g.fillRect(x, (h - bar) / 2, 1, bar);
+    }
+    g.strokeStyle = '#2f81f7'; g.lineWidth = 2 * devicePixelRatio; g.strokeRect(x0 + 1, 1, Math.max(2, x1 - x0 - 2), h - 2);
+    $info.textContent = `♪ ${mmss(len)} · ▶ ${mmss(video)} · ${mmss(musicOffset)} → ${mmss(Math.min(len, musicOffset + video))}${len < video ? ' ↻' : ''}`;
+  };
+  window.redrawMusic = drawWave;
+  // The video made as long as the track (15 s to an hour), the whole of it played
+  document.getElementById('v-music-fit').addEventListener('click', () => {
+    if (!musicBuffer) return;
+    lenSel.value = Math.max(15, Math.min(3600, Math.round(musicBuffer.duration)));
+    musicOffset = 0;
+    markPending();
+    $apply.click();
+  });
+  window.addEventListener('resize', drawWave);
+  // Dragging the window along the track (a click centres it there)
+  let drag = null;
+  $wave.addEventListener('pointerdown', e => {
+    if (!musicBuffer) return;
+    const len = musicBuffer.duration, rect = $wave.getBoundingClientRect();
+    const at = (e.clientX - rect.left) / rect.width * len, video = duration();
+    if (at < musicOffset || at > musicOffset + video) musicOffset = at - video / 2;
+    drag = { x: e.clientX, offset: musicOffset, width: rect.width, len };
+    $wave.setPointerCapture(e.pointerId); $wave.style.cursor = 'grabbing';
+    drawWave();
+  });
+  $wave.addEventListener('pointermove', e => {
+    if (!drag) return;
+    musicOffset = drag.offset + (e.clientX - drag.x) / drag.width * drag.len;
+    drawWave();
+  });
+  $wave.addEventListener('pointerup', () => { drag = null; $wave.style.cursor = 'grab'; });
+  $music.addEventListener('change', async () => {
+    musicFile = $music.files[0] || null;
+    if (musicAudio) { musicAudio.pause(); URL.revokeObjectURL(musicAudio.src); }
+    musicAudio = musicFile ? Object.assign(new Audio(URL.createObjectURL(musicFile)), { loop: true }) : null;
+    musicBuffer = null; musicOffset = 0; peaks = [];
+    if (musicFile) {
+      try { musicBuffer = await new AudioContext().decodeAudioData(await musicFile.arrayBuffer()); } catch (e) { status(fill(T.failed, { e: e.message })); }
+    }
+    drawWave();
+  });
+  const musicGain = t => Math.max(0, Math.min(1, t / fadeIn(), (duration() - t) / fadeOut()));
+  document.getElementById('v-play').addEventListener('click', () => {
+    if (playing) { cancelAnimationFrame(playing); playing = null; musicAudio?.pause(); document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+    if (musicAudio) { musicAudio.currentTime = musicOffset; musicAudio.volume = 0; musicAudio.play(); }
+    const start = performance.now();
+    document.getElementById('v-play').textContent = '■ Stop';
+    const tick = () => {
+      const t = (performance.now() - start) / 1000;
+      if (t > duration()) { playing = null; musicAudio?.pause(); document.getElementById('v-play').textContent = `▶ ${T.preview}`; show(0, true); return; }
+      if (musicAudio) musicAudio.volume = musicGain(t);
+      show(t);
+      status(`Preview ${t.toFixed(1)} / ${duration().toFixed(0)} s (tiles may still be loading)`, t / duration() * 100);
+      playing = requestAnimationFrame(tick);
+    };
+    playing = requestAnimationFrame(tick);
+  });
+
+  // Each frame: the camera moved, waited on until its terrain and map have loaded, then
+  // the map and the HUD composited and handed to the encoder with its exact timestamp
+  const settled = () => new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    const timer = setTimeout(finish, 6000);
+    const check = () => { if (map.areTilesLoaded() && !map.isMoving()) { clearTimeout(timer); map.once('render', finish); map.triggerRepaint(); } else map.once('idle', check); };
+    requestAnimationFrame(check);
+  });
+  // Whether an encoding really works: Firefox says yes to some it then fails to configure
+  // (the failure only comes later, through the error callback), so one frame is tried
+  const encodes = async config => {
+    let failed = false;
+    const encoder = new VideoEncoder({ output: () => {}, error: () => { failed = true; } });
+    try {
+      encoder.configure(config);
+      const canvas = new OffscreenCanvas(config.width, config.height), g = canvas.getContext('2d');
+      g.fillStyle = '#123'; g.fillRect(0, 0, config.width, config.height);
+      const frame = new VideoFrame(canvas, { timestamp: 0 });
+      encoder.encode(frame, { keyFrame: true });
+      frame.close();
+      await encoder.flush();
+    } catch (e) { failed = true; }
+    try { encoder.close(); } catch (e) { /* already closed */ }
+    return !failed;
+  };
+  document.getElementById('v-render').addEventListener('click', async () => {
+    if (!('VideoEncoder' in window)) { status('This browser cannot encode video (WebCodecs): use a recent Chrome, Edge or Firefox.'); return; }
+    if (playing) document.getElementById('v-play').click();
+    const buttons = document.querySelectorAll('#v-panel button, #v-panel select, #v-panel input');
+    buttons.forEach(b => (b.disabled = true));
+    try {
+      // The first encoding the browser takes: H.264 High, Main or Baseline at level 4.0 (enough
+      // for 1080p at 30 fps; Firefox refuses higher levels), level 5.1 for larger custom sizes,
+      // else VP9
+      // With a size asked for, the bitrate capped to fit it whatever the length (8 % kept for
+      // the MP4's own overhead), held constant so the encoder cannot overshoot it
+      // The music's encoding: AAC, which every player reads, else Opus (Firefox); none at all
+      // in a browser without either, the video then made silent
+      let audio = null;
+      if (musicFile && 'AudioEncoder' in window) {
+        for (const [codec, m] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+          const c = { codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 };
+          try { if ((await AudioEncoder.isConfigSupported(c)).supported) { audio = { config: c, mux: m }; break; } } catch (e) { /* next */ }
+        }
+      }
+      const mb = Number(document.getElementById('v-mb').value);
+      const cap = mb > 0 ? mb * 1e6 * 8 * 0.92 / duration() - (audio ? 128000 : 0) : Infinity;
+      const base = { width: W, height: H, bitrate: Math.min(W * H >= 1920 * 1080 ? 14e6 : 8e6, cap),
+        bitrateMode: 'constant', framerate: FPS };
+      let config = null, mux = null;
+      for (const [codec, m] of [['avc1.640028', 'avc'], ['avc1.4d0028', 'avc'], ['avc1.42e028', 'avc'], ['avc1.640033', 'avc'], ['vp09.00.40.08', 'vp9'], ['vp09.00.51.08', 'vp9']]) {
+        for (const bitrateMode of ['constant', 'variable']) {
+          const c = { ...base, bitrateMode, codec, ...(m === 'avc' ? { avc: { format: 'avc' } } : {}) };
+          try { if ((await VideoEncoder.isConfigSupported(c)).supported && await encodes(c)) { config = c; mux = m; break; } } catch (e) { /* next */ }
+        }
+        if (config) break;
+      }
+      if (!config) throw new Error('no video encoding (H.264 or VP9) available in this browser');
+      const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), fastStart: 'in-memory',
+        video: { codec: mux, width: W, height: H },
+        ...(audio ? { audio: { codec: audio.mux, sampleRate: 48000, numberOfChannels: 2 } } : {}) });
+      let failure = null;
+      const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { failure = e; } });
+      encoder.configure(config);
+      const frames = Math.round(duration() * FPS), canvas = document.createElement('canvas'), started = performance.now();
+      canvas.width = W; canvas.height = H;
+      const cx = canvas.getContext('2d');
+      for (let i = 0; i < frames; i++) {
+        if (failure) throw failure;
+        if (encoder.state !== 'configured') throw new Error(`the encoder stopped (${config.codec})`);
+        show(i / FPS);
+        await settled();
+        if (failure) throw failure;
+        if (encoder.state !== 'configured') throw new Error(`the encoder stopped (${config.codec})`);
+        cx.drawImage(map.getCanvas(), 0, 0, W, H);
+        cx.drawImage(hud, 0, 0);
+        const frame = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+        encoder.encode(frame, { keyFrame: i % (FPS * 2) === 0 });
+        frame.close();
+        while (encoder.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 10));
+        // Time left at the pace so far, once a few frames have set it
+        const left = (performance.now() - started) / (i + 1) * (frames - i - 1) / 1000;
+        const eta = i >= 10 ? ` · ${fill(T.eta, { t: `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}` })}` : '';
+        status(fill(T.rendering, { i: i + 1, n: frames }) + eta, (i + 1) / frames * 100);
+      }
+      await encoder.flush();
+      if (audio) {
+        // The music rendered to the video's exact length, with its fades, then encoded in
+        // tenth-of-a-second blocks
+        const rate = 48000, length = Math.ceil(duration() * rate), mix = new OfflineAudioContext(2, length, rate);
+        const source = mix.createBufferSource(), gain = mix.createGain();
+        source.buffer = await mix.decodeAudioData(await musicFile.arrayBuffer());
+        source.loop = true;
+        gain.gain.setValueAtTime(0, 0);
+        gain.gain.linearRampToValueAtTime(1, fadeIn());
+        gain.gain.setValueAtTime(1, Math.max(fadeIn(), duration() - fadeOut()));
+        gain.gain.linearRampToValueAtTime(0, duration());
+        source.connect(gain).connect(mix.destination);
+        source.start(0, musicOffset);
+        const mixed = await mix.startRendering(), left = mixed.getChannelData(0), right = mixed.getChannelData(1);
+        let audioFailure = null;
+        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => { audioFailure = e; } });
+        audioEncoder.configure(audio.config);
+        for (let i = 0; i < length; i += rate / 10) {
+          const n = Math.min(rate / 10, length - i), data = new Float32Array(n * 2);
+          data.set(left.subarray(i, i + n), 0); data.set(right.subarray(i, i + n), n);
+          const block = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: n, numberOfChannels: 2,
+            timestamp: Math.round(i / rate * 1e6), data });
+          audioEncoder.encode(block);
+          block.close();
+        }
+        await audioEncoder.flush();
+        if (audioFailure) throw audioFailure;
+      }
+      muxer.finalize();
+      const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'trip'}-${H}p.mp4`;
+      a.click();
+      status(fill(T.done, { n: (blob.size / 1e6).toFixed(1) }) + (musicFile && !audio ? ' (no music: this browser cannot encode audio)' : ''), 100);
+    } catch (e) {
+      status(fill(T.failed, { e: e.message }));
+    } finally {
+      buttons.forEach(b => (b.disabled = false));
+      markPending();
+      show(0, true);
+    }
+  });
+}
+
+
+// Several trips as one journey, in order: their paths joined (the hop from one trip's end
+// to the next one's start marked as a gap, not drawn), their tunnels and stops shifted along,
+// and each connection a stop with the arrival and departure times
+function mergeTrips(list) {
+  const out = { trip: { ...list[0].trip, destination: list[list.length - 1].trip.destination,
+    end: list[list.length - 1].trip.end }, coords: [], height: [], env: [], stops: [], gaps: [], types: [], spans: [] };
+  list.forEach((t, i) => {
+    const off = out.coords.length;
+    if (i) {
+      const prev = list[i - 1], at = prev.coords[prev.coords.length - 1];
+      // A change named after where the next trip leaves from (the airport, not the shuttle's stop)
+      if (prev.trip.user === t.trip.user) out.stops.push({ name: (t.trip.origin || prev.trip.destination || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), lng: at[0], lat: at[1],
+        arr: prev.trip.end?.slice(-5), dep: t.trip.start?.slice(-5), major: true, transfer: true });
+      out.gaps.push(off - 1);
+    }
+    out.coords.push(...t.coords);
+    out.types.push(...t.coords.map(() => t.trip.type));
+    out.height.push(...(t.height || t.coords.map(() => 0)));
+    for (const [s, e, k] of t.env || []) out.env.push([s + off, e + off, k]);
+    out.stops.push(...(t.stops || []));
+    // Each trip's points and how long it took, so the video gives it its share of the time
+    const took = t.trip.start && t.trip.end ? (new Date(t.trip.end) - new Date(t.trip.start)) / 60000 : null;
+    out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
+      name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
+      real: !!t.height?.some(v => v > 300), user: t.trip.user, utc: t.trip.utc, start: t.trip.start });
+  });
+  return out;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────────
+function runningMedian(z, d, window) {
+  return z.map((_, i) => {
+    let lo = i, hi = i;
+    while (lo > 0 && d[i] - d[lo - 1] <= window / 2) lo--;
+    while (hi < z.length - 1 && d[hi + 1] - d[i] <= window / 2) hi++;
+    const part = z.slice(lo, hi + 1).sort((a, b) => a - b);
+    return part[part.length >> 1];
+  });
+}
+
+function runningMin(z, d, window) {
+  return z.map((_, i) => {
+    let m = z[i];
+    for (let k = i; k >= 0 && d[i] - d[k] <= window / 2; k--) m = Math.min(m, z[k]);
+    for (let k = i + 1; k < z.length && d[k] - d[i] <= window / 2; k++) m = Math.min(m, z[k]);
+    return m;
+  });
+}
+
+function movingAverage(z, d, window) {
+  return z.map((_, i) => {
+    let sum = 0, n = 0;
+    for (let k = i; k >= 0 && d[i] - d[k] <= window / 2; k--) { sum += z[k]; n++; }
+    for (let k = i + 1; k < z.length && d[k] - d[i] <= window / 2; k++) { sum += z[k]; n++; }
+    return sum / n;
+  });
+}
+
+function lerp(a, b, t) { return (a == null || b == null) ? (a ?? b) : a + (b - a) * t; }
+
+// Smallest and largest of a long array (a spread into Math.min/max overflows the call stack)
+function minOf(values) { let m = Infinity; for (const v of values) if (v < m) m = v; return m; }
+function maxOf(values) { let m = -Infinity; for (const v of values) if (v > m) m = v; return m; }
+
+function hexA(hex, alpha) {
+  const v = parseInt(hex.slice(1), 16);
+  return `rgba(${v >> 16},${(v >> 8) & 255},${v & 255},${alpha})`;
+}
+
+function haversine([lng1, lat1], [lng2, lat2]) {
+  const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2
+    + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lng2 - lng1) * r / 2) ** 2;
+  return 12742000 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+
+async function groundHeights(points) {
+  // The most detailed zoom whose tiles under the points number at most 80: counted, not
+  // guessed from the length (a ski day's dozens of runs share a few tiles)
+  const tileKey = (lng, lat, n) => `${Math.floor((((lng + 180) / 360) % 1 + 1) % 1 * n)}/${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n)}`;
+  let z = 14;
+  while (z > 6) {
+    const keys = new Set();
+    for (const [lng, lat] of points) { keys.add(tileKey(lng, lat, 2 ** z)); if (keys.size > 80) break; }
+    if (keys.size <= 80) break;
+    z--;
+  }
+  // Mapterhorn goes past zoom 12 only where it has a national lidar model: points on a
+  // missing tile are read again two zooms coarser, down to the worldwide ones
+  const out = new Array(points.length).fill(null);
+  let todo = points.map((_, i) => i);
+  for (; todo.length && z >= 6; z -= 2) {
+    const got = await heightsAtZoom(todo.map(i => points[i]), z);
+    todo.forEach((i, j) => { out[i] = got[j]; });
+    todo = todo.filter(i => out[i] == null);
+  }
+  return out;
+}
+
+// Heights at one zoom, null where its tile is missing
+async function heightsAtZoom(points, z) {
+  const TILE = 512, n = 2 ** z, tiles = new Map();
+  const where = points.map(([lng, lat]) => {
+    const x = (((lng + 180) / 360) % 1 + 1) % 1 * n;
+    const y = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+    const key = `${Math.floor(x)}/${Math.floor(y)}`;
+    if (!tiles.has(key)) tiles.set(key, null);
+    return { key, px: Math.min(TILE - 1, Math.floor((x % 1) * TILE)), py: Math.min(TILE - 1, Math.floor((y % 1) * TILE)) };
+  });
+  await Promise.all([...tiles.keys()].map(async key => {
+    try {
+      const [x, y] = key.split('/');
+      const res = await fetch(DEM.replace('{z}', z).replace('{x}', x).replace('{y}', y));
+      if (!res.ok) return;
+      const img = await createImageBitmap(await res.blob());
+      const ctx = new OffscreenCanvas(TILE, TILE).getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      tiles.set(key, ctx.getImageData(0, 0, TILE, TILE).data);
+    } catch (e) { /* missing: read coarser */ }
+  }));
+  return where.map(({ key, px, py }) => {
+    const t = tiles.get(key);
+    if (!t) return null;
+    const o = (py * TILE + px) * 4;
+    return t[o] * 256 + t[o + 1] + t[o + 2] / 256 - 32768;
+  });
+}
+</script>
+
+{% endblock %}
