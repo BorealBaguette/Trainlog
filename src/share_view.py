@@ -41,6 +41,7 @@ PRICE_FIELDS = (
     "ticket_price",
     "ticket_currency",
     "ticket_price_in_user_currency",
+    "tickets",
 )
 CARBON_FIELDS = ("carbon", "co2_override", "carbon_footprint")
 

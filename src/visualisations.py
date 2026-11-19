@@ -5,14 +5,16 @@ Registered as a Flask Blueprint. Call register(app, fetch_trips_paths_fn)
 from app.py after fetchTripsPaths is defined.
 """
 
+import functools
 import json
 import unicodedata
 from datetime import datetime
 
-from flask import Blueprint, jsonify, render_template, request, session, url_for
+from flask import Blueprint, Response, jsonify, render_template, request, session, url_for
 
 from src.pg import pg_session
-from src.utils import get_user_id, lang, login_required
+from src.users import User
+from src.utils import get_user_id, getUser, lang, login_required
 
 bp = Blueprint("viz", __name__)
 
@@ -481,3 +483,45 @@ def rail_page(username):
         "viz/network.html", title=_t("vizRail"), graph_mode="train",
         graph_url=url_for("viz.rail_graph_api", username=username), **_ctx(username),
     )
+
+
+@bp.route("/viz/urban_areas")
+def urban_areas_page():
+    """The GHSL urban areas the rail graph groups stations into, for anyone to check."""
+    user = User.query.filter_by(username=getUser()).first()
+    return render_template(
+        "viz/urban_areas.html", title=_t("vizUrbanAreas"), nav="bootstrap/navigation.html",
+        username=getUser(), tileserver=user.tileserver if user else "default",
+        **lang[session["userinfo"]["lang"]], **session["userinfo"],
+    )
+
+
+@functools.cache
+def _urban_areas_geojson():
+    with pg_session() as pg:
+        return pg.execute("""
+            SELECT json_build_object('type', 'FeatureCollection', 'features', json_agg(json_build_object(
+                'type', 'Feature', 'id', id, 'geometry', ST_AsGeoJSON(geom, 4)::json,
+                'properties', json_build_object('name', name, 'country', country, 'population', population)
+            )))::text
+            FROM urban_areas
+        """).scalar()
+
+
+@bp.route("/viz/urban_areas.geojson")
+def urban_areas_geojson():
+    """`urban_areas` as the rail graph reads it; it only changes on a deploy, so built once per worker."""
+    return Response(_urban_areas_geojson(), mimetype="application/geo+json")
+
+
+@bp.route("/viz/urban_areas/at")
+def urban_areas_at():
+    """The urban areas at ?lat=&lng=, most populous first: the first is the one the rail graph picks."""
+    lat, lng = float(request.args["lat"]), float(request.args["lng"])
+    with pg_session() as pg:
+        rows = pg.execute("""
+            SELECT id, name, country, population FROM urban_areas
+            WHERE ST_Intersects(geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326))
+            ORDER BY population DESC
+        """, {"lat": lat, "lng": lng}).fetchall()
+    return jsonify([{k: r[k] for k in ("id", "name", "country", "population")} for r in rows])
