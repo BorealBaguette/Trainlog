@@ -1,0 +1,333 @@
+<!doctype html>
+{#- Self-contained on purpose: the trainlog_health sidecar serves this page and has
+    no layout, nav, lang or /static of its own, and must not lean on the site's
+    workers — the point of the page is to load when they are all busy. -#}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Trainlog health</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --fg: #1f2328; --muted: #6b7280; --line: #e5e7eb;
+    --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --accent: #2563eb; --code: #f3f4f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --card: #1a1f25; --fg: #e5e7eb; --muted: #9ca3af; --line: #2b323b;
+      --ok: #22c55e; --warn: #f59e0b; --bad: #f87171; --accent: #60a5fa; --code: #0f1317;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 14px; }
+  header h1 { font-size: 20px; margin: 0; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  a { color: var(--accent); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
+          border: 1px solid var(--line); color: var(--muted); }
+  .ranges button { border: 1px solid var(--line); background: var(--card); color: var(--fg);
+                   padding: 4px 10px; cursor: pointer; font: inherit; }
+  .ranges button:first-child { border-radius: 6px 0 0 6px; }
+  .ranges button:last-child { border-radius: 0 6px 6px 0; }
+  .ranges button + button { border-left: 0; }
+  .ranges button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .tile .k { color: var(--muted); font-size: 12px; }
+  .tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .s { color: var(--muted); font-size: 12px; }
+  .tile.warn { border-color: var(--warn); } .tile.warn .v { color: var(--warn); }
+  .tile.bad { border-color: var(--bad); } .tile.bad .v { color: var(--bad); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 8px; }
+  .card h2 small { color: var(--muted); font-weight: normal; font-size: 12px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+  .chart { height: 240px; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+  td.num, th.num { text-align: right; }
+  td.path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dot.idle { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.stale { background: var(--bad); }
+  .long { color: var(--bad); font-weight: 600; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+  pre { background: var(--code); padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 11.5px;
+        line-height: 1.35; margin: 6px 0 0; max-height: 420px; }
+  .empty { color: var(--muted); font-style: italic; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .err { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Trainlog health</h1>
+    <span class="pill" id="servedBy">…</span>
+    <span class="meta" id="updated"></span>
+    <span class="spacer"></span>
+    <span class="ranges" id="ranges">
+      {%- for r in ranges %}<button type="button" data-range="{{ r }}">{{ r }}</button>{% endfor -%}
+    </span>
+    <a href="/admin" class="meta">Admin</a>
+  </header>
+
+  <div id="notice"></div>
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Workers <small id="workersNote"></small></h2>
+    <div class="scroll"><table id="workers"></table></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card"><h2>Busy request slots <small>avg / peak vs capacity</small></h2><div class="chart" id="cWorkers"></div></div>
+    <div class="card"><h2>Response time <small>ms, p50 / p95 / max</small></h2><div class="chart" id="cLatency"></div></div>
+    <div class="card"><h2>Traffic <small>requests per minute, 5xx</small></h2><div class="chart" id="cTraffic"></div></div>
+    <div class="card"><h2>Host &amp; database <small>CPU, memory, iowait %, Postgres round-trip ms</small></h2><div class="chart" id="cHost"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Slow routes <small>≥ 1 s, last hour</small></h2>
+      <div class="scroll"><table id="slowRoutes"></table></div>
+    </div>
+    <div class="card">
+      <h2>Recent slow requests</h2>
+      <div class="scroll"><table id="slow"></table></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Postgres <small id="pgNote"></small></h2>
+    <div class="scroll"><table id="pg"></table></div>
+  </div>
+</main>
+
+<script>
+(function () {
+  const BASE = location.pathname.replace(/\/+$/, '');
+  const LIVE_MS = 5000, HISTORY_MS = 60000;
+  let range = '1h';
+  try { range = localStorage.getItem('healthRange') || range; } catch (e) {}
+  const openStacks = new Set();
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
+    (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const fmtMs = (ms) => ms == null ? '–' : ms >= 10000 ? (ms / 1000).toFixed(0) + ' s'
+    : ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : Math.round(ms) + ' ms';
+  const fmtDur = (s) => {
+    if (s == null) return '–';
+    if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + ' s';
+    if (s < 3600) return Math.floor(s / 60) + ' min';
+    if (s < 86400) return (s / 3600).toFixed(1) + ' h';
+    return (s / 86400).toFixed(1) + ' d';
+  };
+  const ago = (t) => fmtDur(Date.now() / 1000 - t) + ' ago';
+  const n = (v, d = '–') => v == null ? d : v;
+
+  function tile(k, v, s, level) {
+    return `<div class="tile ${level || ''}"><div class="k">${esc(k)}</div>` +
+           `<div class="v">${esc(v)}</div><div class="s">${esc(s || '')}</div></div>`;
+  }
+
+  function renderLive(d) {
+    $('servedBy').textContent = d.served_by === 'sidecar' ? 'served by health sidecar' : 'served by a site worker';
+    $('updated').textContent = 'updated ' + new Date(d.now * 1000).toLocaleTimeString();
+    $('notice').innerHTML = d.recording ? '' :
+      '<div class="card err">Recording is off: TRAINLOG_STATUS_DIR is not set for the site\'s gunicorn, so there are no worker numbers. Host and Postgres still show.</div>';
+
+    const t = d.totals, r = d.recent, h = d.host || {}, p = d.pg || {};
+    const free = t.capacity - t.busy;
+    const tiles = [
+      tile('Free slots', t.capacity ? `${free} / ${t.capacity}` : '–',
+           `${t.workers} workers` + (t.stale ? `, ${t.stale} unresponsive` : ''),
+           !t.capacity ? '' : free === 0 ? 'bad' : free <= t.capacity / 4 ? 'warn' : ''),
+      tile('Oldest request', t.busy ? fmtDur(t.oldest_s) : '–', t.busy ? `${t.busy} in flight` : 'none in flight',
+           t.oldest_s >= 30 ? 'bad' : t.oldest_s >= 5 ? 'warn' : ''),
+      tile(`Busy, last ${r.minutes} min`, r.util_pct == null ? '–' : r.util_pct + ' %', 'of worker time',
+           r.util_pct >= 80 ? 'bad' : r.util_pct >= 50 ? 'warn' : ''),
+      tile('Requests / min', n(r.req_per_min), `last ${r.minutes} min`),
+      tile('p50 / p95', `${fmtMs(r.p50)} / ${fmtMs(r.p95)}`, 'max ' + fmtMs(r.max),
+           r.p95 >= 5000 ? 'bad' : r.p95 >= 1500 ? 'warn' : ''),
+      tile('5xx', n(r.err, 0), `last ${r.minutes} min`, r.err ? 'warn' : ''),
+      tile('CPU', h.cpu_pct == null ? '…' : h.cpu_pct + ' %',
+           (h.load ? 'load ' + h.load.join(' ') : '') + (h.cpus ? ` · ${h.cpus} cores` : ''),
+           h.cpu_pct >= 90 ? 'bad' : h.cpu_pct >= 70 ? 'warn' : ''),
+      tile('Memory', h.mem_used_pct == null ? '–' : h.mem_used_pct + ' %',
+           (h.mem_total_gb ? `of ${h.mem_total_gb} GB` : '') + (h.swap_used_pct ? ` · swap ${h.swap_used_pct} %` : ''),
+           h.mem_used_pct >= 92 ? 'bad' : h.mem_used_pct >= 80 ? 'warn' : ''),
+      tile('Disk', h.disk_used_pct == null ? '–' : h.disk_used_pct + ' %', h.disk_free_gb != null ? `${h.disk_free_gb} GB free` : '',
+           h.disk_used_pct >= 95 ? 'bad' : h.disk_used_pct >= 85 ? 'warn' : ''),
+      p.ok
+        ? tile('Postgres', fmtMs(p.latency_ms), `${p.active} active · ${p.waiting} waiting · ${p.connections}/${p.max_connections}`,
+               p.waiting || p.latency_ms >= 1000 ? 'bad' : p.latency_ms >= 200 ? 'warn' : '')
+        : tile('Postgres', p.error === 'not configured' ? '–' : 'down', p.error || '', p.error === 'not configured' ? '' : 'bad'),
+    ];
+    $('tiles').innerHTML = tiles.join('');
+
+    // Workers
+    $('workersNote').textContent = t.busy ? `${t.busy} busy` : 'all idle';
+    const rows = d.workers.map((w) => {
+      const reqs = w.requests.map((q) => {
+        const key = w.pid + ' ' + q.method + ' ' + q.path;
+        const stack = q.stack ? `<details data-key="${esc(key)}"${openStacks.has(key) ? ' open' : ''}>` +
+          `<summary>stack</summary><pre>${esc(q.stack.join('\n'))}</pre></details>` : '';
+        return `<div><span class="${q.for_s >= 30 ? 'long' : ''}">${fmtDur(q.for_s)}</span> ` +
+               `${esc(q.method)} ${esc(q.path)}${stack}</div>`;
+      }).join('');
+      const state = w.state === 'stale' ? `unresponsive ${fmtDur(w.heartbeat_s)}` : w.state;
+      return `<tr><td><span class="dot ${w.state}"></span>${esc(state)}</td><td class="num">${w.pid}</td>` +
+             `<td class="path">${reqs || '<span class="empty">–</span>'}</td>` +
+             `<td class="num">${n(w.cpu_pct)}${w.cpu_pct == null ? '' : ' %'}</td><td class="num">${n(w.rss_mb)}${w.rss_mb == null ? '' : ' MB'}</td>` +
+             `<td class="num">${w.served}</td><td class="num">${fmtDur(w.uptime_s)}</td></tr>`;
+    });
+    $('workers').innerHTML = '<tr><th>State</th><th class="num">PID</th><th>In flight</th><th class="num">CPU</th>' +
+      '<th class="num">RSS</th><th class="num">Served</th><th class="num">Up</th></tr>' +
+      (rows.join('') || '<tr><td colspan="7" class="empty">No worker is reporting.</td></tr>');
+
+    // Slow
+    $('slowRoutes').innerHTML = '<tr><th>Route</th><th class="num">Count</th><th class="num">Avg</th><th class="num">Max</th></tr>' +
+      (d.slow_routes.map((s) => `<tr><td class="path">${esc(s.route)}</td><td class="num">${s.n}</td>` +
+        `<td class="num">${fmtMs(s.avg)}</td><td class="num">${fmtMs(s.max)}</td></tr>`).join('') ||
+       '<tr><td colspan="4" class="empty">None.</td></tr>');
+    $('slow').innerHTML = '<tr><th>When</th><th>Request</th><th class="num">Status</th><th class="num">Time</th></tr>' +
+      (d.slow.map((s) => `<tr><td>${ago(s.t)}</td><td class="path">${esc(s.method)} ${esc(s.path)}</td>` +
+        `<td class="num">${n(s.status)}</td><td class="num">${fmtMs(s.ms)}</td></tr>`).join('') ||
+       '<tr><td colspan="4" class="empty">None.</td></tr>');
+
+    // Postgres
+    if (!p.ok) {
+      $('pgNote').textContent = '';
+      $('pg').innerHTML = `<tr><td class="${p.error === 'not configured' ? 'empty' : 'err'}">${esc(p.error || 'unavailable')}</td></tr>`;
+    } else {
+      $('pgNote').textContent = `${p.idle_in_tx} idle in transaction`;
+      $('pg').innerHTML = '<tr><th class="num">PID</th><th>State</th><th>Waiting on</th><th class="num">For</th><th>Query</th></tr>' +
+        (p.queries.map((q) => `<tr><td class="num">${q.pid}</td><td>${esc(q.state)}</td><td>${esc(q.wait || '')}</td>` +
+          `<td class="num ${q.age_s >= 30 ? 'long' : ''}">${fmtDur(q.age_s)}</td><td class="path">${esc(q.query)}</td></tr>`).join('') ||
+         '<tr><td colspan="5" class="empty">No statement running.</td></tr>');
+    }
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const k = e.target.dataset && e.target.dataset.key;
+    if (!k) return;
+    if (e.target.open) openStacks.add(k); else openStacks.delete(k);
+  }, true);
+
+  // Charts
+  const css = getComputedStyle(document.documentElement);
+  const C = (v) => css.getPropertyValue(v).trim();
+  const charts = {};
+  function chart(id) {
+    if (!charts[id]) charts[id] = echarts.init($(id), null, {renderer: 'canvas'});
+    return charts[id];
+  }
+  window.addEventListener('resize', () => Object.values(charts).forEach((c) => c.resize()));
+
+  function base(extra) {
+    return Object.assign({
+      animation: false,
+      textStyle: {color: C('--fg')},
+      grid: {left: 48, right: 48, top: 30, bottom: 28},
+      legend: {top: 0, textStyle: {color: C('--muted')}, itemWidth: 14, itemHeight: 8},
+      tooltip: {trigger: 'axis'},
+      xAxis: {type: 'time', axisLine: {lineStyle: {color: C('--line')}}, axisLabel: {color: C('--muted')}, splitLine: {show: false}},
+    }, extra);
+  }
+  const yAxis = (o) => Object.assign({type: 'value', axisLabel: {color: C('--muted')}, splitLine: {lineStyle: {color: C('--line')}}}, o || {});
+  const line = (name, data, color, o) => Object.assign({name, type: 'line', data, showSymbol: false, connectNulls: false,
+    lineStyle: {width: 1.6, color}, itemStyle: {color}}, o || {});
+
+  function renderHistory(h) {
+    const P = h.points;
+    const at = (k) => P.map((p) => [p.t * 1000, p[k] == null ? null : p[k]]);
+    chart('cWorkers').setOption(base({
+      yAxis: yAxis({minInterval: 1}),
+      series: [
+        line('capacity', at('cap'), C('--muted'), {lineStyle: {width: 1, type: 'dashed', color: C('--muted')}}),
+        line('peak busy', at('peak'), C('--bad'), {lineStyle: {width: 1, color: C('--bad')}}),
+        line('avg busy', at('busy'), C('--warn'), {areaStyle: {opacity: 0.18}}),
+      ],
+    }), true);
+    chart('cLatency').setOption(base({
+      yAxis: yAxis({type: 'log', min: 1, axisLabel: {color: C('--muted'), formatter: (v) => fmtMs(v)}}),
+      tooltip: {trigger: 'axis', valueFormatter: (v) => fmtMs(v)},
+      series: [
+        line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.6}}),
+        line('p95', at('p95'), C('--warn')),
+        line('p50', at('p50'), C('--accent')),
+      ],
+    }), true);
+    chart('cTraffic').setOption(base({
+      yAxis: [yAxis(), yAxis({minInterval: 1, splitLine: {show: false}})],
+      series: [
+        line('req/min', at('req_per_min'), C('--accent'), {areaStyle: {opacity: 0.15}}),
+        {name: '5xx', type: 'bar', yAxisIndex: 1, data: at('err'), itemStyle: {color: C('--bad')}, barMaxWidth: 6},
+      ],
+    }), true);
+    chart('cHost').setOption(base({
+      yAxis: [yAxis({max: 100, axisLabel: {color: C('--muted'), formatter: '{value} %'}}),
+              yAxis({type: 'log', min: 1, splitLine: {show: false}, axisLabel: {color: C('--muted'), formatter: (v) => fmtMs(v)}})],
+      series: [
+        line('CPU', at('cpu_pct'), C('--accent')),
+        line('memory', at('mem_used_pct'), C('--ok')),
+        line('iowait', at('iowait_pct'), C('--warn')),
+        line('Postgres', at('pg_ms'), C('--bad'), {yAxisIndex: 1, lineStyle: {width: 1, color: C('--bad')}}),
+      ],
+    }), true);
+  }
+
+  async function getJSON(url) {
+    const r = await fetch(url, {credentials: 'same-origin', cache: 'no-store'});
+    if (r.status === 401) throw new Error('Not logged in as owner (session expired?)');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+  function fail(e) {
+    $('updated').innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+  }
+
+  let liveTimer, histTimer;
+  async function pollLive() {
+    clearTimeout(liveTimer);
+    try { renderLive(await getJSON(BASE + '/live')); } catch (e) { fail(e); }
+    if (!document.hidden) liveTimer = setTimeout(pollLive, LIVE_MS);
+  }
+  async function pollHistory() {
+    clearTimeout(histTimer);
+    try { renderHistory(await getJSON(BASE + '/history?range=' + encodeURIComponent(range))); } catch (e) { fail(e); }
+    if (!document.hidden) histTimer = setTimeout(pollHistory, HISTORY_MS);
+  }
+
+  function markRange() {
+    document.querySelectorAll('#ranges button').forEach((b) => b.classList.toggle('on', b.dataset.range === range));
+  }
+  $('ranges').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    range = b.dataset.range;
+    try { localStorage.setItem('healthRange', range); } catch (err) {}
+    markRange();
+    pollHistory();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { pollLive(); pollHistory(); }
+  });
+
+  markRange();
+  pollLive();
+  pollHistory();
+})();
+</script>
+</body>
+</html>

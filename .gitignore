@@ -24,3 +24,4 @@ venv/
 country_percent/countries/preprocessed/
 databases/cache/
 backup/
+databases/health/
