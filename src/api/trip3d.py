@@ -151,21 +151,26 @@ def _payload(row, user=None):
     air = row["trip_type"] == "air"
     raw = row["altitude"] if row["trip_type"] in TRACK_TYPES or air else None
     env = row["track_env"]
+    # A date-only trip is stored at 00:00:01: its day but no times, as a trip without a date
+    start = row["start_datetime"] if isinstance(row["start_datetime"], datetime) else None
+    timed = start is not None and start.second != 1
+    stops = timetable_stops(row["waypoints"], delay_at(row))
     return {
         "trip": {
             "id": row["trip_id"],
             "origin": row["origin_station"],
             "destination": row["destination_station"],
             "type": row["trip_type"],
-            "start": _local(_shift(row["start_datetime"], dep)),
-            "end": _local(_shift(row["end_datetime"], arr)),
-            "utc": [_epoch_ms(_shift(row["utc_start_datetime"], dep)), _epoch_ms(_shift(row["utc_end_datetime"], arr))],
+            "start": _local(_shift(row["start_datetime"], dep)) if timed else None,
+            "end": _local(_shift(row["end_datetime"], arr)) if timed else None,
+            "date": start.strftime("%Y-%m-%d") if start else None,
+            "utc": [_epoch_ms(_shift(row["utc_start_datetime"], dep)), _epoch_ms(_shift(row["utc_end_datetime"], arr))] if timed else [None, None],
             "operator_logos": [url for url in row["operator_logos"] if url],
             "line": row["line_name"] or None,
             "vehicle": row["airframe_name"] or row["material_type"] or None,
             "user": user,
         },
-        "stops": timetable_stops(row["waypoints"], delay_at(row)),
+        "stops": stops if timed else [{**st, "arr": None, "dep": None} for st in stops],
         "coords": [[lng, lat] for lat, lng in coords],
         "raw": raw,
         # A flight's recorded altitude is its height as flown, not to be smoothed
