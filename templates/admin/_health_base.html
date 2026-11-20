@@ -239,6 +239,9 @@ const HC = (function () {
   }
 
   const num = (digits) => (v) => v == null ? '–' : (+v).toFixed(digits);
+  // Log axes start at the power of ten just below the data, not at 1 ms: from
+  // 1 ms, a route living between 40 ms and 5 s used only the top half.
+  const logFloor = (v) => Math.pow(10, Math.floor(Math.log10(Math.max(v.min || 1, 1))));
   const pct = (v) => v == null ? '–' : Math.round(v) + ' %';
 
   // Every chart once: series(h, big) gives the small (dashboard) or large set.
@@ -264,7 +267,7 @@ const HC = (function () {
       sub: 'log scale',
       keys: (big) => [['p50', '--accent'], ['p95', '--warn'], big && ['max', '--bad']],
       option: (at, h, big) => ({
-        yAxis: yAxis(big, {type: 'log', min: 1, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}}),
+        yAxis: yAxis(big, {type: 'log', min: logFloor, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}}),
         tooltip: {valueFormatter: (v) => fmtMs(v)},
         series: [
           big && line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.55}}),
@@ -293,7 +296,7 @@ const HC = (function () {
       keys: (big) => [['CPU', '--accent'], ['memory', '--ok'], big && ['iowait', '--warn'], big && ['Postgres ms', '--bad']],
       option: (at, h, big) => ({
         yAxis: [yAxis(big, {max: 100, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: '{value} %'}}),
-                yAxis(big, {show: big, type: 'log', min: 1, splitLine: {show: false},
+                yAxis(big, {show: big, type: 'log', min: logFloor, splitLine: {show: false},
                             axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}})],
         series: [
           line('CPU', at('cpu_pct'), C('--accent'), {tooltip: {valueFormatter: pct}}),
@@ -420,7 +423,7 @@ const HC = (function () {
 
   return {$, esc, fmtMs, fmtDur, fmtDate, getJSON, initRanges, get range() { return range; },
           setRange(r) { range = r; }, SPECS, keysHTML, draw, drawOption, timeWindow, zoomDetail,
-          parts: {C, alpha, fade, line, yAxis, frame, num, pointAt, deployMarks, tickLabel}};
+          parts: {C, alpha, fade, line, yAxis, frame, num, pointAt, deployMarks, tickLabel, logFloor}};
 })();
 </script>
 {% block script %}{% endblock %}

@@ -14,8 +14,11 @@
     <div class="tiles" id="tiles" style="margin-bottom: 0"></div>
     <div class="card">
       <div class="cardhead">
-        <h2>Timings <small><span id="step"></span> · log scale · scroll or drag to zoom for more detail</small></h2>
+        <h2>Timings <small><span id="step"></span> · scroll or drag to zoom for more detail</small></h2>
         <span class="keys" id="keys"></span>
+        <span class="ranges" id="scale" title="Linear shows peaks as they are; log suits routes spanning ms to minutes">
+          <button type="button" data-scale="linear">linear</button><button type="button" data-scale="log">log</button>
+        </span>
       </div>
       <div class="chart big" id="c-route" style="height: 380px"></div>
     </div>
@@ -50,6 +53,28 @@
   // to a route come in bursts, so many minutes have none and no timing: the lines
   // bridge those, and a dot marks every real measurement, sized by how many
   // requests it stands for (a lone request is a small dot, a busy minute a big one).
+  // Linear by default: one route usually spans a decade or two, and a 47 ms → 5 s
+  // peak should look like one. Fitted to p95 so a lone outlier can't flatten the
+  // rest (max dots above it are clipped; their values stay in the tooltip).
+  let scale = 'linear';
+  try { scale = localStorage.getItem('healthRouteScale') || scale; } catch (e) {}
+  const markScale = () => document.querySelectorAll('#scale button')
+    .forEach((b) => b.classList.toggle('on', b.dataset.scale === scale));
+  markScale();
+  let lastData = null;
+  $('scale').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    scale = b.dataset.scale;
+    try { localStorage.setItem('healthRouteScale', scale); } catch (err) {}
+    markScale();
+    if (lastData) render(lastData);
+  });
+  function niceCeil(v) {
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    return [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map((m) => m * p).find((x) => x >= v);
+  }
+
   function routeOption(d, win) {
     const {alpha, deployMarks, tickLabel} = HC.parts;
     const x = HC.parts.pointAt(d);
@@ -69,7 +94,10 @@
       grid: [{left: 58, right: 18, top: 22, bottom: '34%'}, {left: 58, right: 18, height: '14%', bottom: 46}],
       xAxis: [xAxis(0, false), xAxis(1, true)],
       yAxis: [
-        yAxis(true, {gridIndex: 0, type: 'log', min: 1, axisLabel: ms}),
+        scale === 'log'
+          ? yAxis(true, {gridIndex: 0, type: 'log', min: HC.parts.logFloor, axisLabel: ms})
+          : yAxis(true, {gridIndex: 0, min: 0, axisLabel: ms,
+                         max: niceCeil(Math.max(1, ...P.map((p) => p.p95 || 0), ...P.map((p) => p.avg || 0)) * 1.1)}),
         yAxis(true, {gridIndex: 1, splitNumber: 1, minInterval: 1, axisLabel: {color: C('--muted'), fontSize: 10}}),
       ],
       axisPointer: {link: [{xAxisIndex: 'all'}]},
@@ -102,6 +130,7 @@
   }
 
   function render(d) {
+    lastData = d;
     const P = d.points;
     const spans = [...new Set(P.filter((p) => p.n).map((p) => p.s || d.step_s))].sort((a, b) => a - b);
     $('step').textContent = spans.length > 1
