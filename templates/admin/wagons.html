@@ -397,9 +397,9 @@
 </div>
 
 
-<script defer src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script defer src="{{ static_autoversion('js/wagon_img.js') }}"></script>
 <script defer>
-const WAGONS_URL = '{{ url_for("static", filename="images/wagons") }}';
+const WAGONS_URL = '{{ static_autoversion("images/wagons") }}';
 const API        = '/api/admin/wagons';
 
 function imgSrc(image, itype, ext) {

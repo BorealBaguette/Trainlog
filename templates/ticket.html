@@ -82,7 +82,7 @@
 
 {% macro operator_pill(name, count=none) %}
     <span class="ticket-operator badge bg-light text-dark border fw-normal gap-1" title="{{ name }}">
-        {% if logos.get(name) %}<img src="{{ url_for('static', filename=logos[name]) }}" alt="{{ name }}">{% else %}{{ name }}{% endif %}
+        {% if logos.get(name) %}<img src="{{ static_autoversion(logos[name]) }}" alt="{{ name }}">{% else %}{{ name }}{% endif %}
         {% if count %}<span class="text-muted">×{{ count }}</span>{% endif %}
     </span>
 {% endmacro %}
@@ -107,7 +107,7 @@
         {% set logo = latest.logo %}
         <div class="ticket-logo">
             {% if logo %}
-                <img src="{{ url_for('static', filename=logo) }}" alt="">
+                <img src="{{ static_autoversion(logo) }}" alt="">
             {% else %}
                 <i class="bi bi-ticket-perforated fs-1 text-muted"></i>
             {% endif %}
@@ -208,7 +208,7 @@
                     <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.valid_on or ticket.purchasing_date }}">
                         {% if group.mixed_names or mixed_logos or (mixed_countries and ticket.active_countries) %}
                             <div class="d-flex flex-wrap align-items-center gap-2 fw-medium text-wrap">
-                                {% if mixed_logos and ticket.logo %}<img src="{{ url_for('static', filename=ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
+                                {% if mixed_logos and ticket.logo %}<img src="{{ static_autoversion(ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
                                 {% if group.mixed_names %}{{ ticket.name }}{% endif %}
                                 {% if mixed_countries and ticket.active_countries %}
                                     <span class="fw-normal">{{ flags(ticket.active_countries) }}</span>

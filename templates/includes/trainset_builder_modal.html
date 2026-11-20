@@ -22,7 +22,7 @@
   [data-bs-theme="dark"] .tsb-ref-chip { background: #2c3a55; }
   [data-bs-theme="dark"] #tsb-ref-badge { color: #8fb0f5 !important; }
 </style>
-<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script src="{{ static_autoversion('js/wagon_img.js') }}"></script>
 
 <div class="modal fade" id="tsbModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -76,7 +76,7 @@
   var _units        = [];
   var _uid          = 0;
   var _timer        = null;
-  var WAGONS        = '{{ url_for("static", filename="images/wagons") }}';
+  var WAGONS        = '{{ static_autoversion("images/wagons") }}';
   var _i18n         = {
     noResults:       '{{tsbNoResults}}',
     flip:            '{{tsFlipSide}}',

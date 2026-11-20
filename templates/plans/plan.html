@@ -126,7 +126,7 @@
         <ul class="dropdown-menu" style="max-height:60vh; overflow:auto;">
           {% for vt in vtypes %}
           <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('new', username=username, vehicle_type=vt) }}?plan={{ plan.uuid }}">
-            <img src="{{ url_for('static', filename='images/icons/trip_logos/' + vt + '.png') }}" onerror="this.style.display='none'" style="height:18px;">{{ type_labels.get(vt, vt) }}</a></li>
+            <img src="{{ static_autoversion('images/icons/trip_logos/' + vt + '.png') }}" onerror="this.style.display='none'" style="height:18px;">{{ type_labels.get(vt, vt) }}</a></li>
           {% endfor %}
         </ul>
       </div>
@@ -263,7 +263,7 @@
       <tbody>
         {% for r in plan_stats.per_type %}
         <tr>
-          <td><img src="{{ url_for('static', filename='images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ type_labels.get(r.type, r.type) }}</td>
+          <td><img src="{{ static_autoversion('images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ type_labels.get(r.type, r.type) }}</td>
           <td class="text-end"><span class="fmt-num" data-n="{{ r.count }}">{{ r.count }}</span></td>
           <td class="text-end"><span class="fmt-dur" data-s="{{ r.duration }}">{{ r.duration_h }}</span></td>
           <td class="text-end">{% if r.distance_km %}<span class="fmt-num" data-n="{{ r.distance_km }}">{{ r.distance_km }}</span> km{% endif %}</td>
@@ -362,7 +362,7 @@
         {% endif %}
       </div>
       {% endif %}
-      <div class="leg-icon"><img src="{{ url_for('static', filename='images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
+      <div class="leg-icon"><img src="{{ static_autoversion('images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
         <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}{% if t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}{% if t.validated_trip_id %}{% if plan_editable %}<a class="logged-pill" href="{{ url_for('public_trip', tripIds=t.validated_trip_id) }}" target="_blank" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</a>{% else %}<span class="logged-pill" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</span>{% endif %}{% endif %}</div>
         {% if item.impossible %}

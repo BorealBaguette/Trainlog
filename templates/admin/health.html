@@ -1,0 +1,241 @@
+{% extends "admin/_health_base.html" %}
+{% block header %}
+    <span class="pill" id="servedBy">…</span>
+    <span class="meta" id="updated"></span>
+{% endblock %}
+{% block content %}
+  <div id="notice"></div>
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Workers <small id="workersNote"></small></h2>
+    <div class="scroll"><table id="workers" class="fit"></table></div>
+  </div>
+
+  <div class="grid">
+    {%- for name in ['workers', 'latency', 'traffic', 'host'] %}
+    <div class="card chartcard">
+      <div class="cardhead">
+        <h2 id="t-{{ name }}"></h2>
+        <span class="keys" id="k-{{ name }}"></span>
+        <a class="expand" href="{{ url_for('health.health_charts') }}#{{ name }}" title="Larger, with zoom and details">⤢</a>
+      </div>
+      <div class="chart" id="c-{{ name }}"></div>
+    </div>
+    {%- endfor %}
+  </div>
+
+  <div class="card">
+    <div class="cardhead">
+      <h2>Routes <small id="routesNote"></small></h2>
+      <select id="compare" aria-label="Compare with"></select>
+    </div>
+    <div class="scroll"><table id="routes" class="fit"></table></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Recent slow requests <small>≥ 1 s, last hour</small></h2>
+      <div class="scroll"><table id="slow" class="fit"></table></div>
+    </div>
+    <div class="card">
+      <h2>Postgres <small id="pgNote"></small></h2>
+      <div class="scroll"><table id="pg" class="fit"></table></div>
+    </div>
+  </div>
+{% endblock %}
+{% block script %}
+<script>
+(function () {
+  const BASE = location.pathname.replace(/\/+$/, '');
+  const LIVE_MS = 5000, HISTORY_MS = 60000;
+  const {$, esc, fmtMs, fmtDur} = HC;
+  const ago = (t) => fmtDur(Date.now() / 1000 - t) + ' ago';
+  const n = (v, d = '–') => v == null ? d : v;
+  const openStacks = new Set();
+  const CHARTS = ['workers', 'latency', 'traffic', 'host'];
+
+  function tile(k, v, s, level) {
+    return `<div class="tile ${level || ''}"><div class="k">${esc(k)}</div>` +
+           `<div class="v">${esc(v)}</div><div class="s">${esc(s || '')}</div></div>`;
+  }
+
+  function renderLive(d) {
+    $('servedBy').textContent = d.served_by === 'sidecar' ? 'served by health sidecar' : 'served by a site worker';
+    $('updated').textContent = 'updated ' + new Date(d.now * 1000).toLocaleTimeString();
+    $('notice').innerHTML = d.recording ? '' :
+      '<div class="card err">Recording is off: TRAINLOG_STATUS_DIR is not set for the site\'s gunicorn, so there are no worker numbers. Host and Postgres still show.</div>';
+
+    const t = d.totals, r = d.recent, h = d.host || {}, p = d.pg || {};
+    const free = t.capacity - t.busy;
+    const tiles = [
+      tile('Free slots', t.capacity ? `${free} / ${t.capacity}` : '–',
+           `${t.workers} workers` + (t.stale ? `, ${t.stale} unresponsive` : ''),
+           !t.capacity ? '' : free === 0 ? 'bad' : free <= t.capacity / 4 ? 'warn' : ''),
+      tile('Oldest request', t.busy ? fmtDur(t.oldest_s) : '–', t.busy ? `${t.busy} in flight` : 'none in flight',
+           t.oldest_s >= 30 ? 'bad' : t.oldest_s >= 5 ? 'warn' : ''),
+      tile(`Busy, last ${r.minutes} min`, r.util_pct == null ? '–' : r.util_pct + ' %', 'of worker time',
+           r.util_pct >= 80 ? 'bad' : r.util_pct >= 50 ? 'warn' : ''),
+      tile('Requests / min', n(r.req_per_min), `last ${r.minutes} min`),
+      tile('p50 / p95', `${fmtMs(r.p50)} / ${fmtMs(r.p95)}`, 'max ' + fmtMs(r.max),
+           r.p95 >= 5000 ? 'bad' : r.p95 >= 1500 ? 'warn' : ''),
+      tile('5xx', n(r.err, 0), `last ${r.minutes} min`, r.err ? 'warn' : ''),
+      tile('CPU', h.cpu_pct == null ? '…' : h.cpu_pct + ' %',
+           (h.load ? 'load ' + h.load.join(' ') : '') + (h.cpus ? ` · ${h.cpus} cores` : ''),
+           h.cpu_pct >= 90 ? 'bad' : h.cpu_pct >= 70 ? 'warn' : ''),
+      tile('Memory', h.mem_used_pct == null ? '–' : h.mem_used_pct + ' %',
+           (h.mem_total_gb ? `of ${h.mem_total_gb} GB` : '') + (h.swap_used_pct ? ` · swap ${h.swap_used_pct} %` : ''),
+           h.mem_used_pct >= 92 ? 'bad' : h.mem_used_pct >= 80 ? 'warn' : ''),
+      tile('Disk', h.disk_used_pct == null ? '–' : h.disk_used_pct + ' %', h.disk_free_gb != null ? `${h.disk_free_gb} GB free` : '',
+           h.disk_used_pct >= 95 ? 'bad' : h.disk_used_pct >= 85 ? 'warn' : ''),
+      p.ok
+        ? tile('Postgres', fmtMs(p.latency_ms), `${p.active} active · ${p.waiting} waiting · ${p.connections}/${p.max_connections}`,
+               p.waiting || p.latency_ms >= 1000 ? 'bad' : p.latency_ms >= 200 ? 'warn' : '')
+        : tile('Postgres', p.error === 'not configured' ? '–' : 'down', p.error || '', p.error === 'not configured' ? '' : 'bad'),
+    ];
+    $('tiles').innerHTML = tiles.join('');
+
+    // Workers
+    $('workersNote').textContent = t.busy ? `${t.busy} busy` : 'all idle';
+    const rows = d.workers.map((w) => {
+      const reqs = w.requests.map((q) => {
+        const key = w.pid + ' ' + q.method + ' ' + q.path;
+        const stack = q.stack ? `<details data-key="${esc(key)}"${openStacks.has(key) ? ' open' : ''}>` +
+          `<summary>stack</summary><pre>${esc(q.stack.join('\n'))}</pre></details>` : '';
+        return `<div><span class="${q.for_s >= 30 ? 'long' : ''}">${fmtDur(q.for_s)}</span> ` +
+               `${esc(q.method)} ${esc(q.path)}${stack}</div>`;
+      }).join('');
+      const state = w.state === 'stale' ? `unresponsive ${fmtDur(w.heartbeat_s)}` : w.state;
+      return `<tr><td><span class="dot ${w.state}"></span>${esc(state)}</td><td class="num">${w.pid}</td>` +
+             `<td class="path grow">${reqs || '<span class="empty">–</span>'}</td>` +
+             `<td class="num">${n(w.cpu_pct)}${w.cpu_pct == null ? '' : ' %'}</td><td class="num">${n(w.rss_mb)}${w.rss_mb == null ? '' : ' MB'}</td>` +
+             `<td class="num">${w.served}</td><td class="num">${fmtDur(w.uptime_s)}</td></tr>`;
+    });
+    $('workers').innerHTML = '<tr><th>State</th><th class="num">PID</th><th class="grow">In flight</th><th class="num">CPU</th>' +
+      '<th class="num">RSS</th><th class="num">Served</th><th class="num">Up</th></tr>' +
+      (rows.join('') || '<tr><td colspan="7" class="empty grow">No worker is reporting.</td></tr>');
+
+    // Slow
+    const none = (text) => `<tr><td class="empty grow">${text}</td></tr>`;
+    $('slow').innerHTML = d.slow.length
+      ? '<tr><th>When</th><th class="grow">Request</th><th class="num">Status</th><th class="num">Time</th></tr>' +
+        d.slow.map((s) => `<tr><td>${ago(s.t)}</td><td class="path grow">${esc(s.method)} ${esc(s.path)}</td>` +
+          `<td class="num">${n(s.status)}</td><td class="num">${fmtMs(s.ms)}</td></tr>`).join('')
+      : none('None in the last hour.');
+
+    // Postgres
+    if (!p.ok) {
+      $('pgNote').textContent = '';
+      $('pg').innerHTML = `<tr><td class="grow ${p.error === 'not configured' ? 'empty' : 'err'}">${esc(p.error || 'unavailable')}</td></tr>`;
+    } else {
+      $('pgNote').textContent = `${p.idle_in_tx} idle in transaction`;
+      $('pg').innerHTML = p.queries.length
+        ? '<tr><th class="num">For</th><th>State</th><th class="grow">Query</th></tr>' +
+          p.queries.map((q) => `<tr><td class="num ${q.age_s >= 30 ? 'long' : ''}">${fmtDur(q.age_s)}</td>` +
+            `<td>${esc(q.state)}${q.wait ? '<br><span class="err">' + esc(q.wait) + '</span>' : ''}</td>` +
+            `<td class="path grow">${esc(q.query)}</td></tr>`).join('')
+        : none('No statement running.');
+    }
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const k = e.target.dataset && e.target.dataset.key;
+    if (!k) return;
+    if (e.target.open) openStacks.add(k); else openStacks.delete(k);
+  }, true);
+
+  // Charts: the small versions; the expand link opens the large ones.
+  CHARTS.forEach((name) => {
+    $('t-' + name).textContent = HC.SPECS[name].title;
+    $('k-' + name).innerHTML = HC.keysHTML(HC.SPECS[name], false);
+  });
+  function renderHistory(h) {
+    CHARTS.forEach((name) => HC.draw('c-' + name, name, h, false));
+  }
+
+  // Routes
+  let compare = 'prev';
+  try { compare = localStorage.getItem('healthCompare') || compare; } catch (e) {}
+  const RANGE_WORDS = {'1h': 'hour', '6h': '6 hours', '24h': '24 hours', '7d': '7 days', '30d': '30 days'};
+  const fmtDate = (t) => new Date(t * 1000).toLocaleString([], {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+
+  function delta(cur, base, lowerIsBetter) {
+    if (cur == null || !base) return '';
+    const pct = Math.round((cur - base) / base * 100);
+    if (Math.abs(pct) < 5) return '';
+    const cls = lowerIsBetter == null ? '' : (pct > 0) === lowerIsBetter ? 'worse' : 'better';
+    return `<span class="delta ${cls}">${pct > 0 ? '+' : ''}${pct}%</span>`;
+  }
+
+  function renderRoutes(d) {
+    // Comparison choices: previous period, none, or either side of a recent deploy.
+    const sel = $('compare');
+    const opts = [['prev', `vs previous ${RANGE_WORDS[d.range] || d.range}`], ['none', 'no comparison']]
+      .concat(d.deploys.map((x) => [x.c, (x.prev ? 'before / after ' : 'first recorded: ') +
+        `${x.tag || x.short}, ${fmtDate(x.t)}` + (x.subject ? ` — ${x.subject}` : '')]));
+    if (!opts.some((o) => o[0] === compare)) compare = 'prev';
+    sel.innerHTML = opts.map((o) => `<option value="${esc(o[0])}"${o[0] === compare ? ' selected' : ''}>${esc(o[1])}</option>`).join('');
+
+    const c = d.compare;
+    let note = `${d.total.n} requests, ${d.total.routes} routes`;
+    if (c && c.kind === 'deploy') note += c.no_base
+      ? ` · ${c.deploy.tag || c.deploy.short} is the first commit recorded: nothing before it to compare`
+      : ` · ${c.deploy.tag || c.deploy.short} vs the commit before, ${fmtDur(c.length_s)} each`;
+    $('routesNote').textContent = note;
+
+    const none = (text) => `<tr><td class="empty grow">${text}</td></tr>`;
+    if (!d.rows.length) { $('routes').innerHTML = none('No requests recorded in this range yet.'); return; }
+    const maxShare = Math.max(...d.rows.map((r) => r.cur.share || 0), 1);
+    $('routes').innerHTML = '<tr><th class="grow">Route</th><th class="num">Requests</th><th>Worker time</th>' +
+      '<th class="num">Avg</th><th class="num">p95</th><th class="num">Max</th><th class="num">≥ 1 s</th></tr>' +
+      d.rows.map((r) => {
+        const a = r.cur, b = r.base || {};
+        const href = BASE + '/route?r=' + encodeURIComponent(r.method + ' ' + r.route);
+        return `<tr><td class="path grow"><a class="routelink" href="${esc(href)}" title="This route over time, per commit">` +
+          `<span class="meth">${esc(r.method)}</span>${esc(r.route)}</a></td>` +
+          `<td class="num">${a.n}${delta(a.n, b.n, null)}</td>` +
+          `<td><span class="share"><i style="width:${Math.round(100 * (a.share || 0) / maxShare)}%"></i></span>${n(a.share)} %</td>` +
+          `<td class="num">${fmtMs(a.avg)}${delta(a.avg, b.avg, true)}</td>` +
+          `<td class="num">${fmtMs(a.p95)}${delta(a.p95, b.p95, true)}</td>` +
+          `<td class="num">${fmtMs(a.max)}</td><td class="num${a.slow ? ' long' : ''}">${a.slow || ''}</td></tr>`;
+      }).join('');
+  }
+
+  $('compare').addEventListener('change', (e) => {
+    compare = e.target.value;
+    try { localStorage.setItem('healthCompare', compare); } catch (err) {}
+    pollRoutes();
+  });
+
+  async function pollRoutes() {
+    try {
+      renderRoutes(await HC.getJSON(BASE + '/routes?range=' + encodeURIComponent(HC.range) + '&compare=' + encodeURIComponent(compare)));
+    } catch (e) { fail(e); }
+  }
+
+  function fail(e) {
+    $('updated').innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+  }
+
+  let liveTimer, histTimer;
+  async function pollLive() {
+    clearTimeout(liveTimer);
+    try { renderLive(await HC.getJSON(BASE + '/live')); } catch (e) { fail(e); }
+    if (!document.hidden) liveTimer = setTimeout(pollLive, LIVE_MS);
+  }
+  async function pollHistory() {
+    clearTimeout(histTimer);
+    try { renderHistory(await HC.getJSON(BASE + '/history?range=' + encodeURIComponent(HC.range))); } catch (e) { fail(e); }
+    pollRoutes();
+    if (!document.hidden) histTimer = setTimeout(pollHistory, HISTORY_MS);
+  }
+
+  HC.initRanges(() => pollHistory());
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { pollLive(); pollHistory(); }
+  });
+  pollLive();
+  pollHistory();
+})();
+</script>
+{% endblock %}

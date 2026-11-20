@@ -38,7 +38,7 @@ from werkzeug.exceptions import HTTPException
 
 from src.api import mcp_form as form
 from src.api import mcp_wagons
-from src.api.motis import TRANSIT_MODES, departures_payload
+from src.api.motis import TRANSIT_MODES, _tz, departures_payload
 from src.consts import TripTypes
 from src.currency import get_available_currencies
 from src.pg import pg_session
@@ -865,7 +865,7 @@ def _stops_out(waypoints_json):
         if wp.get("hard"):
             item["exact"] = True
         if stop:
-            tz = ZoneInfo(stop["tz"]) if stop.get("tz") else ZoneInfo("UTC")
+            tz = ZoneInfo(stop["tz"]) if stop.get("tz") else _tz(stop["lat"], stop["lng"])
 
             def local(value):
                 try:

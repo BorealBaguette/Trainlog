@@ -229,10 +229,10 @@
   </div>
 </div>
 
-<script defer src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script defer src="{{ static_autoversion('js/wagon_img.js') }}"></script>
 <script defer>
 const API        = '/api/admin/vagonweb';
-const WAGONS_URL = '{{ url_for("static", filename="images/wagons") }}';
+const WAGONS_URL = '{{ static_autoversion("images/wagons") }}';
 
 /* Licence field: ticking the box greys the text input and submits the
    TRAINLOG_LICENSE sentinel, which every display surface renders as the

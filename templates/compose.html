@@ -1,10 +1,10 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
+<link rel="stylesheet" href="{{ static_autoversion('styles/waypoint_popup.css') }}">
 {% include "bootstrap/leafletLayout.html" %}
 
 {% if vehicle_type == 'ferry' %}
-<script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
+<script src="{{ static_autoversion('js/vessel_field.js') }}"></script>
 {% endif %}
 <script src="{{ static_autoversion(filename='js/stop_slots.js') }}"></script>
 
@@ -656,7 +656,7 @@
       <div class="dropdown">
         <div class="cp-icon" id="typeSwitchIcon" data-bs-toggle="dropdown" aria-expanded="false"
              role="button" title="{{ changeTripType|default('Change trip type') }}" style="cursor:pointer;">
-          <img src="{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}" onerror="this.style.display='none'">
+          <img src="{{ static_autoversion('images/icons/trip_logos/' + vehicle_type + '.png') }}" onerror="this.style.display='none'">
         </div>
         <ul class="dropdown-menu" id="typeSwitchMenu" aria-labelledby="typeSwitchIcon" style="max-height:60vh;overflow:auto;">
           {% set ns = namespace(group=none) %}
@@ -668,7 +668,7 @@
           <li>
             <a class="dropdown-item d-flex align-items-center gap-2 {% if t == vehicle_type %}active{% endif %}"
                href="{{ url_for('compose', username=username, vehicle_type=t) }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
-              <img src="{{ url_for('static', filename='images/icons/trip_logos/' + t + '.png') }}" width="20" height="20" onerror="this.style.display='none'">
+              <img src="{{ static_autoversion('images/icons/trip_logos/' + t + '.png') }}" width="20" height="20" onerror="this.style.display='none'">
               <span>{{ data.label }}</span>
             </a>
           </li>
@@ -680,7 +680,7 @@
       <span data-bs-toggle="modal" data-bs-target="#fr24Modal"
         class="btn btn-sm ms-auto {% if fr24_calls == 'premium' %}btn-primary{% elif fr24_calls is number and fr24_calls >= 5 %}btn-secondary disabled{% else %}btn-primary{% endif %}"
         {% if fr24_calls is number and fr24_calls >= 5 %}aria-disabled="true" title="{{ fr24LimitInfo|default('') }}"{% endif %}>
-        <img src="{{ url_for('static', filename='images/icons/fr24.png') }}" style="height:1.2em;" alt="FR24">
+        <img src="{{ static_autoversion('images/icons/fr24.png') }}" style="height:1.2em;" alt="FR24">
         FR24{% if fr24_calls != 'premium' %} <small>({{ fr24_calls }}/5)</small>{% endif %}
       </span>
       {% endif %}
@@ -1148,8 +1148,8 @@
 {% if not plan_uuid %}{% include "ticket_picker.html" %}{% endif %}
 
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
-<script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
-<script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
+<script src="{{ static_autoversion('js/lib/leaflet.geometryutil.js') }}"></script>
+<script src="{{ static_autoversion('js/freehand.js') }}"></script>
 <script>
 var vehicle_type = "{{ vehicle_type }}";
 // What the trip is saved as: "bus" while a rail replacement bus is picked (setReplacementBus).
@@ -2489,7 +2489,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
 (function initMotisDepartures() {
   var url = "{{ url_for('motis.motis_departures', username=username) }}";
   var logosBase = "{{ url_for('static', filename='') }}";
-  var typeIcon = "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}";
+  var typeIcon = "{{ static_autoversion('images/icons/trip_logos/' + vehicle_type + '.png') }}";
   var tripLogos = "{{ url_for('static', filename='images/icons/trip_logos/') }}";
   var typeNames = { train: {{ (train|default('Train'))|tojson }}, metro: {{ (metro|default('Metro'))|tojson }}, tram: {{ (tram|default('Tram'))|tojson }},
                     funicular: {{ (funicular|default('Funicular'))|tojson }} };

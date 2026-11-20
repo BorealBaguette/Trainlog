@@ -1,0 +1,86 @@
+{% extends "admin/_health_base.html" %}
+{#- The dashboard's charts, large: every series, deploy labels, finer points, and
+    zoom (wheel / drag / slider) shared by all four, as is the crosshair. -#}
+{% block title %}Trainlog health · charts{% endblock %}
+{% block header %}
+    <span class="meta" id="updated"></span>
+    <span class="meta">scroll or drag to zoom · double-click to reset</span>
+{% endblock %}
+{% block nav %}<a href="{{ url_for('health.health_page') }}" class="meta">← Dashboard</a>{% endblock %}
+{% block content %}
+  <div class="stack">
+    {%- for name in ['workers', 'latency', 'traffic', 'host'] %}
+    <div class="card" id="{{ name }}">
+      <div class="cardhead">
+        <h2><span id="t-{{ name }}"></span> <small id="s-{{ name }}"></small></h2>
+        <span class="keys" id="k-{{ name }}"></span>
+      </div>
+      <div class="chart big" id="c-{{ name }}"></div>
+    </div>
+    {%- endfor %}
+    <div class="card" id="deploys">
+      <h2>Deploys <small>in this range, newest first</small></h2>
+      <div class="scroll"><table id="deployList" class="fit"></table></div>
+    </div>
+  </div>
+{% endblock %}
+{% block script %}
+<script>
+(function () {
+  const BASE = location.pathname.replace(/\/charts\/?$/, '');
+  const HISTORY_MS = 60000, POINTS = 1500;
+  const {$, esc} = HC;
+  const CHARTS = ['workers', 'latency', 'traffic', 'host'];
+
+  CHARTS.forEach((name) => {
+    const spec = HC.SPECS[name];
+    $('t-' + name).textContent = spec.title;
+    $('s-' + name).textContent = spec.sub;
+    $('k-' + name).innerHTML = HC.keysHTML(spec, true);
+  });
+
+  let connected = false;
+  function render(h) {
+    CHARTS.forEach((name) => {
+      const c = HC.draw('c-' + name, name, h, true, true);
+      if (!connected) {
+        c.group = 'health';
+        c.getZr().on('dblclick', () => c.dispatchAction({type: 'dataZoom', start: 0, end: 100}));
+      }
+    });
+    if (!connected) { echarts.connect('health'); connected = true; }
+
+    const rows = (h.deploys || []).slice().reverse().map((d) =>
+      `<tr><td>${HC.fmtDate(d.t)}</td><td class="path">${esc(d.tag || d.short)}</td>` +
+      `<td class="grow">${esc(d.subject || '')}</td></tr>`);
+    $('deployList').innerHTML = rows.length
+      ? '<tr><th>When</th><th>Commit</th><th class="grow">Message</th></tr>' + rows.join('')
+      : '<tr><td class="empty grow">No deploy in this range.</td></tr>';
+    $('updated').textContent = 'updated ' + new Date().toLocaleTimeString();
+  }
+
+  // Zoomed in, the visible window is fetched again at full detail (per minute).
+  const detail = HC.zoomDetail('c-workers', (from, to) =>
+    HC.getJSON(BASE + `/history?from=${from}&to=${to}&points=${POINTS}`), render);
+
+  let timer;
+  async function poll() {
+    clearTimeout(timer);
+    try {
+      detail.setOverview(await HC.getJSON(BASE + '/history?range=' + encodeURIComponent(HC.range) + '&points=' + POINTS));
+    } catch (e) {
+      $('updated').innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+    }
+    if (!document.hidden) timer = setTimeout(poll, HISTORY_MS);
+  }
+
+  HC.initRanges(() => {
+    // A new range starts unzoomed.
+    CHARTS.forEach((name) => { const c = echarts.getInstanceByDom($('c-' + name)); if (c) c.clear(); });
+    poll();
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+  poll();
+})();
+</script>
+{% endblock %}

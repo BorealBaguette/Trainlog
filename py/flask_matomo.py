@@ -1,7 +1,10 @@
 import json
 import logging
+import os
+import queue
 import random
 import re
+import threading
 import time
 import typing
 
@@ -10,6 +13,17 @@ import httpx
 from flask import g, request
 
 logger = logging.getLogger("flask_matomo2")
+
+# Tracking hits are sent from a background thread, never from the request: the
+# hit used to be POSTed synchronously in teardown_request, which runs before
+# gunicorn writes the response, so whenever the Matomo host was slow or down
+# every page waited up to httpx's 5 s default on it (Nov 2026: 6 600 failed
+# hits in 3 h made the whole site crawl with the CPU idle).
+_SEND_TIMEOUT = httpx.Timeout(3.0, connect=2.0)
+# After a failure, drop hits for this long instead of trying each one.
+_BACKOFF_S = 60
+# Hits waiting to be sent, per worker; beyond this they are dropped.
+_QUEUE_MAX = 1000
 
 class Matomo:
     """The Matomo object provides the central interface for interacting with Matomo.
@@ -91,7 +105,15 @@ class Matomo:
         self.routes_details: typing.Dict[str, typing.Dict[str, str]] = (
             routes_details or {}
         )
-        self.client = client or httpx.Client()
+        # The client and the sender thread are made lazily per process (see
+        # _sender_queue): with gunicorn --preload this runs in the master, and
+        # neither a thread nor an httpx connection pool survives the fork.
+        self._client_override = client
+        self.client = None
+        self._sender_pid = None
+        self._sender_lock = threading.Lock()
+        self._queue = None
+        self._down_until = 0.0
         self.ignored_patterns = []
         if ignored_patterns:
             self.ignored_patterns = [
@@ -227,20 +249,56 @@ class Matomo:
         if "cvar" in tracking_data:
             cvar = tracking_data.pop("cvar")
             tracking_data["cvar"] = json.dumps(cvar)
-        logger.debug("calling '%s' with '%s'", self.matomo_url, tracking_data)
+        if time.monotonic() < self._down_until:
+            return  # Matomo failed recently: drop rather than queue up
+        logger.debug("queueing '%s' with '%s'", self.matomo_url, tracking_data)
         try:
-            r = self.client.post(self.matomo_url, data=tracking_data)
+            self._sender_queue().put_nowait(tracking_data)
+        except queue.Full:
+            pass  # sender is behind (Matomo slow): drop the hit
 
-            if r.status_code >= 300:
-                logger.error(
-                    "Tracking call failed (status_code=%d)",
-                    r.status_code,
-                    extra={"status_code": r.status_code, "text": r.text},
+    def _sender_queue(self) -> "queue.Queue":
+        """This process's hit queue, starting its sender thread on first use
+        (and again in a forked worker, whose copy of the parent's thread is
+        not running)."""
+        pid = os.getpid()
+        if self._sender_pid != pid:
+            with self._sender_lock:
+                if self._sender_pid != pid:
+                    self.client = self._client_override or httpx.Client(
+                        timeout=_SEND_TIMEOUT
+                    )
+                    self._queue = queue.Queue(maxsize=_QUEUE_MAX)
+                    threading.Thread(
+                        target=self._send_loop,
+                        args=(self._queue, self.client),
+                        name="matomo-sender",
+                        daemon=True,
+                    ).start()
+                    self._sender_pid = pid
+        return self._queue
+
+    def _send_loop(self, q: "queue.Queue", client: httpx.Client) -> None:
+        while True:
+            tracking_data = q.get()
+            if time.monotonic() < self._down_until:
+                continue
+            try:
+                r = client.post(self.matomo_url, data=tracking_data)
+                if r.status_code >= 300:
+                    logger.error(
+                        "Tracking call failed (status_code=%d)", r.status_code
+                    )
+            except httpx.HTTPError as exc:
+                self._down_until = time.monotonic() + _BACKOFF_S
+                logger.warning(
+                    "Matomo unreachable (%s: %s); dropping hits for %d s",
+                    type(exc).__name__,
+                    exc,
+                    _BACKOFF_S,
                 )
-                # raise MatomoError(r.text)
-        except httpx.HTTPError as exc:
-            logger.exception("Tracking call failed:", extra={"exc": exc})
-            logger.exception(exc)
+            except Exception:
+                logger.exception("Tracking call failed")
 
     def ignore(self, route: typing.Optional[str] = None):
         """Ignore a route and don't track it.
