@@ -181,9 +181,9 @@
 </style>
 
 {# ── JavaScript ───────────────────────────────────────────────────────────── #}
-<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script src="{{ static_autoversion('js/wagon_img.js') }}"></script>
 <script>
-var _wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
+var _wagonsBase = '{{ static_autoversion("images/wagons") }}';
 
 /* Drawings licensed directly to Trainlog carry a sentinel instead of a public
    licence name (see window.TRAINLOG_LICENSE in wagon_img.js) — show the

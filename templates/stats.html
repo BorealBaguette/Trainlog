@@ -4,8 +4,8 @@
 {% include nav%}
 
 <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
-<script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
-<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script src="{{ static_autoversion('js/vehicle_display.js') }}"></script>
+<script src="{{ static_autoversion('js/wagon_img.js') }}"></script>
 
 <!-- Loading screen -->
 <div id="loadingScreen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background: light-dark(rgba(255, 255, 255, 0.8), rgba(13, 27, 42, 0.8)); z-index: 9999; display: flex; justify-content: center; align-items: center;">
@@ -418,7 +418,7 @@
     var WAGON_ASPECT = 218 / 41;      // measured median of the wagon artwork
     var PLACEHOLDER_ASPECT = 176 / 44;  // the outline SVGs' own viewBox
 
-    var WAGON_BASE = "{{ url_for('static', filename='images/wagons') }}";
+    var WAGON_BASE = "{{ static_autoversion('images/wagons') }}";
 
     // The lead vehicle stands in for the consist on the axis until the front
     // of the train has been drawn (buildAxisStrip), and decides whether the row
@@ -573,7 +573,7 @@
     // Aircraft registration prefix -> country, from the shared table the trip
     // pages already use. Loaded once before the first render, then a sync
     // lookup. Ferries don't need it: their ensign comes from the vessel record.
-    var REGISTRATIONS_URL = "{{ url_for('static', filename='data/registrations.json') }}";
+    var REGISTRATIONS_URL = "{{ static_autoversion('data/registrations.json') }}";
     var registrations = {};
 
     // Does this row describe an aircraft? Per trip type that is just the type;

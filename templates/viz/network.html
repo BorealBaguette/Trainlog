@@ -582,7 +582,7 @@ window.addEventListener('resize', () => { applyForces(); sim.alpha(0.3).restart(
 // below), and a network crossing borders reads by country. Airport bubbles hold their code.
 // The site's flag SVGs have a viewBox but no size, which Firefox won't draw as an image; stamp
 // the size on, and keep each as a data URI so an exported SVG or PNG carries it too.
-const FLAG_DIR = "{{ url_for('static', filename='images/flags') }}";
+const FLAG_DIR = "{{ static_autoversion('images/flags') }}";
 // A flag fades in as its bubble grows on screen (radius × zoom), from nothing at FLAG_FADE[0] px
 // to full at FLAG_FADE[1]: too small to read, it would only be a speck of colour, but zooming
 // into a cluster brings them up rather than leaving its small bubbles bare.

@@ -36,10 +36,10 @@
 			}
 		</script>
 		<link href="https://fonts.googleapis.com/css2?display=swap&family=Inter:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700" rel="stylesheet" type="text/css" />
-		<link rel="shortcut icon" href="/static/favicon/favicon.ico" type="image/x-icon">
-		<link rel="stylesheet" href="/static/landingassets/main.css" />
-		<link rel="stylesheet" href="/static/landingassets/landing_extra.css" />
-		<noscript><link rel="stylesheet" href="/static/landingassets/noscript.css" /></noscript>
+		<link rel="shortcut icon" href="{{ static_autoversion('favicon/favicon.ico') }}" type="image/x-icon">
+		<link rel="stylesheet" href="{{ static_autoversion('landingassets/main.css') }}" />
+		<link rel="stylesheet" href="{{ static_autoversion('landingassets/landing_extra.css') }}" />
+		<noscript><link rel="stylesheet" href="{{ static_autoversion('landingassets/noscript.css') }}" /></noscript>
 	</head>
 	<body class="is-loading">
 		<div id="wrapper">
@@ -48,7 +48,7 @@
 					<div id="container06" class="style1 container default">
 						<div class="wrapper">
 							<div class="inner">
-								<img class="landing-logo" src="{{ url_for('static', filename='images/logo_square.png') }}" alt="" width="112" height="112" />
+								<img class="landing-logo" src="{{ static_autoversion('images/logo_square.png') }}" alt="" width="112" height="112" />
 								<h1 id="text01" class="style1"><strong>Trainlog</strong></h1>
 								<p id="text02" class="style4 landing-tagline">{{ landingTagline }}</p>
 								<p class="style4 landing-promise">{{ landingPromise }} · <span style="white-space: nowrap">{{ landingSince }}</span></p>
@@ -72,7 +72,7 @@
 							<div class="inner">
 								<div>
 									<div id="image03" class="style2 image">
-										<span class="frame"><img src="/static/landingassets/images/image03.jpg" alt="{{ landingVisualize }}" /></span>
+										<span class="frame"><img src="{{ static_autoversion('landingassets/images/image03.jpg') }}" alt="{{ landingVisualize }}" /></span>
 									</div>
 								</div>
 								<div>
@@ -91,10 +91,10 @@
 								</div>
 								<div>
 									<div id="image11" class="style2 image">
-										<span class="frame"><img src="/static/landingassets/images/image11.jpg" alt="{{ landingStats }}" /></span>
+										<span class="frame"><img src="{{ static_autoversion('landingassets/images/image11.jpg') }}" alt="{{ landingStats }}" /></span>
 									</div>
 									<div id="image04" class="style2 image">
-										<span class="frame"><img src="/static/landingassets/images/image04.jpg" width="1000" height="590" style="height: auto" loading="lazy" alt="{{ landingStats }}" /></span>
+										<span class="frame"><img src="{{ static_autoversion('landingassets/images/image04.jpg') }}" width="1000" height="590" style="height: auto" loading="lazy" alt="{{ landingStats }}" /></span>
 									</div>
 								</div>
 							</div>
@@ -105,7 +105,7 @@
 							<div class="inner">
 								<h2 class="style2">{{ landingDashboard }}</h2>
 								<p class="style4">{{ landingDashboardDesc }}</p>
-								<img class="landing-wide-shot" src="/static/landingassets/images/image07.jpg" alt="{{ landingDashboard }}" loading="lazy" />
+								<img class="landing-wide-shot" src="{{ static_autoversion('landingassets/images/image07.jpg') }}" alt="{{ landingDashboard }}" loading="lazy" />
 							</div>
 						</div>
 					</div>
@@ -114,7 +114,7 @@
 							<div class="inner">
 								<div>
 									<div id="image01" class="style2 image">
-										<span class="frame"><img src="/static/landingassets/images/image01.jpg" alt="{{ landingShare }}" /></span>
+										<span class="frame"><img src="{{ static_autoversion('landingassets/images/image01.jpg') }}" alt="{{ landingShare }}" /></span>
 									</div>
 								</div>
 								<div>
@@ -129,7 +129,7 @@
 							<div class="inner">
 								<div>
 									<div id="image05" class="style2 image">
-										<span class="frame"><img src="/static/landingassets/images/image05.jpg" alt="{{ landingLeaderboards }}" /></span>
+										<span class="frame"><img src="{{ static_autoversion('landingassets/images/image05.jpg') }}" alt="{{ landingLeaderboards }}" /></span>
 									</div>
 								</div>
 								<div>
@@ -148,7 +148,7 @@
 								</div>
 								<div>
 									<div class="style2 image">
-										<span class="frame"><img src="/static/landingassets/images/image06.jpg" alt="{{ landingYours }}" /></span>
+										<span class="frame"><img src="{{ static_autoversion('landingassets/images/image06.jpg') }}" alt="{{ landingYours }}" /></span>
 									</div>
 								</div>
 							</div>
@@ -185,6 +185,6 @@
 				</div>
 			</div>
 		</div>
-		<script src="/static/landingassets/main.js"></script>
+		<script src="{{ static_autoversion('landingassets/main.js') }}"></script>
 	</body>
 </html>

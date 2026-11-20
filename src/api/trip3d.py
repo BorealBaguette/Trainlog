@@ -15,6 +15,7 @@ from src.pg import pg_session
 from src.track_profile import TRACK_TYPES, cumulative_distances, fill_gaps, smooth_profile
 from src.trip_selections import parse_trip_ids
 from src.users import User
+from src.api.motis import _tz
 from src.api.trainset import public_trainset_info
 from src.utils import get_user_id, getUser, has_current_trip, lang, owner
 
@@ -55,7 +56,7 @@ def timetable_stops(waypoints_json, delay=lambda utc: 0):
         stop = wp.get("stop") if isinstance(wp, dict) else None
         if not isinstance(stop, dict) or stop.get("lat") is None:
             continue
-        tz = ZoneInfo(stop["tz"]) if stop.get("tz") else ZoneInfo("UTC")
+        tz = ZoneInfo(stop["tz"]) if stop.get("tz") else _tz(stop["lat"], stop["lng"])
 
         def local(value):
             try:
@@ -78,12 +79,13 @@ TRIP_QUERY = """
            t.material_type_advanced,
            -- An aircraft's type code as its name ("A20N" → "Airbus A320neo"), as the trip card does
            (SELECT concat_ws(' ', a.manufacturer, a.model) FROM airliners a WHERE a.iata = t.material_type LIMIT 1) AS airframe_name,
-           -- The first operator's logo, the one in use on the trip's day
-           (SELECT l.logo_url FROM trip_operators o JOIN operator_logos l ON l.operator_id = o.operator_id
-            WHERE o.trip_id = t.trip_id AND l.logo_url IS NOT NULL
-            ORDER BY o.position, (l.effective_date IS NULL OR l.effective_date <= t.start_datetime::date) DESC,
-                     l.effective_date DESC NULLS LAST, l.uid DESC
-            LIMIT 1) AS operator_logo
+           -- Each operator's logo, the one in use on the trip's day
+           ARRAY(SELECT (SELECT l.logo_url FROM operator_logos l
+                         WHERE l.operator_id = o.operator_id AND l.logo_url IS NOT NULL
+                         ORDER BY (l.effective_date IS NULL OR l.effective_date <= t.start_datetime::date) DESC,
+                                  l.effective_date DESC NULLS LAST, l.uid DESC
+                         LIMIT 1)
+                 FROM trip_operators o WHERE o.trip_id = t.trip_id ORDER BY o.position) AS operator_logos
     FROM trips t JOIN paths p ON p.trip_id = t.trip_id
     WHERE t.trip_id = ANY(:ids)
 """
@@ -158,7 +160,7 @@ def _payload(row, user=None):
             "start": _local(_shift(row["start_datetime"], dep)),
             "end": _local(_shift(row["end_datetime"], arr)),
             "utc": [_epoch_ms(_shift(row["utc_start_datetime"], dep)), _epoch_ms(_shift(row["utc_end_datetime"], arr))],
-            "operator_logo": row["operator_logo"],
+            "operator_logos": [url for url in row["operator_logos"] if url],
             "line": row["line_name"] or None,
             "vehicle": row["airframe_name"] or row["material_type"] or None,
             "user": user,

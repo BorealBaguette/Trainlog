@@ -2,7 +2,7 @@
     comes from, out of the way of the trip itself. -#}
 {% if not session.get("logged_in") %}
 <a class="made-with" href="{{ url_for('landing') }}">
-  <img src="{{ url_for('static', filename='images/logo_square.png') }}" alt="" width="22" height="22">
+  <img src="{{ static_autoversion('images/logo_square.png') }}" alt="" width="22" height="22">
   {{ madeWithTrainlog }}
 </a>
 <style>

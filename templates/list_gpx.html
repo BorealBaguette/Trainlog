@@ -262,7 +262,7 @@
             class="btn btn-outline-primary m-2 trip-type-button" 
             data-type="{{ type }}" 
             data-bs-dismiss="modal">
-            <img src="{{ url_for('static', filename='images/icons/trip_logos/' + type + '.png') }}" 
+            <img src="{{ static_autoversion('images/icons/trip_logos/' + type + '.png') }}" 
                  alt="{{ name }}" width="24" height="24">
             {{ name }}
           </button>

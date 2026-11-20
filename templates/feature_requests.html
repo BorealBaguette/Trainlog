@@ -442,7 +442,7 @@ window.featureRequestsI18n = {{ {
     "voteError": (feature_requests_vote_error if feature_requests_vote_error is defined else "Vote failed. Please try again.")
 } | tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/feature_requests.js') }}"></script>
+<script src="{{ static_autoversion('js/feature_requests.js') }}"></script>
 <script>
 function editRequest(id, title, description) {
     document.getElementById('editRequestId').value = id;

@@ -1867,7 +1867,7 @@ function processHiddenData(rowIdx, columns){
                 
             });
 
-            $.getJSON("{{ url_for('static',filename='data/registrations.json')}}", function(json) {
+            $.getJSON("{{ static_autoversion('data/registrations.json')}}", function(json) {
                 var registrations = json;
                 for (let i = reg.length; i > 0; i--) {
                     var testReg = reg.slice(0, i);
@@ -2149,7 +2149,7 @@ function processHiddenData(rowIdx, columns){
 
 function renderType(data, type, row) {
     if (type === 'display') {
-        let logoType = "{{ url_for('static',filename='images/icons/trip_logos')}}/" + `${data}.png`;
+        let logoType = "{{ static_autoversion('images/icons/trip_logos')}}/" + `${data}.png`;
         return `<span style="display:none;">${data}</span><img data-toggle="tooltip" data-placement="top" class="operatorLogo" src="${logoType}" title="${capitalizeFirstLetter(data)}"></img>`;
     }
     return data;

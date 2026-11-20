@@ -621,7 +621,7 @@ body { background: #e9e9ec; }
                 <div id="posterMap"></div>
                 <div class="posterSpinner" id="posterSpinner">{{wrapped_generating}}</div>
                 <div class="posterCredit">
-                    <img src="{{ url_for('static', filename='images/logo_square.png') }}" alt="">
+                    <img src="{{ static_autoversion('images/logo_square.png') }}" alt="">
                     <div class="posterCreditText">
                         <div class="posterCreditName">Trainlog<span>.me</span></div>
                         <div class="posterCreditTagline">Your online train diary</div>
@@ -645,7 +645,7 @@ body { background: #e9e9ec; }
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion('js/maplibre-utils.js') }}"></script>
 
 <script>
 // Export resolution: the on-screen card is CSS-sized (comfortable to preview),
@@ -1278,7 +1278,7 @@ function buildFooterLegend(trips) {
 // Countries visited. `trips.countries` maps a country code to the metres covered
 // in it (either a number, or an object of sub-distances to add up).
 const FLAG_HEIGHT = 13;
-const FLAG_DIR = "{{ url_for('static', filename='images/flags') }}";
+const FLAG_DIR = "{{ static_autoversion('images/flags') }}";
 
 // The flag assets carry a viewBox but no width/height, so they have no intrinsic
 // size and Firefox refuses to draw them onto a canvas. Stamp the viewBox's size
@@ -2328,7 +2328,7 @@ async function downloadPoster(mode) {
     // some browsers silently hand back a blank buffer even with
     // preserveDrawingBuffer set (a known MapLibre/Chrome timing quirk —
     // https://github.com/maplibre/maplibre-gl-js/discussions/3900).
-    const logo = await loadImage("{{ url_for('static', filename='images/logo_square.png') }}");
+    const logo = await loadImage("{{ static_autoversion('images/logo_square.png') }}");
     // Already cached from the preview, but awaited here for the same reason as the
     // logo: nothing may go async between the map's repaint and reading its pixels.
     const countryItems = Array.from(countriesEl.querySelectorAll('.posterCountryItem'));
@@ -3211,7 +3211,7 @@ let posterLogo = null;
 
 async function renderBack() {
     if (!posterLogo) {
-        posterLogo = await loadImage("{{ url_for('static', filename='images/logo_square.png') }}").catch(() => null);
+        posterLogo = await loadImage("{{ static_autoversion('images/logo_square.png') }}").catch(() => null);
     }
     await loadIconFonts();
     const canvas = document.getElementById('posterBackCanvas');

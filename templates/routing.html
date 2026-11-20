@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
-<script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
+<script src="{{ static_autoversion('js/freehand.js') }}"></script>
 <div id="map" class="mapRouting"></div>
 <div id="sidebar">
     <div id="sidebar-content"></div>
@@ -13,8 +13,8 @@
 </style>
 {% endif %}
 
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/routing_panel.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
+<link rel="stylesheet" href="{{ static_autoversion('styles/routing_panel.css') }}">
+<link rel="stylesheet" href="{{ static_autoversion('styles/waypoint_popup.css') }}">
 <script>
 // ─── Flutter bridge (for app) ───────────────────────────────────────────────
 window.flutterBridge = {

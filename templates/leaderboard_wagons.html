@@ -1,7 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 {% include nav%}
-<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script src="{{ static_autoversion('js/wagon_img.js') }}"></script>
 {% include "includes/trainset_display.html" %}
 
 <!-- Loading screen -->

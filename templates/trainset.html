@@ -1,7 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 {% include nav %}
-<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script src="{{ static_autoversion('js/wagon_img.js') }}"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
@@ -908,7 +908,7 @@ window.addEventListener('resize', () => {
 });
 
 // ── SMART IMAGE ──
-const WAGONS_URL = `{{url_for("static", filename="images/wagons")}}`;
+const WAGONS_URL = `{{static_autoversion("images/wagons")}}`;
 function smartImgSrc(imagePath, side = 'L', imageType = 'sides', ext = 'gif') {
   return wagonImgSrc(WAGONS_URL, { image: imagePath, image_type: imageType, image_ext: ext }, side);
 }

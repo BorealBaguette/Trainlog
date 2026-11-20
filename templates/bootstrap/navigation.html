@@ -10,9 +10,9 @@
          the two — the wordmark fills it. At xl and up the links need that width back,
          so the square mark returns. The breakpoint is navbar-expand-xl's, so the swap
          happens exactly when the toggler does. #}
-      <img class="d-xl-none tl-logo-light" src="{{ url_for('static',filename='images/logo.png') }}" width="96" height="32" alt="Trainlog">
-      <img class="d-xl-none tl-logo-dark" src="{{ url_for('static',filename='images/logo_white.png') }}" width="96" height="32" alt="Trainlog">
-      <img class="d-none d-xl-inline tl-logo-square" src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="Trainlog">
+      <img class="d-xl-none tl-logo-light" src="{{ static_autoversion('images/logo.png') }}" width="96" height="32" alt="Trainlog">
+      <img class="d-xl-none tl-logo-dark" src="{{ static_autoversion('images/logo_white.png') }}" width="96" height="32" alt="Trainlog">
+      <img class="d-none d-xl-inline tl-logo-square" src="{{ static_autoversion('images/logo_square.png') }}" width="30" height="30" alt="Trainlog">
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
@@ -21,29 +21,30 @@
       <ul class="navbar-nav mr-auto">
         {% if is_admin %}
           <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
+              <a class="nav-link dropdown-toggle nav-admin" title="Admin only" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
                   <i class="bi bi-wrench-adjustable"></i> Admin{{stalePremiumIcon | safe}}
               </a>
               <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
                   {% if is_owner %}
-                  <a class="dropdown-item" href="{{ url_for('admin') }}"><i class="bi bi-wrench-adjustable"></i> Users</a>
-                  <a class="dropdown-item" href="https://analytics.maahl.net"><i class="fa-solid fa-chart-line"></i> Analytics</a>
-                  <a class="dropdown-item" href="{{ url_for('admin_user_growth') }}"><i class="fa-solid fa-chart-simple"></i><i class="fa-solid fa-users"></i> User growth </a>
-                  <a class="dropdown-item" href="{{ url_for('admin_trip_growth') }}"><i class="fa-solid fa-chart-simple"></i><i class="fa-solid fa-route"></i> Trip growth </a>
-                  <a class="dropdown-item" href="{{ url_for('admin.suspicious_activity') }}"><i class="fa-solid fa-robot"></i> Suspicious Activity </a>
-                  <a class="dropdown-item" href="{{ url_for('admin.denied_logins') }}"><i class="fa-solid fa-ban"></i> Denied Logins </a>
-                  <a class="dropdown-item" href="{{ url_for('admin_stats') }}"><i class="bi bi-bar-chart-line"></i> Global stats </a>
-                  <a class="dropdown-item" href="{{ url_for('active_users') }}"><i class="fa fa-chart-area"></i> Active Users </a>
-                  <a class="dropdown-item" href="{{ url_for('finance.finances') }}"><i class="fa-solid fa-coins"></i> Finances </a>
-                  <a class="dropdown-item" href="{{ url_for('bmc.pending') }}"><i class="fa-solid fa-mug-hot"></i>{{stalePremiumIcon | safe}} Pending BMC </a>
-                  <a class="dropdown-item" href="{{ url_for('adminManual') }}"><i class="bi bi-sign-stop-lights"></i> Manual Stations</a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('admin') }}"><i class="bi bi-wrench-adjustable"></i> Users</a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="https://analytics.maahl.net"><i class="fa-solid fa-chart-line"></i> Analytics</a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('admin_user_growth') }}"><i class="fa-solid fa-chart-simple"></i><i class="fa-solid fa-users"></i> User growth </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('admin_trip_growth') }}"><i class="fa-solid fa-chart-simple"></i><i class="fa-solid fa-route"></i> Trip growth </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('admin.suspicious_activity') }}"><i class="fa-solid fa-robot"></i> Suspicious Activity </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('admin.denied_logins') }}"><i class="fa-solid fa-ban"></i> Denied Logins </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('admin_stats') }}"><i class="bi bi-bar-chart-line"></i> Global stats </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('active_users') }}"><i class="fa fa-chart-area"></i> Active Users </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('finance.finances') }}"><i class="fa-solid fa-coins"></i> Finances </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('bmc.pending') }}"><i class="fa-solid fa-mug-hot"></i>{{stalePremiumIcon | safe}} Pending BMC </a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="{{ url_for('adminManual') }}"><i class="bi bi-sign-stop-lights"></i> Manual Stations</a>
+                  <a class="dropdown-item nav-owner" title="Owner only" href="/admin/health"><i class="bi bi-heart-pulse"></i> Health</a>
                   {% endif %}
-                  <a class="dropdown-item" href="{{ url_for('admin.station_explorer') }}"><i class="fa-solid fa-magnifying-glass-location"></i> Station explorer</a>
-                  <a class="dropdown-item" href="{{ url_for('ships') }}"><i class="fa fa-ship"></i> Ships </a>
-                  <a class="dropdown-item" href="{{ url_for('editCountriesList') }}"><i class="bi bi-flag"></i> Coverage edit</a>
-                  <a class="dropdown-item" href="{{ url_for('show_operators') }}"><i class="bi bi-images"></i> Operators</a>
-                  <a class="dropdown-item" href="{{ url_for('admin.wagons_admin') }}"><i class="fa-solid fa-trailer"></i> Wagons</a>
-                  <a class="dropdown-item" href="{{ url_for('airliners') }}"><i class="bi bi-airplane"></i></i> Airliners</a>
+                  <a class="dropdown-item nav-admin" title="Admin only" href="{{ url_for('admin.station_explorer') }}"><i class="fa-solid fa-magnifying-glass-location"></i> Station explorer</a>
+                  <a class="dropdown-item nav-admin" title="Admin only" href="{{ url_for('ships') }}"><i class="fa fa-ship"></i> Ships </a>
+                  <a class="dropdown-item nav-admin" title="Admin only" href="{{ url_for('editCountriesList') }}"><i class="bi bi-flag"></i> Coverage edit</a>
+                  <a class="dropdown-item nav-admin" title="Admin only" href="{{ url_for('show_operators') }}"><i class="bi bi-images"></i> Operators</a>
+                  <a class="dropdown-item nav-admin" title="Admin only" href="{{ url_for('admin.wagons_admin') }}"><i class="fa-solid fa-trailer"></i> Wagons</a>
+                  <a class="dropdown-item nav-admin" title="Admin only" href="{{ url_for('airliners') }}"><i class="bi bi-airplane"></i></i> Airliners</a>
               </div>
           </li>
       {% endif %}
@@ -275,7 +276,7 @@
            load. Both links are there, CSS shows the one away from the theme in use. #}
         <li class="nav-item theme-flip">
           {% for target in ('light', 'dark') %}
-          <a class="nav-link theme-flip-{{ target }}" href="{{ request.path }}?{{ dict(request.args, theme=target)|urlencode }}"
+          <a class="nav-link nav-owner theme-flip-{{ target }}" href="{{ request.path }}?{{ dict(request.args, theme=target)|urlencode }}"
              title="{{ target|capitalize }} theme, this page only"><i class="bi bi-circle-half"></i></a>
           {% endfor %}
         </li>
@@ -358,6 +359,17 @@
    it goes blue on blue. */
 .new-trip-row > .new-trip-compose:active,
 .new-trip-row > .new-trip-compose.active { color: #fff; }
+
+/* Links only some people see: a thin bar at the left edge of a menu item, a faint
+   underline on a top-level link. Amber = admins, violet = owner only. The title
+   says which on hover. Semi-transparent so it reads on either theme.
+   Owner only: an admin sees no owner links, so for them there is nothing to tell apart. */
+{% if is_owner %}
+.dropdown-item.nav-admin { box-shadow: inset 2px 0 0 rgba(217, 149, 0, .55); }
+.dropdown-item.nav-owner { box-shadow: inset 2px 0 0 rgba(140, 90, 210, .55); }
+.nav-link.nav-admin { box-shadow: inset 0 -2px 0 rgba(217, 149, 0, .45); }
+.nav-link.nav-owner { box-shadow: inset 0 -2px 0 rgba(140, 90, 210, .45); }
+{% endif %}
 
 .gift-wrap {
   display: inline-block;

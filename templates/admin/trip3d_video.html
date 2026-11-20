@@ -5,7 +5,7 @@
 
 <link href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion('js/maplibre-utils.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.min.js"></script>
 <script type="importmap">
 { "imports": {
@@ -148,11 +148,11 @@ document.getElementById('v-bg').value = BG || '';
 const LEN = new URLSearchParams(location.search).get('len');
 const MB = new URLSearchParams(location.search).get('mb');
 if (MB) document.getElementById('v-mb').value = MB;
-const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
+const LOGO = {{ static_autoversion('images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
 // The train's cars, as its trip page draws them (static/js/wagon_img.js), and their credits
-const WAGONS = {{ url_for('static', filename='images/wagons') | tojson }};
+const WAGONS = {{ static_autoversion('images/wagons') | tojson }};
 const wagonSrc = u => {
   const ext = u.image_ext || 'gif', side = u._side || 'L', t = u.image_type;
   if (t === 'sides') return `${WAGONS}/${u.image}${side === 'R' ? '_R' : '_L'}.${ext}`;
@@ -342,11 +342,11 @@ async function setup() {
   const total = dist[last] || 1;
   const gapSpans = data.gaps.map(g => ({ from: dist[g], to: dist[g + 1] }));
   const tripSpans = data.spans.map(t => ({ from: dist[t.s], to: dist[t.e], minutes: t.minutes,
-    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logo: t.logo, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start, end: t.end, utc: t.utc }));
+    name: (t.name || '').replace(/\p{Regional_Indicator}{2}\s*/gu, ''), type: t.type, real: t.real, flags: t.flags, logos: t.logos, line: t.line, vehicle: t.vehicle, units: t.units, start: t.start, end: t.end, utc: t.utc }));
   tripSpans.forEach(t => t.units.forEach(wagonImage));
   // Every drawing the video shows, for the end card's credits
   const allUnits = tripSpans.flatMap(t => t.units);
-  tripSpans.forEach(t => operatorLogo(t.logo));
+  tripSpans.forEach(t => t.logos.forEach(operatorLogo));
   tripSpans.forEach(t => t.flags.forEach(flagImage));
   data.countries.forEach(([, c]) => flagImage(c));
   // The country at s (metres along the line): of the runs the server read along each path
@@ -949,7 +949,7 @@ async function setup() {
 
   // The journey's timing: legs between the stations it halts at, each starting and ending at
   // rest (eased, their time shared by distance), and a wait at each
-  let plan = [], halting = new Set(), stationTimes = new Map(), dayChanges = [], zoneChanges = [];
+  let plan = [], halting = new Set(), nearby = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [];
   const planJourney = () => {
     // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
     // first, then the stops the timetable waits longest at; the train runs through the rest
@@ -967,6 +967,17 @@ async function setup() {
       halts.push(st);
     }
     halts.sort((a, b) => a.d - b.d);
+    // Each stop run through named on the chip of the nearest halt or end: the 5 closest to it,
+    // then how many more
+    const named = [stations[0], ...halts, stations[stations.length - 1]], passed = new Map();
+    for (const st of stops.filter(st => !halts.includes(st))) {
+      const h = named.reduce((x, y) => (Math.abs(y.d - st.d) < Math.abs(x.d - st.d) ? y : x));
+      passed.set(h, [...(passed.get(h) || []), st]);
+    }
+    nearby = new Map([...passed].map(([h, list]) => {
+      list.sort((a, b) => Math.abs(a.d - h.d) - Math.abs(b.d - h.d));
+      return [h, { list: list.slice(0, 5), more: list.length - 5 }];
+    }));
     const wait = Math.min(0.5, JOURNEY * 0.15 / Math.max(1, halts.length));
     halting = new Set(halts);
     // The hops between trips: crossed in HOP seconds each, whatever their length
@@ -1088,6 +1099,43 @@ async function setup() {
   const transfers = stops.filter(st => st.transfer).length, onWay = stops.length - transfers;
   // The trip leaving a station (the last one arriving, at the end)
   const typeAfter = st => (tripSpans.find(t => t.to > st.d + 1) || tripSpans[tripSpans.length - 1]).type;
+  const typeBefore = st => ([...tripSpans].reverse().find(t => t.from < st.d - 1) || tripSpans[0]).type;
+  // A station's own mark, from the trips on either side: an airport (landing at the journey's
+  // end), a helipad, a port, a station building, a stop's sign; others show the type icon of
+  // the trip leaving it
+  const stationMark = st => {
+    const types = [typeBefore(st), typeAfter(st)];
+    if (types.includes('air')) return st.d >= total - 1 ? '\uf5af' : '\uf5b0';
+    if (types.includes('helicopter')) return '\ue502';
+    if (types.includes('ferry')) return '\uf13d';
+    if (types.some(t => ['train', 'rail', 'metro', 'funicular'].includes(t))) return 'station';
+    if (types.some(t => ['bus', 'tram'].includes(t))) return 'stop';
+    return null;
+  };
+  // A mark centred on x, y, about 2r across, in fill on a bg background
+  function drawMark(mark, x, y, r, fill, bg) {
+    g2.save(); g2.fillStyle = fill; g2.strokeStyle = fill;
+    if (mark === 'station') {
+      g2.beginPath(); g2.moveTo(x - r, y - 0.2 * r); g2.lineTo(x, y - r); g2.lineTo(x + r, y - 0.2 * r);
+      g2.lineTo(x + 0.8 * r, y - 0.2 * r); g2.lineTo(x + 0.8 * r, y + r); g2.lineTo(x - 0.8 * r, y + r);
+      g2.lineTo(x - 0.8 * r, y - 0.2 * r); g2.closePath(); g2.fill();
+      // The clock in the gable and the arched door
+      g2.fillStyle = bg;
+      g2.beginPath(); g2.arc(x, y - 0.3 * r, 0.26 * r, 0, Math.PI * 2); g2.fill();
+      g2.beginPath(); g2.moveTo(x - 0.28 * r, y + r); g2.lineTo(x - 0.28 * r, y + 0.45 * r);
+      g2.arc(x, y + 0.45 * r, 0.28 * r, Math.PI, 0); g2.lineTo(x + 0.28 * r, y + r); g2.closePath(); g2.fill();
+      g2.lineWidth = 0.08 * r; g2.lineCap = 'round';
+      g2.beginPath(); g2.moveTo(x, y - 0.44 * r); g2.lineTo(x, y - 0.3 * r); g2.lineTo(x + 0.12 * r, y - 0.3 * r); g2.stroke();
+    } else if (mark === 'stop') {
+      g2.lineWidth = 0.2 * r; g2.lineCap = 'round';
+      g2.beginPath(); g2.moveTo(x, y - 0.2 * r); g2.lineTo(x, y + 0.9 * r); g2.moveTo(x - 0.35 * r, y + 0.9 * r); g2.lineTo(x + 0.35 * r, y + 0.9 * r); g2.stroke();
+      g2.beginPath(); g2.arc(x, y - 0.45 * r, 0.55 * r, 0, Math.PI * 2); g2.fill();
+      g2.fillStyle = bg; g2.beginPath(); g2.arc(x, y - 0.45 * r, 0.3 * r, 0, Math.PI * 2); g2.fill();
+    } else {
+      g2.font = faFont(r * 1.6 / scale); g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(mark, x, y);
+    }
+    g2.restore();
+  }
   const faFont = px => `900 ${Math.round(px * scale)}px "Font Awesome 6 Free"`;
   // A centred line of [glyph, text] parts, the glyphs a touch smaller and dimmer
   // Too wide for the frame: smaller, down to 3/4, then the last parts left out
@@ -1231,8 +1279,8 @@ async function setup() {
     const cornerIcon = typeIcon(S[Math.min(S.length - 2, pointAt(f.s).k)].type);
     const iconW = cornerIcon ? Math.round(corner.px * 1.3 * u) : 0, textX = pad + (iconW ? iconW + 12 * u : 0);
     const cornerRight = textX + Math.max(...corner.lines.map(l => g2.measureText(l).width));
-    // The current trip's operator logo, beside the clock
-    const opLogo = operatorLogo((tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]).logo);
+    // The current trip's operators' logos, beside the clock
+    const opLogos = (tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1]).logos.map(operatorLogo).filter(Boolean);
     // Below 900 px wide, the logo's train alone
     const compact = W < 900, brand = brandLayout(u, compact), logoW = brand.w;
     // Vignette, for depth and to seat the text
@@ -1383,13 +1431,16 @@ async function setup() {
         g2.globalAlpha = a * (1 - f.card);
         // A transfer: a badge in the colour of the trip it changes to, with its icon; a stop
         // on the way (and the ends): a white dot
-        const icon = st.transfer && typeIcon(typeAfter(st));
-        if (icon) {
-          const b = 30 * u;
-          roundRect(p.x - b / 2, p.y - b / 2, b, b, 8 * u); g2.fillStyle = COLOR[typeAfter(st)] || color; g2.fill();
+        const mark = st.transfer && stationMark(st), icon = st.transfer && !mark && typeIcon(typeAfter(st));
+        if (mark || icon) {
+          const b = 30 * u, bg = COLOR[typeAfter(st)] || color;
+          roundRect(p.x - b / 2, p.y - b / 2, b, b, 8 * u); g2.fillStyle = bg; g2.fill();
           g2.lineWidth = 3 * u; g2.strokeStyle = '#fff'; g2.stroke();
-          const iw = Math.round(20 * u), img = shrink(icon, iw, true);
-          g2.drawImage(img, Math.round(p.x - iw / 2), Math.round(p.y - img.height / 2));
+          if (mark) drawMark(mark, p.x, p.y, 10 * u, '#fff', bg);
+          else {
+            const iw = Math.round(20 * u), img = shrink(icon, iw, true);
+            g2.drawImage(img, Math.round(p.x - iw / 2), Math.round(p.y - img.height / 2));
+          }
         } else {
           g2.beginPath(); g2.arc(p.x, p.y, 8 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
           g2.lineWidth = 3.5 * u; g2.strokeStyle = '#141a22'; g2.stroke();
@@ -1431,8 +1482,12 @@ async function setup() {
     let chipBox = null;
     if (chipFor && f.card < 0.5 && f.title < 0.5) {
       const len = chipFor.to - chipFor.from, size = len >= 1000 ? (len / 1000).toFixed(1) + ' km' : Math.round(len) + ' m';
-      const label = chipFor.stop?.transfer ? `${chipFor.stop.name.toUpperCase()} · ${chipFor.stop.arr || ''} → ${chipFor.stop.dep || ''}`
-        : chipFor.stop ? `${chipFor.stop.name.toUpperCase()} · ${chipFor.stop.dep || chipFor.stop.arr || ''}`.replace(/ · $/, '')
+      const stopLabel = st => (st.transfer ? `${st.name.toUpperCase()} · ${st.arr || ''} → ${st.dep || ''}`
+        : `${st.name.toUpperCase()} · ${st.dep || st.arr || ''}`.replace(/ · $/, ''));
+      const near = chipFor.stop && nearby.get(chipFor.stop);
+      const parts = chipFor.stop ? [chipFor.stop, ...(near?.list || [])].sort((a, b) => a.d - b.d).map(stopLabel) : null;
+      if (near?.more > 0) parts.push(`+${near.more}`);
+      const label = parts ? parts.join('  /  ')
         : chipFor.name ? `${chipFor.name.toUpperCase()}${/tunnel|tunel|túnel|galleri/i.test(chipFor.name) ? '' : ` ${T.tunnel.toUpperCase()}`} · ${size}`
         : `${(inT ? T.tunnel : T.bridge).toUpperCase()} · ${size}`;
       const edge = Math.min(len / 5, speed * 0.4), tt = chipFor.stop && stationTimes.get(chipFor.stop);
@@ -1440,24 +1495,40 @@ async function setup() {
         : Math.min(1, (f.s - chipFor.from) / edge, (chipFor.to - f.s) / edge);
       g2.globalAlpha = Math.max(0, fade);
       g2.font = font(700, 24);
-      // Centred in the room between the corner title and the logo, else below the title
-      const tw = g2.measureText(label).width, cw = tw + 64 * u, ch = 50 * u;
       const roomL = cornerRight + 24 * u, roomR = W - pad - logoW - 24 * u;
+      // Several stations wider than the room at the top: on two lines, split where they are most
+      // even, and smaller if still wider than the frame
+      let lines = [label];
+      if (parts && parts.length > 1 && g2.measureText(label).width + 64 * u > roomR - roomL) {
+        const split = k => [parts.slice(0, k).join('  /  '), parts.slice(k).join('  /  ')];
+        const widest = ls => Math.max(...ls.map(l => g2.measureText(l).width));
+        let best = 1;
+        for (let k = 2; k < parts.length; k++) if (widest(split(k)) < widest(split(best))) best = k;
+        lines = split(best);
+      }
+      let px = 24;
+      const fit = (W - 2 * pad - 64 * u) / Math.max(...lines.map(l => g2.measureText(l).width));
+      if (fit < 1) g2.font = font(700, (px = Math.max(14, 24 * fit)));
+      // Centred in the room between the corner title and the logo, else below the title
+      const lineH = px * 1.25 * u, tw = Math.max(...lines.map(l => g2.measureText(l).width));
+      const cw = tw + 64 * u, ch = 50 * u + (lines.length - 1) * lineH;
       let cx = Math.max(roomL, Math.min((W - cw) / 2, roomR - cw)), cy = pad;
       if (cx + cw > roomR) { cx = pad; cy = pad + dateRow + (corner.lines.length * corner.px * 1.15 + 60) * u; }
       // A transfer's chip in the colour of the trip it changes to, white on it
       const dark = inT && !chipFor.stop, change = chipFor.stop?.transfer;
       chipBox = { x: cx, y: cy, w: cw, h: ch };
-      roundRect(cx, cy, cw, ch, ch / 2);
+      roundRect(cx, cy, cw, ch, 25 * u);
       g2.fillStyle = change ? COLOR[typeAfter(chipFor.stop)] || color : dark ? 'rgba(20,26,34,0.82)' : 'rgba(255,255,255,0.88)'; g2.fill();
       if (change) { g2.lineWidth = 2.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.9)'; g2.stroke(); }
-      // A station shows the icon of the trip leaving it (arriving, at the last)
-      const icon = chipFor.stop && typeIcon(typeAfter(chipFor.stop));
-      if (icon) {
+      // A station shows its own glyph, else the icon of the trip leaving it (arriving, at the last)
+      const mark = chipFor.stop && stationMark(chipFor.stop), icon = chipFor.stop && !mark && typeIcon(typeAfter(chipFor.stop));
+      if (mark) drawMark(mark, cx + 24 * u, cy + ch / 2, 13 * u, change ? '#fff' : '#141a22', change ? COLOR[typeAfter(chipFor.stop)] || color : '#fff');
+      else if (icon) {
         const iw = Math.round(28 * u), img = shrink(icon, iw, change);
         g2.drawImage(img, Math.round(cx + 24 * u - iw / 2), Math.round(cy + ch / 2 - img.height / 2));
       } else chipIcon(chipFor.stop ? 'station' : inT ? 'tunnel' : 'bridge', cx + 24 * u, cy + ch / 2, 9 * u);
-      g2.fillStyle = dark || change ? '#fff' : '#141a22'; g2.textBaseline = 'middle'; g2.fillText(label, cx + (chipFor.stop ? 46 : 40) * u, cy + ch / 2 + 1);
+      g2.fillStyle = dark || change ? '#fff' : '#141a22'; g2.textBaseline = 'middle';
+      lines.forEach((l, i) => g2.fillText(l, cx + (chipFor.stop ? 46 : 40) * u, cy + ch / 2 + 1 + (i - (lines.length - 1) / 2) * lineH));
       g2.globalAlpha = 1;
     }
 
@@ -1498,7 +1569,7 @@ async function setup() {
       const flag = icon && flagImage(countryAt(f.s) || trip.flags[f.s < (trip.from + trip.to) / 2 ? 0 : 1] || trip.flags[0]);
       // The flag as tall as the logo's chip (34 px), at its own width (Firefox gives these SVGs
       // no size: 3:2 then), left-aligned with the icons above; a wide one pushes the logo along
-      const lh = 22 * u, cpad = 6 * u, ch = opLogo ? lh + 2 * cpad : 0;
+      const lh = 22 * u, cpad = 6 * u, ch = opLogos.length ? lh + 2 * cpad : 0;
       const fh = flag ? Math.round(lh + 2 * cpad) : 0;
       const fw = flag ? Math.round(fh * (flag.naturalWidth && flag.naturalHeight ? flag.naturalWidth / flag.naturalHeight : 1.5)) : 0;
       const rowX = Math.max(textX, flag ? pad + fw + 10 * u : 0);
@@ -1521,11 +1592,14 @@ async function setup() {
         roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
       }
       let clockX = rowX;
-      if (opLogo) {
-        const lw = Math.min(130 * u, lh * opLogo.naturalWidth / (opLogo.naturalHeight || 1)), cy = Math.round(clockMid - ch / 2);
+      if (opLogos.length) {
+        // On one chip, side by side
+        const gap = 10 * u, cy = Math.round(clockMid - ch / 2);
+        const imgs = opLogos.map(l => shrink(l, Math.max(1, Math.round(Math.min(130 * u, lh * l.naturalWidth / (l.naturalHeight || 1))))));
+        const lw = imgs.reduce((w, img) => w + img.width, 0) + gap * (imgs.length - 1);
         box(rowX, cy, lw + 2 * cpad, ch, 8 * u, 'rgba(255,255,255,0.92)');
-        const img = shrink(opLogo, Math.max(1, Math.round(lw)));
-        g2.drawImage(img, Math.round(rowX + cpad), Math.round(cy + (ch - img.height) / 2));
+        let x = rowX + cpad;
+        for (const img of imgs) { g2.drawImage(img, Math.round(x), Math.round(cy + (ch - img.height) / 2)); x += img.width + gap; }
         clockX = rowX + lw + 2 * cpad + 12 * u;
       }
       const clock = f.dwell ? (f.dwell.dep || f.dwell.arr) : clockAt(f.s);
@@ -2000,7 +2074,7 @@ function mergeTrips(list) {
     out.spans.push({ s: off, e: out.coords.length - 1, minutes: took > 0 ? took : null,
       name: `${t.trip.origin} → ${t.trip.destination}`, type: t.trip.type,
       real: !!t.height?.some(v => v > 300), flags: [flagCode(t.trip.origin), flagCode(t.trip.destination)],
-      logo: t.trip.operator_logo, line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start,
+      logos: t.trip.operator_logos || [], line: t.trip.line, vehicle: t.trip.vehicle, units: t.trip.units || [], start: t.trip.start,
       end: t.trip.end, utc: t.trip.utc });
   });
   return out;

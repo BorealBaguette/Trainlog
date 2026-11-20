@@ -55,7 +55,6 @@ from flask import (
 )
 from flask_caching import Cache
 from flask_compress import Compress
-from flaskext.autoversion import Autoversion
 from PIL import Image
 from requests.adapters import HTTPAdapter, Retry
 from scgraph.geographs.marnet import marnet_geograph
@@ -181,6 +180,7 @@ from src.api.admin import (
     wagons_admin_blueprint,
 )
 from src.api.feature_requests import feature_requests_blueprint
+from src.health.views import health_blueprint, record_route
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
@@ -358,18 +358,24 @@ from src.gpx_import import (
     parse_trip_params,
 )
 from src.error_reporter import report_error
+from src.static_cache import init_static_caching, register_static_autoversion
 
 app = Flask(__name__)
 start_email_listener(app)
 start_trip_announcer(app)
 
 app.config['DEBUG'] = True
+# Before Compress(app): it reads its cache settings at init.
+init_static_caching(app)
 Compress(app)
-app.autoversion = True
-Autoversion(app)
+register_static_autoversion(app)
 app.url_map.strict_slashes = False
 
 app.register_blueprint(admin_blueprint, url_prefix="/admin")
+# Fallback and dev: in prod Traefik sends /admin/health to the trainlog_health
+# sidecar first (src/health/standalone.py).
+app.register_blueprint(health_blueprint, url_prefix="/admin/health")
+record_route(app)
 
 app.register_blueprint(operators_api_blueprint, url_prefix="/api/admin/operators")
 app.register_blueprint(wagons_admin_blueprint, url_prefix="/api/admin/wagons")
@@ -421,7 +427,7 @@ if matomo_config:
             matomo_url=matomo_url,
             id_site=id_site,
             token_auth=token_auth,
-            ignored_routes=["/static/<path:filename>"],
+            ignored_routes=["/static/<path:filename>", "/admin/health/live", "/admin/health/history", "/admin/health/routes"],
         )
         matomo.client_dimension_id = matomo_config.get("client_dimension_id")
 
@@ -703,15 +709,18 @@ def getLangDropdown(user):
     langs.append(
         {"code": user.lang, "name": lang[session["userinfo"]["lang"]][user.lang]}
     )
-    for code in readLang().keys():
+    for code in lang.keys():
         if code != user.lang:
             langs.append({"code": code, "name": lang[code][code]})
     return langs
 
 
 def changeLang(langToSet, session=False):
+    # The cached `lang` (src.utils._LiveLang, reloads edited files within a
+    # second), not readLang(): this runs on every request, and re-reading the 25
+    # lang files (2.8 MB of JSON) cost ~30 ms each time (seen on /admin/health).
     available_languages = []
-    languages = readLang()
+    languages = lang
     for language in languages:
         available_languages.append(
             {"id": language, "name": languages[language][language]}
@@ -1314,6 +1323,10 @@ def before_request():
             getRequestData(request),
         )
         return "", 406
+    # Static files need no user, language or session: skipping the rest keeps
+    # them cheap and stops every asset response from re-sending the cookie.
+    if request.endpoint == "static":
+        return None
     endpoint = request.endpoint
     if endpoint:
         # Get the URL rule associated with the current endpoint
@@ -15019,18 +15032,6 @@ def sitemap():
     response = make_response(sitemap_xml)
     response.headers['Content-Type'] = 'application/xml'
     return response
-
-@app.route("/public/video/<tripIds>")
-def video(tripIds):
-    if User.query.filter_by(username=getUser()).first().alpha:
-        return render_template(
-            "video.html",
-            tripIds=tripIds,
-            **lang[session["userinfo"]["lang"]],
-            **session["userinfo"],
-        )
-    else:
-        abort(401)
 
 @app.route("/u/<username>/dashboard")
 @login_required

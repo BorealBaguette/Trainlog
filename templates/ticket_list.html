@@ -83,7 +83,7 @@
     <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3 ticket-row" data-search="{{ group.name }} {{ group.tickets|map(attribute='name')|unique|join(' ') }} {{ group.operators|map('first')|join(' ') }} {{ group.secondary_operators|join(' ') }} {{ group.countries.replace(',', ' ') }}">
         <div class="ticket-logo">
             {% if logo %}
-                <img src="{{ url_for('static', filename=logo) }}" alt="">
+                <img src="{{ static_autoversion(logo) }}" alt="">
             {% else %}
                 <i class="bi bi-ticket-perforated fs-3 text-muted"></i>
             {% endif %}
@@ -214,7 +214,7 @@
                     <td class="ticket-cell-validity ticket-cell-wide" data-order="{{ ticket.name|lower }}">
                         <div class="d-flex align-items-center gap-2">
                             <span class="ticket-table-logo">
-                                {% if logo %}<img src="{{ url_for('static', filename=logo) }}" alt="">{% else %}<i class="bi bi-ticket-perforated text-muted"></i>{% endif %}
+                                {% if logo %}<img src="{{ static_autoversion(logo) }}" alt="">{% else %}<i class="bi bi-ticket-perforated text-muted"></i>{% endif %}
                             </span>
                             <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=ticket.uid, only=1) }}" class="text-reset text-decoration-none fw-medium">{{ ticket.name }}</a>
                             {% if ticket.active_countries %}
