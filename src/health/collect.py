@@ -7,7 +7,10 @@ when every site worker is stuck), or in the site itself as a fallback. Stdlib +
 psycopg2 only, and nothing here imports the app.
 
 History: one JSON line per minute in HISTORY_DIR/YYYY-MM-DD.jsonl (UTC days),
-HISTORY_DAYS kept. Aggregate numbers only, no paths or users. Written by
+HISTORY_DAYS kept. Aggregate numbers only, no paths or users. Per-route counters
+go to YYYY-MM-DD.routes.jsonl, one line per ROUTE_BUCKET_S and commit, keyed by
+route pattern (no paths either); the bucket being filled lives in
+routes_open.json. deploys.jsonl lists each commit the workers started from. Written by
 sample(), which the sidecar calls every SAMPLE_EVERY_S whether or not anyone
 is looking; in the fallback it only runs while the page is open.
 """
@@ -20,6 +23,7 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import threading
 import time
 
@@ -37,6 +41,9 @@ CACHE_S = 4  # sample() result reused for this long
 RECENT_MINUTES = 5
 SLOW_WINDOW_S = rec.SLOW_KEEP_S
 MAX_POINTS = 360
+
+ROUTE_BUCKET_S = 600
+ROUTE_ROWS = 40
 
 RANGES = {"1h": 3600, "6h": 6 * 3600, "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400}
 
@@ -382,9 +389,63 @@ def pg():
 _peaks = {}  # minute -> most busy slots seen by a sample in it
 
 
-def _day_file(t):
-    day = datetime.datetime.fromtimestamp(t, datetime.timezone.utc).date()
-    return os.path.join(HISTORY_DIR, f"{day.isoformat()}.jsonl")
+def _day(t):
+    return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).date()
+
+
+def _day_file(t, kind=""):
+    return os.path.join(HISTORY_DIR, f"{_day(t).isoformat()}{kind}.jsonl")
+
+
+def _days(since, until):
+    day, last = _day(since), _day(until)
+    while day <= last:
+        yield day
+        day += datetime.timedelta(days=1)
+
+
+def _merge_routes(states, m, open_buckets):
+    """Add minute m of every worker's per-route counters to the open bucket of
+    its commit."""
+    t = m // ROUTE_BUCKET_S * ROUTE_BUCKET_S
+    for st in states:
+        minute = st.get("routes", {}).get(str(m))
+        if not minute:
+            continue
+        commit = st.get("commit") or "unknown"
+        bucket = open_buckets.setdefault(f"{t}|{commit}", {"t": t, "c": commit, "r": {}})
+        for key, counters in minute.items():
+            cur = bucket["r"].get(key)
+            if cur is None:
+                bucket["r"][key] = list(counters)
+            else:
+                rec.add_route_counters(cur, counters)
+
+
+def _record_deploy(states):
+    """Append to deploys.jsonl when the workers run a commit other than the last
+    one recorded: the newest commit, at the time its first worker booted."""
+    booted = {}
+    for st in states:
+        c = st.get("commit")
+        if c:
+            booted[c] = min(booted.get(c, st.get("booted", 0)), st.get("booted", 0))
+    if not booted:
+        return
+    newest = max(booted, key=booted.get)
+    path = os.path.join(HISTORY_DIR, "deploys.jsonl")
+    last = None
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.strip():
+                    last = json.loads(line)
+    except (OSError, ValueError):
+        pass
+    if last and last.get("c") == newest:
+        return
+    with open(path, "a") as f:
+        f.write(json.dumps({"t": round(booted[newest]), "c": newest, "prev": last.get("c") if last else None}) + "\n")
 
 
 def persist(now, states, host_now, pg_now):
@@ -413,8 +474,16 @@ def persist(now, states, host_now, pg_now):
         if start > upto:
             return
 
+        open_path = os.path.join(HISTORY_DIR, "routes_open.json")
+        try:
+            with open(open_path) as f:
+                open_buckets = json.load(f)
+        except (OSError, ValueError):
+            open_buckets = {}
+
         lines = {}
         for m in range(start, upto + 60, 60):
+            _merge_routes(states, m, open_buckets)
             cap = capacity(states, m)
             if not cap:
                 continue
@@ -444,9 +513,26 @@ def persist(now, states, host_now, pg_now):
                 elif pg_now.get("error") != "not configured":
                     row["pg_down"] = 1
             lines.setdefault(_day_file(m), []).append(json.dumps(row, separators=(",", ":")))
+        # Route buckets whose minutes are all final move to the day file.
+        for key in sorted(open_buckets, key=lambda k: int(k.split("|")[0])):
+            bucket = open_buckets[key]
+            if bucket["t"] + ROUTE_BUCKET_S > upto + 60:
+                continue
+            del open_buckets[key]
+            for counters in bucket["r"].values():
+                counters[rec.R_SUM] = round(counters[rec.R_SUM])
+                counters[rec.R_MAX] = round(counters[rec.R_MAX])
+            lines.setdefault(_day_file(bucket["t"], ".routes"), []).append(
+                json.dumps(bucket, separators=(",", ":"))
+            )
         for path, rows in lines.items():
             with open(path, "a") as f:
                 f.write("\n".join(rows) + "\n")
+        tmp = open_path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(open_buckets, f, separators=(",", ":"))
+        os.replace(tmp, open_path)
+        _record_deploy(states)
         tmp = marker + ".tmp"
         with open(tmp, "w") as f:
             f.write(str(upto))
@@ -527,7 +613,151 @@ def history(range_key):
                 }
             )
         t += step
-    return {"range": range_key if range_key in RANGES else "1h", "step_s": step, "points": points}
+    return {
+        "range": range_key if range_key in RANGES else "1h",
+        "step_s": step,
+        "points": points,
+        "deploys": [d for d in deploys() if d["t"] >= since],
+    }
+
+
+# --- deploys and routes -----------------------------------------------------
+
+_commit_info = {}
+
+
+def commit_info(sha):
+    """Subject and tag of a commit, from the checkout (cached; git is in the image)."""
+    if sha in _commit_info:
+        return _commit_info[sha]
+    info = {"subject": None, "tag": None}
+    if sha and sha != "unknown":
+        try:
+            out = subprocess.run(
+                ["git", "log", "-1", "--format=%s", sha], capture_output=True, text=True, timeout=3
+            )
+            if out.returncode == 0:
+                info["subject"] = out.stdout.strip()[:140]
+            out = subprocess.run(
+                ["git", "describe", "--tags", "--exact-match", sha], capture_output=True, text=True, timeout=3
+            )
+            if out.returncode == 0:
+                info["tag"] = out.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    _commit_info[sha] = info
+    return info
+
+
+def deploys():
+    out = []
+    try:
+        with open(os.path.join(HISTORY_DIR, "deploys.jsonl")) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                d.update(commit_info(d["c"]))
+                d["short"] = (d["c"] or "?")[:7]
+                out.append(d)
+    except OSError:
+        pass
+    return out
+
+
+def _route_rows(since, until):
+    rows = []
+    for day in _days(since, until):
+        try:
+            with open(os.path.join(HISTORY_DIR, f"{day.isoformat()}.routes.jsonl")) as f:
+                for line in f:
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        continue
+                    if since <= row["t"] < until:
+                        rows.append(row)
+        except OSError:
+            pass
+    try:
+        with open(os.path.join(HISTORY_DIR, "routes_open.json")) as f:
+            rows += [b for b in json.load(f).values() if since <= b["t"] < until]
+    except (OSError, ValueError):
+        pass
+    return rows
+
+
+def _sum_routes(rows, commit=None):
+    out = {}
+    for row in rows:
+        if commit is not None and row["c"] != commit:
+            continue
+        for key, counters in row["r"].items():
+            cur = out.get(key)
+            if cur is None:
+                out[key] = list(counters)
+            else:
+                rec.add_route_counters(cur, counters)
+    return out
+
+
+def _route_stats(c, total_ms):
+    n = c[rec.R_N]
+    return {
+        "n": n,
+        "time_s": round(c[rec.R_SUM] / 1000),
+        "share": round(100 * c[rec.R_SUM] / total_ms, 1) if total_ms else None,
+        "avg": round(c[rec.R_SUM] / n) if n else None,
+        "p95": percentile(c[rec.R_HIST :], 0.95, c[rec.R_MAX]),
+        "max": round(c[rec.R_MAX]),
+        "slow": c[rec.R_SLOW],
+    }
+
+
+def routes(range_key, compare="prev"):
+    """Per-route totals over the range, busiest (by total time) first, each
+    against a baseline: the previous period of the same length ("prev"), or
+    the same length either side of a deploy (compare = its commit), split by
+    the commit each request ran on rather than by the clock."""
+    span = RANGES.get(range_key, RANGES["1h"])
+    now = time.time()
+    since = now - span
+    base, info = None, None
+    if compare == "prev":
+        cur = _sum_routes(_route_rows(since, now + 1))
+        base = _sum_routes(_route_rows(since - span, since))
+        info = {"kind": "prev", "from": since - span, "to": since}
+    elif compare and compare != "none":
+        d = next((d for d in deploys() if d["c"] == compare), None)
+        if d:
+            length = min(span, max(now - d["t"], ROUTE_BUCKET_S))
+            cur = _sum_routes(_route_rows(d["t"] - ROUTE_BUCKET_S, d["t"] + length), commit=d["c"])
+            base = _sum_routes(_route_rows(d["t"] - length - ROUTE_BUCKET_S, d["t"] + ROUTE_BUCKET_S), commit=d.get("prev"))
+            info = {"kind": "deploy", "deploy": d, "length_s": round(length)}
+        else:
+            cur = _sum_routes(_route_rows(since, now + 1))
+    else:
+        cur = _sum_routes(_route_rows(since, now + 1))
+
+    cur_total = sum(c[rec.R_SUM] for c in cur.values())
+    base_total = sum(c[rec.R_SUM] for c in (base or {}).values())
+    keys = sorted(cur, key=lambda k: -cur[k][rec.R_SUM])[:ROUTE_ROWS]
+    rows = []
+    for key in keys:
+        method, _, route = key.partition(" ")
+        row = {"method": method, "route": route, "cur": _route_stats(cur[key], cur_total)}
+        if base is not None and key in base:
+            row["base"] = _route_stats(base[key], base_total)
+        rows.append(row)
+    return {
+        "range": range_key if range_key in RANGES else "1h",
+        "compare": info,
+        "total": {"routes": len(cur), "n": sum(c[rec.R_N] for c in cur.values()), "time_s": round(cur_total / 1000)},
+        "base_total": {"n": sum(c[rec.R_N] for c in base.values()), "time_s": round(base_total / 1000)} if base else None,
+        "rows": rows,
+        "deploys": [d for d in deploys() if d["t"] >= now - RANGES["30d"]][::-1],
+    }
 
 
 # --- sampling ---------------------------------------------------------------

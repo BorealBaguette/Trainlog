@@ -13,6 +13,7 @@ import yaml
 from flask import Blueprint, abort, jsonify, render_template, request, session
 
 from src.health import collect
+from src.health.recorder import ROUTE_ENVIRON_KEY
 
 health_blueprint = Blueprint("health", __name__)
 
@@ -38,6 +39,25 @@ def owner_only(f):
         return f(*args, **kwargs)
 
     return wrapper
+
+
+def record_route(app):
+    """Hand each request's route pattern (/u/<username>/trips, not the path) to
+    the gunicorn recorder, which reads it in post_request. teardown_request runs
+    for every request, failed ones included, after the URL has been matched."""
+
+    @app.teardown_request
+    def _health_record_route(exc=None):
+        rule = request.url_rule
+        request.environ[ROUTE_ENVIRON_KEY] = rule.rule if rule is not None else None
+
+
+@health_blueprint.route("/routes")
+@owner_only
+def health_routes():
+    resp = jsonify(collect.routes(request.args.get("range", "1h"), request.args.get("compare", "prev")))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @health_blueprint.route("/")

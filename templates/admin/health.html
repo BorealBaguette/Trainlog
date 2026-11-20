@@ -53,6 +53,16 @@
   .grid > .card { margin-bottom: 0; }
   @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
   .chart { height: 200px; }
+  .cardhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; margin-bottom: 4px; }
+  .cardhead h2 { margin: 0; }
+  select { font: inherit; font-size: 12px; color: var(--fg); background: var(--card); border: 1px solid var(--line);
+           border-radius: 6px; padding: 2px 6px; max-width: 100%; }
+  .meth { color: var(--muted); font-size: 11px; margin-right: 4px; }
+  .delta { font-size: 11px; margin-left: 4px; color: var(--muted); }
+  .delta.worse { color: var(--bad); } .delta.better { color: var(--ok); }
+  .share { display: inline-block; width: 48px; height: 6px; background: var(--line); border-radius: 3px;
+           margin-right: 6px; vertical-align: middle; overflow: hidden; }
+  .share > i { display: block; height: 100%; background: var(--accent); }
   .scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
   th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -101,13 +111,17 @@
     <div class="card"><h2>Host &amp; database</h2><div class="chart" id="cHost"></div></div>
   </div>
 
+  <div class="card">
+    <div class="cardhead">
+      <h2>Routes <small id="routesNote"></small></h2>
+      <select id="compare" aria-label="Compare with"></select>
+    </div>
+    <div class="scroll"><table id="routes" class="fit"></table></div>
+  </div>
+
   <div class="grid">
     <div class="card">
-      <h2>Slow routes <small>≥ 1 s, last hour</small></h2>
-      <div class="scroll"><table id="slowRoutes" class="fit"></table></div>
-    </div>
-    <div class="card">
-      <h2>Recent slow requests</h2>
+      <h2>Recent slow requests <small>≥ 1 s, last hour</small></h2>
       <div class="scroll"><table id="slow" class="fit"></table></div>
     </div>
     <div class="card">
@@ -202,11 +216,6 @@
 
     // Slow
     const none = (text) => `<tr><td class="empty grow">${text}</td></tr>`;
-    $('slowRoutes').innerHTML = d.slow_routes.length
-      ? '<tr><th class="grow">Route</th><th class="num">Count</th><th class="num">Avg</th><th class="num">Max</th></tr>' +
-        d.slow_routes.map((s) => `<tr><td class="path grow">${esc(s.route)}</td><td class="num">${s.n}</td>` +
-          `<td class="num">${fmtMs(s.avg)}</td><td class="num">${fmtMs(s.max)}</td></tr>`).join('')
-      : none('None in the last hour.');
     $('slow').innerHTML = d.slow.length
       ? '<tr><th>When</th><th class="grow">Request</th><th class="num">Status</th><th class="num">Time</th></tr>' +
         d.slow.map((s) => `<tr><td>${ago(s.t)}</td><td class="path grow">${esc(s.method)} ${esc(s.path)}</td>` +
@@ -274,6 +283,16 @@
   const line = (name, data, color, o) => Object.assign({name, type: 'line', data, symbol: 'circle', symbolSize: 3, connectNulls: false,
     lineStyle: {width: 1.6, color}, itemStyle: {color}}, o || {});
 
+  // Deploys: a dashed vertical line where the workers started on a new commit.
+  function deployMarks(h) {
+    return {
+      symbol: 'none', silent: true, animation: false,
+      lineStyle: {color: C('--muted'), type: 'dashed', width: 1},
+      label: {show: true, position: 'insideEndTop', color: C('--muted'), fontSize: 10, formatter: (p) => p.name},
+      data: (h.deploys || []).map((d) => ({xAxis: d.t * 1000, name: d.tag || d.short})),
+    };
+  }
+
   function renderHistory(h) {
     const P = h.points;
     const max = Date.now(), min = P.length ? P[0].t * 1000 : max - 3600000;
@@ -286,7 +305,7 @@
     chart('cWorkers').setOption(base({
       yAxis: yAxis({minInterval: 1}),
       series: [
-        line('capacity', at('cap'), C('--muted'), {lineStyle: {width: 1, type: 'dashed', color: C('--muted')}}),
+        line('capacity', at('cap'), C('--muted'), {lineStyle: {width: 1, type: 'dashed', color: C('--muted')}, markLine: deployMarks(h)}),
         line('peak busy', at('peak'), C('--bad'), {lineStyle: {width: 1, color: C('--bad')}}),
         line('avg busy', at('busy'), C('--warn'), {areaStyle: {opacity: 0.18}}),
       ],
@@ -295,7 +314,7 @@
       yAxis: yAxis({type: 'log', min: 1, axisLabel: {color: C('--muted'), formatter: (v) => fmtMs(v)}}),
       tooltip: {trigger: 'axis', valueFormatter: (v) => fmtMs(v)},
       series: [
-        line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.6}}),
+        line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.6}, markLine: deployMarks(h)}),
         line('p95', at('p95'), C('--warn')),
         line('p50', at('p50'), C('--accent')),
       ],
@@ -303,7 +322,7 @@
     chart('cTraffic').setOption(base({
       yAxis: [yAxis(), yAxis({minInterval: 1, splitLine: {show: false}})],
       series: [
-        line('req/min', at('req_per_min'), C('--accent'), {areaStyle: {opacity: 0.15}}),
+        line('req/min', at('req_per_min'), C('--accent'), {areaStyle: {opacity: 0.15}, markLine: deployMarks(h)}),
         {name: '5xx', type: 'bar', yAxisIndex: 1, data: at('err'), itemStyle: {color: C('--bad')}, barMaxWidth: 6},
       ],
     }), true);
@@ -311,12 +330,67 @@
       yAxis: [yAxis({max: 100, axisLabel: {color: C('--muted'), formatter: '{value} %'}}),
               yAxis({type: 'log', min: 1, splitLine: {show: false}, axisLabel: {color: C('--muted'), formatter: (v) => fmtMs(v)}})],
       series: [
-        line('CPU', at('cpu_pct'), C('--accent')),
+        line('CPU', at('cpu_pct'), C('--accent'), {markLine: deployMarks(h)}),
         line('memory', at('mem_used_pct'), C('--ok')),
         line('iowait', at('iowait_pct'), C('--warn')),
         line('Postgres', at('pg_ms'), C('--bad'), {yAxisIndex: 1, lineStyle: {width: 1, color: C('--bad')}}),
       ],
     }), true);
+  }
+
+  // Routes
+  let compare = 'prev';
+  try { compare = localStorage.getItem('healthCompare') || compare; } catch (e) {}
+  const RANGE_WORDS = {'1h': 'hour', '6h': '6 hours', '24h': '24 hours', '7d': '7 days', '30d': '30 days'};
+  const fmtDate = (t) => new Date(t * 1000).toLocaleString([], {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+
+  function delta(cur, base, lowerIsBetter) {
+    if (cur == null || !base) return '';
+    const pct = Math.round((cur - base) / base * 100);
+    if (Math.abs(pct) < 5) return '';
+    const cls = lowerIsBetter == null ? '' : (pct > 0) === lowerIsBetter ? 'worse' : 'better';
+    return `<span class="delta ${cls}">${pct > 0 ? '+' : ''}${pct}%</span>`;
+  }
+
+  function renderRoutes(d) {
+    // Comparison choices: previous period, none, or either side of a recent deploy.
+    const sel = $('compare');
+    const opts = [['prev', `vs previous ${RANGE_WORDS[d.range] || d.range}`], ['none', 'no comparison']]
+      .concat(d.deploys.map((x) => [x.c, `before / after ${x.tag || x.short}, ${fmtDate(x.t)}` + (x.subject ? ` — ${x.subject}` : '')]));
+    if (!opts.some((o) => o[0] === compare)) compare = 'prev';
+    sel.innerHTML = opts.map((o) => `<option value="${esc(o[0])}"${o[0] === compare ? ' selected' : ''}>${esc(o[1])}</option>`).join('');
+
+    const c = d.compare;
+    let note = `${d.total.n} requests, ${d.total.routes} routes`;
+    if (c && c.kind === 'deploy') note += ` · ${c.deploy.tag || c.deploy.short} vs the commit before, ${fmtDur(c.length_s)} each`;
+    $('routesNote').textContent = note;
+
+    const none = (text) => `<tr><td class="empty grow">${text}</td></tr>`;
+    if (!d.rows.length) { $('routes').innerHTML = none('No requests recorded in this range yet.'); return; }
+    const maxShare = Math.max(...d.rows.map((r) => r.cur.share || 0), 1);
+    $('routes').innerHTML = '<tr><th class="grow">Route</th><th class="num">Requests</th><th>Worker time</th>' +
+      '<th class="num">Avg</th><th class="num">p95</th><th class="num">Max</th><th class="num">≥ 1 s</th></tr>' +
+      d.rows.map((r) => {
+        const a = r.cur, b = r.base || {};
+        return `<tr><td class="path grow"><span class="meth">${esc(r.method)}</span>${esc(r.route)}</td>` +
+          `<td class="num">${a.n}${delta(a.n, b.n, null)}</td>` +
+          `<td><span class="share"><i style="width:${Math.round(100 * (a.share || 0) / maxShare)}%"></i></span>${n(a.share)} %</td>` +
+          `<td class="num">${fmtMs(a.avg)}${delta(a.avg, b.avg, true)}</td>` +
+          `<td class="num">${fmtMs(a.p95)}${delta(a.p95, b.p95, true)}</td>` +
+          `<td class="num">${fmtMs(a.max)}</td><td class="num${a.slow ? ' long' : ''}">${a.slow || ''}</td></tr>`;
+      }).join('');
+  }
+
+  $('compare').addEventListener('change', (e) => {
+    compare = e.target.value;
+    try { localStorage.setItem('healthCompare', compare); } catch (err) {}
+    pollRoutes();
+  });
+
+  async function pollRoutes() {
+    try {
+      renderRoutes(await getJSON(BASE + '/routes?range=' + encodeURIComponent(range) + '&compare=' + encodeURIComponent(compare)));
+    } catch (e) { fail(e); }
   }
 
   async function getJSON(url) {
@@ -338,6 +412,7 @@
   async function pollHistory() {
     clearTimeout(histTimer);
     try { renderHistory(await getJSON(BASE + '/history?range=' + encodeURIComponent(range))); } catch (e) { fail(e); }
+    pollRoutes();
     if (!document.hidden) histTimer = setTimeout(pollHistory, HISTORY_MS);
   }
 

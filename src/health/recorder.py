@@ -13,6 +13,12 @@ for any request running longer than STACK_AFTER_S, captures the stack of the
 thread serving it, which is what shows what a stuck worker is waiting on
 (a dead analytics host, an outside API, a lock in Postgres) without py-spy.
 
+Each request is also counted under its route pattern (/u/<username>/trips, put
+in the environ by src/health/views.py:record_route), never its path, so the
+per-route numbers carry no personal data and can be kept for weeks; and every
+worker reports the commit it was started from, so a change in timings can be
+pinned to a deploy.
+
 The files carry the requests' paths (no query strings), which can name a user,
 and only in memory (tmpfs): a path in flight goes when its request ends, a slow
 request's after SLOW_KEEP_S, and all of them when the worker exits. The history
@@ -37,6 +43,10 @@ SLOW_KEEP = 30  # ...this many per worker
 SLOW_KEEP_S = 3600  # ...and for at most this long: paths are personal data
 STACK_AFTER_S = 5  # capture the stack of requests running longer than this
 TICK_S = 2  # watchdog period: heartbeat, file write, busy-time credit
+ROUTE_KEEP_MINUTES = 15  # per-route minute buckets kept (the sidecar saves them within ~1 min)
+ROUTE_ENVIRON_KEY = "trainlog.route"
+# Per-route counters: [n, sum_ms, max_ms, slow_n, *hist]
+R_N, R_SUM, R_MAX, R_SLOW, R_HIST = 0, 1, 2, 3, 4
 
 _lock = threading.Lock()
 _state = None
@@ -59,6 +69,42 @@ def hist_index(ms):
         if ms <= bound:
             return i
     return len(HIST_BOUNDS_MS)
+
+
+def new_route_counters():
+    return [0, 0.0, 0.0, 0] + [0] * (len(HIST_BOUNDS_MS) + 1)
+
+
+def add_route_counters(into, other):
+    into[R_N] += other[R_N]
+    into[R_SUM] += other[R_SUM]
+    into[R_MAX] = max(into[R_MAX], other[R_MAX])
+    into[R_SLOW] += other[R_SLOW]
+    for i in range(len(HIST_BOUNDS_MS) + 1):
+        into[R_HIST + i] += other[R_HIST + i]
+
+
+def git_head(root="."):
+    """The commit checked out in `root`, read from .git directly (no git
+    binary, no subprocess in a gunicorn hook)."""
+    try:
+        with open(os.path.join(root, ".git", "HEAD")) as f:
+            head = f.read().strip()
+        if not head.startswith("ref: "):
+            return head or None
+        ref = head[5:]
+        try:
+            with open(os.path.join(root, ".git", ref)) as f:
+                return f.read().strip() or None
+        except OSError:
+            with open(os.path.join(root, ".git", "packed-refs")) as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) == 2 and parts[1] == ref:
+                        return parts[0]
+    except OSError:
+        pass
+    return None
 
 
 def minute_of(t):
@@ -150,6 +196,9 @@ def _watchdog():
                 cutoff = minute_of(now) - KEEP_MINUTES * 60
                 for key in [k for k in _state["minutes"] if int(k) < cutoff]:
                     del _state["minutes"][key]
+                cutoff = minute_of(now) - ROUTE_KEEP_MINUTES * 60
+                for key in [k for k in _state["routes"] if int(k) < cutoff]:
+                    del _state["routes"][key]
                 _write()
         except Exception:
             pass
@@ -183,6 +232,9 @@ def post_worker_init(worker):
         _state = {
             "pid": pid,
             "threads": max(1, int(getattr(worker.cfg, "threads", 1) or 1)),
+            # What this worker's code was loaded from: a later git pull without a
+            # restart changes the checkout, not what runs.
+            "commit": git_head(),
             "booted": now,
             "heartbeat": now,
             "served": 0,
@@ -190,6 +242,7 @@ def post_worker_init(worker):
             "cpu_s": _cpu_s(),
             "busy": {},  # thread id -> request in flight
             "minutes": {},  # minute epoch -> bucket
+            "routes": {},  # minute epoch -> {"GET /route/<pattern>": counters}
             "slow": [],
         }
         with _lock:
@@ -234,6 +287,18 @@ def post_request(worker, req, environ, resp):
             b["hist"][hist_index(ms)] += 1
             if isinstance(status, int) and status >= 500:
                 b["err"] += 1
+            rule = environ.get(ROUTE_ENVIRON_KEY) if environ else None
+            key = f"{entry['method']} {rule or '(no route)'}"
+            routes = _state["routes"].setdefault(str(minute_of(now)), {})
+            rc = routes.get(key)
+            if rc is None:
+                rc = routes[key] = new_route_counters()
+            rc[R_N] += 1
+            rc[R_SUM] += ms
+            rc[R_MAX] = max(rc[R_MAX], ms)
+            if ms >= SLOW_MS:
+                rc[R_SLOW] += 1
+            rc[R_HIST + hist_index(ms)] += 1
             if ms >= SLOW_MS:
                 _state["slow"].append(
                     {

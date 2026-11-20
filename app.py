@@ -181,7 +181,7 @@ from src.api.admin import (
     wagons_admin_blueprint,
 )
 from src.api.feature_requests import feature_requests_blueprint
-from src.health.views import health_blueprint
+from src.health.views import health_blueprint, record_route
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
@@ -374,6 +374,7 @@ app.register_blueprint(admin_blueprint, url_prefix="/admin")
 # Fallback and dev: in prod Traefik sends /admin/health to the trainlog_health
 # sidecar first (src/health/standalone.py).
 app.register_blueprint(health_blueprint, url_prefix="/admin/health")
+record_route(app)
 
 app.register_blueprint(operators_api_blueprint, url_prefix="/api/admin/operators")
 app.register_blueprint(wagons_admin_blueprint, url_prefix="/api/admin/wagons")
@@ -425,7 +426,7 @@ if matomo_config:
             matomo_url=matomo_url,
             id_site=id_site,
             token_auth=token_auth,
-            ignored_routes=["/static/<path:filename>", "/admin/health/live", "/admin/health/history"],
+            ignored_routes=["/static/<path:filename>", "/admin/health/live", "/admin/health/history", "/admin/health/routes"],
         )
         matomo.client_dimension_id = matomo_config.get("client_dimension_id")
 
