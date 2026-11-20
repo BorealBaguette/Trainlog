@@ -147,8 +147,15 @@ _USER_RE = re.compile(r"/u/[^/]+")
 _ID_RE = re.compile(r"/(\d+|[0-9a-f]{16,}|[0-9a-f-]{36})(?=/|$)")
 
 
+# Routes whose tail is free-form (app.py: /forwardRouting/<routingType>/<path:path>,
+# the router's own URL with the trip's coordinates in it): keep the type, star the rest.
+_TAIL_RE = re.compile(r"^(/forwardRouting/[^/]+)/.*")
+
+
 def route_of(path):
-    """Group paths the way routes are: /u/<user>/trip/123 -> /u/*/trip/#"""
+    """Group paths the way routes are: /u/<user>/trip/123 -> /u/*/trip/#,
+    /forwardRouting/bus/route/v1/driving/6.1,49.1;... -> /forwardRouting/bus/*"""
+    path = _TAIL_RE.sub(r"\1/*", path)
     return _ID_RE.sub("/#", _USER_RE.sub("/u/*", path))
 
 
