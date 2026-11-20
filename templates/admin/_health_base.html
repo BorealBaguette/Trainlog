@@ -343,7 +343,7 @@ const HC = (function () {
   // Full ECharts option for one of the SPECS charts.
   // A point sums up [t, t + step): drawn at the middle of that span, so a change
   // lines up with the deploy that caused it instead of up to a step before it.
-  const pointAt = (h) => (p) => (p.t + (h.step_s || 60) / 2) * 1000;
+  const pointAt = (h) => (p) => (p.t + (p.s || h.step_s || 60) / 2) * 1000;
   function option(name, h, big) {
     const P = h.points || [];
     const x = pointAt(h);
@@ -367,8 +367,56 @@ const HC = (function () {
     return drawOption(id, option(name, h, big), keepZoom);
   }
 
+  // Detail follows the zoom. The page draws an overview of the whole range; once
+  // a zoom settles, the visible window is fetched again at full detail
+  // (fetchWindow(from, to) in epoch s) and drawn in place of the overview's
+  // points there. Zooming back out returns to the overview.
+  function mergeDetail(overview, fine) {
+    const span = (p, h) => p.s || h.step_s || 60;
+    const outside = overview.points.filter((p) => p.t + span(p, overview) <= fine.from || p.t >= fine.to)
+      .map((p) => Object.assign({s: span(p, overview)}, p));
+    const inside = fine.points.map((p) => Object.assign({s: span(p, fine)}, p));
+    const seen = new Set();
+    const deploys = (overview.deploys || []).concat(fine.deploys || [])
+      .filter((d) => !seen.has(d.c) && seen.add(d.c)).sort((a, b) => a.t - b.t);
+    return Object.assign({}, overview, {points: outside.concat(inside).sort((a, b) => a.t - b.t), deploys,
+                                         step_s: fine.step_s, detail: true});
+  }
+  function zoomDetail(chartId, fetchWindow, render) {
+    let overview = null, timer = null, applying = false, hooked = false, seq = 0;
+    function visible() {
+      const c = charts[chartId];
+      const dz = c && c.getOption() && (c.getOption().dataZoom || [])[0];
+      if (!dz || (dz.start <= 0.01 && dz.end >= 99.99)) return null;
+      return [dz.startValue / 1000, dz.endValue / 1000];
+    }
+    function apply(h) { applying = true; try { render(h); } finally { applying = false; } }
+    async function refine() {
+      const w = visible(), mine = ++seq;
+      if (!w) { apply(overview); return; }
+      const fine = await fetchWindow(w[0], w[1]);
+      if (mine === seq) apply(mergeDetail(overview, fine));  // a newer zoom wins
+    }
+    function hook() {
+      if (hooked || !charts[chartId]) return;
+      hooked = true;
+      charts[chartId].on('datazoom', () => {
+        if (applying) return;
+        clearTimeout(timer);
+        timer = setTimeout(refine, 350);
+      });
+    }
+    return {
+      setOverview(h) {
+        overview = h;
+        if (visible()) refine(); else apply(h);
+        hook();
+      },
+    };
+  }
+
   return {$, esc, fmtMs, fmtDur, fmtDate, getJSON, initRanges, get range() { return range; },
-          setRange(r) { range = r; }, SPECS, keysHTML, draw, drawOption, timeWindow,
+          setRange(r) { range = r; }, SPECS, keysHTML, draw, drawOption, timeWindow, zoomDetail,
           parts: {C, alpha, fade, line, yAxis, frame, num, pointAt}};
 })();
 </script>

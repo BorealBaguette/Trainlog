@@ -105,7 +105,11 @@ def health_route_page():
 @health_blueprint.route("/route/data")
 @owner_only
 def health_route_data():
-    resp = jsonify(collect.route_series(request.args.get("range", "24h"), request.args.get("r", "")))
+    resp = jsonify(collect.route_series(
+        request.args.get("range", "24h"), request.args.get("r", ""),
+        max_points=request.args.get("points", 300, type=int),
+        frm=request.args.get("from", type=float), to=request.args.get("to", type=float),
+    ))
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
@@ -120,6 +124,9 @@ def health_charts():
 @owner_only
 def health_history():
     points = request.args.get("points", collect.MAX_POINTS, type=int)
-    resp = jsonify(collect.history(request.args.get("range", "1h"), max_points=points))
+    resp = jsonify(collect.history(
+        request.args.get("range", "1h"), max_points=points,
+        frm=request.args.get("from", type=float), to=request.args.get("to", type=float),
+    ))
     resp.headers["Cache-Control"] = "no-store"
     return resp

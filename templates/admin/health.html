@@ -171,13 +171,16 @@
     // Comparison choices: previous period, none, or either side of a recent deploy.
     const sel = $('compare');
     const opts = [['prev', `vs previous ${RANGE_WORDS[d.range] || d.range}`], ['none', 'no comparison']]
-      .concat(d.deploys.map((x) => [x.c, `before / after ${x.tag || x.short}, ${fmtDate(x.t)}` + (x.subject ? ` — ${x.subject}` : '')]));
+      .concat(d.deploys.map((x) => [x.c, (x.prev ? 'before / after ' : 'first recorded: ') +
+        `${x.tag || x.short}, ${fmtDate(x.t)}` + (x.subject ? ` — ${x.subject}` : '')]));
     if (!opts.some((o) => o[0] === compare)) compare = 'prev';
     sel.innerHTML = opts.map((o) => `<option value="${esc(o[0])}"${o[0] === compare ? ' selected' : ''}>${esc(o[1])}</option>`).join('');
 
     const c = d.compare;
     let note = `${d.total.n} requests, ${d.total.routes} routes`;
-    if (c && c.kind === 'deploy') note += ` · ${c.deploy.tag || c.deploy.short} vs the commit before, ${fmtDur(c.length_s)} each`;
+    if (c && c.kind === 'deploy') note += c.no_base
+      ? ` · ${c.deploy.tag || c.deploy.short} is the first commit recorded: nothing before it to compare`
+      : ` · ${c.deploy.tag || c.deploy.short} vs the commit before, ${fmtDur(c.length_s)} each`;
     $('routesNote').textContent = note;
 
     const none = (text) => `<tr><td class="empty grow">${text}</td></tr>`;

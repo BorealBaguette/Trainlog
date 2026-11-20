@@ -59,11 +59,15 @@
     $('updated').textContent = 'updated ' + new Date().toLocaleTimeString();
   }
 
+  // Zoomed in, the visible window is fetched again at full detail (per minute).
+  const detail = HC.zoomDetail('c-workers', (from, to) =>
+    HC.getJSON(BASE + `/history?from=${from}&to=${to}&points=${POINTS}`), render);
+
   let timer;
   async function poll() {
     clearTimeout(timer);
     try {
-      render(await HC.getJSON(BASE + '/history?range=' + encodeURIComponent(HC.range) + '&points=' + POINTS));
+      detail.setOverview(await HC.getJSON(BASE + '/history?range=' + encodeURIComponent(HC.range) + '&points=' + POINTS));
     } catch (e) {
       $('updated').innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
     }

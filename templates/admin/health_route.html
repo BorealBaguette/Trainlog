@@ -14,7 +14,7 @@
     <div class="tiles" id="tiles" style="margin-bottom: 0"></div>
     <div class="card">
       <div class="cardhead">
-        <h2>Timings <small>per {{ '' }}<span id="step"></span>, log scale · scroll or drag to zoom</small></h2>
+        <h2>Timings <small><span id="step"></span> · log scale · scroll or drag to zoom for more detail</small></h2>
         <span class="keys" id="keys"></span>
       </div>
       <div class="chart big" id="c-route"></div>
@@ -47,8 +47,11 @@
     .map(([l, c]) => `<span class="key"><i style="background:${C(c)}"></i>${esc(l)}</span>`).join('');
 
   function render(d) {
-    $('step').textContent = fmtDur(d.step_s);
     const P = d.points;
+    const spans = [...new Set(P.filter((p) => p.n).map((p) => p.s || d.step_s))].sort((a, b) => a - b);
+    $('step').textContent = spans.length > 1
+      ? `per ${fmtDur(spans[0])}, per ${fmtDur(spans[spans.length - 1])} where only that is kept`
+      : `per ${fmtDur(spans[0] || d.step_s)}`;
     const x = HC.parts.pointAt(d);
     const at = (k) => P.map((p) => [x(p), p[k] == null ? null : p[k]]);
     const withData = P.filter((p) => p.n);
@@ -71,9 +74,10 @@
     opt.series[1].markLine = opt.series[0].markLine; delete opt.series[0].markLine;
     HC.drawOption('c-route', opt, true);
 
-    // Range totals
-    const tot = withData.reduce((a, p) => ({n: a.n + p.n, time: a.time + p.time_s, slow: a.slow + p.slow,
-                                             max: Math.max(a.max, p.max || 0)}), {n: 0, time: 0, slow: 0, max: 0});
+    // Range totals, from the per-commit numbers (which cover the whole range
+    // whatever the zoom shows in detail)
+    const tot = d.commits.reduce((a, c) => ({n: a.n + c.n, time: a.time + c.time_s, slow: a.slow + c.slow,
+                                             max: Math.max(a.max, c.max || 0)}), {n: 0, time: 0, slow: 0, max: 0});
     $('tiles').innerHTML = [
       tile('Requests', tot.n, 'in this range'),
       tile('Average', tot.n ? fmtMs(tot.time * 1000 / tot.n) : '–', 'over the range'),
@@ -100,11 +104,15 @@
     $('updated').textContent = 'updated ' + new Date().toLocaleTimeString();
   }
 
+  const POINTS = 1000;
+  const url = (q) => BASE + '/route/data?r=' + encodeURIComponent(KEY) + '&points=' + POINTS + '&' + q;
+  const detail = HC.zoomDetail('c-route', (from, to) => HC.getJSON(url(`from=${from}&to=${to}`)), render);
+
   let timer;
   async function poll() {
     clearTimeout(timer);
     try {
-      render(await HC.getJSON(BASE + '/route/data?range=' + encodeURIComponent(HC.range) + '&r=' + encodeURIComponent(KEY)));
+      detail.setOverview(await HC.getJSON(url('range=' + encodeURIComponent(HC.range))));
     } catch (e) {
       $('updated').innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
     }

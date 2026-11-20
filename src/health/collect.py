@@ -45,6 +45,9 @@ MAX_POINTS = 360
 
 ROUTE_BUCKET_S = 600
 ROUTE_ROWS = 40
+# Per-minute route counters too (YYYY-MM-DD.routes1m.jsonl), for the detail a
+# zoomed route chart wants; kept this long, the 10-minute buckets for HISTORY_DAYS.
+ROUTE_MINUTE_DAYS = 3
 
 RANGES = {"1h": 3600, "6h": 6 * 3600, "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400}
 
@@ -429,6 +432,27 @@ def _merge_routes(states, m, open_buckets):
                 rec.add_route_counters(cur, counters)
 
 
+def _minute_routes(states, m):
+    """Minute m's per-route counters of all workers, per commit (fresh copies)."""
+    out = {}
+    for st in states:
+        minute = st.get("routes", {}).get(str(m))
+        if not minute:
+            continue
+        per = out.setdefault(st.get("commit") or "unknown", {})
+        for key, counters in minute.items():
+            cur = per.get(key)
+            if cur is None:
+                per[key] = list(counters)
+            else:
+                rec.add_route_counters(cur, counters)
+    for per in out.values():
+        for counters in per.values():
+            counters[rec.R_SUM] = round(counters[rec.R_SUM])
+            counters[rec.R_MAX] = round(counters[rec.R_MAX])
+    return out
+
+
 def _record_deploy(states):
     """Append to deploys.jsonl when the workers run a commit other than the last
     one recorded: the newest commit, at the time its first worker booted."""
@@ -491,6 +515,10 @@ def persist(now, states, host_now, pg_now):
         lines = {}
         for m in range(start, upto + 60, 60):
             _merge_routes(states, m, open_buckets)
+            for commit, routes_m in _minute_routes(states, m).items():
+                lines.setdefault(_day_file(m, ".routes1m"), []).append(
+                    json.dumps({"t": m, "c": commit, "r": routes_m}, separators=(",", ":"))
+                )
             cap = capacity(states, m)
             if not cap:
                 continue
@@ -545,20 +573,32 @@ def persist(now, states, host_now, pg_now):
             f.write(str(upto))
         os.replace(tmp, marker)
 
-        cutoff = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=HISTORY_DAYS)).isoformat()
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+        cutoff = (today - datetime.timedelta(days=HISTORY_DAYS)).isoformat()
+        cutoff_1m = (today - datetime.timedelta(days=ROUTE_MINUTE_DAYS)).isoformat()
         for name in os.listdir(HISTORY_DIR):
-            if name.endswith(".jsonl") and name[:10] < cutoff:
+            if name.endswith(".jsonl") and name[:10] < (cutoff_1m if ".routes1m." in name else cutoff):
                 try:
                     os.remove(os.path.join(HISTORY_DIR, name))
                 except OSError:
                     pass
 
 
-def history(range_key, max_points=MAX_POINTS):
-    span = RANGES.get(range_key, RANGES["1h"])
-    max_points = min(max(int(max_points or MAX_POINTS), 60), 1500)
+def _window(range_key, frm=None, to=None):
+    """(since, until): the range up to now, or an explicit from/to (epoch s, a
+    zoomed chart asking for its visible part), clamped to what is kept."""
     now = time.time()
-    since = rec.minute_of(now - span)
+    if frm is not None and to is not None:
+        until = min(float(to), now)
+        since = max(float(frm), now - RANGES["30d"])
+        return min(since, until - 120), until
+    return now - RANGES.get(range_key, RANGES["1h"]), now
+
+
+def history(range_key, max_points=MAX_POINTS, frm=None, to=None):
+    max_points = min(max(int(max_points or MAX_POINTS), 60), 1500)
+    since, now = _window(range_key, frm, to)
+    since = rec.minute_of(since)
     rows = []
     day = datetime.datetime.fromtimestamp(since, datetime.timezone.utc).date()
     last_day = datetime.datetime.fromtimestamp(now, datetime.timezone.utc).date()
@@ -629,7 +669,9 @@ def history(range_key, max_points=MAX_POINTS):
         "range": range_key if range_key in RANGES else "1h",
         "step_s": step,
         "points": points,
-        "deploys": [d for d in deploys() if d["t"] >= since],
+        "from": since,
+        "to": now,
+        "deploys": [d for d in deploys() if since <= d["t"] <= now],
     }
 
 
@@ -678,11 +720,12 @@ def deploys():
     return out
 
 
-def _route_rows(since, until):
+def _route_rows(since, until, minute=False):
     rows = []
+    kind = ".routes1m" if minute else ".routes"
     for day in _days(since, until):
         try:
-            with open(os.path.join(HISTORY_DIR, f"{day.isoformat()}.routes.jsonl")) as f:
+            with open(os.path.join(HISTORY_DIR, f"{day.isoformat()}{kind}.jsonl")) as f:
                 for line in f:
                     try:
                         row = json.loads(line)
@@ -692,6 +735,8 @@ def _route_rows(since, until):
                         rows.append(row)
         except OSError:
             pass
+    if minute:
+        return rows
     try:
         with open(os.path.join(HISTORY_DIR, "routes_open.json")) as f:
             rows += [b for b in json.load(f).values() if since <= b["t"] < until]
@@ -727,38 +772,58 @@ def _route_stats(c, total_ms):
     }
 
 
-def route_series(range_key, key, max_points=300):
-    """One route over the range: a time series (requests per minute, avg, p95,
-    max, slow) from the 10-minute buckets, and its numbers per commit, oldest
-    first, so a deploy's effect on that route reads straight off both."""
-    span = RANGES.get(range_key, RANGES["1h"])
-    now = time.time()
-    since = now - span
-    rows = [row for row in _route_rows(since - ROUTE_BUCKET_S, now + 1) if key in row["r"]]
-    if rows:  # spacing from the span with data, as in history()
-        since = max(since, min(row["t"] for row in rows))
-    step = ROUTE_BUCKET_S * max(1, math.ceil((now - since) / ROUTE_BUCKET_S / max(int(max_points or 300), 30)))
-    groups, commits = {}, {}
-    for row in rows:
-        counters = row["r"][key]
-        g = groups.setdefault(row["t"] // step * step, rec.new_route_counters())
-        rec.add_route_counters(g, counters)
-        c = commits.setdefault(row["c"], {"first": row["t"], "last": row["t"], "counters": rec.new_route_counters()})
-        c["first"], c["last"] = min(c["first"], row["t"]), max(c["last"], row["t"])
-        rec.add_route_counters(c["counters"], counters)
+def route_series(range_key, key, max_points=300, frm=None, to=None):
+    """One route over the window: a time series (requests per minute, avg, p95,
+    max, slow) and its numbers per commit, oldest first, so a deploy's effect on
+    that route reads straight off both. Per-minute points where the minute lines
+    reach (the last ROUTE_MINUTE_DAYS) and the window is short enough, 10-minute
+    buckets before that; each point carries its own span ("s")."""
+    max_points = max(int(max_points or 300), 30)
+    since, now = _window(range_key, frm, to)
+    span = now - since
+    fine = span / 60 / max_points < ROUTE_BUCKET_S / 60
+    minute_rows = _route_rows(since - 60, now + 1, minute=True) if fine else []
+    coverage = min((row["t"] for row in minute_rows), default=math.inf)
+    rows_1m = [row for row in minute_rows if key in row["r"]]
+    rows_10m = [
+        row for row in _route_rows(since - ROUTE_BUCKET_S, min(now, coverage) + 1)
+        if key in row["r"] and row["t"] + ROUTE_BUCKET_S <= coverage
+    ]
+    first = min((row["t"] for row in rows_1m + rows_10m), default=None)
+    if first is not None:  # spacing from the span with data, as in history()
+        since = max(since, first)
+        span = now - since
+    step_10m = ROUTE_BUCKET_S * max(1, math.ceil(span / ROUTE_BUCKET_S / max_points))
+    step_1m = 60 * max(1, math.ceil(span / 60 / max_points))
 
-    points = []
-    t = int(since // step * step)
-    while t <= now:
-        g = groups.get(t)
-        if g is None:
-            points.append({"t": t})
-        else:
-            stats = _route_stats(g, 0)
-            stats.pop("share", None)
-            stats["req_per_min"] = round(g[rec.R_N] / (step / 60), 2)
-            points.append({"t": t, **stats})
-        t += step
+    commits = {}
+    def series(rows, step, start, end):
+        groups = {}
+        for row in rows:
+            counters = row["r"][key]
+            rec.add_route_counters(groups.setdefault(row["t"] // step * step, rec.new_route_counters()), counters)
+            c = commits.setdefault(row["c"], {"first": row["t"], "last": row["t"], "counters": rec.new_route_counters()})
+            c["first"], c["last"] = min(c["first"], row["t"]), max(c["last"], row["t"])
+            rec.add_route_counters(c["counters"], counters)
+        out = []
+        t = int(start // step * step)
+        while t < end:
+            g = groups.get(t)
+            if g is None:
+                out.append({"t": t, "s": step})
+            else:
+                stats = _route_stats(g, 0)
+                stats.pop("share", None)
+                stats["req_per_min"] = round(g[rec.R_N] / (step / 60), 2)
+                out.append({"t": t, "s": step, **stats})
+            t += step
+        return out
+
+    split = min(max(coverage, since), now) if fine else now
+    points = series(rows_10m, step_10m, since, split) if since < split else []
+    if fine and split < now:
+        points += series(rows_1m, step_1m, split, now + 1)
+    step = step_1m if fine and split < now else step_10m
 
     known = {d["c"]: d for d in deploys()}
     per_commit = []
@@ -774,9 +839,10 @@ def route_series(range_key, key, max_points=300):
     return {
         "range": range_key if range_key in RANGES else "1h",
         "key": key, "method": method, "route": route, "step_s": step,
+        "from": since, "to": now,
         "points": points,
         "commits": per_commit,
-        "deploys": [d for d in deploys() if d["t"] >= since],
+        "deploys": [d for d in deploys() if since <= d["t"] <= now],
     }
 
 
@@ -798,8 +864,15 @@ def routes(range_key, compare="prev"):
         if d:
             length = min(span, max(now - d["t"], ROUTE_BUCKET_S))
             cur = _sum_routes(_route_rows(d["t"] - ROUTE_BUCKET_S, d["t"] + length), commit=d["c"])
-            base = _sum_routes(_route_rows(d["t"] - length - ROUTE_BUCKET_S, d["t"] + ROUTE_BUCKET_S), commit=d.get("prev"))
             info = {"kind": "deploy", "deploy": d, "length_s": round(length)}
+            # The first commit recorded has nothing before it. (commit=None would
+            # mean "any commit" and compare the deploy with its own first minutes.)
+            if d.get("prev"):
+                base = _sum_routes(
+                    _route_rows(d["t"] - length - ROUTE_BUCKET_S, d["t"] + ROUTE_BUCKET_S), commit=d["prev"]
+                )
+            else:
+                info["no_base"] = True
         else:
             cur = _sum_routes(_route_rows(since, now + 1))
     else:
