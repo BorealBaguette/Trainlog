@@ -56,7 +56,7 @@
   .cardhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; margin-bottom: 4px; }
   .cardhead h2 { margin: 0; }
   select { font: inherit; font-size: 12px; color: var(--fg); background: var(--card); border: 1px solid var(--line);
-           border-radius: 6px; padding: 2px 6px; max-width: 100%; }
+           border-radius: 6px; padding: 2px 6px; width: auto; max-width: min(380px, 100%); text-overflow: ellipsis; }
   .meth { color: var(--muted); font-size: 11px; margin-right: 4px; }
   .delta { font-size: 11px; margin-left: 4px; color: var(--muted); }
   .delta.worse { color: var(--bad); } .delta.better { color: var(--ok); }
@@ -269,7 +269,8 @@
     return Object.assign({
       animation: false,
       textStyle: {color: C('--fg'), fontSize: 11},
-      grid: {left: 6, right: 6, top: 24, bottom: 2, containLabel: true},
+      // right: room for the last time label, which sits at the very edge (now).
+      grid: {left: 6, right: 18, top: 24, bottom: 2, containLabel: true},
       legend: {top: 0, right: 0, textStyle: {color: C('--muted'), fontSize: 11}, itemWidth: 12, itemHeight: 7, itemGap: 8},
       tooltip: {trigger: 'axis'},
       // Explicit window and tick spacing: left to itself ECharts picks a different

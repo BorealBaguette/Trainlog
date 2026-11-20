@@ -207,15 +207,41 @@ def _watchdog():
 # --- gunicorn hooks (see gunicorn.conf.py) -----------------------------------
 
 
+# Workers that go away leave their file behind, marked "exited", rather than
+# deleting it: its last minute or two may not be in the history yet, and
+# deleting it left a gap in every chart at each restart. src/health/collect.py
+# saves those minutes, keeps exited workers out of the live view, and removes
+# the file afterwards.
+
+
+def mark_exited(path, when=None):
+    """Flag a worker file as exited (from any process; the worker is gone or
+    going, so nothing else writes it)."""
+    try:
+        with open(path) as f:
+            st = json.load(f)
+        if st.get("exited"):
+            return
+        st["exited"] = when or time.time()
+        st["heartbeat"] = min(st.get("heartbeat", st["exited"]), st["exited"])
+        st["busy"] = {}
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(st, f, separators=(",", ":"))
+        os.replace(tmp, path)
+    except (OSError, ValueError, KeyError):
+        pass
+
+
 def on_starting(server):
-    """Master, before the workers: forget workers of a previous run."""
+    """Master, before the workers: the previous run's workers are gone."""
     if not ENABLED:
         return
     try:
         os.makedirs(STATUS_DIR, exist_ok=True)
         for name in os.listdir(STATUS_DIR):
-            if name.startswith("worker-"):
-                os.remove(os.path.join(STATUS_DIR, name))
+            if name.startswith("worker-") and name.endswith(".json"):
+                mark_exited(os.path.join(STATUS_DIR, name))
     except Exception:
         pass
 
@@ -316,12 +342,18 @@ def post_request(worker, req, environ, resp):
 
 
 def worker_exit(server, worker):
-    """Worker, on a clean exit."""
-    if _path:
-        try:
-            os.remove(_path)
-        except OSError:
-            pass
+    """Worker, on a clean exit: last write, flagged exited."""
+    if _state is None or not _path:
+        return
+    try:
+        now = time.time()
+        with _lock:
+            _state["heartbeat"] = now
+            _state["exited"] = now
+            _state["busy"] = {}
+            _write()
+    except Exception:
+        pass
 
 
 def child_exit(server, worker):
@@ -329,7 +361,4 @@ def child_exit(server, worker):
     timeout or by the OOM killer, which never runs worker_exit."""
     if not ENABLED:
         return
-    try:
-        os.remove(os.path.join(STATUS_DIR, f"worker-{worker.pid}.json"))
-    except OSError:
-        pass
+    mark_exited(os.path.join(STATUS_DIR, f"worker-{worker.pid}.json"))

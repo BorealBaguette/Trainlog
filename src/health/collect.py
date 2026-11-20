@@ -35,6 +35,7 @@ HISTORY_DIR = os.environ.get("TRAINLOG_HEALTH_HISTORY", "databases/health")
 HISTORY_DAYS = 30
 STALE_S = 15  # no heartbeat for this long: worker shown as unresponsive
 FORGET_S = 600  # ...and for this long: its file is removed
+EXITED_KEEP_S = 900  # an exited worker's file is kept this long, for its last minutes to be saved
 PERSIST_GRACE_S = 10  # a minute is final this long after it ends
 SAMPLE_EVERY_S = 10
 CACHE_S = 4  # sample() result reused for this long
@@ -70,13 +71,13 @@ def read_states(now):
         except (OSError, ValueError):
             continue
         age = now - st.get("heartbeat", 0)
-        if age > FORGET_S:
+        if age > (EXITED_KEEP_S if st.get("exited") else FORGET_S):
             try:
                 os.remove(path)
             except OSError:
                 pass
             continue
-        st["_stale"] = age > STALE_S
+        st["_stale"] = age > STALE_S and not st.get("exited")
         states.append(st)
     states.sort(key=lambda s: s.get("booted", 0))
     return states
@@ -100,12 +101,15 @@ def merge(states, minutes):
 
 
 def capacity(states, m):
-    """Request slots (workers x threads) alive at some point in minute m."""
-    return sum(
-        st.get("threads", 1)
-        for st in states
-        if st.get("booted", 0) < m + 60 and st.get("heartbeat", 0) >= m
-    )
+    """Request slots (workers x threads) in minute m, each weighted by the part
+    of the minute it was up: across a restart the outgoing and incoming
+    workers share the minute instead of doubling it."""
+    total = 0.0
+    for st in states:
+        up = min(st.get("heartbeat", 0), m + 60) - max(st.get("booted", 0), m)
+        if up > 0:
+            total += st.get("threads", 1) * min(up, 60) / 60
+    return round(total, 2)
 
 
 def percentile(hist, q, max_ms):
@@ -170,6 +174,9 @@ _cpu_prev = {}  # pid -> (heartbeat, cpu_s, last pct)
 
 
 def live(now, states):
+    """Exited workers (kept until their last minutes are saved) count in the
+    recent numbers and slow list, not in the worker table or capacity."""
+    all_states, states = states, [st for st in states if not st.get("exited")]
     workers = []
     busy = 0
     oldest = 0.0
@@ -217,7 +224,7 @@ def live(now, states):
 
     cur = rec.minute_of(now)
     first = cur - (RECENT_MINUTES - 1) * 60
-    b = merge(states, range(first, cur + 60, 60))
+    b = merge(all_states, range(first, cur + 60, 60))
     span_min = max((now - first) / 60, 1 / 60)
     recent = {
         "minutes": RECENT_MINUTES,
@@ -232,7 +239,7 @@ def live(now, states):
     if cap:
         recent["util_pct"] = round(100 * b["busy_ms"] / (cap * span_min * 60000), 1)
 
-    slow = [s for st in states for s in st.get("slow", []) if now - s["t"] <= SLOW_WINDOW_S]
+    slow = [s for st in all_states for s in st.get("slow", []) if now - s["t"] <= SLOW_WINDOW_S]
     slow.sort(key=lambda s: -s["t"])
     by_route = {}
     for s in slow:
