@@ -1,101 +1,9 @@
-<!doctype html>
-{#- Self-contained on purpose: the trainlog_health sidecar serves this page and has
-    no layout, nav, lang or /static of its own, and must not lean on the site's
-    workers — the point of the page is to load when they are all busy. -#}
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Trainlog health</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
-<style>
-  :root {
-    --bg: #f6f7f9; --card: #fff; --fg: #1f2328; --muted: #6b7280; --line: #e5e7eb;
-    --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --accent: #2563eb; --code: #f3f4f6;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #111418; --card: #1a1f25; --fg: #e5e7eb; --muted: #9ca3af; --line: #2b323b;
-      --ok: #22c55e; --warn: #f59e0b; --bad: #f87171; --accent: #60a5fa; --code: #0f1317;
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-         font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 1680px; margin: 0 auto; padding: 12px 16px; }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 10px; }
-  header h1 { font-size: 18px; margin: 0; }
-  header .meta { color: var(--muted); font-size: 12px; }
-  header .spacer { flex: 1; }
-  a { color: var(--accent); }
-  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
-          border: 1px solid var(--line); color: var(--muted); }
-  .ranges button { border: 1px solid var(--line); background: var(--card); color: var(--fg);
-                   padding: 4px 10px; cursor: pointer; font: inherit; }
-  .ranges button:first-child { border-radius: 6px 0 0 6px; }
-  .ranges button:last-child { border-radius: 0 6px 6px 0; }
-  .ranges button + button { border-left: 0; }
-  .ranges button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  /* Ten tiles: one row on a wide screen, two rows of five below ~1400 px. */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 10px; }
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
-  .tile .k { color: var(--muted); font-size: 11.5px; }
-  .tile .v { font-size: 19px; line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tile .s { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tile.warn { border-color: var(--warn); } .tile.warn .v { color: var(--warn); }
-  .tile.bad { border-color: var(--bad); } .tile.bad .v { color: var(--bad); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; margin-bottom: 10px; min-width: 0; }
-  .card h2 { font-size: 13.5px; margin: 0 0 4px; }
-  .card h2 small { color: var(--muted); font-weight: normal; font-size: 11.5px; margin-left: 4px; }
-  /* Four charts side by side when there is room, else 2 x 2, else stacked. */
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 10px; margin-bottom: 10px; }
-  .grid > .card { margin-bottom: 0; }
-  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
-  .chart { height: 200px; }
-  .cardhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; margin-bottom: 4px; }
-  .cardhead h2 { margin: 0; }
-  select { font: inherit; font-size: 12px; color: var(--fg); background: var(--card); border: 1px solid var(--line);
-           border-radius: 6px; padding: 2px 6px; width: auto; max-width: min(380px, 100%); text-overflow: ellipsis; }
-  .meth { color: var(--muted); font-size: 11px; margin-right: 4px; }
-  .delta { font-size: 11px; margin-left: 4px; color: var(--muted); }
-  .delta.worse { color: var(--bad); } .delta.better { color: var(--ok); }
-  .share { display: inline-block; width: 48px; height: 6px; background: var(--line); border-radius: 3px;
-           margin-right: 6px; vertical-align: middle; overflow: hidden; }
-  .share > i { display: block; height: 100%; background: var(--accent); }
-  .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  tr:last-child td { border-bottom: 0; }
-  th { color: var(--muted); font-weight: 500; font-size: 11.5px; white-space: nowrap; }
-  /* Columns hug their content; the one marked .grow takes the rest. */
-  table.fit th:not(.grow), table.fit td:not(.grow) { width: 1%; white-space: nowrap; }
-  td.num, th.num { text-align: right; }
-  td.path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-  .dot.idle { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.stale { background: var(--bad); }
-  .long { color: var(--bad); font-weight: 600; }
-  details summary { cursor: pointer; color: var(--accent); font-size: 12px; }
-  pre { background: var(--code); padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 11.5px;
-        line-height: 1.35; margin: 6px 0 0; max-height: 420px; }
-  .empty { color: var(--muted); font-style: italic; }
-  .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .err { color: var(--bad); }
-</style>
-</head>
-<body>
-<main>
-  <header>
-    <h1>Trainlog health</h1>
+{% extends "admin/_health_base.html" %}
+{% block header %}
     <span class="pill" id="servedBy">…</span>
     <span class="meta" id="updated"></span>
-    <span class="spacer"></span>
-    <span class="ranges" id="ranges">
-      {%- for r in ranges %}<button type="button" data-range="{{ r }}">{{ r }}</button>{% endfor -%}
-    </span>
-    <a href="/admin" class="meta">Admin</a>
-  </header>
-
+{% endblock %}
+{% block content %}
   <div id="notice"></div>
   <div class="tiles" id="tiles"></div>
 
@@ -105,10 +13,16 @@
   </div>
 
   <div class="grid">
-    <div class="card"><h2>Busy slots</h2><div class="chart" id="cWorkers"></div></div>
-    <div class="card"><h2>Response time</h2><div class="chart" id="cLatency"></div></div>
-    <div class="card"><h2>Traffic <small>per minute</small></h2><div class="chart" id="cTraffic"></div></div>
-    <div class="card"><h2>Host &amp; database</h2><div class="chart" id="cHost"></div></div>
+    {%- for name in ['workers', 'latency', 'traffic', 'host'] %}
+    <div class="card chartcard">
+      <div class="cardhead">
+        <h2 id="t-{{ name }}"></h2>
+        <span class="keys" id="k-{{ name }}"></span>
+        <a class="expand" href="{{ url_for('health.health_charts') }}#{{ name }}" title="Larger, with zoom and details">⤢</a>
+      </div>
+      <div class="chart" id="c-{{ name }}"></div>
+    </div>
+    {%- endfor %}
   </div>
 
   <div class="card">
@@ -129,30 +43,17 @@
       <div class="scroll"><table id="pg" class="fit"></table></div>
     </div>
   </div>
-</main>
-
+{% endblock %}
+{% block script %}
 <script>
 (function () {
   const BASE = location.pathname.replace(/\/+$/, '');
   const LIVE_MS = 5000, HISTORY_MS = 60000;
-  let range = '1h';
-  try { range = localStorage.getItem('healthRange') || range; } catch (e) {}
-  const openStacks = new Set();
-
-  const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
-    (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const fmtMs = (ms) => ms == null ? '–' : ms >= 10000 ? (ms / 1000).toFixed(0) + ' s'
-    : ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : Math.round(ms) + ' ms';
-  const fmtDur = (s) => {
-    if (s == null) return '–';
-    if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + ' s';
-    if (s < 3600) return Math.floor(s / 60) + ' min';
-    if (s < 86400) return (s / 3600).toFixed(1) + ' h';
-    return (s / 86400).toFixed(1) + ' d';
-  };
+  const {$, esc, fmtMs, fmtDur} = HC;
   const ago = (t) => fmtDur(Date.now() / 1000 - t) + ' ago';
   const n = (v, d = '–') => v == null ? d : v;
+  const openStacks = new Set();
+  const CHARTS = ['workers', 'latency', 'traffic', 'host'];
 
   function tile(k, v, s, level) {
     return `<div class="tile ${level || ''}"><div class="k">${esc(k)}</div>` +
@@ -243,100 +144,13 @@
     if (e.target.open) openStacks.add(k); else openStacks.delete(k);
   }, true);
 
-  // Charts
-  const css = getComputedStyle(document.documentElement);
-  const C = (v) => css.getPropertyValue(v).trim();
-  const charts = {};
-  function chart(id) {
-    if (!charts[id]) charts[id] = echarts.init($(id), null, {renderer: 'canvas'});
-    return charts[id];
-  }
-  window.addEventListener('resize', () => Object.values(charts).forEach((c) => c.resize()));
-
-  // Tick spacing: the first of these giving at most ~6 ticks over the range.
-  const STEPS = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 7200].map((m) => m * 60000);
-  let xr = {min: null, max: null, step: null};
-  const pad = (v) => String(v).padStart(2, '0');
-  function tickLabel(v) {
-    const d = new Date(v);
-    const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
-    if (xr.step >= 86400000) return pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
-    if (xr.max - xr.min > 86400000) return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + hm;
-    return hm;
-  }
-
-  function base(extra) {
-    return Object.assign({
-      animation: false,
-      textStyle: {color: C('--fg'), fontSize: 11},
-      // right: room for the last time label, which sits at the very edge (now).
-      grid: {left: 6, right: 18, top: 24, bottom: 2, containLabel: true},
-      legend: {top: 0, right: 0, textStyle: {color: C('--muted'), fontSize: 11}, itemWidth: 12, itemHeight: 7, itemGap: 8},
-      tooltip: {trigger: 'axis'},
-      // Explicit window and tick spacing: left to itself ECharts picks a different
-      // step per chart and crams 5-minute labels into a 1h axis until they overlap.
-      xAxis: {type: 'time', min: xr.min, max: xr.max, interval: xr.step, minInterval: xr.step, maxInterval: xr.step,
-              axisLine: {lineStyle: {color: C('--line')}}, splitLine: {show: false},
-              axisLabel: {color: C('--muted'), hideOverlap: true, formatter: tickLabel}},
-    }, extra);
-  }
-  const yAxis = (o) => Object.assign({type: 'value', axisLabel: {color: C('--muted')}, splitLine: {lineStyle: {color: C('--line')}}}, o || {});
-  const line = (name, data, color, o) => Object.assign({name, type: 'line', data, symbol: 'circle', symbolSize: 3, connectNulls: false,
-    lineStyle: {width: 1.6, color}, itemStyle: {color}}, o || {});
-
-  // Deploys: a dashed vertical line where the workers started on a new commit.
-  function deployMarks(h) {
-    return {
-      symbol: 'none', silent: true, animation: false,
-      lineStyle: {color: C('--muted'), type: 'dashed', width: 1},
-      label: {show: true, position: 'insideEndTop', color: C('--muted'), fontSize: 10, formatter: (p) => p.name},
-      data: (h.deploys || []).map((d) => ({xAxis: d.t * 1000, name: d.tag || d.short})),
-    };
-  }
-
+  // Charts: the small versions; the expand link opens the large ones.
+  CHARTS.forEach((name) => {
+    $('t-' + name).textContent = HC.SPECS[name].title;
+    $('k-' + name).innerHTML = HC.keysHTML(HC.SPECS[name], false);
+  });
   function renderHistory(h) {
-    const P = h.points;
-    const max = Date.now(), min = P.length ? P[0].t * 1000 : max - 3600000;
-    const step = STEPS.find((st) => (max - min) / st <= 6) || STEPS[STEPS.length - 1];
-    // Start on a round tick (local time), rounding down so no data is cut off,
-    // and the labels read 13:00, 13:10… rather than 13:03, 13:13…
-    const off = new Date(min).getTimezoneOffset() * 60000;
-    xr = {min: Math.floor((min - off) / step) * step + off, max, step};
-    const at = (k) => P.map((p) => [p.t * 1000, p[k] == null ? null : p[k]]);
-    chart('cWorkers').setOption(base({
-      yAxis: yAxis({minInterval: 1}),
-      series: [
-        line('capacity', at('cap'), C('--muted'), {lineStyle: {width: 1, type: 'dashed', color: C('--muted')}, markLine: deployMarks(h)}),
-        line('peak busy', at('peak'), C('--bad'), {lineStyle: {width: 1, color: C('--bad')}}),
-        line('avg busy', at('busy'), C('--warn'), {areaStyle: {opacity: 0.18}}),
-      ],
-    }), true);
-    chart('cLatency').setOption(base({
-      yAxis: yAxis({type: 'log', min: 1, axisLabel: {color: C('--muted'), formatter: (v) => fmtMs(v)}}),
-      tooltip: {trigger: 'axis', valueFormatter: (v) => fmtMs(v)},
-      series: [
-        line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.6}, markLine: deployMarks(h)}),
-        line('p95', at('p95'), C('--warn')),
-        line('p50', at('p50'), C('--accent')),
-      ],
-    }), true);
-    chart('cTraffic').setOption(base({
-      yAxis: [yAxis(), yAxis({minInterval: 1, splitLine: {show: false}})],
-      series: [
-        line('req/min', at('req_per_min'), C('--accent'), {areaStyle: {opacity: 0.15}, markLine: deployMarks(h)}),
-        {name: '5xx', type: 'bar', yAxisIndex: 1, data: at('err'), itemStyle: {color: C('--bad')}, barMaxWidth: 6},
-      ],
-    }), true);
-    chart('cHost').setOption(base({
-      yAxis: [yAxis({max: 100, axisLabel: {color: C('--muted'), formatter: '{value} %'}}),
-              yAxis({type: 'log', min: 1, splitLine: {show: false}, axisLabel: {color: C('--muted'), formatter: (v) => fmtMs(v)}})],
-      series: [
-        line('CPU', at('cpu_pct'), C('--accent'), {markLine: deployMarks(h)}),
-        line('memory', at('mem_used_pct'), C('--ok')),
-        line('iowait', at('iowait_pct'), C('--warn')),
-        line('Postgres', at('pg_ms'), C('--bad'), {yAxisIndex: 1, lineStyle: {width: 1, color: C('--bad')}}),
-      ],
-    }), true);
+    CHARTS.forEach((name) => HC.draw('c-' + name, name, h, false));
   }
 
   // Routes
@@ -390,16 +204,10 @@
 
   async function pollRoutes() {
     try {
-      renderRoutes(await getJSON(BASE + '/routes?range=' + encodeURIComponent(range) + '&compare=' + encodeURIComponent(compare)));
+      renderRoutes(await HC.getJSON(BASE + '/routes?range=' + encodeURIComponent(HC.range) + '&compare=' + encodeURIComponent(compare)));
     } catch (e) { fail(e); }
   }
 
-  async function getJSON(url) {
-    const r = await fetch(url, {credentials: 'same-origin', cache: 'no-store'});
-    if (r.status === 401) throw new Error('Not logged in as owner (session expired?)');
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  }
   function fail(e) {
     $('updated').innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
   }
@@ -407,35 +215,22 @@
   let liveTimer, histTimer;
   async function pollLive() {
     clearTimeout(liveTimer);
-    try { renderLive(await getJSON(BASE + '/live')); } catch (e) { fail(e); }
+    try { renderLive(await HC.getJSON(BASE + '/live')); } catch (e) { fail(e); }
     if (!document.hidden) liveTimer = setTimeout(pollLive, LIVE_MS);
   }
   async function pollHistory() {
     clearTimeout(histTimer);
-    try { renderHistory(await getJSON(BASE + '/history?range=' + encodeURIComponent(range))); } catch (e) { fail(e); }
+    try { renderHistory(await HC.getJSON(BASE + '/history?range=' + encodeURIComponent(HC.range))); } catch (e) { fail(e); }
     pollRoutes();
     if (!document.hidden) histTimer = setTimeout(pollHistory, HISTORY_MS);
   }
 
-  function markRange() {
-    document.querySelectorAll('#ranges button').forEach((b) => b.classList.toggle('on', b.dataset.range === range));
-  }
-  $('ranges').addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    range = b.dataset.range;
-    try { localStorage.setItem('healthRange', range); } catch (err) {}
-    markRange();
-    pollHistory();
-  });
+  HC.initRanges(() => pollHistory());
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) { pollLive(); pollHistory(); }
   });
-
-  markRange();
   pollLive();
   pollHistory();
 })();
 </script>
-</body>
-</html>
+{% endblock %}

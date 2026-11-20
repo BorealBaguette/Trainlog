@@ -554,8 +554,9 @@ def persist(now, states, host_now, pg_now):
                     pass
 
 
-def history(range_key):
+def history(range_key, max_points=MAX_POINTS):
     span = RANGES.get(range_key, RANGES["1h"])
+    max_points = min(max(int(max_points or MAX_POINTS), 60), 1500)
     now = time.time()
     since = rec.minute_of(now - span)
     rows = []
@@ -576,7 +577,7 @@ def history(range_key):
             pass
         day += datetime.timedelta(days=1)
 
-    step = max(1, math.ceil(span / 60 / MAX_POINTS)) * 60
+    step = max(1, math.ceil(span / 60 / max_points)) * 60
     groups = {}
     for row in rows:
         groups.setdefault(row["t"] // step * step, []).append(row)

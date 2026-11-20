@@ -96,9 +96,16 @@ def health_live():
     return resp
 
 
+@health_blueprint.route("/charts")
+@owner_only
+def health_charts():
+    return render_template("admin/health_charts.html", ranges=list(collect.RANGES))
+
+
 @health_blueprint.route("/history")
 @owner_only
 def health_history():
-    resp = jsonify(collect.history(request.args.get("range", "1h")))
+    points = request.args.get("points", collect.MAX_POINTS, type=int)
+    resp = jsonify(collect.history(request.args.get("range", "1h"), max_points=points))
     resp.headers["Cache-Control"] = "no-store"
     return resp

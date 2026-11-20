@@ -1,0 +1,363 @@
+<!doctype html>
+{#- Self-contained on purpose: the trainlog_health sidecar serves these pages and has
+    no layout, nav, lang or /static of its own, and must not lean on the site's
+    workers — the point of the pages is to load when they are all busy.
+    Shared by health.html (dashboard) and health_charts.html (large charts): the
+    look, the helpers, and the one definition of every chart (HC.SPECS), drawn
+    small on the dashboard and large on the charts page. -#}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{% block title %}Trainlog health{% endblock %}</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --fg: #1f2328; --muted: #6b7280; --line: #e5e7eb;
+    --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --accent: #2563eb; --code: #f3f4f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --card: #1a1f25; --fg: #e5e7eb; --muted: #9ca3af; --line: #2b323b;
+      --ok: #22c55e; --warn: #f59e0b; --bad: #f87171; --accent: #60a5fa; --code: #0f1317;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1680px; margin: 0 auto; padding: 12px 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 10px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  a { color: var(--accent); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
+          border: 1px solid var(--line); color: var(--muted); }
+  .ranges button { border: 1px solid var(--line); background: var(--card); color: var(--fg);
+                   padding: 4px 10px; cursor: pointer; font: inherit; }
+  .ranges button:first-child { border-radius: 6px 0 0 6px; }
+  .ranges button:last-child { border-radius: 0 6px 6px 0; }
+  .ranges button + button { border-left: 0; }
+  .ranges button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* Ten tiles: one row on a wide screen, two rows of five below ~1400 px. */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+  .tile .k { color: var(--muted); font-size: 11.5px; }
+  .tile .v { font-size: 19px; line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .s { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile.warn { border-color: var(--warn); } .tile.warn .v { color: var(--warn); }
+  .tile.bad { border-color: var(--bad); } .tile.bad .v { color: var(--bad); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; margin-bottom: 10px; min-width: 0; }
+  .card h2 { font-size: 13.5px; margin: 0 0 4px; }
+  .card h2 small { color: var(--muted); font-weight: normal; font-size: 11.5px; margin-left: 4px; }
+  /* Four charts side by side when there is room, else 2 x 2, else stacked. */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .grid > .card { margin-bottom: 0; }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+  .cardhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; margin-bottom: 4px; }
+  .cardhead h2 { margin: 0; }
+  select { font: inherit; font-size: 12px; color: var(--fg); background: var(--card); border: 1px solid var(--line);
+           border-radius: 6px; padding: 2px 6px; width: auto; max-width: min(380px, 100%); text-overflow: ellipsis; }
+  .meth { color: var(--muted); font-size: 11px; margin-right: 4px; }
+  .delta { font-size: 11px; margin-left: 4px; color: var(--muted); }
+  .delta.worse { color: var(--bad); } .delta.better { color: var(--ok); }
+  .share { display: inline-block; width: 48px; height: 6px; background: var(--line); border-radius: 3px;
+           margin-right: 6px; vertical-align: middle; overflow: hidden; }
+  .share > i { display: block; height: 100%; background: var(--accent); }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--muted); font-weight: 500; font-size: 11.5px; white-space: nowrap; }
+  /* Columns hug their content; the one marked .grow takes the rest. */
+  table.fit th:not(.grow), table.fit td:not(.grow) { width: 1%; white-space: nowrap; }
+  td.num, th.num { text-align: right; }
+  td.path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dot.idle { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.stale { background: var(--bad); }
+  .long { color: var(--bad); font-weight: 600; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+  pre { background: var(--code); padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 11.5px;
+        line-height: 1.35; margin: 6px 0 0; max-height: 420px; }
+  .empty { color: var(--muted); font-style: italic; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .err { color: var(--bad); }
+
+  /* Charts: small and quiet on the dashboard, large on /charts. */
+  .chart { height: 150px; }
+  .chart.big { height: 300px; }
+  .chartcard .cardhead { margin-bottom: 2px; }
+  .keys { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--muted); font-size: 11px; margin-left: auto; }
+  .key { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .key i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; }
+  .key i.dash { height: 0; border-top: 2px dashed; background: none !important; }
+  .expand { color: var(--muted); text-decoration: none; font-size: 15px; line-height: 1; padding: 0 2px; }
+  .expand:hover { color: var(--accent); }
+  .stack { display: grid; gap: 10px; }
+  .stack > .card { margin-bottom: 0; scroll-margin-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>{% block h1 %}Trainlog health{% endblock %}</h1>
+    {% block header %}{% endblock %}
+    <span class="spacer"></span>
+    <span class="ranges" id="ranges">
+      {%- for r in ranges %}<button type="button" data-range="{{ r }}">{{ r }}</button>{% endfor -%}
+    </span>
+    {% block nav %}<a href="/admin" class="meta">Admin</a>{% endblock %}
+  </header>
+{% block content %}{% endblock %}
+</main>
+
+<script>
+const HC = (function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
+    (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const fmtMs = (ms) => ms == null ? '–' : ms >= 10000 ? (ms / 1000).toFixed(0) + ' s'
+    : ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : Math.round(ms) + ' ms';
+  const fmtDur = (s) => {
+    if (s == null) return '–';
+    if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + ' s';
+    if (s < 3600) return Math.floor(s / 60) + ' min';
+    if (s < 86400) return (s / 3600).toFixed(1) + ' h';
+    return (s / 86400).toFixed(1) + ' d';
+  };
+  const pad = (v) => String(v).padStart(2, '0');
+  const fmtDate = (t) => new Date(t * 1000).toLocaleString([], {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+
+  async function getJSON(url) {
+    const r = await fetch(url, {credentials: 'same-origin', cache: 'no-store'});
+    if (r.status === 401) throw new Error('Not logged in as owner (session expired?)');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  // The selected range, shared by both pages (and remembered).
+  let range = '1h';
+  try { range = localStorage.getItem('healthRange') || range; } catch (e) {}
+  function initRanges(onChange) {
+    const mark = () => document.querySelectorAll('#ranges button')
+      .forEach((b) => b.classList.toggle('on', b.dataset.range === range));
+    $('ranges').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      range = b.dataset.range;
+      try { localStorage.setItem('healthRange', range); } catch (err) {}
+      mark();
+      onChange(range);
+    });
+    mark();
+  }
+
+  // --- charts ---------------------------------------------------------------
+  const css = getComputedStyle(document.documentElement);
+  const C = (v) => css.getPropertyValue(v).trim();
+  function alpha(hex, a) {
+    const h = hex.replace('#', '');
+    const f = h.length === 3 ? h.split('').map((x) => x + x).join('') : h;
+    const n = parseInt(f, 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+  }
+  const fade = (color) => ({
+    color: new echarts.graphic.LinearGradient(0, 0, 0, 1,
+      [{offset: 0, color: alpha(color, 0.28)}, {offset: 1, color: alpha(color, 0.02)}]),
+  });
+
+  // The window drawn: the range, but starting where data starts, so a few hours
+  // of history are not squeezed against the right edge of a 7-day axis.
+  function timeWindow(h) {
+    const max = Date.now();
+    const P = h.points || [];
+    const start = P.length ? P[0].t * 1000 : max - 3600000;
+    const first = P.find((p) => p.cap != null);
+    const min = first ? Math.max(start, first.t * 1000 - (h.step_s || 60) * 1000) : start;
+    return {min, max: Math.max(max, min + 600000)};
+  }
+
+  // Ticks at round local times, about `count` of them.
+  const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 7200].map((m) => m * 60000);
+  function tickStep(span, count) { return STEPS.find((s) => span / s <= count) || STEPS[STEPS.length - 1]; }
+  function roundDown(t, step) {
+    const off = new Date(t).getTimezoneOffset() * 60000;
+    return Math.floor((t - off) / step) * step + off;
+  }
+  function tickLabel(v, span) {
+    const d = new Date(v);
+    const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    const dm = pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
+    if (span > 3 * 86400000) return d.getHours() === 0 && d.getMinutes() === 0 ? dm : dm + ' ' + hm;
+    if (span > 86400000) return d.getHours() === 0 && d.getMinutes() === 0 ? dm : hm;
+    return hm;
+  }
+
+  // A point between two gaps gets a dot: a line needs two points to show at all.
+  function isolatedDots(data) {
+    return (v, p) => {
+      const i = p.dataIndex, d = data;
+      const gap = (j) => j < 0 || j >= d.length || d[j][1] == null;
+      return d[i][1] != null && gap(i - 1) && gap(i + 1) ? 4 : 0;
+    };
+  }
+  function line(name, data, color, o) {
+    return Object.assign({
+      name, type: 'line', data, smooth: 0.2, connectNulls: false,
+      showSymbol: true, symbol: 'circle', symbolSize: isolatedDots(data),
+      lineStyle: {width: 1.6, color}, itemStyle: {color}, emphasis: {disabled: true},
+    }, o || {});
+  }
+  function yAxis(big, o) {
+    return Object.assign({
+      type: 'value', splitNumber: big ? 5 : 2, axisLine: {show: false}, axisTick: {show: false},
+      axisLabel: {color: C('--muted'), fontSize: 10.5},
+      splitLine: {lineStyle: {color: C('--line'), type: [4, 4]}},
+    }, o || {});
+  }
+
+  // Deploys: a dashed line where the workers started on a new commit. Labelled on
+  // the large charts only, skipping labels that would collide.
+  function deployMarks(h, big, win) {
+    const minGap = (win.max - win.min) / (big ? 14 : 1e9);
+    let last = -Infinity;
+    const data = (h.deploys || []).filter((d) => d.t * 1000 >= win.min).map((d) => {
+      const t = d.t * 1000, show = big && t - last >= minGap;
+      if (show) last = t;
+      return {xAxis: t, name: d.tag || d.short, label: {show}};
+    });
+    return {
+      symbol: 'none', silent: true, animation: false, data,
+      lineStyle: {color: C('--muted'), type: [3, 3], width: 1, opacity: big ? 0.9 : 0.55},
+      label: {position: 'end', color: C('--muted'), fontSize: 10, formatter: (p) => p.name},
+    };
+  }
+
+  const num = (digits) => (v) => v == null ? '–' : (+v).toFixed(digits);
+  const pct = (v) => v == null ? '–' : Math.round(v) + ' %';
+
+  // Every chart once: series(h, big) gives the small (dashboard) or large set.
+  const SPECS = {
+    workers: {
+      title: 'Busy slots',
+      sub: 'requests being served at once',
+      keys: (big) => [['avg busy', '--warn'], big && ['peak busy', '--bad'], ['capacity', '--muted', 'dash']],
+      option: (at, h, big) => ({
+        yAxis: yAxis(big, {minInterval: 1}),
+        tooltip: {valueFormatter: num(2)},
+        series: [
+          line('capacity', at('cap'), C('--muted'), {lineStyle: {width: 1, type: [4, 4], color: C('--muted')}, smooth: false}),
+          big && line('peak busy', at('peak'), C('--bad'), {lineStyle: {width: 1, color: C('--bad')}, smooth: false}),
+          line('avg busy', at('busy'), C('--warn'), {areaStyle: fade(C('--warn'))}),
+        ],
+      }),
+    },
+    latency: {
+      title: 'Response time',
+      sub: 'log scale',
+      keys: (big) => [['p50', '--accent'], ['p95', '--warn'], big && ['max', '--bad']],
+      option: (at, h, big) => ({
+        yAxis: yAxis(big, {type: 'log', min: 1, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}}),
+        tooltip: {valueFormatter: (v) => fmtMs(v)},
+        series: [
+          big && line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.55}}),
+          line('p95', at('p95'), C('--warn')),
+          line('p50', at('p50'), C('--accent')),
+        ],
+      }),
+    },
+    traffic: {
+      title: 'Traffic',
+      sub: 'requests per minute',
+      keys: (big) => [['requests / min', '--accent'], ['5xx', '--bad']],
+      option: (at, h, big) => ({
+        yAxis: [yAxis(big), yAxis(big, {show: big, minInterval: 1, splitLine: {show: false}})],
+        tooltip: {valueFormatter: num(0)},
+        series: [
+          line('requests / min', at('req_per_min'), C('--accent'), {areaStyle: fade(C('--accent'))}),
+          {name: '5xx', type: 'bar', yAxisIndex: 1, data: at('err').map((p) => [p[0], p[1] || null]),
+           itemStyle: {color: C('--bad')}, barMaxWidth: 4, barMinHeight: 2},
+        ],
+      }),
+    },
+    host: {
+      title: 'Host & database',
+      sub: 'whole server',
+      keys: (big) => [['CPU', '--accent'], ['memory', '--ok'], big && ['iowait', '--warn'], big && ['Postgres ms', '--bad']],
+      option: (at, h, big) => ({
+        yAxis: [yAxis(big, {max: 100, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: '{value} %'}}),
+                yAxis(big, {show: big, type: 'log', min: 1, splitLine: {show: false},
+                            axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}})],
+        series: [
+          line('CPU', at('cpu_pct'), C('--accent'), {tooltip: {valueFormatter: pct}}),
+          line('memory', at('mem_used_pct'), C('--ok'), {tooltip: {valueFormatter: pct}}),
+          big && line('iowait', at('iowait_pct'), C('--warn'), {tooltip: {valueFormatter: pct}}),
+          big && line('Postgres ms', at('pg_ms'), C('--bad'), {yAxisIndex: 1, lineStyle: {width: 1, color: C('--bad')},
+                                                             tooltip: {valueFormatter: (v) => fmtMs(v)}}),
+        ],
+      }),
+    },
+  };
+
+  function keysHTML(spec, big) {
+    return spec.keys(big).filter(Boolean).map(([label, color, style]) =>
+      `<span class="key"><i class="${style || ''}" style="background:${C(color)};border-color:${C(color)}"></i>${esc(label)}</span>`).join('');
+  }
+
+  // Full ECharts option for one chart.
+  function option(name, h, big) {
+    const spec = SPECS[name];
+    const win = timeWindow(h);
+    const span = win.max - win.min;
+    const step = tickStep(span, big ? 10 : 5);
+    const P = h.points || [];
+    const at = (k) => P.map((p) => [p.t * 1000, p[k] == null ? null : p[k]]);
+    const o = spec.option(at, h, big);
+    o.series = o.series.filter(Boolean);
+    o.series[0].markLine = deployMarks(h, big, win);
+    return Object.assign({
+      animation: false,
+      textStyle: {fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', color: C('--fg')},
+      grid: big ? {left: 6, right: 22, top: 22, bottom: 40, containLabel: true}
+                : {left: 2, right: 14, top: 8, bottom: 0, containLabel: true},
+      legend: {show: false},
+      xAxis: Object.assign({
+        type: 'time', min: big ? win.min : roundDown(win.min, step), max: win.max,
+        axisLine: {lineStyle: {color: C('--line')}}, axisTick: {show: false}, splitLine: {show: false},
+        axisLabel: {color: C('--muted'), fontSize: 10.5, hideOverlap: true, formatter: (v) => tickLabel(v, span)},
+      }, big ? {splitNumber: 10} : {interval: step, minInterval: step, maxInterval: step}),
+      dataZoom: big ? [{type: 'inside', filterMode: 'none'},
+                       {type: 'slider', filterMode: 'none', height: 14, bottom: 6, borderColor: C('--line'),
+                        fillerColor: alpha(C('--accent'), 0.12), handleSize: '80%', showDetail: false,
+                        dataBackground: {lineStyle: {color: C('--line')}, areaStyle: {color: C('--line')}}}] : [],
+    }, o, {
+      tooltip: Object.assign({
+        trigger: 'axis', confine: true, backgroundColor: C('--card'), borderColor: C('--line'),
+        textStyle: {color: C('--fg'), fontSize: 12},
+        axisPointer: {type: 'line', lineStyle: {color: C('--muted'), width: 1}},
+      }, o.tooltip || {}),
+    });
+  }
+
+  const charts = {};
+  function draw(id, name, h, big, keepZoom) {
+    let c = charts[id];
+    if (!c) {
+      c = charts[id] = echarts.init($(id), null, {renderer: 'canvas'});
+      window.addEventListener('resize', () => c.resize());
+    }
+    // Large charts keep their zoom across the minutely refresh.
+    const z = keepZoom && c.getOption() && (c.getOption().dataZoom || [])[0];
+    c.setOption(option(name, h, big), true);
+    if (z && (z.start > 0 || z.end < 100)) c.dispatchAction({type: 'dataZoom', start: z.start, end: z.end});
+    return c;
+  }
+
+  return {$, esc, fmtMs, fmtDur, fmtDate, getJSON, initRanges, get range() { return range; },
+          SPECS, keysHTML, draw, timeWindow};
+})();
+</script>
+{% block script %}{% endblock %}
+</body>
+</html>
