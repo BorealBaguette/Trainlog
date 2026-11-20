@@ -187,7 +187,9 @@
       '<th class="num">Avg</th><th class="num">p95</th><th class="num">Max</th><th class="num">≥ 1 s</th></tr>' +
       d.rows.map((r) => {
         const a = r.cur, b = r.base || {};
-        return `<tr><td class="path grow"><span class="meth">${esc(r.method)}</span>${esc(r.route)}</td>` +
+        const href = BASE + '/route?r=' + encodeURIComponent(r.method + ' ' + r.route);
+        return `<tr><td class="path grow"><a class="routelink" href="${esc(href)}" title="This route over time, per commit">` +
+          `<span class="meth">${esc(r.method)}</span>${esc(r.route)}</a></td>` +
           `<td class="num">${a.n}${delta(a.n, b.n, null)}</td>` +
           `<td><span class="share"><i style="width:${Math.round(100 * (a.share || 0) / maxShare)}%"></i></span>${n(a.share)} %</td>` +
           `<td class="num">${fmtMs(a.avg)}${delta(a.avg, b.avg, true)}</td>` +

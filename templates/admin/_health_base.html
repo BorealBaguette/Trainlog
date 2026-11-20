@@ -60,6 +60,8 @@
   select { font: inherit; font-size: 12px; color: var(--fg); background: var(--card); border: 1px solid var(--line);
            border-radius: 6px; padding: 2px 6px; width: auto; max-width: min(380px, 100%); text-overflow: ellipsis; }
   .meth { color: var(--muted); font-size: 11px; margin-right: 4px; }
+  a.routelink { color: inherit; text-decoration: none; }
+  a.routelink:hover { color: var(--accent); text-decoration: underline; }
   .delta { font-size: 11px; margin-left: 4px; color: var(--muted); }
   .delta.worse { color: var(--bad); } .delta.better { color: var(--ok); }
   .share { display: inline-block; width: 48px; height: 6px; background: var(--line); border-radius: 3px;
@@ -174,7 +176,7 @@ const HC = (function () {
     const P = h.points || [];
     const start = P.length ? P[0].t * 1000 : max - 3600000;
     const first = P.find((p) => p.cap != null);
-    const min = first ? Math.max(start, first.t * 1000 - (h.step_s || 60) * 1000) : start;
+    const min = first ? Math.max(start, first.t * 1000) : start;
     return {min, max: Math.max(max, min + 600000)};
   }
 
@@ -242,13 +244,15 @@ const HC = (function () {
     workers: {
       title: 'Busy slots',
       sub: 'requests being served at once',
-      keys: (big) => [['avg busy', '--warn'], big && ['peak busy', '--bad'], ['capacity', '--muted', 'dash']],
+      keys: (big) => [['avg busy', '--warn'], ['peak busy', '--bad'], big && ['capacity', '--muted', 'dash']],
       option: (at, h, big) => ({
         yAxis: yAxis(big, {minInterval: 1}),
         tooltip: {valueFormatter: num(2)},
         series: [
-          line('capacity', at('cap'), C('--muted'), {lineStyle: {width: 1, type: [4, 4], color: C('--muted')}, smooth: false}),
-          big && line('peak busy', at('peak'), C('--bad'), {lineStyle: {width: 1, color: C('--bad')}, smooth: false}),
+          // Capacity on the large chart only: it is flat but for restarts, and on the
+          // small one it just pins the scale to the worker count.
+          big && line('capacity', at('cap'), C('--muted'), {lineStyle: {width: 1, type: [4, 4], color: C('--muted')}, smooth: false}),
+          line('peak busy', at('peak'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: big ? 1 : 0.7}, smooth: false}),
           line('avg busy', at('busy'), C('--warn'), {areaStyle: fade(C('--warn'))}),
         ],
       }),
@@ -305,17 +309,13 @@ const HC = (function () {
       `<span class="key"><i class="${style || ''}" style="background:${C(color)};border-color:${C(color)}"></i>${esc(label)}</span>`).join('');
   }
 
-  // Full ECharts option for one chart.
-  function option(name, h, big) {
-    const spec = SPECS[name];
-    const win = timeWindow(h);
+  // The frame every chart shares (axes, grid, tooltip, zoom), around `o`, which
+  // brings yAxis, series and any tooltip.valueFormatter.
+  function frame(win, big, o, h) {
     const span = win.max - win.min;
     const step = tickStep(span, big ? 10 : 5);
-    const P = h.points || [];
-    const at = (k) => P.map((p) => [p.t * 1000, p[k] == null ? null : p[k]]);
-    const o = spec.option(at, h, big);
     o.series = o.series.filter(Boolean);
-    o.series[0].markLine = deployMarks(h, big, win);
+    if (big && o.series.length) o.series[0].markLine = deployMarks(h, big, win);
     return Object.assign({
       animation: false,
       textStyle: {fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', color: C('--fg')},
@@ -340,22 +340,36 @@ const HC = (function () {
     });
   }
 
+  // Full ECharts option for one of the SPECS charts.
+  // A point sums up [t, t + step): drawn at the middle of that span, so a change
+  // lines up with the deploy that caused it instead of up to a step before it.
+  const pointAt = (h) => (p) => (p.t + (h.step_s || 60) / 2) * 1000;
+  function option(name, h, big) {
+    const P = h.points || [];
+    const x = pointAt(h);
+    const at = (k) => P.map((p) => [x(p), p[k] == null ? null : p[k]]);
+    return frame(timeWindow(h), big, SPECS[name].option(at, h, big), h);
+  }
+
   const charts = {};
-  function draw(id, name, h, big, keepZoom) {
+  function drawOption(id, opt, keepZoom) {
     let c = charts[id];
     if (!c) {
       c = charts[id] = echarts.init($(id), null, {renderer: 'canvas'});
       window.addEventListener('resize', () => c.resize());
     }
-    // Large charts keep their zoom across the minutely refresh.
     const z = keepZoom && c.getOption() && (c.getOption().dataZoom || [])[0];
-    c.setOption(option(name, h, big), true);
+    c.setOption(opt, true);
     if (z && (z.start > 0 || z.end < 100)) c.dispatchAction({type: 'dataZoom', start: z.start, end: z.end});
     return c;
   }
+  function draw(id, name, h, big, keepZoom) {
+    return drawOption(id, option(name, h, big), keepZoom);
+  }
 
   return {$, esc, fmtMs, fmtDur, fmtDate, getJSON, initRanges, get range() { return range; },
-          SPECS, keysHTML, draw, timeWindow};
+          setRange(r) { range = r; }, SPECS, keysHTML, draw, drawOption, timeWindow,
+          parts: {C, alpha, fade, line, yAxis, frame, num, pointAt}};
 })();
 </script>
 {% block script %}{% endblock %}

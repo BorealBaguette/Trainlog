@@ -1,0 +1,126 @@
+{% extends "admin/_health_base.html" %}
+{#- One route (a row of the dashboard's Routes table) over the range: its timings
+    as a chart with the deploys on it, and its numbers per commit, each against
+    the commit before — what a deploy did to this route. -#}
+{% block title %}{{ key or 'Route' }} · Trainlog health{% endblock %}
+{% block h1 %}Route{% endblock %}
+{% block header %}
+    <span class="path" style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;">{{ key }}</span>
+    <span class="meta" id="updated"></span>
+{% endblock %}
+{% block nav %}<a href="{{ url_for('health.health_page') }}" class="meta">← Dashboard</a>{% endblock %}
+{% block content %}
+  <div class="stack">
+    <div class="tiles" id="tiles" style="margin-bottom: 0"></div>
+    <div class="card">
+      <div class="cardhead">
+        <h2>Timings <small>per {{ '' }}<span id="step"></span>, log scale · scroll or drag to zoom</small></h2>
+        <span class="keys" id="keys"></span>
+      </div>
+      <div class="chart big" id="c-route"></div>
+    </div>
+    <div class="card">
+      <h2>Per commit <small>oldest first; changes against the commit before</small></h2>
+      <div class="scroll"><table id="commits" class="fit"></table></div>
+    </div>
+  </div>
+{% endblock %}
+{% block script %}
+<script>
+(function () {
+  const KEY = {{ key|tojson }};
+  const BASE = location.pathname.replace(/\/route\/?$/, '');
+  const REFRESH_MS = 60000;
+  const {$, esc, fmtMs, fmtDur, fmtDate} = HC;
+  const {C, line, yAxis, frame, fade} = HC.parts;
+
+  function delta(cur, base, lowerIsBetter) {
+    if (cur == null || !base) return '';
+    const pct = Math.round((cur - base) / base * 100);
+    if (Math.abs(pct) < 5) return '';
+    const cls = lowerIsBetter == null ? '' : (pct > 0) === lowerIsBetter ? 'worse' : 'better';
+    return `<span class="delta ${cls}">${pct > 0 ? '+' : ''}${pct}%</span>`;
+  }
+  const tile = (k, v, s) => `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s || '')}</div></div>`;
+
+  $('keys').innerHTML = [['avg', '--accent'], ['p95', '--warn'], ['max', '--bad'], ['requests / min', '--muted']]
+    .map(([l, c]) => `<span class="key"><i style="background:${C(c)}"></i>${esc(l)}</span>`).join('');
+
+  function render(d) {
+    $('step').textContent = fmtDur(d.step_s);
+    const P = d.points;
+    const x = HC.parts.pointAt(d);
+    const at = (k) => P.map((p) => [x(p), p[k] == null ? null : p[k]]);
+    const withData = P.filter((p) => p.n);
+    const max = Date.now();
+    const min = withData.length ? Math.max(P[0].t * 1000, withData[0].t * 1000) : (P.length ? P[0].t * 1000 : max - 86400000);
+    const opt = frame({min, max: Math.max(max, min + 600000)}, true, {
+      yAxis: [
+        yAxis(true, {type: 'log', min: 1, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}}),
+        yAxis(true, {splitLine: {show: false}, axisLabel: {color: C('--muted'), fontSize: 10.5}}),
+      ],
+      series: [
+        {name: 'requests / min', type: 'bar', yAxisIndex: 1, data: at('req_per_min'), barMaxWidth: 8,
+         itemStyle: {color: C('--line')}, tooltip: {valueFormatter: (v) => v == null ? '–' : (+v).toFixed(1)}},
+        line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.5}, tooltip: {valueFormatter: fmtMs}}),
+        line('p95', at('p95'), C('--warn'), {tooltip: {valueFormatter: fmtMs}}),
+        line('avg', at('avg'), C('--accent'), {areaStyle: fade(C('--accent')), tooltip: {valueFormatter: fmtMs}}),
+      ],
+    }, d);
+    // Deploy lines on a line series (the frame puts them on the first one).
+    opt.series[1].markLine = opt.series[0].markLine; delete opt.series[0].markLine;
+    HC.drawOption('c-route', opt, true);
+
+    // Range totals
+    const tot = withData.reduce((a, p) => ({n: a.n + p.n, time: a.time + p.time_s, slow: a.slow + p.slow,
+                                             max: Math.max(a.max, p.max || 0)}), {n: 0, time: 0, slow: 0, max: 0});
+    $('tiles').innerHTML = [
+      tile('Requests', tot.n, 'in this range'),
+      tile('Average', tot.n ? fmtMs(tot.time * 1000 / tot.n) : '–', 'over the range'),
+      tile('Worker time', fmtDur(tot.time), 'spent on this route'),
+      tile('Slowest', fmtMs(tot.max || null), `${tot.slow} over 1 s`),
+      tile('Commits', d.commits.length, 'served it in this range'),
+    ].join('');
+
+    // Per commit
+    const rows = d.commits.map((c, i) => {
+      const b = d.commits[i - 1] || {};
+      const when = c.deployed ? fmtDate(c.deployed) : `seen from ${fmtDate(c.first)}`;
+      return `<tr><td>${esc(when)}</td><td class="path">${esc(c.tag || c.short)}</td>` +
+        `<td class="grow">${esc(c.subject || '')}</td>` +
+        `<td class="num">${c.n}</td>` +
+        `<td class="num">${fmtMs(c.avg)}${delta(c.avg, b.avg, true)}</td>` +
+        `<td class="num">${fmtMs(c.p95)}${delta(c.p95, b.p95, true)}</td>` +
+        `<td class="num">${fmtMs(c.max)}</td><td class="num${c.slow ? ' long' : ''}">${c.slow || ''}</td></tr>`;
+    });
+    $('commits').innerHTML = rows.length
+      ? '<tr><th>Deployed</th><th>Commit</th><th class="grow">Message</th><th class="num">Requests</th>' +
+        '<th class="num">Avg</th><th class="num">p95</th><th class="num">Max</th><th class="num">≥ 1 s</th></tr>' + rows.join('')
+      : '<tr><td class="empty grow">No requests to this route in this range.</td></tr>';
+    $('updated').textContent = 'updated ' + new Date().toLocaleTimeString();
+  }
+
+  let timer;
+  async function poll() {
+    clearTimeout(timer);
+    try {
+      render(await HC.getJSON(BASE + '/route/data?range=' + encodeURIComponent(HC.range) + '&r=' + encodeURIComponent(KEY)));
+    } catch (e) {
+      $('updated').innerHTML = `<span class="err">${esc(e.message || e)}</span>`;
+    }
+    if (!document.hidden) timer = setTimeout(poll, REFRESH_MS);
+  }
+  HC.initRanges(() => {
+    const c = echarts.getInstanceByDom($('c-route'));
+    if (c) c.clear();
+    poll();
+  });
+  $('c-route').addEventListener('dblclick', () => {
+    const c = echarts.getInstanceByDom($('c-route'));
+    if (c) c.dispatchAction({type: 'dataZoom', start: 0, end: 100});
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+  poll();
+})();
+</script>
+{% endblock %}

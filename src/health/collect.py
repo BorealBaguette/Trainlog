@@ -577,7 +577,11 @@ def history(range_key, max_points=MAX_POINTS):
             pass
         day += datetime.timedelta(days=1)
 
-    step = max(1, math.ceil(span / 60 / max_points)) * 60
+    # Point spacing from the span the data covers, not the range picked: a few
+    # hours of history on the 7d view would otherwise be drawn in 7-minute steps.
+    if rows:
+        since = max(since, min(r["t"] for r in rows))
+    step = max(1, math.ceil((now - since) / 60 / max_points)) * 60
     groups = {}
     for row in rows:
         groups.setdefault(row["t"] // step * step, []).append(row)
@@ -591,7 +595,7 @@ def history(range_key, max_points=MAX_POINTS):
         return max(vals) if vals else None
 
     points = []
-    t = since // step * step
+    t = int(since // step * step)
     while t <= now:
         g = groups.get(t)
         if not g:
@@ -720,6 +724,59 @@ def _route_stats(c, total_ms):
         "p95": percentile(c[rec.R_HIST :], 0.95, c[rec.R_MAX]),
         "max": round(c[rec.R_MAX]),
         "slow": c[rec.R_SLOW],
+    }
+
+
+def route_series(range_key, key, max_points=300):
+    """One route over the range: a time series (requests per minute, avg, p95,
+    max, slow) from the 10-minute buckets, and its numbers per commit, oldest
+    first, so a deploy's effect on that route reads straight off both."""
+    span = RANGES.get(range_key, RANGES["1h"])
+    now = time.time()
+    since = now - span
+    rows = [row for row in _route_rows(since - ROUTE_BUCKET_S, now + 1) if key in row["r"]]
+    if rows:  # spacing from the span with data, as in history()
+        since = max(since, min(row["t"] for row in rows))
+    step = ROUTE_BUCKET_S * max(1, math.ceil((now - since) / ROUTE_BUCKET_S / max(int(max_points or 300), 30)))
+    groups, commits = {}, {}
+    for row in rows:
+        counters = row["r"][key]
+        g = groups.setdefault(row["t"] // step * step, rec.new_route_counters())
+        rec.add_route_counters(g, counters)
+        c = commits.setdefault(row["c"], {"first": row["t"], "last": row["t"], "counters": rec.new_route_counters()})
+        c["first"], c["last"] = min(c["first"], row["t"]), max(c["last"], row["t"])
+        rec.add_route_counters(c["counters"], counters)
+
+    points = []
+    t = int(since // step * step)
+    while t <= now:
+        g = groups.get(t)
+        if g is None:
+            points.append({"t": t})
+        else:
+            stats = _route_stats(g, 0)
+            stats.pop("share", None)
+            stats["req_per_min"] = round(g[rec.R_N] / (step / 60), 2)
+            points.append({"t": t, **stats})
+        t += step
+
+    known = {d["c"]: d for d in deploys()}
+    per_commit = []
+    for sha, c in sorted(commits.items(), key=lambda kv: kv[1]["first"]):
+        stats = _route_stats(c["counters"], 0)
+        stats.pop("share", None)
+        info = commit_info(sha)
+        per_commit.append({
+            "c": sha, "short": (sha or "?")[:7], "subject": info["subject"], "tag": info["tag"],
+            "deployed": known.get(sha, {}).get("t"), "first": c["first"], "last": c["last"] + ROUTE_BUCKET_S, **stats,
+        })
+    method, _, route = key.partition(" ")
+    return {
+        "range": range_key if range_key in RANGES else "1h",
+        "key": key, "method": method, "route": route, "step_s": step,
+        "points": points,
+        "commits": per_commit,
+        "deploys": [d for d in deploys() if d["t"] >= since],
     }
 
 
