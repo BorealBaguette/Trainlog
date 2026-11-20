@@ -359,12 +359,15 @@ from src.gpx_import import (
     parse_trip_params,
 )
 from src.error_reporter import report_error
+from src.static_cache import init_static_caching
 
 app = Flask(__name__)
 start_email_listener(app)
 start_trip_announcer(app)
 
 app.config['DEBUG'] = True
+# Before Compress(app): it reads its cache settings at init.
+init_static_caching(app)
 Compress(app)
 app.autoversion = True
 Autoversion(app)
