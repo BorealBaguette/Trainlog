@@ -5,7 +5,7 @@
 
 <link href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
-<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ static_autoversion('js/maplibre-utils.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.min.js"></script>
 <script type="importmap">
 { "imports": {
@@ -148,11 +148,11 @@ document.getElementById('v-bg').value = BG || '';
 const LEN = new URLSearchParams(location.search).get('len');
 const MB = new URLSearchParams(location.search).get('mb');
 if (MB) document.getElementById('v-mb').value = MB;
-const LOGO = {{ url_for('static', filename='images/logo_square.png') | tojson }};
+const LOGO = {{ static_autoversion('images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
 // The train's cars, as its trip page draws them (static/js/wagon_img.js), and their credits
-const WAGONS = {{ url_for('static', filename='images/wagons') | tojson }};
+const WAGONS = {{ static_autoversion('images/wagons') | tojson }};
 const wagonSrc = u => {
   const ext = u.image_ext || 'gif', side = u._side || 'L', t = u.image_type;
   if (t === 'sides') return `${WAGONS}/${u.image}${side === 'R' ? '_R' : '_L'}.${ext}`;

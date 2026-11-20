@@ -802,7 +802,7 @@
                 {# The Trainlog server: only once Discord is linked (the post needs the id). Can be switched off, not removed. #}
                 {% if discord_id %}
                 <div class="dw-row {{ '' if discord_main_checked else 'dw-row-off' }}">
-                  <span class="dw-avatar dw-avatar-main"><img src="{{ url_for('static', filename='images/logo_square.png') }}" alt=""></span>
+                  <span class="dw-avatar dw-avatar-main"><img src="{{ static_autoversion('images/logo_square.png') }}" alt=""></span>
                   <div class="dw-body">
                     <div class="dw-name"><span class="dw-name-text">{{ discordMainServer }}</span><span class="dw-badge">{{ discordOfficial }}</span></div>
                     {{ dw_status(discord_main_checked, discord_autopost_checked) }}

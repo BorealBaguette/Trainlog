@@ -66,8 +66,8 @@
 <script>
 
 var calcIcon = new L.Icon({
-  iconUrl: "{{ url_for('static',filename='images/icons/calc.png') }}",
-  shadowUrl: "{{ url_for('static',filename='images/icons/marker-shadow.png') }}",
+  iconUrl: "{{ static_autoversion('images/icons/calc.png') }}",
+  shadowUrl: "{{ static_autoversion('images/icons/marker-shadow.png') }}",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -80,9 +80,9 @@ const colorblindMode = {{ 'true' if colorblind else 'false' }};
 
 var greenIcon = new L.Icon({
   iconUrl: colorblindMode
-    ? "{{ url_for('static', filename='images/icons/marker-icon-2x-purple.png') }}"
-    : "{{ url_for('static', filename='images/icons/marker-icon-2x-green.png') }}",
-  shadowUrl: "{{ url_for('static', filename='images/icons/marker-shadow.png') }}",
+    ? "{{ static_autoversion('images/icons/marker-icon-2x-purple.png') }}"
+    : "{{ static_autoversion('images/icons/marker-icon-2x-green.png') }}",
+  shadowUrl: "{{ static_autoversion('images/icons/marker-shadow.png') }}",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -91,9 +91,9 @@ var greenIcon = new L.Icon({
 
 var redIcon = new L.Icon({
   iconUrl: colorblindMode
-    ? "{{ url_for('static', filename='images/icons/marker-icon-2x-orange.png') }}"
-    : "{{ url_for('static', filename='images/icons/marker-icon-2x-red.png') }}",
-  shadowUrl: "{{ url_for('static', filename='images/icons/marker-shadow.png') }}",
+    ? "{{ static_autoversion('images/icons/marker-icon-2x-orange.png') }}"
+    : "{{ static_autoversion('images/icons/marker-icon-2x-red.png') }}",
+  shadowUrl: "{{ static_autoversion('images/icons/marker-shadow.png') }}",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -102,9 +102,9 @@ var redIcon = new L.Icon({
 
 var redGreenIcon = new L.Icon({
   iconUrl: colorblindMode
-    ? "{{ url_for('static', filename='images/icons/marker-icon-2x-orangePurple.png') }}"
-    : "{{ url_for('static', filename='images/icons/marker-icon-2x-redGreen.png') }}",
-  shadowUrl: "{{ url_for('static', filename='images/icons/marker-shadow.png') }}",
+    ? "{{ static_autoversion('images/icons/marker-icon-2x-orangePurple.png') }}"
+    : "{{ static_autoversion('images/icons/marker-icon-2x-redGreen.png') }}",
+  shadowUrl: "{{ static_autoversion('images/icons/marker-shadow.png') }}",
   iconSize: [46, 41],
   iconAnchor: [23, 41],
   popupAnchor: [1, -34],

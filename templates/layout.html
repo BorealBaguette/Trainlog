@@ -7,18 +7,18 @@
   {% include "_page_title.html" %}
   <meta charset="utf-8">
   
-  <link rel="shortcut icon" href="/static/favicon/favicon.ico" type="image/x-icon">
+  <link rel="shortcut icon" href="{{ static_autoversion('favicon/favicon.ico') }}" type="image/x-icon">
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
   <link rel="stylesheet" href="{{ static_autoversion(filename='styles/style.css') }}">
   <link rel="stylesheet" href="{{ static_autoversion(filename='styles/style2.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/jquery-ui.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/Control.Geocoder.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/leaflet-routing-machine.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/L.Control.Sidebar.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/leaflet-numbered-markers.css') }}">
+  <link rel="stylesheet" href="{{ static_autoversion('styles/lib/jquery-ui.css') }}">
+  <link rel="stylesheet" href="{{ static_autoversion('styles/lib/Control.Geocoder.css') }}">
+  <link rel="stylesheet" href="{{ static_autoversion('styles/lib/leaflet-routing-machine.css') }}">
+  <link rel="stylesheet" href="{{ static_autoversion('styles/lib/L.Control.Sidebar.css') }}">
+  <link rel="stylesheet" href="{{ static_autoversion('styles/lib/leaflet-numbered-markers.css') }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
   {% include "includes/theme_head.html" %}
@@ -29,15 +29,15 @@
   
   <script src="https://cdn.jsdelivr.net/npm/chart.js@3.8.0/dist/chart.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
-  <script src="{{ url_for('static',filename='js/lib/jquery-3.6.0.min.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/localforage.min.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/jquery-ui.min.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/Control.Geocoder.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/leaflet-routing-machine-antpath.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/L.Control.Sidebar.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/L.Geodesic.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/leaflet-numbered-markers.js') }}"></script>
-  <script src="{{ url_for('static',filename='js/lib/leaflet.geometryutil.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/jquery-3.6.0.min.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/localforage.min.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/jquery-ui.min.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/Control.Geocoder.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/leaflet-routing-machine-antpath.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/L.Control.Sidebar.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/L.Geodesic.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/leaflet-numbered-markers.js') }}"></script>
+  <script src="{{ static_autoversion('js/lib/leaflet.geometryutil.js') }}"></script>
   <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
   <script src="{{ static_autoversion(filename='js/util.js') }}"></script>
   <script>

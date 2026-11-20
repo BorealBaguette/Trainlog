@@ -15,18 +15,27 @@ every page load (no max-age). So:
   up to STATIC_MAX_AGE after a deploy. Other send_file routes keep Flask's
   default (no max-age).
 
-Must run before Compress(app), which reads its cache settings when it starts.
+- static_autoversion(filename) (a Jinja global, replacing flaskext.autoversion):
+  url_for('static') plus ?ts=<mtime>, so a changed file gets a new URL and every
+  versioned file can be cached for a year. The mtime is looked up at most every
+  MTIME_TTL_S per file, so icons in a loop don't cost a stat() per row.
+
+init_static_caching must run before Compress(app), which reads its cache
+settings when it starts.
 """
 
 import os
+import stat
 import threading
+import time
 
-from flask import current_app, request
+from flask import current_app, request, url_for
 from werkzeug.security import safe_join
 
 STATIC_MAX_AGE = 3600
 VERSIONED_MAX_AGE = 365 * 86400
 CACHE_MAX_BYTES = 64 * 2**20  # per worker
+MTIME_TTL_S = 10
 
 _PREFIX = "static:"
 _SEP = "\0"
@@ -99,3 +108,32 @@ def init_static_caching(app):
         return None
 
     app.get_send_file_max_age = get_send_file_max_age
+
+
+_versions = {}  # filename -> (checked at, version or None)
+
+
+def static_autoversion(filename):
+    if not isinstance(filename, str) or not filename:
+        return url_for("static", filename=filename)
+    now = time.monotonic()
+    hit = _versions.get(filename)
+    if hit and now - hit[0] < MTIME_TTL_S:
+        version = hit[1]
+    else:
+        path = safe_join(current_app.static_folder, filename)
+        # Regular files only: a directory or prefix ('images/flags/') is a base
+        # that JS or Jinja appends to, where ?ts= would end up mid-path.
+        try:
+            st = os.stat(path) if path else None
+            version = str(int(st.st_mtime)) if st and stat.S_ISREG(st.st_mode) else None
+        except OSError:
+            version = None
+        _versions[filename] = (now, version)
+    if version is None:
+        return url_for("static", filename=filename)
+    return url_for("static", filename=filename, ts=version)
+
+
+def register_static_autoversion(app):
+    app.jinja_env.globals["static_autoversion"] = static_autoversion

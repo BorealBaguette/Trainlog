@@ -4,7 +4,7 @@
 
   <div id="form" >
     {#- Icon and name as text: no baked-in English slogan above a translated page #}
-    <div class="auth-logo"><img src="{{ url_for('static',filename='images/logo_square.png') }}" alt=""><span>Trainlog<small>.me</small></span></div>
+    <div class="auth-logo"><img src="{{ static_autoversion('images/logo_square.png') }}" alt=""><span>Trainlog<small>.me</small></span></div>
     <div>
   <form  action="{{ url_for('login')}}" method="post">
     {{userName}} :  <input type="text" id="username" name="username" />

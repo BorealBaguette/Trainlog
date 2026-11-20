@@ -118,8 +118,8 @@
 <div class="error-page">
     <div class="error-card">
         <a href="{{ url_for('landing') }}">
-            <img class="error-logo tl-logo-light" src="{{ url_for('static', filename='images/logo.png') }}" alt="Trainlog">
-            <img class="error-logo tl-logo-dark" src="{{ url_for('static', filename='images/logo_white.png') }}" alt="Trainlog">
+            <img class="error-logo tl-logo-light" src="{{ static_autoversion('images/logo.png') }}" alt="Trainlog">
+            <img class="error-logo tl-logo-dark" src="{{ static_autoversion('images/logo_white.png') }}" alt="Trainlog">
         </a>
 
         <p class="error-code">{{ errorCode }}</p>

@@ -3,15 +3,15 @@
 {% block content %}
 {# The trip types whose ends can search for another station (the stops editor's stationUrls) #}
 {% set end_search_types = ['train', 'rail', 'funicular', 'tram', 'metro', 'bus', 'ferry', 'aerialway', 'ski'] %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
+<link rel="stylesheet" href="{{ static_autoversion('styles/waypoint_popup.css') }}">
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
-<script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
-<script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
+<script src="{{ static_autoversion('js/lib/leaflet.geometryutil.js') }}"></script>
+<script src="{{ static_autoversion('js/freehand.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/stop_slots.js') }}"></script>
 {% if tripType == 'ferry' %}
-<script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
+<script src="{{ static_autoversion('js/vessel_field.js') }}"></script>
 {% endif %}
-<script src="{{ url_for('static', filename='js/currency_combo.js') }}"></script>
+<script src="{{ static_autoversion('js/currency_combo.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -922,7 +922,7 @@
                     id="fr24PathButton" {% if fr24_calls=='premium' or (fr24_calls is number and fr24_calls < 5) %}
                     data-bs-toggle="modal" data-bs-target="#fr24PathModal" {% else %} aria-disabled="true" {% endif %}>
                     <span class="btn-label">
-                        <img src="{{ url_for('static', filename='images/icons/fr24.png') }}" alt="FR24"
+                        <img src="{{ static_autoversion('images/icons/fr24.png') }}" alt="FR24"
                             style="height: 1em;">
                     </span>
                     <span class="btn-label-label">
@@ -985,7 +985,7 @@
                     </button>
                 </div>
                 <p class="stops-linked" id="stopsLinked" style="display:none">
-                    <a href="https://transitous.org" target="_blank" rel="noopener"><img src="{{ url_for('static', filename='images/transitous.svg') }}" alt="Transitous"></a>
+                    <a href="https://transitous.org" target="_blank" rel="noopener"><img src="{{ static_autoversion('images/transitous.svg') }}" alt="Transitous"></a>
                     <span>{{stopsLinked}}</span>
                 </p>
                 <p class="stops-note" id="stopsUnlinked" style="display:none">{{stopsUnlinked}}</p>
@@ -1881,7 +1881,7 @@
                 runs.forEach(function (d) {
                     var $run = $('<button type="button" class="stops-run">').toggleClass('best', !!best && best.d === d);
                     if (d.color) $run.css('--line-color', d.color);
-                    $('<img alt="">').attr('src', d.logo_url ? runsLogos + d.logo_url : "{{ url_for('static', filename='images/icons/trip_logos/' + tripType + '.png') }}")
+                    $('<img alt="">').attr('src', d.logo_url ? runsLogos + d.logo_url : "{{ static_autoversion('images/icons/trip_logos/' + tripType + '.png') }}")
                         .appendTo($run);
                     $('<span class="run-time">').text(d.departure.slice(11) + ' \u2192 ' + d.arrival.slice(11)).appendTo($run);
                     var $head = $('<span class="run-head">').appendTo($run);
@@ -3484,7 +3484,7 @@
         // Reset FR24 button
         fr24Button.classList.remove('btn-success');
         fr24Button.classList.add('btn-primary');
-        fr24Button.innerHTML = `<span class="btn-label"><img src="{{ url_for('static', filename='images/icons/fr24.png') }}" alt="FR24" style="height: 1em;"></span>{{importFr24Path}}`;
+        fr24Button.innerHTML = `<span class="btn-label"><img src="{{ static_autoversion('images/icons/fr24.png') }}" alt="FR24" style="height: 1em;"></span>{{importFr24Path}}`;
         {% endif %}
 
         // Set the successful button to green with check icon based on import type
@@ -3722,7 +3722,7 @@
     // type, as on the new-trip form. It previously guessed a legacy
     // images/operator_logos/<name>.png path, which only ever matched exact spellings
     // that happened to have a file under that old naming convention.
-    $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}");
+    $(".operatorLogo").attr("src", "{{ static_autoversion('images/icons/trip_logos/{}.png'.format(tripType))}}");
 
     $.get('{{url_for("getManAndOps", username=username, station_type=tripType)}}', function (manAndOps, status) {
         operatorPills = operatorPillsInput(

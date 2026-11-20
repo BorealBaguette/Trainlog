@@ -55,7 +55,6 @@ from flask import (
 )
 from flask_caching import Cache
 from flask_compress import Compress
-from flaskext.autoversion import Autoversion
 from PIL import Image
 from requests.adapters import HTTPAdapter, Retry
 from scgraph.geographs.marnet import marnet_geograph
@@ -359,7 +358,7 @@ from src.gpx_import import (
     parse_trip_params,
 )
 from src.error_reporter import report_error
-from src.static_cache import init_static_caching
+from src.static_cache import init_static_caching, register_static_autoversion
 
 app = Flask(__name__)
 start_email_listener(app)
@@ -369,8 +368,7 @@ app.config['DEBUG'] = True
 # Before Compress(app): it reads its cache settings at init.
 init_static_caching(app)
 Compress(app)
-app.autoversion = True
-Autoversion(app)
+register_static_autoversion(app)
 app.url_map.strict_slashes = False
 
 app.register_blueprint(admin_blueprint, url_prefix="/admin")
