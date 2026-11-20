@@ -3395,6 +3395,8 @@ def signup():
     if request.method == "POST":
         # API clients (the mobile app) post with ?raw=1 and get JSON back
         raw = request.args.get("raw") == "1"
+        if raw and request.form.get("locale") in lang:
+            session["userinfo"]["lang"] = request.form["locale"]
 
         # The hidden "website" field is a honeypot: people never see it, form
         # fillers fill it in
