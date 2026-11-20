@@ -35,7 +35,7 @@ PERSIST_GRACE_S = 10  # a minute is final this long after it ends
 SAMPLE_EVERY_S = 10
 CACHE_S = 4  # sample() result reused for this long
 RECENT_MINUTES = 5
-SLOW_WINDOW_S = 3600
+SLOW_WINDOW_S = rec.SLOW_KEEP_S
 MAX_POINTS = 360
 
 RANGES = {"1h": 3600, "6h": 6 * 3600, "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400}
@@ -119,6 +119,28 @@ def percentile(hist, q, max_ms):
         if hi is not None:
             lo = hi
     return round(max_ms)
+
+
+# psycopg2 interpolates parameters client-side, so pg_stat_activity holds the
+# statement with its values in it (emails, names, tokens). Only the shape is
+# shown: string and number literals become ?. Redacted before truncating, so a
+# string cut in half can't slip through unterminated.
+_SQL_STR_RE = re.compile(r"(?:\b[EeBbXxUu]&?)?'(?:[^']|'')*'")
+_SQL_OPEN_STR_RE = re.compile(r"'[^']*$")
+_SQL_DOLLAR_RE = re.compile(r"\$([A-Za-z_]*)\$.*?\$\1\$", re.S)
+_SQL_NUM_RE = re.compile(r"(?<![\w.$\"])-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w\"])")
+_SQL_WS_RE = re.compile(r"\s+")
+
+
+def redact_sql(query, limit=160):
+    if not query:
+        return query
+    q = _SQL_DOLLAR_RE.sub("?", query)
+    q = _SQL_STR_RE.sub("?", q)
+    q = _SQL_OPEN_STR_RE.sub("?", q)
+    q = _SQL_NUM_RE.sub("?", q)
+    q = _SQL_WS_RE.sub(" ", q).strip()
+    return q if len(q) <= limit else q[: limit - 1] + "…"
 
 
 _USER_RE = re.compile(r"/u/[^/]+")
@@ -310,7 +332,7 @@ def pg():
                     """
                     SELECT pid, state, wait_event_type, wait_event,
                            extract(epoch FROM now() - coalesce(xact_start, query_start)),
-                           left(regexp_replace(query, '\\s+', ' ', 'g'), 160)
+                           left(query, 4000)
                     FROM pg_stat_activity
                     WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()
                       AND state <> 'idle'
@@ -324,7 +346,7 @@ def pg():
                         "state": r[1],
                         "wait": f"{r[2]}:{r[3]}" if r[2] else None,
                         "age_s": round(float(r[4] or 0), 1),
-                        "query": r[5],
+                        "query": redact_sql(r[5]),
                     }
                     for r in cur.fetchall()
                 ]

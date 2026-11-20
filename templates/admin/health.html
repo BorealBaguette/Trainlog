@@ -22,10 +22,10 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
-         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 1400px; margin: 0 auto; padding: 16px; }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 14px; }
-  header h1 { font-size: 20px; margin: 0; }
+         font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1680px; margin: 0 auto; padding: 12px 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 10px; }
+  header h1 { font-size: 18px; margin: 0; }
   header .meta { color: var(--muted); font-size: 12px; }
   header .spacer { flex: 1; }
   a { color: var(--accent); }
@@ -37,23 +37,29 @@
   .ranges button:last-child { border-radius: 0 6px 6px 0; }
   .ranges button + button { border-left: 0; }
   .ranges button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-  .tile .k { color: var(--muted); font-size: 12px; }
-  .tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tile .s { color: var(--muted); font-size: 12px; }
+  /* Ten tiles: one row on a wide screen, two rows of five below ~1400 px. */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+  .tile .k { color: var(--muted); font-size: 11.5px; }
+  .tile .v { font-size: 19px; line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .s { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile.warn { border-color: var(--warn); } .tile.warn .v { color: var(--warn); }
   .tile.bad { border-color: var(--bad); } .tile.bad .v { color: var(--bad); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
-  .card h2 { font-size: 15px; margin: 0 0 8px; }
-  .card h2 small { color: var(--muted); font-weight: normal; font-size: 12px; }
-  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
-  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
-  .chart { height: 240px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; margin-bottom: 10px; min-width: 0; }
+  .card h2 { font-size: 13.5px; margin: 0 0 4px; }
+  .card h2 small { color: var(--muted); font-weight: normal; font-size: 11.5px; margin-left: 4px; }
+  /* Four charts side by side when there is room, else 2 x 2, else stacked. */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .grid > .card { margin-bottom: 0; }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+  .chart { height: 200px; }
   .scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+  th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--muted); font-weight: 500; font-size: 11.5px; white-space: nowrap; }
+  /* Columns hug their content; the one marked .grow takes the rest. */
+  table.fit th:not(.grow), table.fit td:not(.grow) { width: 1%; white-space: nowrap; }
   td.num, th.num { text-align: right; }
   td.path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
@@ -85,30 +91,29 @@
 
   <div class="card">
     <h2>Workers <small id="workersNote"></small></h2>
-    <div class="scroll"><table id="workers"></table></div>
+    <div class="scroll"><table id="workers" class="fit"></table></div>
   </div>
 
-  <div class="grid2">
-    <div class="card"><h2>Busy request slots <small>avg / peak vs capacity</small></h2><div class="chart" id="cWorkers"></div></div>
-    <div class="card"><h2>Response time <small>ms, p50 / p95 / max</small></h2><div class="chart" id="cLatency"></div></div>
-    <div class="card"><h2>Traffic <small>requests per minute, 5xx</small></h2><div class="chart" id="cTraffic"></div></div>
-    <div class="card"><h2>Host &amp; database <small>CPU, memory, iowait %, Postgres round-trip ms</small></h2><div class="chart" id="cHost"></div></div>
+  <div class="grid">
+    <div class="card"><h2>Busy slots</h2><div class="chart" id="cWorkers"></div></div>
+    <div class="card"><h2>Response time</h2><div class="chart" id="cLatency"></div></div>
+    <div class="card"><h2>Traffic <small>per minute</small></h2><div class="chart" id="cTraffic"></div></div>
+    <div class="card"><h2>Host &amp; database</h2><div class="chart" id="cHost"></div></div>
   </div>
 
-  <div class="grid2">
+  <div class="grid">
     <div class="card">
       <h2>Slow routes <small>≥ 1 s, last hour</small></h2>
-      <div class="scroll"><table id="slowRoutes"></table></div>
+      <div class="scroll"><table id="slowRoutes" class="fit"></table></div>
     </div>
     <div class="card">
       <h2>Recent slow requests</h2>
-      <div class="scroll"><table id="slow"></table></div>
+      <div class="scroll"><table id="slow" class="fit"></table></div>
     </div>
-  </div>
-
-  <div class="card">
-    <h2>Postgres <small id="pgNote"></small></h2>
-    <div class="scroll"><table id="pg"></table></div>
+    <div class="card">
+      <h2>Postgres <small id="pgNote"></small></h2>
+      <div class="scroll"><table id="pg" class="fit"></table></div>
+    </div>
   </div>
 </main>
 
@@ -187,34 +192,39 @@
       }).join('');
       const state = w.state === 'stale' ? `unresponsive ${fmtDur(w.heartbeat_s)}` : w.state;
       return `<tr><td><span class="dot ${w.state}"></span>${esc(state)}</td><td class="num">${w.pid}</td>` +
-             `<td class="path">${reqs || '<span class="empty">–</span>'}</td>` +
+             `<td class="path grow">${reqs || '<span class="empty">–</span>'}</td>` +
              `<td class="num">${n(w.cpu_pct)}${w.cpu_pct == null ? '' : ' %'}</td><td class="num">${n(w.rss_mb)}${w.rss_mb == null ? '' : ' MB'}</td>` +
              `<td class="num">${w.served}</td><td class="num">${fmtDur(w.uptime_s)}</td></tr>`;
     });
-    $('workers').innerHTML = '<tr><th>State</th><th class="num">PID</th><th>In flight</th><th class="num">CPU</th>' +
+    $('workers').innerHTML = '<tr><th>State</th><th class="num">PID</th><th class="grow">In flight</th><th class="num">CPU</th>' +
       '<th class="num">RSS</th><th class="num">Served</th><th class="num">Up</th></tr>' +
-      (rows.join('') || '<tr><td colspan="7" class="empty">No worker is reporting.</td></tr>');
+      (rows.join('') || '<tr><td colspan="7" class="empty grow">No worker is reporting.</td></tr>');
 
     // Slow
-    $('slowRoutes').innerHTML = '<tr><th>Route</th><th class="num">Count</th><th class="num">Avg</th><th class="num">Max</th></tr>' +
-      (d.slow_routes.map((s) => `<tr><td class="path">${esc(s.route)}</td><td class="num">${s.n}</td>` +
-        `<td class="num">${fmtMs(s.avg)}</td><td class="num">${fmtMs(s.max)}</td></tr>`).join('') ||
-       '<tr><td colspan="4" class="empty">None.</td></tr>');
-    $('slow').innerHTML = '<tr><th>When</th><th>Request</th><th class="num">Status</th><th class="num">Time</th></tr>' +
-      (d.slow.map((s) => `<tr><td>${ago(s.t)}</td><td class="path">${esc(s.method)} ${esc(s.path)}</td>` +
-        `<td class="num">${n(s.status)}</td><td class="num">${fmtMs(s.ms)}</td></tr>`).join('') ||
-       '<tr><td colspan="4" class="empty">None.</td></tr>');
+    const none = (text) => `<tr><td class="empty grow">${text}</td></tr>`;
+    $('slowRoutes').innerHTML = d.slow_routes.length
+      ? '<tr><th class="grow">Route</th><th class="num">Count</th><th class="num">Avg</th><th class="num">Max</th></tr>' +
+        d.slow_routes.map((s) => `<tr><td class="path grow">${esc(s.route)}</td><td class="num">${s.n}</td>` +
+          `<td class="num">${fmtMs(s.avg)}</td><td class="num">${fmtMs(s.max)}</td></tr>`).join('')
+      : none('None in the last hour.');
+    $('slow').innerHTML = d.slow.length
+      ? '<tr><th>When</th><th class="grow">Request</th><th class="num">Status</th><th class="num">Time</th></tr>' +
+        d.slow.map((s) => `<tr><td>${ago(s.t)}</td><td class="path grow">${esc(s.method)} ${esc(s.path)}</td>` +
+          `<td class="num">${n(s.status)}</td><td class="num">${fmtMs(s.ms)}</td></tr>`).join('')
+      : none('None in the last hour.');
 
     // Postgres
     if (!p.ok) {
       $('pgNote').textContent = '';
-      $('pg').innerHTML = `<tr><td class="${p.error === 'not configured' ? 'empty' : 'err'}">${esc(p.error || 'unavailable')}</td></tr>`;
+      $('pg').innerHTML = `<tr><td class="grow ${p.error === 'not configured' ? 'empty' : 'err'}">${esc(p.error || 'unavailable')}</td></tr>`;
     } else {
       $('pgNote').textContent = `${p.idle_in_tx} idle in transaction`;
-      $('pg').innerHTML = '<tr><th class="num">PID</th><th>State</th><th>Waiting on</th><th class="num">For</th><th>Query</th></tr>' +
-        (p.queries.map((q) => `<tr><td class="num">${q.pid}</td><td>${esc(q.state)}</td><td>${esc(q.wait || '')}</td>` +
-          `<td class="num ${q.age_s >= 30 ? 'long' : ''}">${fmtDur(q.age_s)}</td><td class="path">${esc(q.query)}</td></tr>`).join('') ||
-         '<tr><td colspan="5" class="empty">No statement running.</td></tr>');
+      $('pg').innerHTML = p.queries.length
+        ? '<tr><th class="num">For</th><th>State</th><th class="grow">Query</th></tr>' +
+          p.queries.map((q) => `<tr><td class="num ${q.age_s >= 30 ? 'long' : ''}">${fmtDur(q.age_s)}</td>` +
+            `<td>${esc(q.state)}${q.wait ? '<br><span class="err">' + esc(q.wait) + '</span>' : ''}</td>` +
+            `<td class="path grow">${esc(q.query)}</td></tr>`).join('')
+        : none('No statement running.');
     }
   }
 
@@ -234,14 +244,30 @@
   }
   window.addEventListener('resize', () => Object.values(charts).forEach((c) => c.resize()));
 
+  // Tick spacing: the first of these giving at most ~6 ticks over the range.
+  const STEPS = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 7200].map((m) => m * 60000);
+  let xr = {min: null, max: null, step: null};
+  const pad = (v) => String(v).padStart(2, '0');
+  function tickLabel(v) {
+    const d = new Date(v);
+    const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    if (xr.step >= 86400000) return pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
+    if (xr.max - xr.min > 86400000) return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + hm;
+    return hm;
+  }
+
   function base(extra) {
     return Object.assign({
       animation: false,
-      textStyle: {color: C('--fg')},
-      grid: {left: 48, right: 48, top: 30, bottom: 28},
-      legend: {top: 0, textStyle: {color: C('--muted')}, itemWidth: 14, itemHeight: 8},
+      textStyle: {color: C('--fg'), fontSize: 11},
+      grid: {left: 6, right: 6, top: 24, bottom: 2, containLabel: true},
+      legend: {top: 0, right: 0, textStyle: {color: C('--muted'), fontSize: 11}, itemWidth: 12, itemHeight: 7, itemGap: 8},
       tooltip: {trigger: 'axis'},
-      xAxis: {type: 'time', splitNumber: 6, axisLine: {lineStyle: {color: C('--line')}}, axisLabel: {color: C('--muted'), hideOverlap: true}, splitLine: {show: false}},
+      // Explicit window and tick spacing: left to itself ECharts picks a different
+      // step per chart and crams 5-minute labels into a 1h axis until they overlap.
+      xAxis: {type: 'time', min: xr.min, max: xr.max, interval: xr.step, minInterval: xr.step, maxInterval: xr.step,
+              axisLine: {lineStyle: {color: C('--line')}}, splitLine: {show: false},
+              axisLabel: {color: C('--muted'), hideOverlap: true, formatter: tickLabel}},
     }, extra);
   }
   const yAxis = (o) => Object.assign({type: 'value', axisLabel: {color: C('--muted')}, splitLine: {lineStyle: {color: C('--line')}}}, o || {});
@@ -250,6 +276,12 @@
 
   function renderHistory(h) {
     const P = h.points;
+    const max = Date.now(), min = P.length ? P[0].t * 1000 : max - 3600000;
+    const step = STEPS.find((st) => (max - min) / st <= 6) || STEPS[STEPS.length - 1];
+    // Start on a round tick (local time), rounding down so no data is cut off,
+    // and the labels read 13:00, 13:10… rather than 13:03, 13:13…
+    const off = new Date(min).getTimezoneOffset() * 60000;
+    xr = {min: Math.floor((min - off) / step) * step + off, max, step};
     const at = (k) => P.map((p) => [p.t * 1000, p[k] == null ? null : p[k]]);
     chart('cWorkers').setOption(base({
       yAxis: yAxis({minInterval: 1}),

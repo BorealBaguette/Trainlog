@@ -13,8 +13,10 @@ for any request running longer than STACK_AFTER_S, captures the stack of the
 thread serving it, which is what shows what a stuck worker is waiting on
 (a dead analytics host, an outside API, a lock in Postgres) without py-spy.
 
-The files carry the requests' paths (no query strings), and only in memory: the
-history src/health/collect.py keeps on disk is aggregate numbers only.
+The files carry the requests' paths (no query strings), which can name a user,
+and only in memory (tmpfs): a path in flight goes when its request ends, a slow
+request's after SLOW_KEEP_S, and all of them when the worker exits. The history
+src/health/collect.py keeps on disk is aggregate numbers only.
 """
 
 import json
@@ -32,6 +34,7 @@ HIST_BOUNDS_MS = (10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 600
 KEEP_MINUTES = 90  # per-minute buckets kept in the worker file
 SLOW_MS = 1000  # requests at least this slow are listed individually
 SLOW_KEEP = 30  # ...this many per worker
+SLOW_KEEP_S = 3600  # ...and for at most this long: paths are personal data
 STACK_AFTER_S = 5  # capture the stack of requests running longer than this
 TICK_S = 2  # watchdog period: heartbeat, file write, busy-time credit
 
@@ -142,6 +145,8 @@ def _watchdog():
                             if frames is None:
                                 frames = sys._current_frames()
                             entry["stack"] = _stack(frames.get(int(tid)))
+                if _state["slow"] and _state["slow"][0]["t"] < now - SLOW_KEEP_S:
+                    _state["slow"] = [x for x in _state["slow"] if x["t"] >= now - SLOW_KEEP_S]
                 cutoff = minute_of(now) - KEEP_MINUTES * 60
                 for key in [k for k in _state["minutes"] if int(k) < cutoff]:
                     del _state["minutes"][key]
