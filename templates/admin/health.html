@@ -37,10 +37,10 @@
   .ranges button:last-child { border-radius: 0 6px 6px 0; }
   .ranges button + button { border-left: 0; }
   .ranges button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
   .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .tile .k { color: var(--muted); font-size: 12px; }
-  .tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile .s { color: var(--muted); font-size: 12px; }
   .tile.warn { border-color: var(--warn); } .tile.warn .v { color: var(--warn); }
   .tile.bad { border-color: var(--bad); } .tile.bad .v { color: var(--bad); }
@@ -241,11 +241,11 @@
       grid: {left: 48, right: 48, top: 30, bottom: 28},
       legend: {top: 0, textStyle: {color: C('--muted')}, itemWidth: 14, itemHeight: 8},
       tooltip: {trigger: 'axis'},
-      xAxis: {type: 'time', axisLine: {lineStyle: {color: C('--line')}}, axisLabel: {color: C('--muted')}, splitLine: {show: false}},
+      xAxis: {type: 'time', splitNumber: 6, axisLine: {lineStyle: {color: C('--line')}}, axisLabel: {color: C('--muted'), hideOverlap: true}, splitLine: {show: false}},
     }, extra);
   }
   const yAxis = (o) => Object.assign({type: 'value', axisLabel: {color: C('--muted')}, splitLine: {lineStyle: {color: C('--line')}}}, o || {});
-  const line = (name, data, color, o) => Object.assign({name, type: 'line', data, showSymbol: false, connectNulls: false,
+  const line = (name, data, color, o) => Object.assign({name, type: 'line', data, symbol: 'circle', symbolSize: 3, connectNulls: false,
     lineStyle: {width: 1.6, color}, itemStyle: {color}}, o || {});
 
   function renderHistory(h) {
