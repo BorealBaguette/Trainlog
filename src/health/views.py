@@ -7,6 +7,7 @@ Nothing here imports the app: the owner check reads the same signed session
 cookie the site sets, against the owner name in config.yaml.
 """
 
+import re
 from functools import wraps
 
 import yaml
@@ -41,6 +42,25 @@ def owner_only(f):
     return wrapper
 
 
+# Route arguments whose value names a kind of thing, never a person or a record,
+# and has few values: kept in the recorded route so /forwardRouting/bus/... and
+# /forwardRouting/train/... are timed apart. Everything else stays a <placeholder>.
+KEEP_ARGS = frozenset({
+    "routingType", "routing", "tripType", "trip_type", "vehicle_type", "type",
+    "station_type", "mode", "kind", "metric", "period", "time", "style", "ext",
+})
+_SAFE_VALUE = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
+
+
+def route_label(rule, view_args):
+    pattern = rule.rule
+    for name in KEEP_ARGS.intersection(view_args or ()):
+        value = str(view_args[name])
+        if _SAFE_VALUE.match(value):
+            pattern = re.sub(r"<(?:[^<>]*:)?%s>" % re.escape(name), value, pattern)
+    return pattern
+
+
 def record_route(app):
     """Hand each request's route pattern (/u/<username>/trips, not the path) to
     the gunicorn recorder, which reads it in post_request. teardown_request runs
@@ -49,7 +69,9 @@ def record_route(app):
     @app.teardown_request
     def _health_record_route(exc=None):
         rule = request.url_rule
-        request.environ[ROUTE_ENVIRON_KEY] = rule.rule if rule is not None else None
+        request.environ[ROUTE_ENVIRON_KEY] = (
+            route_label(rule, request.view_args) if rule is not None else None
+        )
 
 
 @health_blueprint.route("/routes")
