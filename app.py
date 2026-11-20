@@ -709,15 +709,18 @@ def getLangDropdown(user):
     langs.append(
         {"code": user.lang, "name": lang[session["userinfo"]["lang"]][user.lang]}
     )
-    for code in readLang().keys():
+    for code in lang.keys():
         if code != user.lang:
             langs.append({"code": code, "name": lang[code][code]})
     return langs
 
 
 def changeLang(langToSet, session=False):
+    # The cached `lang` (src.utils._LiveLang, reloads edited files within a
+    # second), not readLang(): this runs on every request, and re-reading the 25
+    # lang files (2.8 MB of JSON) cost ~30 ms each time (seen on /admin/health).
     available_languages = []
-    languages = readLang()
+    languages = lang
     for language in languages:
         available_languages.append(
             {"id": language, "name": languages[language][language]}
@@ -1320,6 +1323,10 @@ def before_request():
             getRequestData(request),
         )
         return "", 406
+    # Static files need no user, language or session: skipping the rest keeps
+    # them cheap and stops every asset response from re-sending the cookie.
+    if request.endpoint == "static":
+        return None
     endpoint = request.endpoint
     if endpoint:
         # Get the URL rule associated with the current endpoint
