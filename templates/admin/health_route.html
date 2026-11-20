@@ -17,7 +17,7 @@
         <h2>Timings <small><span id="step"></span> · log scale · scroll or drag to zoom for more detail</small></h2>
         <span class="keys" id="keys"></span>
       </div>
-      <div class="chart big" id="c-route"></div>
+      <div class="chart big" id="c-route" style="height: 380px"></div>
     </div>
     <div class="card">
       <h2>Per commit <small>oldest first; changes against the commit before</small></h2>
@@ -43,8 +43,63 @@
   }
   const tile = (k, v, s) => `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s || '')}</div></div>`;
 
-  $('keys').innerHTML = [['avg', '--accent'], ['p95', '--warn'], ['max', '--bad'], ['requests / min', '--muted']]
-    .map(([l, c]) => `<span class="key"><i style="background:${C(c)}"></i>${esc(l)}</span>`).join('');
+  $('keys').innerHTML = [['avg (dot size = requests)', '--accent'], ['p95', '--warn'], ['max', '--bad'], ['requests / min', '--accent']]
+    .map(([l, c], i) => `<span class="key"><i style="background:${C(c)};${i === 3 ? 'opacity:.45' : ''}"></i>${esc(l)}</span>`).join('');
+
+  // Two panels on one time axis: response time above, requests below. Requests
+  // to a route come in bursts, so many minutes have none and no timing: the lines
+  // bridge those, and a dot marks every real measurement, sized by how many
+  // requests it stands for (a lone request is a small dot, a busy minute a big one).
+  function routeOption(d, win) {
+    const {alpha, deployMarks, tickLabel} = HC.parts;
+    const x = HC.parts.pointAt(d);
+    const P = d.points;
+    const lat = (k) => P.map((p) => [x(p), p[k] == null ? null : p[k], p.n || 0]);
+    const dot = (v) => (v[1] == null ? 0 : Math.min(15, 3 + 2.2 * Math.sqrt(v[2] || 1)));
+    const span = win.max - win.min;
+    const xAxis = (grid, labels) => ({
+      type: 'time', gridIndex: grid, min: win.min, max: win.max, splitNumber: 10,
+      axisTick: {show: false}, splitLine: {show: false}, axisLine: {lineStyle: {color: C('--line')}},
+      axisLabel: labels ? {color: C('--muted'), fontSize: 10.5, hideOverlap: true, formatter: (v) => tickLabel(v, span)} : {show: false},
+    });
+    const ms = {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)};
+    return {
+      animation: false,
+      textStyle: {fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', color: C('--fg')},
+      grid: [{left: 58, right: 18, top: 22, bottom: '34%'}, {left: 58, right: 18, height: '14%', bottom: 46}],
+      xAxis: [xAxis(0, false), xAxis(1, true)],
+      yAxis: [
+        yAxis(true, {gridIndex: 0, type: 'log', min: 1, axisLabel: ms}),
+        yAxis(true, {gridIndex: 1, splitNumber: 1, minInterval: 1, axisLabel: {color: C('--muted'), fontSize: 10}}),
+      ],
+      axisPointer: {link: [{xAxisIndex: 'all'}]},
+      dataZoom: [
+        {type: 'inside', xAxisIndex: [0, 1], filterMode: 'none'},
+        {type: 'slider', xAxisIndex: [0, 1], filterMode: 'none', height: 14, bottom: 6, borderColor: C('--line'),
+         fillerColor: alpha(C('--accent'), 0.12), showDetail: false, handleSize: '80%',
+         dataBackground: {lineStyle: {color: C('--line')}, areaStyle: {color: C('--line')}}},
+      ],
+      tooltip: {
+        trigger: 'axis', confine: true, backgroundColor: C('--card'), borderColor: C('--line'),
+        textStyle: {color: C('--fg'), fontSize: 12}, axisPointer: {type: 'line', lineStyle: {color: C('--muted'), width: 1}},
+      },
+      series: [
+        {name: 'p95', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: lat('p95'), connectNulls: true, smooth: 0.35,
+         showSymbol: false, lineStyle: {width: 1.4, color: C('--warn'), opacity: 0.9}, itemStyle: {color: C('--warn')},
+         emphasis: {disabled: true}, tooltip: {valueFormatter: fmtMs}, markLine: deployMarks(d, true, win)},
+        {name: 'avg', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: lat('avg'), connectNulls: true, smooth: 0.35,
+         showSymbol: true, symbol: 'circle', symbolSize: dot, lineStyle: {width: 2, color: C('--accent')},
+         itemStyle: {color: alpha(C('--accent'), 0.75), borderColor: C('--card'), borderWidth: 1},
+         areaStyle: fade(C('--accent')), emphasis: {disabled: true}, tooltip: {valueFormatter: fmtMs}},
+        {name: 'max', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: lat('max').filter((v) => v[1] != null),
+         symbolSize: 4, itemStyle: {color: alpha(C('--bad'), 0.55)}, tooltip: {valueFormatter: fmtMs}},
+        {name: 'requests / min', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+         data: P.map((p) => [x(p), p.req_per_min || null]), barMaxWidth: 6,
+         itemStyle: {color: alpha(C('--accent'), 0.45), borderRadius: [2, 2, 0, 0]},
+         tooltip: {valueFormatter: (v) => (v == null ? '–' : (+v).toFixed(1))}},
+      ],
+    };
+  }
 
   function render(d) {
     const P = d.points;
@@ -53,26 +108,10 @@
       ? `per ${fmtDur(spans[0])}, per ${fmtDur(spans[spans.length - 1])} where only that is kept`
       : `per ${fmtDur(spans[0] || d.step_s)}`;
     const x = HC.parts.pointAt(d);
-    const at = (k) => P.map((p) => [x(p), p[k] == null ? null : p[k]]);
     const withData = P.filter((p) => p.n);
     const max = Date.now();
     const min = withData.length ? Math.max(P[0].t * 1000, x(withData[0])) : (P.length ? P[0].t * 1000 : max - 86400000);
-    const opt = frame({min, max: Math.max(max, min + 600000)}, true, {
-      yAxis: [
-        yAxis(true, {type: 'log', min: 1, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}}),
-        yAxis(true, {splitLine: {show: false}, axisLabel: {color: C('--muted'), fontSize: 10.5}}),
-      ],
-      series: [
-        {name: 'requests / min', type: 'bar', yAxisIndex: 1, data: at('req_per_min'), barMaxWidth: 8,
-         itemStyle: {color: C('--line')}, tooltip: {valueFormatter: (v) => v == null ? '–' : (+v).toFixed(1)}},
-        line('max', at('max'), C('--bad'), {lineStyle: {width: 1, color: C('--bad'), opacity: 0.5}, tooltip: {valueFormatter: fmtMs}}),
-        line('p95', at('p95'), C('--warn'), {tooltip: {valueFormatter: fmtMs}}),
-        line('avg', at('avg'), C('--accent'), {areaStyle: fade(C('--accent')), tooltip: {valueFormatter: fmtMs}}),
-      ],
-    }, d);
-    // Deploy lines on a line series (the frame puts them on the first one).
-    opt.series[1].markLine = opt.series[0].markLine; delete opt.series[0].markLine;
-    HC.drawOption('c-route', opt, true);
+    HC.drawOption('c-route', routeOption(d, {min, max: Math.max(max, min + 600000)}), true);
 
     // Range totals, from the per-commit numbers (which cover the whole range
     // whatever the zoom shows in detail)
