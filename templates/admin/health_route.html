@@ -56,7 +56,7 @@
     const at = (k) => P.map((p) => [x(p), p[k] == null ? null : p[k]]);
     const withData = P.filter((p) => p.n);
     const max = Date.now();
-    const min = withData.length ? Math.max(P[0].t * 1000, withData[0].t * 1000) : (P.length ? P[0].t * 1000 : max - 86400000);
+    const min = withData.length ? Math.max(P[0].t * 1000, x(withData[0])) : (P.length ? P[0].t * 1000 : max - 86400000);
     const opt = frame({min, max: Math.max(max, min + 600000)}, true, {
       yAxis: [
         yAxis(true, {type: 'log', min: 1, axisLabel: {color: C('--muted'), fontSize: 10.5, formatter: (v) => fmtMs(v)}}),

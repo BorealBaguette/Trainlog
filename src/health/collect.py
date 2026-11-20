@@ -453,6 +453,28 @@ def _minute_routes(states, m):
     return out
 
 
+def _minute_row(states, m):
+    """The history row of minute m from the worker files, or None if no worker
+    was up in it. Host and Postgres numbers are added by persist() only."""
+    cap = capacity(states, m)
+    if not cap:
+        return None
+    b = merge(states, [m])
+    row = {
+        "t": m,
+        "cap": cap,
+        "n": b["n"],
+        "err": b["err"],
+        "busy": round(b["busy_ms"] / 60000, 3),
+        "sum": round(b["sum_ms"]),
+        "max": round(b["max_ms"]),
+        "hist": b["hist"],
+    }
+    if m in _peaks:
+        row["peak"] = _peaks[m]
+    return row
+
+
 def _record_deploy(states):
     """Append to deploys.jsonl when the workers run a commit other than the last
     one recorded: the newest commit, at the time its first worker booted."""
@@ -519,22 +541,9 @@ def persist(now, states, host_now, pg_now):
                 lines.setdefault(_day_file(m, ".routes1m"), []).append(
                     json.dumps({"t": m, "c": commit, "r": routes_m}, separators=(",", ":"))
                 )
-            cap = capacity(states, m)
-            if not cap:
+            row = _minute_row(states, m)
+            if row is None:
                 continue
-            b = merge(states, [m])
-            row = {
-                "t": m,
-                "cap": cap,
-                "n": b["n"],
-                "err": b["err"],
-                "busy": round(b["busy_ms"] / 60000, 3),
-                "sum": round(b["sum_ms"]),
-                "max": round(b["max_ms"]),
-                "hist": b["hist"],
-            }
-            if m in _peaks:
-                row["peak"] = _peaks[m]
             if m == upto:  # the sampled values describe "now", i.e. this minute
                 if "load" in host_now:
                     row["load1"] = host_now["load"][0]
@@ -616,6 +625,22 @@ def history(range_key, max_points=MAX_POINTS, frm=None, to=None):
         except OSError:
             pass
         day += datetime.timedelta(days=1)
+
+    # Minutes that are over but not written yet (persist waits PERSIST_GRACE_S
+    # and runs every SAMPLE_EVERY_S): read from the worker files, so the charts
+    # reach the last complete minute instead of stopping a minute or two short.
+    have = {r["t"] for r in rows}
+    last_done = rec.minute_of(time.time()) - 60
+    if now >= last_done:
+        states = read_states(time.time())
+        m = max(have) + 60 if have else since
+        m = max(m, last_done - rec.KEEP_MINUTES * 60)  # all the worker files hold
+        while m <= min(last_done, now):
+            if m not in have:
+                row = _minute_row(states, m)
+                if row:
+                    rows.append(row)
+            m += 60
 
     # Point spacing from the span the data covers, not the range picked: a few
     # hours of history on the 7d view would otherwise be drawn in 7-minute steps.

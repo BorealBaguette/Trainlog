@@ -172,21 +172,23 @@ const HC = (function () {
   // The window drawn: the range, but starting where data starts, so a few hours
   // of history are not squeezed against the right edge of a 7-day axis.
   function timeWindow(h) {
-    const max = Date.now();
+    const now = Date.now();
     const P = h.points || [];
-    const start = P.length ? P[0].t * 1000 : max - 3600000;
-    const first = P.find((p) => p.cap != null);
-    const min = first ? Math.max(start, first.t * 1000) : start;
+    const start = P.length ? P[0].t * 1000 : now - 3600000;
+    const withData = P.filter((p) => p.cap != null);
+    const first = withData[0], last = withData[withData.length - 1];
+    // From the first point to the last (each drawn mid-period), so the lines
+    // touch both edges: not from a rounded tick before the data, nor to "now"
+    // (history is per finished minute, which left a strip on the right).
+    const mid = (p) => (p.t + (p.s || h.step_s || 60) / 2) * 1000;
+    const min = first ? mid(first) : start;
+    const max = last ? Math.min(now, mid(last)) : now;
     return {min, max: Math.max(max, min + 600000)};
   }
 
   // Ticks at round local times, about `count` of them.
   const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 7200].map((m) => m * 60000);
   function tickStep(span, count) { return STEPS.find((s) => span / s <= count) || STEPS[STEPS.length - 1]; }
-  function roundDown(t, step) {
-    const off = new Date(t).getTimezoneOffset() * 60000;
-    return Math.floor((t - off) / step) * step + off;
-  }
   function tickLabel(v, span) {
     const d = new Date(v);
     const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
@@ -323,10 +325,11 @@ const HC = (function () {
                 : {left: 2, right: 14, top: 8, bottom: 0, containLabel: true},
       legend: {show: false},
       xAxis: Object.assign({
-        type: 'time', min: big ? win.min : roundDown(win.min, step), max: win.max,
+        type: 'time', min: win.min, max: win.max,
         axisLine: {lineStyle: {color: C('--line')}}, axisTick: {show: false}, splitLine: {show: false},
         axisLabel: {color: C('--muted'), fontSize: 10.5, hideOverlap: true, formatter: (v) => tickLabel(v, span)},
-      }, big ? {splitNumber: 10} : {interval: step, minInterval: step, maxInterval: step}),
+        // ECharts picks round times itself; minInterval keeps the small ones sparse.
+      }, big ? {splitNumber: 10} : {splitNumber: 5, minInterval: step}),
       dataZoom: big ? [{type: 'inside', filterMode: 'none'},
                        {type: 'slider', filterMode: 'none', height: 14, bottom: 6, borderColor: C('--line'),
                         fillerColor: alpha(C('--accent'), 0.12), handleSize: '80%', showDetail: false,
