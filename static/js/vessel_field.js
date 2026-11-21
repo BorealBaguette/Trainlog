@@ -13,12 +13,13 @@
  * initVesselField(input, hint, url)
  *   Wires jQuery UI autocomplete onto `input` (matching name, IMO or MMSI alike, and
  *   folding the ship-type prefix so 'MS Fjordtroll', 'M/S Fjordtroll' and 'Fjordtroll'
- *   are one search) and keeps `hint` in step — on selection, on load, and after a manual
- *   edit. The hint shows the flag, the name AS OF THE TRIP'S DATE and the cached photo,
+ *   are one search) and keeps `hint` in step — on selection, on load, and when the trip's
+ *   date changes. The hint shows the flag, the name AS OF THE TRIP'S DATE and the cached photo,
  *   so the ship behind the number can be checked at a glance. `url` is the /vesselAutocomplete endpoint.
  *
- * Free text stays valid throughout: this only offers the ships already on record, and
- * a reg that resolves to nothing simply gets no hint and is displayed as typed.
+ * Only a ship picked from the list is stored by its key; typed text is stored as typed,
+ * even when it names a ship on record, so a ship missing from the register can be logged
+ * under the name of one that is there.
  */
 (function () {
   // What the ship was called on the trip's date — the name the trip will display — with
@@ -60,16 +61,11 @@
     return '';
   }
 
-  // Which suggestion (if any) the typed text actually IS, rather than merely starts.
-  // The endpoint does prefix and substring matching, so "977" comes back with Megastar
-  // attached — that is a suggestion, not a resolution, and must not be labelled as one.
-  //
-  // The server flags it, rather than this comparing strings: only vessel_resolve() knows
-  // that 'MS Fjordtroll' and 'Fjordtroll' are the same ship, and a second opinion here
-  // would drift from the one the trip is actually displayed through.
-  function exactMatch(vessels) {
+  // The suggestion whose key is `key` itself. The endpoint also returns ships that merely
+  // share a name with the text, and those must not be taken for the stored one.
+  function keyMatch(vessels, key) {
     for (var i = 0; i < vessels.length; i++) {
-      if (vessels[i].exact) return vessels[i];
+      if (vessels[i].value === key) return vessels[i];
     }
     return null;
   }
@@ -92,11 +88,9 @@
       .val($input.val());
     $input.after($key).removeAttr('name');
 
-    // Free text is stored as typed; only a ship we recognise is stored by its key.
     function setStored(value) { $key.val(value == null ? '' : value); }
 
-    // Show the ship, store the key. Called on selection and whenever typed text turns
-    // out to name a ship exactly.
+    // Show the ship, store the key.
     function showVessel(vessel) {
       setHint(vessel);
       if (!vessel) return;
@@ -143,22 +137,16 @@
       $hint.show();
     }
 
-    // Name the ship a typed identifier stands for. Called on load and after edits, so
-    // a number pasted in by hand is named too, not only one picked from the list.
-    function resolve(term) {
-      if (!term || term.trim().length < 2) {
-        setHint(null);
-        setStored(term);            // free text, including an empty field
-        return;
-      }
-      $.getJSON(url, { query: term.trim(), at: tripDate() })
+    // Name the ship the stored key stands for, as of the trip's date.
+    function resolveKey() {
+      var key = $key.val();
+      if (!key || key.length < 2) { setHint(null); return; }
+      $.getJSON(url, { query: key, at: tripDate() })
         .done(function (data) {
-          var vessel = exactMatch(data || []);
-          // Typing a name or a number in full is the same act as picking it from the
-          // list; anything else is free text and is stored as written.
-          if (vessel) showVessel(vessel); else { setHint(null); setStored(term); }
+          var vessel = keyMatch(data || [], key);
+          if (vessel) showVessel(vessel); else setHint(null);
         })
-        .fail(function () { setHint(null); setStored(term); });
+        .fail(function () { setHint(null); });
     }
 
     $input.autocomplete({
@@ -185,15 +173,15 @@
       }
     });
 
-    // What the user typed is what gets resolved...
-    $input.on('change blur', function () { resolve($input.val()); });
+    // Typing turns the field back into free text; only a pick stores a key.
+    $input.on('input', function () {
+      setHint(null);
+      setStored($input.val());
+    });
 
-    // ...but everywhere else the stored key is the thing to ask about: it is canonical,
-    // where the visible text is only a name, and after a rename the two differ. Changing
-    // the trip's date can change which name that key answers to, so the field follows.
-    function reresolve() { resolve($key.val() || $input.val()); }
-    $(document).on('change', '#newTripStartDate, #newTripStartOnlyDate, #onlyDate', reresolve);
-    reresolve();
+    // Changing the trip's date can change which name the key answers to.
+    $(document).on('change', '#newTripStartDate, #newTripStartOnlyDate, #onlyDate', resolveKey);
+    resolveKey();
   }
 
   window.initVesselField = initVesselField;

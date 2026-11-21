@@ -196,12 +196,12 @@ def search_commons_images(query, limit=12):
 
 def resolve_vessel(pg, identifier, at=None):
     """
-    The ship a written identifier names, as of `at`, or None.
+    The ship a trip's `reg` names, as of `at`, or None.
 
-    `identifier` is whatever the user typed into a trip's `reg`: a hull key, a name, an
-    IMO or an MMSI. All of them resolve to one hull (vessel_resolve), and the hull's
-    identity at that moment is one registration (vessel_identity) — see migration 0056.
-    `at` of None means the current identity.
+    Only a hull key — the IMO or the trainlog_id — resolves (vessel_resolve, migration
+    0090); a name or an MMSI is text. The hull's identity at that moment is one
+    registration (vessel_identity, migration 0056). `at` of None means the current
+    identity.
 
     Returns the registration joined to its hull, so callers get the name and flag that
     were in force alongside the keys that never change.
@@ -228,9 +228,8 @@ def find_vessel_ids(pg, term):
     Vessels whose name, IMO or MMSI matches `term`.
 
     Lets trip search follow the split the same way the display does: a trip logged as
-    '9773064' is shown as Megastar, so searching "Megastar" has to find it, and
-    searching the number has to find the ones logged by name. The counterpart of
-    find_operator_ids for ships.
+    '9773064' is shown as Megastar, so searching "Megastar" has to find it. The
+    counterpart of find_operator_ids for ships.
 
     Returns an empty list when nothing matches, in which case the caller falls back to
     plain text matching on the raw `reg` field alone.
@@ -532,16 +531,16 @@ def fetch_picture_for_registration(pg, registration_id):
 
 def get_vessel_picture(identifier, pg, at=None):
     """
-    Photo and identity for a vessel named by name, IMO or MMSI.
+    Photo and identity for a vessel named by its hull key.
 
     `at` is the moment to answer for — a trip's own date. The name, flag and photo are
     those of the registration in force then, so a 2017 crossing of IMO 8601915 answers
     Amorella under the Finnish flag and not Mega Victoria under the Italian one. None
     means now.
 
-    Returns None when nothing is found. A miss runs a Google Images search and
-    downloads the result, so call it on a deliberate user action only — never once per
-    row of a listing.
+    Returns None for text that is no hull key, or when nothing is found. A miss runs a
+    Google Images search and downloads the result, so call it on a deliberate user
+    action only — never once per row of a listing.
     """
     if not identifier or not identifier.strip():
         return None
@@ -564,8 +563,7 @@ def get_vessel_picture(identifier, pg, at=None):
         if picture:
             return _picture_response(vessel, picture)
 
-    # A known vessel with no cached photo falls through to a lookup, same as an unknown
-    # one: the row may have been created by an admin, or by an earlier search whose
+    # A known vessel with no cached photo falls through to a lookup: the row may have been created by an admin, or by an earlier search whose
     # download failed. Commons first where the ship has a number to match on, because its
     # files are licensed for reuse; the image search is the fallback.
     if vessel and vessel["registration_id"]:
@@ -577,6 +575,10 @@ def get_vessel_picture(identifier, pg, at=None):
                 {"path": commons},
             ).fetchone()
             return _picture_response(vessel, picture)
+
+    # Text that names no hull is not searched for: any ship found would be a guess.
+    if not vessel:
+        return None
 
     found = search_vessel_image(identifier)
     if not found:
