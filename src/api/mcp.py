@@ -1274,6 +1274,66 @@ def _list_tickets(user) -> list[dict]:
                     "valid_from": _iso(r["valid_from"]), "valid_until": _iso(r["valid_until"])}) for r in rows]
 
 
+# ── trip queries ──────────────────────────────────────────────────────────────
+
+
+def _trips_owner(user, username) -> tuple[bool, int]:
+    """(own, uid) of the trips to read: the user's own, or a friend's read-only."""
+    username = (username or "").strip()
+    if not username or username == user.username:
+        return True, user.uid
+    target = User.query.filter_by(username=username).first()
+    if target is None or not _are_friends(user.uid, target.uid):
+        # Don't disclose whether the user exists.
+        raise ValueError("No such friend, or you are not friends with them.")
+    return False, target.uid
+
+
+def _filtered_trips(user, args):
+    """(where, params, own) for list_trips."""
+    own, target_uid = _trips_owner(user, args.get("username"))
+    clauses = ["user_id = :target_uid"]
+    params = {"target_uid": target_uid}
+
+    if not own:
+        # FRIEND_VISIBLE is a fixed tuple of trusted literals (no user input).
+        allowed = ", ".join(f"'{v}'" for v in FRIEND_VISIBLE)
+        clauses.append(f"visibility IN ({allowed})")
+    if args.get("trip_type"):
+        clauses.append("trip_type = :trip_type")
+        params["trip_type"] = args["trip_type"]
+    if args.get("upcoming_only"):
+        clauses.append("(is_project OR COALESCE(utc_start_datetime, start_datetime) >= NOW())")
+    if args.get("from_date"):
+        clauses.append("start_datetime >= :from_date")
+        params["from_date"] = form.iso_date(args["from_date"], "from_date")
+    if args.get("to_date"):
+        clauses.append("start_datetime < CAST(:to_date AS date) + 1")
+        params["to_date"] = form.iso_date(args["to_date"], "to_date")
+    return " AND ".join(clauses), params, own
+
+
+def _list_trips(user, args) -> list[dict]:
+    where, params, own = _filtered_trips(user, args)
+    params["limit"] = max(1, min(int(args.get("limit") or 50), 500))
+    with pg_session() as pg:
+        rows = pg.execute(
+            f"""
+            SELECT trip_id, trip_type, origin_station, destination_station,
+                   start_datetime, end_datetime, operator, line_name,
+                   trip_length, price, currency, is_project, visibility
+            FROM trips
+            WHERE {where}
+            ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
+                     COALESCE(utc_start_datetime, start_datetime) DESC NULLS LAST,
+                     trip_id DESC
+            LIMIT :limit
+            """,
+            params,
+        ).fetchall()
+    return [_trip_summary(dict(r._mapping), include_private=own) for r in rows]
+
+
 # ── writes ────────────────────────────────────────────────────────────────────
 
 
@@ -1382,52 +1442,7 @@ def _call_tool(name: str, args: dict, user) -> str:
 
     # ── trips ───────────────────────────────────────────────────────────────
     if name == "list_trips":
-        limit = max(1, min(int(args.get("limit") or 50), 500))
-        # Whose trips? Default own; an explicit username reads a friend's, read-only.
-        target_username = (args.get("username") or "").strip()
-        own = not target_username or target_username == user.username
-        if own:
-            target_uid = uid
-        else:
-            target = User.query.filter_by(username=target_username).first()
-            if target is None or not _are_friends(uid, target.uid):
-                # Don't disclose whether the user exists.
-                raise ValueError("No such friend, or you are not friends with them.")
-            target_uid = target.uid
-
-        clauses = ["user_id = :target_uid"]
-        params = {"target_uid": target_uid, "limit": limit}
-        if not own:
-            # FRIEND_VISIBLE is a fixed tuple of trusted literals (no user input).
-            allowed = ", ".join(f"'{v}'" for v in FRIEND_VISIBLE)
-            clauses.append(f"visibility IN ({allowed})")
-        if args.get("trip_type"):
-            clauses.append("trip_type = :trip_type")
-            params["trip_type"] = args["trip_type"]
-        if args.get("upcoming_only"):
-            clauses.append("(is_project OR COALESCE(utc_start_datetime, start_datetime) >= NOW())")
-        if args.get("from_date"):
-            clauses.append("start_datetime >= :from_date")
-            params["from_date"] = form.iso_date(args["from_date"], "from_date")
-        if args.get("to_date"):
-            clauses.append("start_datetime < CAST(:to_date AS date) + 1")
-            params["to_date"] = form.iso_date(args["to_date"], "to_date")
-        with pg_session() as pg:
-            rows = pg.execute(
-                f"""
-                SELECT trip_id, trip_type, origin_station, destination_station,
-                       start_datetime, end_datetime, operator, line_name,
-                       trip_length, price, currency, is_project, visibility
-                FROM trips
-                WHERE {" AND ".join(clauses)}
-                ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
-                         COALESCE(utc_start_datetime, start_datetime) DESC NULLS LAST,
-                         trip_id DESC
-                LIMIT :limit
-                """,
-                params,
-            ).fetchall()
-        return out([_trip_summary(dict(r._mapping), include_private=own) for r in rows])
+        return out(_list_trips(user, args))
 
     if name == "get_trip":
         try:
