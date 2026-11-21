@@ -503,6 +503,10 @@ function loadComments() {
     });
 }
 
+// Comment texts by id, for the edit modal: a text never goes into the markup's
+// onclick, where a quote or ${…} in it would run as code
+let commentsById = {};
+
 function renderComments(comments) {
   const container = document.getElementById('commentsList');
   if (!comments.length) {
@@ -513,6 +517,7 @@ function renderComments(comments) {
   // Build tree
   const map = {}, roots = [];
   comments.forEach(c => { c.children = []; map[c.id] = c; });
+  commentsById = map;
   comments.forEach(c => {
     if (c.parent_id && map[c.parent_id]) map[c.parent_id].children.push(c);
     else roots.push(c);
@@ -533,13 +538,13 @@ function renderComment(c, depth) {
     <div class="border-start ps-3 mb-3" style="margin-left:${indent}px">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          <strong>${c.username}</strong>${authorBadge}
+          <strong>${escapeHtml(c.username)}</strong>${authorBadge}
           <small class="text-muted ms-2">${new Date(c.created).toLocaleString()}</small>
           ${edited ? '<small class="text-muted fst-italic ms-1">({{ feature_requests_edited if feature_requests_edited is defined else "edited" }})</small>' : ''}
         </div>
         ${canEdit ? `
           <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary btn-sm" onclick="editComment(${c.id}, \`${c.content.replace(/`/g,'\\`').replace(/\\/g,'\\\\')}\`)">
+            <button class="btn btn-outline-secondary btn-sm" onclick="editComment(${c.id})">
               <i class="fa-solid fa-edit"></i>
             </button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteComment(${c.id})">
@@ -609,9 +614,9 @@ document.getElementById('commentForm')?.addEventListener('submit', function(e) {
   });
 });
 
-function editComment(id, content) {
+function editComment(id) {
   editingCommentId = id;
-  document.getElementById('editCommentContent').value = content;
+  document.getElementById('editCommentContent').value = commentsById[id].content;
   new bootstrap.Modal(document.getElementById('editCommentModal')).show();
 }
 

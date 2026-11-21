@@ -3303,8 +3303,9 @@ def login():
         # Safely get form data to avoid KeyError
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
-        # Ensure the next URL starts with / to avoid sending to external websites. 
-        next_page = n if (n := request.form.get("next", "").strip()).startswith("/") else url_for("landing", username=username)
+        # Only a path on this site: browsers read "//host" and "/\host" as another site
+        n = request.form.get("next", "").strip()
+        next_page = n if n.startswith("/") and not n.startswith(("//", "/\\")) else url_for("landing", username=username)
 
         # Check if username and password are provided
         if not username or not password:
@@ -4177,7 +4178,7 @@ def _run_revert(ids, restrict_user_id=None):
     return results
 
 
-@app.route("/admin/freehandify/<trip_ids>", methods=["GET"])
+@app.route("/admin/freehandify/<trip_ids>", methods=["POST"])
 @owner_required
 def freehandify_trips_admin(trip_ids):
     """Owner-only: freehandify any trips. See _run_freehandify. `?epsilon` (metres,
@@ -4192,7 +4193,7 @@ def freehandify_trips_admin(trip_ids):
     return jsonify({"success": True, "epsilon": epsilon, "results": _run_freehandify(ids, epsilon)})
 
 
-@app.route("/admin/freehandify/revert/<trip_ids>", methods=["GET"])
+@app.route("/admin/freehandify/revert/<trip_ids>", methods=["POST"])
 @owner_required
 def freehandify_revert_admin(trip_ids):
     """Owner-only: restore trips' original routes from the freehand_backup snapshot."""
@@ -4202,7 +4203,7 @@ def freehandify_revert_admin(trip_ids):
     return jsonify({"success": True, "results": _run_revert(ids)})
 
 
-@app.route("/u/<username>/freehandify/<trip_ids>", methods=["GET"])
+@app.route("/u/<username>/freehandify/<trip_ids>", methods=["POST"])
 @login_required
 def freehandify_trips_user(username, trip_ids):
     """Freehandify the caller's own trips (login_required guarantees username is the
@@ -4219,7 +4220,7 @@ def freehandify_trips_user(username, trip_ids):
     return jsonify({"success": True, "epsilon": epsilon, "results": results})
 
 
-@app.route("/u/<username>/freehandify/revert/<trip_ids>", methods=["GET"])
+@app.route("/u/<username>/freehandify/revert/<trip_ids>", methods=["POST"])
 @login_required
 def freehandify_revert_user(username, trip_ids):
     """Restore the caller's own trips from their freehand_backup snapshot; trips owned

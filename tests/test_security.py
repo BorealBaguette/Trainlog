@@ -163,6 +163,18 @@ class CrossSiteWrites(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+class LoginRedirect(unittest.TestCase):
+    def test_next_to_other_site_ignored(self):
+        name = make_user()
+        for target in ["//evil.example/x", "/\\evil.example/x", "https://evil.example/x"]:
+            with self.subTest(next=target):
+                response = app.test_client().post(
+                    "/login/", data={"username": name, "password": "test-password", "next": target}
+                )
+                self.assertEqual(response.status_code, 302)
+                self.assertNotIn("evil.example", response.location)
+
+
 class NoStateChangeOnGet(unittest.TestCase):
     def test_get_refused(self):
         user = make_user()
@@ -176,6 +188,10 @@ class NoStateChangeOnGet(unittest.TestCase):
             (user, f"/u/{user}/delete_ticket/1"),
             (user, f"/u/{user}/toggle_ticket_active/1"),
             (user, f"/u/{user}/logout"),
+            (user, f"/u/{user}/freehandify/1"),
+            (user, f"/u/{user}/freehandify/revert/1"),
+            (OWNER, "/admin/freehandify/1"),
+            (OWNER, "/admin/freehandify/revert/1"),
         ]
         for who, path in cases:
             with self.subTest(path=path):
