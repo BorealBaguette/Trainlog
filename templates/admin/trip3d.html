@@ -71,7 +71,7 @@ const TILESERVER = {{ tileserver | tojson }};
 const TERRARIUM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
 const TILE = 512;
 const TERRAIN_ATTRIBUTION = '<a href="https://mapterhorn.com/attribution" target="_blank">© Mapterhorn</a>';
-const COLOR = { train: '#52b0fe', tram: '#a2d7ff', metro: '#004595', funicular: '#6495ed', rail: '#7ec8ff' };
+const COLOR = { ...Object.fromEntries(MapLibreUtils.MapConfig.transportTypes.map(t => [t.id, t.color])), metro: '#3d8bff' };
 // Colours as given, as MapLibre draws them
 THREE.ColorManagement.enabled = false;
 
@@ -389,7 +389,12 @@ async function showTrip() {
         lls.push(coords[e]); dd.push(dist[e]); hh.push(heights[e]); fb.push(ground[e] ?? heights[e]);
         const raw = lls.map((q, k) => map.queryTerrainElevation(q) || fb[k]);
         const zs = movingAverage(runningMedian(raw, dd, 200), dd, 100);
-        zs[0] = raw[0]; zs[zs.length - 1] = raw[raw.length - 1];
+        // Eased back onto the ground over 60 m rather than at the last point alone: a portal
+        // in a cutting sits metres below the smoothed line, which made a step at the mouth
+        const l = zs.length - 1, d0 = raw[0] - zs[0], d1 = raw[l] - zs[l];
+        for (let k = 0; k <= l; k++) {
+          zs[k] += d0 * Math.max(0, 1 - (dd[k] - dd[0]) / 60) + d1 * Math.max(0, 1 - (dd[l] - dd[k]) / 60);
+        }
         const p = lls.map((q, k) => localAt(q, zs[k] + lift));
         const c = hh.map(h => (byAlt ? altColor(h).toArray() : base.toArray()));
         line(p, c.map(() => outline), { width: 7, order: 1, depthWrite: false, onTop: true });

@@ -3,6 +3,8 @@
 
 {% include nav %}
 
+<script src="{{ static_autoversion('js/maplibre-utils.js') }}"></script>
+
 <script type="importmap">
 { "imports": {
     "three": "https://esm.sh/three@0.180.0",
@@ -90,7 +92,7 @@ const fetchTrips = () => fetch(DATA_URL, { method: 'POST', headers: { 'Content-T
 const TERRARIUM = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
 const TILE = 512;
 const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const COLOR = { train: '#52b0fe', tram: '#a2d7ff', metro: '#004595', funicular: '#6495ed', rail: '#7ec8ff' };
+const COLOR = { ...Object.fromEntries(MapLibreUtils.MapConfig.transportTypes.map(t => [t.id, t.color])), metro: '#3d8bff' };
 THREE.ColorManagement.enabled = false;
 
 
@@ -587,18 +589,27 @@ async function showTrip() {
     for (const { kind: kd, s, e } of structures) {
       if (kd !== 'tunnel') continue;
       const a = at[s], b = at[e], dd = d.slice(a, b + 1);
+      // A tunnel steeper than DIVE between its portals (Spiralen's road corkscrew, ~11 %)
+      // must still reach the far one
+      const dive = Math.max(DIVE, 1.25 * Math.abs(z[b] - z[a]) / ((d[b] - d[a]) || 1));
       const above = movingAverage(S.slice(a, b + 1).map(p => p.above), dd, 300);
       const t = z.slice(a, b + 1).map((v, k) => {
         // A route's own end inside a tunnel is an underground station, not a portal
         const fromA = s === 0 ? Infinity : dd[k] - dd[0], fromB = e === lastIdx ? Infinity : dd[dd.length - 1] - dd[k];
-        return Math.min(v, above[k] - Math.min(TUNNEL_COVER, DIVE * Math.min(fromA, fromB)));
+        return Math.min(v, above[k] - Math.min(TUNNEL_COVER, dive * Math.min(fromA, fromB)));
       });
       const smooth = movingAverage(t, dd, 200).map((v, k) => Math.min(v, t[k]));
-      // Never steeper than DIVE: where the ground falls faster (off Majorstuen's hill) the
+      // The average is one-sided at the portals and sinks below them on a climb: eased back
+      // up to them over 100 m, or the line steps up at each mouth
+      const L = smooth.length - 1, d0 = t[0] - smooth[0], d1 = t[L] - smooth[L];
+      for (let k = 0; k <= L; k++) {
+        smooth[k] += d0 * Math.max(0, 1 - (dd[k] - dd[0]) / 100) + d1 * Math.max(0, 1 - (dd[L] - dd[k]) / 100);
+      }
+      // Never steeper than that: where the ground falls faster (off Majorstuen's hill) the
       // tunnel is lowered further rather than following it down, so it stays under the
       // ground and climbs as a train can; the portals keep their heights
-      for (let k = 1; k < smooth.length; k++) smooth[k] = Math.min(smooth[k], smooth[k - 1] + DIVE * (dd[k] - dd[k - 1]));
-      for (let k = smooth.length - 2; k >= 0; k--) smooth[k] = Math.min(smooth[k], smooth[k + 1] + DIVE * (dd[k + 1] - dd[k]));
+      for (let k = 1; k < smooth.length; k++) smooth[k] = Math.min(smooth[k], smooth[k - 1] + dive * (dd[k] - dd[k - 1]));
+      for (let k = smooth.length - 2; k >= 0; k--) smooth[k] = Math.min(smooth[k], smooth[k + 1] + dive * (dd[k + 1] - dd[k]));
       for (let k = a + 1; k < b; k++) z[k] = smooth[k - a];
     }
     }
