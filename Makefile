@@ -44,4 +44,12 @@ generate-schema-sql:
 	docker compose exec trainlog_db pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} --schema-only >> src/sql/migrations/schema.sql
 	@echo "SET search_path TO DEFAULT;" >> src/sql/migrations/schema.sql
 
-.PHONY: start start-db start-local stop logs psql generate-schema-sql
+# run tests/ in a throwaway container (needs trainlog_db up; uses database trainlog_test)
+test:
+	docker compose run --rm --no-deps -u $$(id -u):$$(id -g) -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python trainlog -m unittest discover -v -s tests -t . $(ARGS)
+
+# the same suite on the working tree and on HEAD, with the route statuses diffed
+test-compare:
+	scripts/compare_main.sh
+
+.PHONY: start start-db start-local stop logs psql generate-schema-sql test test-compare
