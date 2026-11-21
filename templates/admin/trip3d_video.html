@@ -527,7 +527,7 @@ async function setup() {
   const multiDay = dayAt(0) !== dayAt(total);
   const dateText = (day, opts) => new Date(`${day}T00:00:00Z`).toLocaleDateString(LANG, { ...opts, timeZone: 'UTC' });
   const dateOf = (iso, year) => new Date(iso).toLocaleDateString(LANG, { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
-  const day = data.trip.start ? dateOf(data.trip.start, true) : null;
+  const day = data.trip.date ? dateOf(data.trip.date, true) : null;
   // The end's date too when the journey runs over several days
   const endDay = data.trip.end && data.trip.end.slice(0, 10) !== data.trip.start?.slice(0, 10) ? dateOf(data.trip.end) + ' ' : '';
 
@@ -949,7 +949,7 @@ async function setup() {
 
   // The journey's timing: legs between the stations it halts at, each starting and ending at
   // rest (eased, their time shared by distance), and a wait at each
-  let plan = [], halting = new Set(), nearby = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [];
+  let plan = [], halting = new Set(), nearby = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [], countryChanges = [];
   const planJourney = () => {
     // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
     // first, then the stops the timetable waits longest at; the train runs through the rest
@@ -1050,11 +1050,15 @@ async function setup() {
     dayChanges = [];
     // and where the clock moves to another time zone, for its own highlight
     zoneChanges = [];
-    let zone = offsetAt(0);
+    // and where the train enters another country, for the flag's
+    countryChanges = [];
+    let zone = offsetAt(0), country = countryAt(0);
     for (let t = 0.1; t <= JOURNEY; t += 0.1) {
       const s = journeyAt(t).s, now = dayAt(s), off = offsetAt(s);
       if (now && now !== day) { dayChanges.push({ t, day: now }); day = now; }
       if (off !== zone) { zoneChanges.push({ t }); zone = off; }
+      const here = countryAt(s);
+      if (here && here !== country) { if (country) countryChanges.push({ t }); country = here; }
     }
     // When the train reaches and leaves each station shown
     stationTimes = new Map();
@@ -1586,10 +1590,15 @@ async function setup() {
       };
       g2.shadowBlur = 0;
       if (flag) {
-        const fy = Math.round(clockMid - fh / 2);
-        box(pad, fy, fw, fh, 4 * u, '#fff');
-        g2.save(); roundRect(pad, fy, fw, fh, 4 * u); g2.clip(); g2.drawImage(flag, pad, fy, fw, fh); g2.restore();
-        roundRect(pad, fy, fw, fh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
+        // A little larger with a warm edge for 2.5 s as the train enters another country, as the
+        // clock does at a time zone
+        const change = countryChanges.find(c => f.jt >= c.t && f.jt < c.t + 2.5);
+        const glow = change ? Math.max(0, Math.min(1, (f.jt - change.t) / 0.3, (change.t + 2.5 - f.jt) / 0.8)) : 0;
+        const w = fw * (1 + 0.15 * glow), h = fh * (1 + 0.15 * glow), fx = Math.round(pad + (fw - w) / 2), fy = Math.round(clockMid - h / 2);
+        box(fx, fy, w, h, 4 * u, '#fff');
+        g2.save(); roundRect(fx, fy, w, h, 4 * u); g2.clip(); g2.drawImage(flag, fx, fy, w, h); g2.restore();
+        roundRect(fx, fy, w, h, 4 * u); g2.lineWidth = (1.5 + 1.5 * glow) * u;
+        g2.strokeStyle = glow ? `rgba(255,${Math.round(255 - 46 * glow)},${Math.round(255 - 153 * glow)},0.95)` : 'rgba(255,255,255,0.85)'; g2.stroke();
       }
       let clockX = rowX;
       if (opLogos.length) {
@@ -1650,7 +1659,7 @@ async function setup() {
         W / 2, H / 2 + 46 * u + shift, 30, 600);
       if (day) {
         g2.font = font(500, 26); g2.fillStyle = 'rgba(255,255,255,0.88)';
-        iconLine([[FA.calendar, `${day} · ${data.trip.start.slice(-5)} → ${endDay}${(data.trip.end || '').slice(-5)}`],
+        iconLine([[FA.calendar, data.trip.start ? `${day} · ${data.trip.start.slice(-5)} → ${endDay}${(data.trip.end || '').slice(-5)}` : day],
           onWay && [FA.stop, plural(T.stops, onWay)], transfers && [FA.transfer, plural(T.transfers, transfers)]].filter(Boolean), W / 2, H / 2 + 92 * u + shift, 26, 500);
       }
       g2.shadowBlur = 0; g2.textAlign = 'left'; g2.globalAlpha = 1;
