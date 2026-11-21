@@ -17,7 +17,7 @@ from src.trip_selections import parse_trip_ids
 from src.users import User
 from src.api.motis import _tz
 from src.api.trainset import public_trainset_info
-from src.utils import get_user_id, getUser, has_current_trip, lang, owner
+from src.utils import current_user_is_friend_with, get_user_id, getUser, has_current_trip, lang, owner
 
 trip3d_blueprint = Blueprint("trip3d", __name__)
 
@@ -180,6 +180,14 @@ def _payload(row, user=None):
     }
 
 
+def _shared_with_viewer(row, user):
+    """The public trip page's rules: the account shares its trips, the trip is not
+    private, and a friends-only trip needs the viewer to be a friend."""
+    if not (user and user.is_public_trips()) or row["visibility"] == "private":
+        return False
+    return row["visibility"] != "friends" or current_user_is_friend_with(user.username)
+
+
 def trips_video_json(trip_ids):
     """Several trips for the video, in the order they were taken. Like the poster, the
     viewer's own trips (the site owner may see any); with them, for a trip taken together,
@@ -193,13 +201,13 @@ def trips_video_json(trip_ids):
     if not rows:
         abort(404)
     viewer = get_user_id()
+    owners = {uid: User.query.filter_by(uid=uid).first() for uid in {row["user_id"] for row in rows}}
     others = [row for row in rows if row["user_id"] != viewer]
     if not session.get(owner) and others and (
-        len(others) == len(rows) or any(row["visibility"] == "private" for row in others)
+        len(others) == len(rows) or not all(_shared_with_viewer(row, owners[row["user_id"]]) for row in others)
     ):
         abort(401)
     rows = sorted(rows, key=lambda r: (r["utc_start_datetime"] or r["start_datetime"] or datetime.min, r["trip_id"]))
-    owners = {uid: User.query.filter_by(uid=uid).first() for uid in {row["user_id"] for row in rows}}
     trips = []
     with pg_session() as pg:
         for row in rows:

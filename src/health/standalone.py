@@ -21,6 +21,9 @@ app = Flask(__name__, template_folder=str(ROOT / "templates"), static_folder=Non
 # here and a refreshed one stays valid there.
 app.secret_key = (ROOT / ".flask_secret").read_text()
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+# Same cookie flags too, or a refresh from here would drop them
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = True
 app.url_map.strict_slashes = False
 app.register_blueprint(health_blueprint, url_prefix="/admin/health")
 

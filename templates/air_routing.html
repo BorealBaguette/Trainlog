@@ -44,7 +44,7 @@ const id = getGetParams().get("id");
 let newTrip = null;
 
 {% if trip_data %}
-newTrip = {{ trip_data | safe }};
+newTrip = {{ trip_data | tojson }};
 {% endif %}
 if (!newTrip && id) {
     newTrip = JSON.parse(sessionStorage.getItem(id));

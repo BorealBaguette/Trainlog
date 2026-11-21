@@ -143,6 +143,18 @@ def feature_admin_or_owner_required(f):
     return decorated_function
 
 
+def posted_trip_data():
+    """The trip the app posts to the routing pages, parsed: it ends up in a <script>,
+    so it must be data (rendered with |tojson), never markup or code."""
+    raw = request.form.get("trip_data")
+    if raw is None:
+        return request.get_json(silent=True)
+    try:
+        return json.loads(raw)
+    except ValueError:
+        abort(400)
+
+
 def getUser():
     return session.get("logged_in") if session.get("logged_in") else "public"
 

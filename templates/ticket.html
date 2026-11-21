@@ -294,7 +294,7 @@ $(function () {
         if (!confirm('Are you sure you want to delete this ticket?')) return;
         var deleted = this.dataset.ticketId;
         var url = {{ url_for('tickets.delete_ticket', username=username, ticket_id=0)|tojson }}.replace(/0$/, deleted);
-        $.get(url)
+        $.post(url)
             .done(function () {
                 // The page may be addressed by the ticket just deleted: go on by one still there.
                 var left = $('#ticketsTable tbody tr').not('#ticket_' + deleted).first();
@@ -308,7 +308,7 @@ $(function () {
     $('.ticket-active-switch').on('change', function () {
         var url = {{ url_for('tickets.toggle_ticket_active', username=username, ticket_id=0)|tojson }}.replace(/0$/, this.dataset.ticketId);
         var input = this;
-        $.get(url).fail(function () { input.checked = !input.checked; });
+        $.post(url).fail(function () { input.checked = !input.checked; });
     });
 
 });

@@ -256,6 +256,7 @@ from src.error_gifs import (
 )
 from src.utils import (
     getNameFromPath,
+    posted_trip_data,
     processDates,
     getUser,
     get_user_id,
@@ -347,7 +348,7 @@ from src.trip_announcer import (
 )
 from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.quai import QUAI_MODES, search_stations, stations_at, stops_by_direction
-from src.routing import forward_routing_core
+from src.routing import forward_routing_core, router_health
 from src.gpx_import import (
     GpxIngestError,
     build_trip_payload,
@@ -357,6 +358,7 @@ from src.gpx_import import (
     parse_gpx_files,
     parse_trip_params,
 )
+from src.csrf import init_csrf
 from src.error_reporter import report_error
 from src.static_cache import init_static_caching, register_static_autoversion
 
@@ -478,6 +480,7 @@ except FileNotFoundError:
         secret_file.write(app.secret_key)
 
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+init_csrf(app)
 
 
 authDb.init_app(app)
@@ -3285,9 +3288,7 @@ def routing(username):
     trip_data = None
     from_app = request.args.get('fromApp') == 'true'
     if request.method == 'POST':
-        trip_data = request.form.get('trip_data') or request.get_json()
-        if isinstance(trip_data, dict):
-            trip_data = json.dumps(trip_data)
+        trip_data = posted_trip_data()
     
     user_obj = User.query.filter_by(username=username).first()
     colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
@@ -3309,9 +3310,7 @@ def air_routing(username, type):
     trip_data = None
     from_app = request.args.get('fromApp') == 'true'
     if request.method == 'POST':
-        trip_data = request.form.get('trip_data') or request.get_json()
-        if isinstance(trip_data, dict):
-            trip_data = json.dumps(trip_data)
+        trip_data = posted_trip_data()
     return render_template(
         "air_routing.html",
         title=lang[session["userinfo"]["lang"]]["routeTrip"],
@@ -4389,7 +4388,7 @@ def realign_flight_tracks():
     return jsonify(find_and_fix(apply=apply))
 
 
-@app.route("/admin/add_dummy_path/<trip_id>", methods=["GET"])
+@app.route("/admin/add_dummy_path/<trip_id>", methods=["POST"])
 @owner_required
 def add_dummy_path(trip_id):
     with pg_session() as pg:
@@ -5664,7 +5663,7 @@ def privacy(override_lang):
     )
 
 
-@app.route("/u/<username>/logout")
+@app.route("/u/<username>/logout", methods=["POST"])
 def logout(username):
     """Logout user and redirect to login page with success message."""
     session.pop(username, None)
@@ -7905,47 +7904,7 @@ def forwardRouting(path, routingType):
 
 @app.route("/router_status/single")
 def router_status_single():
-    url = request.args.get("url")
-    profile = request.args.get("profile", "driving")
-
-    # Map profile to dummy query (avoid 'driving' for cycle/walk)
-    if profile == "driving":
-        dummy_profile = "driving"
-    elif profile in {"cycling", "bike"}:
-        dummy_profile = "bike"
-    elif profile in {"foot", "walking", "walk"}:
-        dummy_profile = "foot"
-    elif profile == "ferry":
-        dummy_profile = "driving"  # or whatever the OSRM instance uses
-    elif profile == "train":
-        dummy_profile = "driving"
-    elif profile == "bus":
-        dummy_profile = "driving"
-    elif profile == "aerialway":
-        dummy_profile = "driving"
-    else:
-        dummy_profile = "driving"
-
-    # Most OSRM endpoints use /route/v1/<profile>/<coords>
-    try:
-        health_resp = requests.get(f"{url}/health", timeout=3)
-        if health_resp.status_code == 200:
-            return jsonify({"status": "OK", "message": "healthy"})
-    except Exception:
-        pass
-    try:
-        # Some endpoints might need https (if the url isn't already)
-        dummy = requests.get(f"{url}/route/v1/{dummy_profile}/0,0.1;0,0.1", timeout=3)
-        if dummy.status_code == 200:
-            j = dummy.json()
-            if "routes" in j:
-                return jsonify({"status": "OK", "message": "responding"})
-            else:
-                return jsonify({"status": "DOWN", "message": "no routes key"})
-        else:
-            return jsonify({"status": "DOWN", "message": f"HTTP {dummy.status_code}"})
-    except Exception as e:
-        return jsonify({"status": "DOWN", "message": str(e)})
+    return jsonify(router_health(request.args.get("url"), request.args.get("profile", "driving")))
 
 
 @app.route("/status/trip_counter")
@@ -10197,7 +10156,7 @@ def admin_currency_test_convert():
     return jsonify({"result": result})
 
 
-@app.route("/toggle_role/<int:uid>/<role>/<action>", methods=["POST", "GET"])
+@app.route("/toggle_role/<int:uid>/<role>/<action>", methods=["POST"])
 @owner_required
 def toggle_role(uid, role, action):
     # Define a set of allowed roles to prevent arbitrary field manipulation
@@ -13913,7 +13872,7 @@ def user_avatars(username):
     )
 
 
-@app.route("/u/<username>/cancelFriendship/<int:friendId>", methods=["GET"])
+@app.route("/u/<username>/cancelFriendship/<int:friendId>", methods=["POST"])
 @login_required
 def cancelFriendship(username, friendId):
     user_id = User.query.filter_by(username=username).first().uid
@@ -13941,7 +13900,7 @@ def cancelFriendship(username, friendId):
     return redirect(url_for("friends", username=username))
 
 
-@app.route("/u/<username>/acceptFriendship/<int:friendId>", methods=["GET"])
+@app.route("/u/<username>/acceptFriendship/<int:friendId>", methods=["POST"])
 @login_required
 def acceptFriendship(username, friendId):
     user_id = User.query.filter_by(username=username).first().uid
@@ -13976,7 +13935,7 @@ def acceptFriendship(username, friendId):
     return redirect(url_for("friends", username=username))
 
 
-@app.route("/u/<username>/requestFriend/<friendId>", methods=["GET"])
+@app.route("/u/<username>/requestFriend/<friendId>", methods=["POST"])
 @login_required
 def requestFriend(username, friendId):
     user = User.query.filter_by(username=username).first()
@@ -14125,6 +14084,10 @@ def calculate_route():
 
 @app.route("/resize_image/<int:max_width>/<int:target_height>")
 def resize_image(max_width, target_height):
+    # The only size the site asks for: any other would let anyone allocate huge
+    # canvases and fill the disk with a cache folder per size.
+    if (max_width, target_height) != (240, 40):
+        abort(404)
     static_dir = os.path.abspath("static")
     image_path = os.path.abspath(os.path.join("static", request.args.get("image_path", "").replace("%26", "&")))
     if not image_path.startswith(static_dir + os.sep):
@@ -15046,11 +15009,11 @@ def list_routes():
 
 @app.get("/flags/<code>.svg")
 def get_flag(code):
-    w = request.args.get("w")
-    h = request.args.get("h")
+    w = request.args.get("w", type=int)
+    h = request.args.get("h", type=int)
     svg = open(f"static/images/flags/{code}.svg").read()
     svg = re.sub(r'<svg([^>]*)>',
-                 rf'<svg\1 width="{w}" height="{h}">', svg)
+                 lambda m: f'<svg{m.group(1)} width="{w}" height="{h}">', svg, count=1)
 
     resp = make_response(svg)
     resp.mimetype = "image/svg+xml"

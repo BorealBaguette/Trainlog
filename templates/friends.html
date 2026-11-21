@@ -177,6 +177,14 @@
 </div>
 
 <script>
+// These change friendships, so they are POSTs (a link anyone could send must not)
+function postTo(url) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = url;
+    document.body.appendChild(form);
+    form.submit();
+}
 // JavaScript for handling unfriend action
 function unfriend(friendId, friendName, type) {
     if(type == "unfriend"){
@@ -195,16 +203,16 @@ function unfriend(friendId, friendName, type) {
 
 function confirmUnfriend() {
     var friendId = $('#confirmationModal').data('friendId');
-    location.href = `cancelFriendship/${encodeURIComponent(friendId)}`;
+    postTo(`cancelFriendship/${encodeURIComponent(friendId)}`);
     $('#confirmationModal').modal('hide');
 }
 
 function acceptFriend(friendId){
-    location.href = `acceptFriendship/${encodeURIComponent(friendId)}`;
+    postTo(`acceptFriendship/${encodeURIComponent(friendId)}`);
 }
 
 function sendFriendRequest(username, friendId) {
-    location.href = `requestFriend/${encodeURIComponent(friendId)}`;
+    postTo(`requestFriend/${encodeURIComponent(friendId)}`);
 }
 
 $(document).ready(function() {

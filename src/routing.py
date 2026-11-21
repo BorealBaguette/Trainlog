@@ -309,3 +309,39 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None, use_
         return make_response(with_road_environment(response.json(), args), response.status_code)
     except ValueError:
         return response.text
+
+
+# The routers the /status page checks (templates/status.html), and only those: the
+# url comes from the browser, so anything else would let anyone make the server
+# fetch any address, internal ones included.
+STATUS_ROUTER_URLS = frozenset({
+    "http://train.srv.trainlog.me",
+    "http://train-gh.srv.trainlog.me",
+    "http://bus.srv.trainlog.me",
+    "https://busrouter.jkimball.dev",
+    "https://routing.openstreetmap.de/routed-car",
+    "http://ferry.srv.trainlog.me",
+    "http://aerialway.srv.trainlog.me",
+    "https://routing.openstreetmap.de/routed-foot",
+    "https://routing.openstreetmap.de/routed-bike",
+})
+
+
+def router_health(url, profile):
+    if url not in STATUS_ROUTER_URLS:
+        return {"status": "ERROR", "message": "Unknown router"}
+    dummy_profile = {"cycling": "bike", "bike": "bike", "foot": "foot", "walking": "foot", "walk": "foot"}.get(profile, "driving")
+    try:
+        if requests.get(f"{url}/health", timeout=3).status_code == 200:
+            return {"status": "OK", "message": "healthy"}
+    except requests.RequestException:
+        pass
+    try:
+        dummy = requests.get(f"{url}/route/v1/{dummy_profile}/0,0.1;0,0.1", timeout=3)
+        if dummy.status_code != 200:
+            return {"status": "DOWN", "message": f"HTTP {dummy.status_code}"}
+        if "routes" in dummy.json():
+            return {"status": "OK", "message": "responding"}
+        return {"status": "DOWN", "message": "no routes key"}
+    except (requests.RequestException, ValueError) as e:
+        return {"status": "DOWN", "message": type(e).__name__}

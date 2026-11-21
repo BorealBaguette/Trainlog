@@ -109,7 +109,7 @@ const texts = {
 
 // Try POST data first, then sessionStorage
 {% if trip_data %}
-newTrip = {{ trip_data | safe }};
+newTrip = {{ trip_data | tojson }};
 {% endif %}
 if (!newTrip && id) {
     newTrip = JSON.parse(sessionStorage.getItem(id));

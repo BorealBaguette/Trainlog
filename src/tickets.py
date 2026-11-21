@@ -714,7 +714,7 @@ def get_all_tickets(username):
     return jsonify(tickets=tickets)
 
 
-@tickets_blueprint.route("/u/<username>/delete_ticket/<int:ticket_id>")
+@tickets_blueprint.route("/u/<username>/delete_ticket/<int:ticket_id>", methods=["POST"])
 @login_required
 def delete_ticket(username, ticket_id):
     success, error = delete_ticket_from_db(username, ticket_id)
@@ -724,7 +724,7 @@ def delete_ticket(username, ticket_id):
     return jsonify(success=True)
 
 
-@tickets_blueprint.route("/u/<username>/toggle_ticket_active/<int:ticket_id>")
+@tickets_blueprint.route("/u/<username>/toggle_ticket_active/<int:ticket_id>", methods=["POST"])
 @login_required
 def toggle_ticket_active(username, ticket_id):
     with pg_session() as pg:
