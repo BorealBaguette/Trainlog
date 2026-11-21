@@ -31,7 +31,7 @@ counted AS (
     FROM utc_filtered
 )
 
-SELECT user_id, countries 
+SELECT user_id, countries, trip_type
 FROM counted 
 WHERE user_id = ANY(:user_ids)
     AND past = 1
