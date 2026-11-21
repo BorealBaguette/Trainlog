@@ -1,4 +1,3 @@
-{% set light_only = true %}
 {% extends "layout.html" %}
 {% block content %}
 {# The site navigation, which this layout (unlike bootstrap/layout.html) carries
@@ -206,6 +205,8 @@ body { background: #e9e9ec; }
 /* Only shown when the trip set actually has a private leg in it (see init()),
    so it isn't dead UI for posters that don't need it. */
 #posterPrivateToggle { display: none; }
+/* Not on the dark basemap, which has nothing to darken (syncDarkenToggle) */
+#posterDarkenToggle[hidden] { display: none; }
 
 .posterDownloadBtn {
     display: inline-flex;
@@ -488,6 +489,44 @@ body { background: #e9e9ec; }
 }
 .posterAttribution a { color: #9a9a9a; }
 
+/* Dark theme: the page around the card. The card follows its map instead
+   (applyCardTheme): dark on the dark basemap, or when the map is darkened. */
+[data-bs-theme="dark"] body { background: var(--bs-body-bg); }
+/* theme.css paints dark maps' unloaded area; this map's mount does that instead */
+#posterMap { background: transparent; }
+[data-bs-theme="dark"] .posterBackBtn,
+[data-bs-theme="dark"] .posterSideTabs,
+[data-bs-theme="dark"] .posterBackBtn:disabled:hover {
+    background: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+[data-bs-theme="dark"] .posterBackBtn:hover { background: #24394f; color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] .posterSideTab { color: var(--bs-body-color); }
+[data-bs-theme="dark"] .posterSideTab.active { background: #0d6efd; color: #fff; }
+[data-bs-theme="dark"] .posterModal { background: rgba(0,0,0,0.6); }
+[data-bs-theme="dark"] .posterModalCard { background: var(--bs-body-bg); box-shadow: 0 18px 50px rgba(0,0,0,0.6); }
+[data-bs-theme="dark"] .posterModalHead { color: var(--bs-emphasis-color); border-bottom-color: var(--bs-border-color); }
+[data-bs-theme="dark"] .posterModalClose { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] .posterModalClose:hover { color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] .posterModalRow,
+[data-bs-theme="dark"] .posterModalCheck { color: var(--bs-body-color); border-bottom-color: var(--bs-border-color); }
+[data-bs-theme="dark"] .posterModalRow i,
+[data-bs-theme="dark"] .posterModalCheck i { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] .posterModalRow select,
+[data-bs-theme="dark"] .posterModalIconBtn {
+    background: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .posterModalIconBtn:hover { background: #24394f; color: var(--bs-emphasis-color); }
+[data-bs-theme="dark"] .posterSwitch { background: #41556b; }
+[data-bs-theme="dark"] .posterSwitch:checked { background: #0d6efd; }
+[data-bs-theme="dark"] .posterHint { color: var(--bs-secondary-color); }
+[data-bs-theme="dark"] .posterAttribution,
+[data-bs-theme="dark"] .posterAttribution a { color: var(--bs-tertiary-color); }
+[data-bs-theme="dark"] .posterCardWrap { box-shadow: 0 10px 34px rgba(0,0,0,0.6); }
+
 /* Phones: the control bar becomes a wrapping grid of pills instead of a single
    horizontally-scrolling row (which hid the download button off-screen), and the
    page padding gives the scaled-down card as much width as possible. */
@@ -602,6 +641,10 @@ body { background: #e9e9ec; }
             <label class="posterModalCheck" id="posterPrivateToggle">
                 <i class="fa-solid fa-lock"></i><span>{{ posterIncludePrivate }}</span>
                 <input type="checkbox" class="posterSwitch" id="posterPrivateCheckbox">
+            </label>
+            <label class="posterModalCheck" id="posterDarkenToggle">
+                <i class="fa-solid fa-moon"></i><span>{{ posterDarkenMap }}</span>
+                <input type="checkbox" class="posterSwitch" id="posterDarkenCheckbox">
             </label>
             <label class="posterModalCheck" id="posterTransparentToggle">
                 <i class="fa-solid fa-chess-board"></i><span>{{ posterTransparentBg }}</span>
@@ -851,6 +894,17 @@ const BASEMAPS = {
     dark:     { tileserver: 'dark-train', isDark: true }
 };
 
+// Whether a light basemap is darkened. Starts from the user's "darken map backgrounds"
+// setting (whatever the theme), as on every other map; the settings switch overrides it for
+// this visit only (not remembered, so the setting stays what decides).
+let darkenMap = !!window.trainlogDarkMapsOn?.();
+
+// Whether the poster is dark: the dark basemap, or a light one being darkened. The
+// card, labels and trip colours then take their dark treatment to match.
+function posterIsDark() {
+    return !!BASEMAPS[basemapId].isDark || darkenMap;
+}
+
 // Remember the last choice per control (js-cookie, same convention as
 // delayDateMode elsewhere in the app) — falls back to the default if unset
 // or if it names an option that no longer exists.
@@ -1021,7 +1075,7 @@ function buildLabelPoints(trips) {
 // Same treatment for our labels and for promoted basemap ones, so a poster
 // reads as one set of labels whichever basemap is under it.
 function labelPaint() {
-    return BASEMAPS[basemapId].isDark
+    return posterIsDark()
         ? { 'text-color': '#f5f5f5', 'text-halo-color': '#111111', 'text-halo-width': 1.6 }
         : { 'text-color': '#1a1a1a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 };
 }
@@ -1080,7 +1134,7 @@ function rgbToHex(rgb) {
 }
 
 function posterModeColor(color) {
-    if (!BASEMAPS[basemapId].isDark) return color;
+    if (!posterIsDark()) return color;
     const rgb = hexToRgb(color);
     const background = hexToRgb(posterTheme.shoulder);
     if (!rgb || !background) return color;
@@ -1529,7 +1583,8 @@ async function buildMap() {
         center: firstCoord,
         zoom: 5,
         preserveDrawingBuffer: true,
-        pixelRatio: effectivePixelRatio()
+        pixelRatio: effectivePixelRatio(),
+        darken: darkenMap
     });
     if (myGeneration !== buildGeneration) { newMap.remove(); return; }
     map = newMap;
@@ -1591,7 +1646,7 @@ let posterTheme = { shoulder: '#ffffff', title: '#1a1a1a', subtitle: '#5a5a5a', 
 
 function applyCardTheme() {
     const wrap = document.getElementById('posterCardWrap');
-    const dark = !!BASEMAPS[basemapId].isDark;
+    const dark = posterIsDark();
     // Also drives the credit chip, the pre-tile-load placeholder and the map's
     // hairline edge, which all sit on the map rather than on the mount.
     wrap.classList.toggle('dark', dark);
@@ -1619,6 +1674,7 @@ function applyBasemap(id) {
     if (id === basemapId) return;
     basemapId = id;
     rememberChoice('posterBasemap', id);
+    syncDarkenToggle();
     buildMap();
 }
 
@@ -1628,6 +1684,9 @@ async function init() {
     document.getElementById('posterMapLangSelect').value = mapLangMode;
     document.getElementById('posterCountriesSelect').value = countriesMode;
     document.getElementById('posterTransparentCheckbox').checked = transparentBg;
+    document.getElementById('posterDarkenCheckbox').checked = darkenMap;
+    // The dark basemap has nothing to darken
+    syncDarkenToggle();
     applyOrientation(orientation);
 
     const response = await $.post({
@@ -2154,6 +2213,15 @@ document.getElementById('posterPrivateCheckbox').addEventListener('change', (e) 
     // it needs the same full rebuild, not just a filter/visibility toggle.
     buildMap();
 });
+function syncDarkenToggle() {
+    document.getElementById('posterDarkenToggle').hidden = !!BASEMAPS[basemapId].isDark;
+}
+document.getElementById('posterDarkenCheckbox').addEventListener('change', (e) => {
+    darkenMap = e.target.checked;
+    // The basemap's colours are set when its style loads, so a rebuild as for a basemap
+    // switch, which also brings the card's theme along
+    buildMap();
+});
 document.getElementById('posterTransparentCheckbox').addEventListener('change', (e) => {
     transparentBg = e.target.checked;
     rememberChoice('posterTransparentBg', String(transparentBg));
@@ -2301,7 +2369,7 @@ async function downloadPoster(mode) {
     // the basemap's sea colour, so the export matches the preview for any
     // basemap without duplicating the luminance logic here. isDarkTheme is
     // still used further down for the credit chip, which sits on the map.
-    const isDarkTheme = !!BASEMAPS[basemapId].isDark;
+    const isDarkTheme = posterIsDark();
     // Skipped entirely when transparentBg is on: the canvas starts fully
     // transparent, and PNG keeps the alpha. Only the mount is affected — the
     // map itself is an opaque raster and stays that way.
@@ -2828,7 +2896,7 @@ function fitText(ctx, text, maxWidth) {
 }
 
 function drawItineraryColumn(ctx, rows, x, y, width, scale) {
-    const isDark = !!BASEMAPS[basemapId].isDark;
+    const isDark = posterIsDark();
     const hairline = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
     const railX = x + 7 * scale;
     const textX = x + 22 * scale;
@@ -3079,7 +3147,7 @@ function drawQr(ctx, text, x, y, size) {
 function drawBackPoster(ctx, dims, forcedColumns) {
     const mat = posterMat();
     const cs = posterCreditScale();
-    const isDark = !!BASEMAPS[basemapId].isDark;
+    const isDark = posterIsDark();
     const hairline = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
     if (!transparentBg) {
         ctx.fillStyle = posterTheme.shoulder;

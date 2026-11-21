@@ -94,9 +94,11 @@ let regionsMap = null;
 function initRegionsMap() {
     regionsMap = new maplibregl.Map({
         container: "router-regions-map",
-        style: "https://tiles.openfreemap.org/styles/positron",
         center: [-20, 30],
         zoom: 1,
+    });
+    regionsMap.setStyle("https://tiles.openfreemap.org/styles/positron", {
+        transformStyle: (_, style) => window.trainlogDarkMapsOn?.() ? window.trainlogDarkenMapStyle(style) : style,
     });
     regionsMap.on("load", () => {
         regionsMap.addSource("world", {type: "geojson", data: {

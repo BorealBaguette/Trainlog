@@ -181,8 +181,9 @@
 
 /* Raster tiles have no dark variant, so the base layer (always added first) is
    inverted with hues turned back; overlays like OpenRailwayMap come after it and
-   keep their colours. */
-[data-bs-theme="dark"]:not([data-light-leaflet]) .leaflet-tile-pane > .leaflet-layer:first-child:not(.tiles-dark) {
+   keep their colours. MapLibre maps get the same treatment in dark_maps.js. Its own
+   setting (data-dark-maps), not the theme's: dark maps in a light UI work too. */
+[data-dark-maps] .leaflet-tile-pane > .leaflet-layer:first-child:not(.tiles-dark) {
   filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.85) saturate(0.6);
 }
 /* The coverage and world squares maps' percentage box */
@@ -214,7 +215,8 @@
 [data-bs-theme="dark"] .lds-spinner div:after { background: var(--bs-body-color); }
 
 /* What shows where tiles have not loaded yet */
-[data-bs-theme="dark"]:not([data-light-leaflet]) .leaflet-container { background: #0b1622; }
+[data-dark-maps] .leaflet-container,
+[data-dark-maps] .maplibregl-map { background: #0b1622; }
 
 /* The sidebar plugin's panel and close button, and freehand.js's toggle, which
    injects its own light styles */
