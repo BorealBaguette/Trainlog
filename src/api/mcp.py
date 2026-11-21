@@ -317,6 +317,15 @@ def _trip_write_schema(plan=False, update=False):
     return props
 
 
+TRIP_FILTERS = {
+    "username": {"type": "string", "description": "Read this friend's trips (read-only). Omit for your own."},
+    "trip_type": {"type": "string", "enum": [t.value for t in TripTypes]},
+    "upcoming_only": {"type": "boolean", "description": "Only future / planned trips."},
+    "from_date": {"type": "string", "description": "Only trips starting on/after YYYY-MM-DD."},
+    "to_date": {"type": "string", "description": "Only trips starting on/before YYYY-MM-DD."},
+}
+
+
 def _build_tools(user) -> list:
     return (mcp_wagons.TOOLS + mcp_trainsets.TOOLS if mcp_wagons.allowed(user) else []) + [
         # ── lookups ─────────────────────────────────────────────────────────
@@ -483,11 +492,7 @@ def _build_tools(user) -> list:
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "username": {"type": "string", "description": "Read this friend's trips (read-only). Omit for your own."},
-                    "trip_type": {"type": "string", "enum": [t.value for t in TripTypes]},
-                    "upcoming_only": {"type": "boolean", "description": "Only future / planned trips."},
-                    "from_date": {"type": "string", "description": "Only trips starting on/after YYYY-MM-DD."},
-                    "to_date": {"type": "string", "description": "Only trips starting on/before YYYY-MM-DD."},
+                    **TRIP_FILTERS,
                     "limit": {"type": "integer", "description": "Max trips to return (default 50, max 500)."},
                 },
                 "required": [],
