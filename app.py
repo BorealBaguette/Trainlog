@@ -57,7 +57,6 @@ from flask_caching import Cache
 from flask_compress import Compress
 from PIL import Image
 from requests.adapters import HTTPAdapter, Retry
-from scgraph.geographs.marnet import marnet_geograph
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy_utils import database_exists
 from werkzeug.datastructures import FileStorage
@@ -2451,64 +2450,6 @@ def saveTripFromGPX(username, gpx_id):
     }), 200
 
 
-@app.route("/u/<username>/preview_smart_routing/<gpx_id>/<trip_type>", methods=["POST", "GET"])
-@login_required  
-def previewSmartRouting(username, gpx_id, trip_type):
-    """
-    Preview smart routing results without saving the trip
-    GET: Shows interactive map with original vs cleaned route
-    POST: Returns JSON data for API usage
-    """
-   
-    # Retrieve GPX data
-    with pg_session() as pg:
-        gpx = pg.execute(
-            "SELECT * FROM gpx WHERE uid = :uid AND username = :username",
-            {"uid": gpx_id, "username": username},
-        ).fetchone()
-    
-    if not gpx:
-        if request.method == "GET":
-            return render_template('error.html', error="GPX file not found"), 404
-        return jsonify({"error": "GPX file not found"}), 404
-
-    # Convert to waypoints format
-    raw_waypoints = [
-        {"lat": point[0], "lng": point[1]} for point in json.loads(gpx["path"])
-    ]
-   
-    # Clean the GPS route with smart routing
-    cleaning_result = clean_gps_route(raw_waypoints, trip_type)
-   
-    if request.method == "POST":
-        # Return JSON for API usage
-        if cleaning_result["success"]:
-            return jsonify({
-                "success": True,
-                "original_points": len(raw_waypoints),
-                "cleaned_points": len(cleaning_result["path"]),
-                "waypoints_count": len(cleaning_result["waypoints"]),
-                "compression_ratio": cleaning_result["compression_ratio"],
-                "reroute_count": cleaning_result["reroute_count"],
-                "distance": cleaning_result["distance"],
-                "preview_path": cleaning_result["path"][:100]  # First 100 points for preview
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": cleaning_result["error"],
-                "fallback_points": len(raw_waypoints)
-            })
-    
-    # GET request: Show interactive map
-    return render_template('preview_route.html',
-                         gpx=gpx,
-                         trip_type=trip_type,
-                         raw_waypoints=json.dumps(raw_waypoints),
-                         cleaning_result=json.dumps(cleaning_result),
-                         success=cleaning_result["success"])
-
-
 @app.route("/u/<username>/simplify_path", methods=["POST"])
 @login_required
 def simplify_path(username):
@@ -2563,228 +2504,6 @@ def parse_maprika_filename(filename):
 @login_required
 def upload_gpx_advanced(username):
     return redirect(url_for("upload_gpx", username=username))
-
-
-@app.route("/u/<username>/parse_gpx_advanced", methods=["POST"])
-@login_required
-def parse_gpx_advanced(username):
-    """Parse multiple GPX files and return trip data, including Maprika segments"""
-    files = request.files.getlist("files")
-
-    if not files:
-        return jsonify({"error": "No files uploaded"}), 400
-
-    trips = []
-
-    for file in files:
-        if not file.filename.endswith(".gpx"):
-            continue
-
-        try:
-            # Read file content
-            file_content = file.read()
-            file.seek(0)
-
-            # Parse Maprika filename if applicable
-            maprika_data = parse_maprika_filename(file.filename)
-
-            # Parse GPX content
-            gpx = gpxpy.parse(file)
-
-            # Collect all track points
-            all_points = []
-            if gpx.tracks:
-                for track in gpx.tracks:
-                    for segment in track.segments:
-                        all_points.extend(segment.points)
-
-            if not all_points:
-                continue
-
-            # Try to parse Maprika segments
-            maprika_segments = []
-            try:
-                root = ET.fromstring(file_content)
-                # Find maprika:log section
-                namespaces = {'maprika': 'http://www.maprika.com/gpx'}
-                log = root.find('.//maprika:log', namespaces)
-
-                if log is not None:
-                    for seg in log.findall('maprika:segment', namespaces):
-                        seg_type = int(seg.get('type', 0))
-                        seg_name = seg.get('name', '')
-                        start_time_unix = int(seg.get('startTime', 0))
-                        moving_time = int(seg.get('movingTime', 0))
-                        index_begin = int(seg.get('indexBegin', 0))
-                        index_end = int(seg.get('indexEnd', 0))
-
-                        # Map Maprika types to Trainlog types
-                        # 1=chairlift, 7=gondola, 8=bus, 9=ski lift
-                        # 3=easy run, 4=medium run, 5=difficult run
-                        # 2=unknown/walking, 6=break
-                        if seg_type in [1, 7, 9]:  # Lifts and gondolas
-                            trip_type = 'aerialway'
-                        elif seg_type == 8:  # Bus
-                            trip_type = 'bus'
-                        elif seg_type in [3, 4, 5]:  # Ski runs
-                            trip_type = 'ski'
-                        elif seg_type == 2:  # Unknown/walking
-                            trip_type = 'walk'
-                        elif seg_type == 6:  # Break
-                            continue  # Skip breaks
-                        else:
-                            trip_type = 'other'
-
-                        maprika_segments.append({
-                            'name': seg_name,
-                            'type': trip_type,
-                            'start_time_unix': start_time_unix,
-                            'duration': moving_time,
-                            'index_begin': index_begin,
-                            'index_end': index_end
-                        })
-            except Exception as e:
-                logger.info(f"No Maprika segments found in {file.filename}: {str(e)}")
-
-            # If Maprika segments found, create trips from segments
-            if maprika_segments:
-                for seg in maprika_segments:
-                    try:
-                        # Extract points for this segment
-                        seg_points = all_points[seg['index_begin']:seg['index_end'] + 1]
-
-                        if not seg_points or len(seg_points) < 2:
-                            continue
-
-                        # Calculate distance
-                        distance = 0
-                        for i in range(1, len(seg_points)):
-                            distance += getDistance(
-                                {"lat": seg_points[i - 1].latitude, "lng": seg_points[i - 1].longitude},
-                                {"lat": seg_points[i].latitude, "lng": seg_points[i].longitude},
-                            )
-
-                        # Get start and end points
-                        start_point = seg_points[0]
-                        end_point = seg_points[-1]
-
-                        # Geocode
-                        origin = getAddressFromCoords(lat=start_point.latitude, lng=start_point.longitude)
-                        destination = getAddressFromCoords(lat=end_point.latitude, lng=end_point.longitude)
-
-                        # Convert Unix timestamp to datetime
-                        from datetime import datetime
-                        start_datetime = datetime.fromtimestamp(seg['start_time_unix'], UTC)
-                        end_datetime = datetime.fromtimestamp(seg['start_time_unix'] + seg['duration'], UTC)
-
-                        # Convert to local time
-                        start_time_local = getLocalDatetime(start_point.latitude, start_point.longitude, start_datetime)
-                        end_time_local = getLocalDatetime(end_point.latitude, end_point.longitude, end_datetime)
-
-                        formatted_start_time = start_time_local.strftime("%Y-%m-%d %H:%M")
-                        formatted_end_time = end_time_local.strftime("%Y-%m-%d %H:%M")
-
-                        # Generate path
-                        path = [[point.latitude, point.longitude] for point in seg_points]
-
-                        # Build trip data
-                        trip_data = {
-                            'origin': origin,
-                            'destination': destination,
-                            'start_time': formatted_start_time,
-                            'end_time': formatted_end_time,
-                            'duration': seg['duration'],
-                            'distance': int(distance),
-                            'path': path,
-                            'maprika_name': seg['name'] or (maprika_data['name'] if maprika_data else None),
-                            'gpx_name': seg['name'],
-                            'notes': f"Segment from {file.filename}",
-                            'suggested_type': seg['type'],
-                            'filename': file.filename
-                        }
-
-                        trips.append(trip_data)
-                    except Exception as e:
-                        logger.error(f"Error processing segment in {file.filename}: {str(e)}")
-                        continue
-            else:
-                # No Maprika segments - treat as single trip (original behavior)
-                points = all_points
-                start_time = None
-                end_time = None
-                distance = 0
-
-                if points[0].time and points[-1].time:
-                    start_time = points[0].time
-                    end_time = points[-1].time
-
-                # Calculate distance
-                for i in range(1, len(points)):
-                    distance += getDistance(
-                        {"lat": points[i - 1].latitude, "lng": points[i - 1].longitude},
-                        {"lat": points[i].latitude, "lng": points[i].longitude},
-                    )
-
-                # Extract start and end points
-                start_point = points[0]
-                end_point = points[-1]
-
-                # Geocode
-                origin = getAddressFromCoords(lat=start_point.latitude, lng=start_point.longitude)
-                destination = getAddressFromCoords(lat=end_point.latitude, lng=end_point.longitude)
-
-                # Calculate duration
-                duration = 0
-                formatted_start_time = None
-                formatted_end_time = None
-
-                if start_time and end_time:
-                    duration = int((end_time - start_time).total_seconds())
-                    start_time_local = getLocalDatetime(start_point.latitude, start_point.longitude, start_time)
-                    end_time_local = getLocalDatetime(end_point.latitude, end_point.longitude, end_time)
-                    formatted_start_time = start_time_local.strftime("%Y-%m-%d %H:%M")
-                    formatted_end_time = end_time_local.strftime("%Y-%m-%d %H:%M")
-                elif maprika_data:
-                    formatted_start_time = maprika_data['datetime']
-
-                # Generate path
-                path = [[point.latitude, point.longitude] for point in points]
-
-                # Determine suggested trip type
-                suggested_type = "other"
-                if maprika_data and maprika_data['name']:
-                    name_lower = maprika_data['name'].lower()
-                    if 'ski' in name_lower or 'skiing' in name_lower:
-                        suggested_type = 'ski'
-                    elif 'cycle' in name_lower or 'bike' in name_lower:
-                        suggested_type = 'cycle'
-                    elif 'walk' in name_lower or 'hike' in name_lower:
-                        suggested_type = 'walk'
-
-                # Build trip data
-                trip_data = {
-                    'origin': origin,
-                    'destination': destination,
-                    'start_time': formatted_start_time,
-                    'end_time': formatted_end_time,
-                    'duration': duration,
-                    'distance': int(distance),
-                    'path': path,
-                    'maprika_name': maprika_data['name'] if maprika_data else None,
-                    'gpx_name': gpx.tracks[0].name if gpx.tracks else None,
-                    'notes': gpx.tracks[0].description if gpx.tracks and gpx.tracks[0].description else '',
-                    'suggested_type': suggested_type,
-                    'filename': file.filename
-                }
-
-                trips.append(trip_data)
-
-        except Exception as e:
-            logger.error(f"Error parsing {file.filename}: {str(e)}")
-            traceback.print_exc()
-            continue
-
-    return jsonify({"trips": trips}), 200
 
 
 @app.route("/u/<username>/parse_gpx_stream", methods=["POST"])
@@ -3318,21 +3037,6 @@ def air_routing(username, type):
         username=username,
         trip_data=trip_data,
         from_app=from_app,
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
-
-
-@app.route("/u/<username>/ship_routing")
-@login_required
-def ship_routing(username):
-    user_obj = User.query.filter_by(username=username).first()
-    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
-    return render_template(
-        "ship_routing.html",
-        title=lang[session["userinfo"]["lang"]]["routeTrip"],
-        username=username,
-        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -12996,33 +12700,6 @@ def airliners():
     )
 
 
-@app.route("/u/<username>/importFlight")
-def importFlight(username):
-    return render_template(
-        "import_flight.html",
-        nav="bootstrap/navigation.html",
-        username=username,
-        title="Import Flight",
-    )
-
-
-@app.route("/u/<username>/upload_image", methods=["POST"])
-def upload_image(username):
-    if "image" not in request.files:
-        return redirect(request.url)
-
-    file = request.files["image"]
-    if file.filename == "":
-        return redirect(request.url)
-
-    if file:
-        # Convert the file to a BytesIO object and read it using OpenCV
-        in_memory_file = BytesIO()
-        file.save(in_memory_file)
-    # return redirect(url_for("new_flight", username=username, **readBarcode(data)))
-    return redirect(url_for("new_flight", username=username))
-
-
 @app.route("/deleteManual/<int:id>", methods=["POST"])
 @owner_required
 def deleteManual(id):
@@ -14049,39 +13726,6 @@ def refreshCurrency():
     return run_currency_update()
 
 
-@app.route("/ship_route", methods=["POST"])
-def calculate_route():
-    data = request.json
-    waypoints = data["waypoints"]  # Array of waypoints
-
-    print(waypoints)
-
-    # Calculate the shortest path for each segment
-    route_segments = []
-    total_length = 0
-
-    for i in range(len(waypoints) - 1):
-        output = marnet_geograph.get_shortest_path(
-            origin_node={"latitude": waypoints[i][0], "longitude": waypoints[i][1]},
-            destination_node={
-                "latitude": waypoints[i + 1][0],
-                "longitude": waypoints[i + 1][1],
-            },
-            output_units="m",
-        )
-        total_length += output["length"]
-        route_segments.extend(output["coordinate_path"])
-
-    # Remove duplicates from the route segments
-    route_segments = [
-        route_segments[i]
-        for i in range(len(route_segments))
-        if i == 0 or route_segments[i] != route_segments[i - 1]
-    ]
-
-    return jsonify(route=route_segments, length=total_length)
-
-
 @app.route("/resize_image/<int:max_width>/<int:target_height>")
 def resize_image(max_width, target_height):
     # The only size the site asks for: any other would let anyone allocate huge
@@ -14335,62 +13979,6 @@ def show_operators():
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],
     )
-
-@app.route("/migrate-logos")
-@owner_required
-def migrate_logos():
-    """
-    Migrate logos from the old system to the new system and insert them into the database with the logo type.
-    """
-    logo_types = ["operator", "accommodation", "car", "poi"]
-    logoURLs = {}
-
-    for logo_type in logo_types:
-        # Search for logos in the main directory
-        for logo in map(
-            os.path.basename, glob(f"static/images/{logo_type}_logos/*.png")
-        ):
-            logo_name = os.path.splitext(logo)[0]
-            logo_name = logo_name.encode("utf-8", "surrogateescape").decode(
-                "utf-8", "surrogatepass"
-            )
-            logoURLs[(logo_name, logo_type)] = f"images/{logo_type}_logos/{logo}"
-
-        # Search for admin_uploaded logos if not already there
-        admin_uploaded_path = f"static/images/{logo_type}_logos/admin_uploaded/*.png"
-        for logo in map(os.path.basename, glob(admin_uploaded_path)):
-            logo_name = os.path.splitext(logo)[0]
-            logo_name = logo_name.encode("utf-8", "surrogateescape").decode(
-                "utf-8", "surrogatepass"
-            )
-            if (logo_name, logo_type) not in logoURLs.keys():
-                logoURLs[(logo_name, logo_type)] = (
-                    f"images/{logo_type}_logos/admin_uploaded/{logo}"
-                )
-
-    # Insert each operator and its corresponding logo into the new system
-    with pg_session() as pg:
-        for (name, logo_type), logo_url in logoURLs.items():
-            # Insert into operators table (operator_type stores logo_type)
-            operator_id = pg.execute(
-                """
-                INSERT INTO operators (short_name, long_name, operator_type)
-                VALUES (:name, :name, :logo_type)
-                RETURNING operator_id
-            """,
-                {"name": name, "logo_type": logo_type},
-            ).fetchone()[0]
-
-            # Insert into operator_logos table
-            pg.execute(
-                """
-                INSERT INTO operator_logos (operator_id, logo_url, effective_date)
-                VALUES (:operator_id, :logo_url, NULL)
-            """,
-                {"operator_id": operator_id, "logo_url": logo_url},
-            )
-
-    return "Logos and types migrated successfully"
 
 
 @app.route("/u/<username>/tll")

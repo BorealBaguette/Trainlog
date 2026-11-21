@@ -1952,8 +1952,8 @@
     }
   });
 
-  // Fill an airport input from an ICAO code (barcode / query-param import)
-  function fillFromBarcode(element, icao) {
+  // Fill an airport input from an ICAO code (FR24 import)
+  function fillAirportFromIcao(element, icao) {
     return new Promise((resolve, reject) => {
       $.ajax({
         url: "/api/airportAutocomplete/" + icao,
@@ -1970,28 +1970,6 @@
       });
     });
   }
-
-  // Prefill from query params (e.g. boarding pass import)
-  (function fillFormWithQueryParams() {
-    var qp = new URLSearchParams(window.location.search);
-    if ([...qp.keys()].length === 0) return;
-    if (qp.get('origin')) fillFromBarcode($('#originStation'), qp.get('origin'));
-    if (qp.get('destination')) fillFromBarcode($('#destinationStation'), qp.get('destination'));
-    if (qp.get('operator')) setOperatorValue(qp.get('operator'));
-    if (qp.get('flight_number')) $('#lineName').val(qp.get('flight_number'));
-    if (qp.get('start_datetime')) {
-      var startDateTime = qp.get('start_datetime').split('+')[0];
-      $('#newTripStartDate').val(startDateTime.split('T')[0]);
-      $('#newTripStartTime').val(startDateTime.split('T')[1]);
-    }
-    if (qp.get('end_datetime')) {
-      var endDateTime = qp.get('end_datetime').split('+')[0];
-      $('#newTripEndDate').val(endDateTime.split('T')[0]);
-      $('#newTripEndTime').val(endDateTime.split('T')[1]);
-    }
-    if (qp.get('seat_number')) $('#seat').val(qp.get('seat_number'));
-    if (qp.get('material')) $('#material_type').val(qp.get('material'));
-  })();
 
   // ---------- FR24 import ----------
   $("#fr24Date").val(getCurrentDate());
@@ -2152,8 +2130,8 @@
 
     updateProgressBar(25);
 
-    await fillFromBarcode($('#originStation'), flight.orig_icao);
-    await fillFromBarcode($('#destinationStation'), flight.dest_icao);
+    await fillAirportFromIcao($('#originStation'), flight.orig_icao);
+    await fillAirportFromIcao($('#destinationStation'), flight.dest_icao);
 
     updateProgressBar(50);
 
