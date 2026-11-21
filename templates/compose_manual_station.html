@@ -1,0 +1,22 @@
+{# A station end's own place, named and placed by hand: the classic form's manual toggle.
+   Wired up by initManualStations() in compose.html; role is 'origin' or 'dest'.
+   toggle() goes beside the field's label, panel() takes the search field's place. #}
+
+{% macro toggle(role, label) %}
+<button type="button" class="cp-manual-toggle" data-role="{{ role }}" aria-pressed="false"
+        aria-controls="{{ role }}ManualPanel">
+  <i class="bi bi-geo-alt"></i> {{ label }}
+</button>
+{% endmacro %}
+
+{% macro panel(role, name_label, hint) %}
+<div class="cp-manual" id="{{ role }}ManualPanel" data-role="{{ role }}" hidden>
+  <input type="text" class="form-control cp-manual-name" placeholder="{{ name_label }}"
+         aria-label="{{ name_label }}" maxlength="200" autocomplete="off">
+  <div class="cp-manual-coords">
+    <input type="text" inputmode="decimal" class="form-control cp-manual-lat" placeholder="Lat" aria-label="Lat" autocomplete="off">
+    <input type="text" inputmode="decimal" class="form-control cp-manual-lng" placeholder="Lng" aria-label="Lng" autocomplete="off">
+  </div>
+  <div class="cp-manual-hint">{{ hint }}</div>
+</div>
+{% endmacro %}

@@ -570,6 +570,16 @@ function toRouting(data, routingUrl, type){
   newTrip["viaStations"] = [];
   var viaState = [];
   $(".viaStation").each(function(){
+    // One placed by hand (new.html): its name and coordinates, its point all that is saved.
+    var $manual = $(this).closest('.via-row.is-manual');
+    if ($manual.length) {
+      var manualEntry = manualViaEntry($manual);
+      if (manualEntry) {
+        newTrip["viaStations"].push(manualEntry);
+        viaState.push({ time: null, tracks: null, lines: null, point: null });
+      }
+      return;
+    }
     // A timetable's stop has its own entry (two stops of a run can share a name).
     var val = $(this).val(), entry = $(this).data('stationEntry') || globalStationDict[val];
     if (val && entry){
@@ -1072,39 +1082,65 @@ function sanitize(string) {
   return string.replace(reg, (match)=>(map[match]));
 }
 
+// Both coordinates at once, as copied from a map, null for anything else. The commas
+// say what they are: one separates the two ("51.88, 0.26"); two are both decimal commas,
+// the numbers apart by a space, semicolon or slash ("51,88 0,26"); three are decimal,
+// separator, decimal ("51,88, 0,26"). Without commas, a space, semicolon or slash parts
+// them ("51.88 0.26", "51.88/0.26").
+function splitCoordinates(text) {
+  var t = String(text || '').replace(/[()\[\]]/g, '').trim();
+  var parts;
+  switch ((t.match(/,/g) || []).length) {
+    case 0: parts = t.split(/\s*[;\/\s]\s*/); break;
+    case 1: parts = t.split(','); break;
+    case 2: parts = t.replace(/,/g, '.').split(/\s*[;\/\s]\s*/); break;
+    case 3:
+      var c = t.split(',');
+      parts = [c[0] + '.' + c[1], c[2] + '.' + c[3]];
+      break;
+    default: return null;
+  }
+  if (parts.length !== 2) return null;
+  parts = parts.map(function(p) { return p.trim(); });
+  if (!parts.every(function(p) { return /^[-+]?\d+(\.\d+)?$/.test(p); })) return null;
+  return parts.map(parseFloat);
+}
+
+// Both coordinates, typed or pasted into the Lat field alone: as splitCoordinates reads
+// them, except a bare "51,88", which there is one latitude with a decimal comma.
+function bothInLat(text) {
+  return /^\s*[-+]?\d+,\d+\s*$/.test(String(text || '')) ? null : splitCoordinates(text);
+}
+
+// A hand-placed via row's [[lat, lng], name], or null until it has all three.
+function manualViaEntry($row) {
+  var name = ($row.find('.via-manual-name').val() || '').trim();
+  var lat = parseFloat(String($row.find('.via-manual-lat').val()).replace(',', '.'));
+  var lng = parseFloat(String($row.find('.via-manual-lng').val()).replace(',', '.'));
+  if (!name || !isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return [[lat, lng], name];
+}
+
+// Both coordinates pasted or typed into `lat` (an input) go to it and `lng`.
+function splitCoordinatesInto(lat, lng) {
+  lat.addEventListener('paste', function (e) {
+    var both = bothInLat((e.clipboardData || window.clipboardData).getData('text'));
+    if (!both) return;
+    e.preventDefault();
+    lat.value = both[0];
+    lng.value = both[1];
+    $(lat).trigger('change');
+  });
+  lat.addEventListener('change', function () {
+    var both = bothInLat(lat.value);
+    if (both) { lat.value = both[0]; lng.value = both[1]; $(lng).trigger('change'); }
+  });
+}
+
 function manualCopyHandler(){
   ['originManualLat', 'destinationManualLat'].forEach(function(inputId) {
-    var lastValue = document.getElementById(inputId).value;
-    document.getElementById(inputId).addEventListener('paste', function (e) {
-        var pastedData = (e.clipboardData || window.clipboardData).getData('text');
-
-        if (pastedData !== lastValue) {
-          // 1. Strip out parentheses and extra whitespace
-          var strippedData = pastedData.replace(/[()]/g, '').trim();
-          
-          // Existing regex patterns
-          var englishFormat = /^(\-?\d+(\.\d+)?)[,\/\s\u00A0]*(\-?\d+(\.\d+)?)$/;
-          var internationalFormat = /^(\-?\d+(,\d+)?)[;\s\u00A0]*(\-?\d+(,\d+)?)$/;
-
-        // 2. Check if it matches your existing formats
-        if (englishFormat.test(strippedData)) {
-            // Split by comma or slash
-            var coordinates = strippedData.split(/[,/]/).map(Number);
-            e.preventDefault();
-            document.getElementById(inputId).value = coordinates[0];
-            document.getElementById(inputId.replace('Lat', 'Lng')).value = coordinates[1];
-        } else if (internationalFormat.test(strippedData)) {
-            // Split by semicolon
-            var coordinates = strippedData.split(';').map(function(item) {
-                return Number(item.replace(',', '.'));
-            });
-            e.preventDefault();
-            document.getElementById(inputId).value = coordinates[0];
-            document.getElementById(inputId.replace('Lat', 'Lng')).value = coordinates[1];
-        }
-        lastValue = document.getElementById(inputId).value;
-      }
-    });
+    var lat = document.getElementById(inputId);
+    if (lat) splitCoordinatesInto(lat, document.getElementById(inputId.replace('Lat', 'Lng')));
   });
 }
  
