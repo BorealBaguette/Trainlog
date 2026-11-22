@@ -68,6 +68,13 @@ from src.sql.trips import (
     get_material_types_query,
     get_operators_query,
 )
+from src.trip_search import (
+    FILTER_FIELDS,
+    PUBLIC_HIDDEN_FIELDS,
+    base_type_filter,
+    filter_conditions,
+    parse_filters,
+)
 from src.trips import update_trip_type
 from src.trips.delete_trip import delete_trip as _delete_trip
 from src.users import Friendship, User
@@ -321,12 +328,39 @@ def _trip_write_schema(plan=False, update=False):
     return props
 
 
+# Not filterable on a friend's trips: get_trip leaves them out for friends.
+PRIVATE_FILTER_FIELDS = PUBLIC_HIDDEN_FIELDS | {"notes"}
+
 TRIP_FILTERS = {
     "username": {"type": "string", "description": "Read this friend's trips (read-only). Omit for your own."},
     "trip_type": {"type": "string", "enum": [t.value for t in TripTypes]},
     "upcoming_only": {"type": "boolean", "description": "Only future / planned trips."},
     "from_date": {"type": "string", "description": "Only trips starting on/after YYYY-MM-DD."},
     "to_date": {"type": "string", "description": "Only trips starting on/before YYYY-MM-DD."},
+    "filters": {
+        "type": "array",
+        "description": (
+            "The trips page's field filters, ANDed. Text matches are case- and accent-insensitive "
+            "substrings; `exact` matches the whole value; `*` and `?` are wildcards. operator "
+            "matches any one of a trip's operators, under any alias of it. material_type also "
+            "matches trainsets and aircraft names. start_datetime, trip_length (km), "
+            "trip_duration_seconds ('2h'), trip_speed (km/h) and price take comparisons and "
+            "ranges ('>=2024-03', '2024-01..2024-06'). uid and ticket_ids take ids, countries "
+            "ISO codes. The value '' with `exact` matches trips where the field is unset; "
+            "add `negate` for set. price, ticket_ids and notes only on your own trips."
+        ),
+        "items": {
+            "type": "object",
+            "properties": {
+                "field": {"type": "string", "enum": sorted(FILTER_FIELDS)},
+                "values": {"type": "array", "items": {"type": "string"}, "description": "Alternatives, ORed."},
+                "exact": {"type": "boolean"},
+                "negate": {"type": "boolean", "description": "Trips matching none of the values."},
+            },
+            "required": ["field", "values"],
+        },
+    },
+    "tag_id": {"type": "integer", "description": "Only trips with this tag (list_tags). Own trips only."},
 }
 
 
@@ -1295,22 +1329,46 @@ def _trips_owner(user, username) -> tuple[bool, int]:
 
 def _filtered_trips(user, args):
     """(query, where, params, own) for list_trips: the trips page's
-    FilteredTrips, past and future together."""
+    FilteredTrips with its filters (src/trip_search.py), past and future together."""
     own, target_uid = _trips_owner(user, args.get("username"))
-    clauses = []
-    params = {"user_id": target_uid}
+
+    filters = []
+    for i, entry in enumerate(args.get("filters") or []):
+        if not isinstance(entry, dict) or entry.get("field") not in FILTER_FIELDS:
+            raise ValueError(f"filters[{i}].field must be one of {sorted(FILTER_FIELDS)}.")
+        values = entry.get("values")
+        if isinstance(values, (str, int, float)):
+            values = [values]
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"filters[{i}].values must be a list of values.")
+        filters.append({"field": entry["field"], "values": [str(v) for v in values],
+                        "exact": bool(entry.get("exact")), "negate": bool(entry.get("negate"))})
+    private = {f["field"] for f in filters} & PRIVATE_FILTER_FIELDS
+    if args.get("tag_id") is not None:
+        private.add("tag_id")
+    if not own and private:
+        raise ValueError(f"{', '.join(sorted(private))}: only on your own trips.")
+
+    parsed = parse_filters(json.dumps(filters))
+    if len(parsed) != len(filters):
+        raise ValueError("Each filter needs a value; an empty one only with exact: true.")
+    clauses, params = filter_conditions(parsed)
+    params["user_id"] = target_uid
 
     if not own:
         # FRIEND_VISIBLE is a fixed tuple of trusted literals (no user input).
         allowed = ", ".join(f"'{v}'" for v in FRIEND_VISIBLE)
         clauses.append(f"visibility IN ({allowed})")
     trip_types = {t.value for t in TripTypes}
+    base_type = base_type_filter(parsed, trip_types)
     if args.get("trip_type"):
         if args["trip_type"] not in trip_types:
             raise ValueError(f"trip_type must be one of {sorted(trip_types)}.")
         clauses.append("type = :trip_type")
         params["trip_type"] = args["trip_type"]
-        params["base_type"] = [args["trip_type"]]
+        base_type = [args["trip_type"]]
+    if base_type:
+        params["base_type"] = base_type
     if args.get("upcoming_only"):
         clauses.append("(is_project OR utc_filtered_start_datetime >= NOW())")
     if args.get("from_date"):
@@ -1319,8 +1377,13 @@ def _filtered_trips(user, args):
     if args.get("to_date"):
         clauses.append("start_datetime < CAST(:to_date AS date) + 1")
         params["to_date"] = form.iso_date(args["to_date"], "to_date")
+    tag_id = form.integer(args, "tag_id")
+    if tag_id is not None:
+        clauses.append("EXISTS (SELECT 1 FROM tags_associations ta"
+                       " WHERE ta.trip_id = FilteredTrips.uid AND ta.tag_id = :tag_id)")
+        params["tag_id"] = tag_id
 
-    query = get_dynamic_user_trips_query(base_type_filter="base_type" in params, all_trips=True)
+    query = get_dynamic_user_trips_query(base_type_filter=bool(base_type), all_trips=True)
     return query, " AND ".join(clauses) or "TRUE", params, own
 
 
