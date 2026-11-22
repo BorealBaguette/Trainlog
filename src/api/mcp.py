@@ -520,12 +520,12 @@ def _build_tools(user) -> list:
         {
             "name": "list_trips",
             "description": (
-                "List trips, most recent first, as a compact summary per trip. "
-                "By default lists the authenticated user's own trips (all "
-                "visibilities, including price). Pass `username` to read a "
-                "FRIEND's trips instead: this is read-only and only returns their "
-                "public/friends-visibility trips, with private fields (price, "
-                "notes, seat, booking refs) omitted. Use get_trip for everything about one."
+                "List trips, most recent first, as a compact summary per trip (unset "
+                "fields left out). By default lists the authenticated user's own trips (all "
+                "visibilities, including price, seat, tags and tickets). Pass `username` "
+                "to read a FRIEND's trips instead: this is read-only and only returns their "
+                "public/friends-visibility trips, with private fields (price, notes, seat, "
+                "tags, tickets) omitted. Use get_trip for everything about one."
             ),
             "inputSchema": {
                 "type": "object",
@@ -857,8 +857,8 @@ def _clean(d):
 
 
 def _trip_summary(r: dict, include_private: bool = True) -> dict:
-    """Compact per-trip summary of a FilteredTrips row. When include_private is False
-    (friend reads), price/currency are dropped so a friend never sees what was paid."""
+    """Compact per-trip summary of a FilteredTrips row. include_private is False for
+    friend reads, which leave out what get_trip leaves out for friends."""
     out = {
         "id": r["uid"],
         "type": r["type"],
@@ -868,14 +868,24 @@ def _trip_summary(r: dict, include_private: bool = True) -> dict:
         "end": _iso(r.get("end_datetime")),
         "operator": r.get("operator"),
         "line_name": r.get("line_name"),
+        "material_type": r.get("material_type"),
+        "reg": r.get("reg"),
+        "power_type": r.get("power_type"),
         "distance_km": _km(r.get("trip_length")),
         "is_project": r.get("is_project"),
         "visibility": r.get("visibility"),
     }
     if include_private:
-        out["price"] = r.get("price")
-        out["currency"] = r.get("currency")
-    return out
+        out.update({
+            "price": r.get("price"),
+            "currency": r.get("currency"),
+            "seat": r.get("seat"),
+            "has_notes": r.get("has_notes") or None,
+            "tags": sorted(({"id": t["tag_id"], "name": t["name"]} for t in r.get("tags") or []),
+                           key=lambda t: t["name"]),
+            "ticket_ids": r.get("ticket_ids"),
+        })
+    return _clean(out)
 
 
 def _timing_out(start, end, manual_duration, is_project):
@@ -1395,7 +1405,9 @@ def _list_trips(user, args) -> list[dict]:
             query + f"""
             SELECT uid, type, origin_station, destination_station,
                    start_datetime, end_datetime, operator, line_name,
-                   trip_length, price, currency, is_project, visibility
+                   material_type, reg, power_type,
+                   trip_length, price, currency, is_project, visibility, seat,
+                   COALESCE(notes, '') <> '' AS has_notes, tags, ticket_ids
             FROM FilteredTrips
             WHERE {where}
             ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
