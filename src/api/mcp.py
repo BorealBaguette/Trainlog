@@ -520,8 +520,11 @@ def _build_tools(user) -> list:
         {
             "name": "list_trips",
             "description": (
-                "List trips, most recent first, as a compact summary per trip (unset "
-                "fields left out). By default lists the authenticated user's own trips (all "
+                "List trips, most recent first, undated plans on top and undated past "
+                "trips last, as a compact summary per trip (unset fields left out). "
+                "Returns {total, trips, next_offset}: pass next_offset as `offset` for the "
+                "next page; an empty page has no total. "
+                "By default lists the authenticated user's own trips (all "
                 "visibilities, including price, seat, tags and tickets). Pass `username` "
                 "to read a FRIEND's trips instead: this is read-only and only returns their "
                 "public/friends-visibility trips, with private fields (price, notes, seat, "
@@ -532,6 +535,7 @@ def _build_tools(user) -> list:
                 "properties": {
                     **TRIP_FILTERS,
                     "limit": {"type": "integer", "description": "Max trips to return (default 50, max 500)."},
+                    "offset": {"type": "integer", "description": "Trips to skip (default 0)."},
                 },
                 "required": [],
             },
@@ -1397,9 +1401,10 @@ def _filtered_trips(user, args):
     return query, " AND ".join(clauses) or "TRUE", params, own
 
 
-def _list_trips(user, args) -> list[dict]:
+def _list_trips(user, args) -> dict:
     query, where, params, own = _filtered_trips(user, args)
     params["limit"] = min(form.integer(args, "limit", 1) or 50, 500)
+    params["offset"] = form.integer(args, "offset", 0) or 0
     with pg_session() as pg:
         rows = pg.execute(
             query + f"""
@@ -1407,17 +1412,24 @@ def _list_trips(user, args) -> list[dict]:
                    start_datetime, end_datetime, operator, line_name,
                    material_type, reg, power_type,
                    trip_length, price, currency, is_project, visibility, seat,
-                   COALESCE(notes, '') <> '' AS has_notes, tags, ticket_ids
+                   COALESCE(notes, '') <> '' AS has_notes, tags, ticket_ids,
+                   COUNT(*) OVER () AS total
             FROM FilteredTrips
             WHERE {where}
             ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
                      utc_filtered_start_datetime DESC NULLS LAST,
                      uid DESC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
             """,
             params,
         ).fetchall()
-    return [_trip_summary(dict(r._mapping), include_private=own) for r in rows]
+    trips = [_trip_summary(dict(r._mapping), include_private=own) for r in rows]
+    result = {"trips": trips}
+    if rows:  # an empty page has no row to carry the total
+        result["total"] = rows[0].total
+    if params["offset"] + len(trips) < result.get("total", 0):
+        result["next_offset"] = params["offset"] + len(trips)
+    return result
 
 
 # ── writes ────────────────────────────────────────────────────────────────────
