@@ -155,9 +155,8 @@ def _render_map(rows):
         logger.warning("Martin unreachable for OG card: %s", e)
         return None
     if response.status_code != 200:
-        logger.warning(
-            "Martin refused OG card: %s %s", response.status_code, response.text[:200]
-        )
+        log = logger.error if response.status_code < 500 else logger.warning
+        log("Martin refused OG card: %s %s", response.status_code, response.text[:200])
         return None
     return Image.open(io.BytesIO(response.content)).convert("RGB")
 

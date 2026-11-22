@@ -334,7 +334,13 @@ def _simplify(parts, zoom):
     simplified = []
     for part in parts:
         line = LineString([(c[0], c[1]) for c in part]) if len(part) > 1 else None
-        coords = list(line.simplify(tolerance).coords) if line else part
+        # Topology is irrelevant to a painted line, and preserving it keeps most
+        # of a track that crosses itself hundreds of times.
+        coords = (
+            list(line.simplify(tolerance, preserve_topology=False).coords)
+            if line
+            else part
+        )
         simplified.append([[round(x, digits), round(y, digits)] for x, y in coords])
     return simplified
 
@@ -452,7 +458,10 @@ def _render_map(trip):
         logger.warning("Martin unreachable for trip %s: %s", trip["trip_id"], e)
         return None, RENDER_FAILED
     if response.status_code != 200:
-        logger.warning(
+        # A 4xx is our request at fault and will fail the same way every time;
+        # a 5xx is Martin restarting.
+        log = logger.error if response.status_code < 500 else logger.warning
+        log(
             "Martin refused trip %s: %s %s",
             trip["trip_id"], response.status_code, response.text[:200],
         )

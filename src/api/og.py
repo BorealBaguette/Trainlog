@@ -12,7 +12,7 @@ from flask import Blueprint, Response, abort, redirect, url_for
 
 from src.og_card import render_og_card, render_plan_og_card
 from src.pg import pg_session
-from src.trip_card import render_trip_card
+from src.trip_card import NO_ROUTE, render_trip_card
 from src.trip_periods import parse_period, period_trip_ids
 from src.trip_selections import (
     is_selection_key,
@@ -230,9 +230,11 @@ def trip_card(trip_ids):
     single-trip card, and a selection of several has an OG picture of its own
     (og.trip_image) that draws them together.
 
-    Unlike the og routes this answers 404 rather than the logo. Nothing caches
-    an og:image failure here — the picture is asked for by a person following a
-    link, and a placeholder logo would tell them less than a missing image.
+    Unlike the og routes this answers an error rather than the logo. Nothing
+    caches an og:image failure here — the picture is asked for by a person
+    following a link, and a placeholder logo would tell them less than a missing
+    image. A failed render is a 502, not a 404, so it does not pass for a trip
+    that is simply not shown.
     """
     try:
         ids = parse_trip_ids(trip_ids)
@@ -245,7 +247,11 @@ def trip_card(trip_ids):
     png, reason = render_trip_card(ids[0])
     if png is None:
         logger.info("No card for trip %s (%s)", ids[0], reason)
-        abort(404)
+        if reason == NO_ROUTE:
+            abort(404)
+        return Response(
+            f"Card render failed ({reason})", status=502, mimetype="text/plain"
+        )
     return Response(png, mimetype="image/png", headers={"Cache-Control": CACHE_CONTROL})
 
 
