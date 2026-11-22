@@ -184,6 +184,8 @@ FilteredTrips AS (
     FROM sub
     LEFT JOIN airliners ON sub.material_type = airliners.iata
     LEFT JOIN trip_tags ON sub.uid = trip_tags.trip_id
+    {%- if not all_trips %}
+    -- all_trips (the MCP list) reads past and future in one listing.
     WHERE
         (CASE
             WHEN NOT sub.is_project
@@ -197,4 +199,5 @@ FilteredTrips AS (
             AND sub.utc_filtered_start_datetime IS NOT NULL
             AND NOW() <= sub.utc_filtered_start_datetime
         )
+    {%- endif %}
 )

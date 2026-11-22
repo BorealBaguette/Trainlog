@@ -63,7 +63,11 @@ from src.sql.plans import (
     update_plan_visibility_query,
 )
 from src.sql.stations import get_airports_query
-from src.sql.trips import get_material_types_query, get_operators_query
+from src.sql.trips import (
+    get_dynamic_user_trips_query,
+    get_material_types_query,
+    get_operators_query,
+)
 from src.trips import update_trip_type
 from src.trips.delete_trip import delete_trip as _delete_trip
 from src.users import Friendship, User
@@ -819,11 +823,11 @@ def _clean(d):
 
 
 def _trip_summary(r: dict, include_private: bool = True) -> dict:
-    """Compact per-trip summary. When include_private is False (friend reads),
-    price/currency are dropped so a friend never sees what was paid."""
+    """Compact per-trip summary of a FilteredTrips row. When include_private is False
+    (friend reads), price/currency are dropped so a friend never sees what was paid."""
     out = {
-        "id": r["trip_id"],
-        "type": r["trip_type"],
+        "id": r["uid"],
+        "type": r["type"],
         "origin": r["origin_station"],
         "destination": r["destination_station"],
         "start": _iso(r.get("start_datetime")),
@@ -1290,43 +1294,50 @@ def _trips_owner(user, username) -> tuple[bool, int]:
 
 
 def _filtered_trips(user, args):
-    """(where, params, own) for list_trips."""
+    """(query, where, params, own) for list_trips: the trips page's
+    FilteredTrips, past and future together."""
     own, target_uid = _trips_owner(user, args.get("username"))
-    clauses = ["user_id = :target_uid"]
-    params = {"target_uid": target_uid}
+    clauses = []
+    params = {"user_id": target_uid}
 
     if not own:
         # FRIEND_VISIBLE is a fixed tuple of trusted literals (no user input).
         allowed = ", ".join(f"'{v}'" for v in FRIEND_VISIBLE)
         clauses.append(f"visibility IN ({allowed})")
+    trip_types = {t.value for t in TripTypes}
     if args.get("trip_type"):
-        clauses.append("trip_type = :trip_type")
+        if args["trip_type"] not in trip_types:
+            raise ValueError(f"trip_type must be one of {sorted(trip_types)}.")
+        clauses.append("type = :trip_type")
         params["trip_type"] = args["trip_type"]
+        params["base_type"] = [args["trip_type"]]
     if args.get("upcoming_only"):
-        clauses.append("(is_project OR COALESCE(utc_start_datetime, start_datetime) >= NOW())")
+        clauses.append("(is_project OR utc_filtered_start_datetime >= NOW())")
     if args.get("from_date"):
         clauses.append("start_datetime >= :from_date")
         params["from_date"] = form.iso_date(args["from_date"], "from_date")
     if args.get("to_date"):
         clauses.append("start_datetime < CAST(:to_date AS date) + 1")
         params["to_date"] = form.iso_date(args["to_date"], "to_date")
-    return " AND ".join(clauses), params, own
+
+    query = get_dynamic_user_trips_query(base_type_filter="base_type" in params, all_trips=True)
+    return query, " AND ".join(clauses) or "TRUE", params, own
 
 
 def _list_trips(user, args) -> list[dict]:
-    where, params, own = _filtered_trips(user, args)
-    params["limit"] = max(1, min(int(args.get("limit") or 50), 500))
+    query, where, params, own = _filtered_trips(user, args)
+    params["limit"] = min(form.integer(args, "limit", 1) or 50, 500)
     with pg_session() as pg:
         rows = pg.execute(
-            f"""
-            SELECT trip_id, trip_type, origin_station, destination_station,
+            query + f"""
+            SELECT uid, type, origin_station, destination_station,
                    start_datetime, end_datetime, operator, line_name,
                    trip_length, price, currency, is_project, visibility
-            FROM trips
+            FROM FilteredTrips
             WHERE {where}
             ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
-                     COALESCE(utc_start_datetime, start_datetime) DESC NULLS LAST,
-                     trip_id DESC
+                     utc_filtered_start_datetime DESC NULLS LAST,
+                     uid DESC
             LIMIT :limit
             """,
             params,
