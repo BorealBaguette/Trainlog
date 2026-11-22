@@ -22,7 +22,8 @@ from src.utils import external_url, owner
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 SNAPSHOT_ROOT = Path("backup/mcp/wagons")
 UPLOAD_TTL = 3600
-# Writes allowed per 24 h, so a runaway client or a leaked token can only do bounded,
+# Writes allowed per 24 h across wagons and trainsets (every snapshot under
+# SNAPSHOT_ROOT's parent), so a runaway client or a leaked token can only do bounded,
 # recoverable damage (each write leaves a snapshot behind).
 DAILY_WRITES = 200
 
@@ -173,11 +174,11 @@ def _get(wname):
     return w
 
 
-def _check_cap():
+def check_cap():
     since = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d-%H%M%S")
-    recent = sum(1 for d in SNAPSHOT_ROOT.glob("*/*") if d.name[:15] >= since)
+    recent = sum(1 for d in SNAPSHOT_ROOT.parent.glob("*/*/*") if d.name[:15] >= since)
     if recent >= DAILY_WRITES:
-        raise ValueError(f"wagon write limit reached ({DAILY_WRITES} per 24 h)")
+        raise ValueError(f"write limit reached ({DAILY_WRITES} per 24 h)")
 
 
 def _snapshot(tool, wname):
@@ -225,7 +226,7 @@ def upload(token):
     except BadSignature:
         return jsonify({"error": "invalid or expired upload URL"}), 403
     try:
-        _check_cap()
+        check_cap()
     except ValueError as e:
         return jsonify({"error": str(e)}), 429
     f = request.files.get("file")
@@ -244,7 +245,7 @@ def upload(token):
 
 def call(name, args):
     if name in DESTRUCTIVE or name == "create_wagon":
-        _check_cap()
+        check_cap()
     if name in DESTRUCTIVE:
         return _snapshotted(name, args.get("wagon"), lambda: _call(name, args))
     return _call(name, args)

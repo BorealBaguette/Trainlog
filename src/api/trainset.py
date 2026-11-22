@@ -279,29 +279,7 @@ def update_trainset(tid):
             return jsonify({'error': 'Forbidden'}), 403
         if _name_taken(pg, name, row['username'], bool(row['is_admin']), exclude_id=tid):
             return jsonify({'error': _dup_name_error(name, bool(row['is_admin']))}), 409
-        old_name = row['old_name']
-        pg.execute(
-            """
-            UPDATE trainsets
-            SET name = :name, units_json = :units_json, updated_at = NOW()
-            WHERE id = :id
-            """,
-            {"name": name, "units_json": json.dumps(units), "id": tid},
-        )
-        if name != old_name:
-            if row['is_admin']:
-                pg.execute(
-                    "UPDATE trips SET material_type_advanced = :new WHERE material_type_advanced = :old",
-                    {"new": name, "old": old_name},
-                )
-                _rename_in_composites(pg, old_name, name)
-            else:
-                user_id = get_user_id(username)
-                pg.execute(
-                    "UPDATE trips SET material_type_advanced = :new WHERE user_id = :user AND material_type_advanced = :old",
-                    {"new": name, "old": old_name, "user": user_id},
-                )
-                _rename_in_composites(pg, old_name, name, user_id)
+        save_trainset(pg, tid, row, name, units)
 
     return jsonify({'id': tid, 'name': name})
 
@@ -385,6 +363,36 @@ def _name_taken(pg, name, username, is_admin_set, exclude_id=None):
         sql += " AND id <> :id"
         params["id"] = exclude_id
     return pg.execute(sql + " LIMIT 1", params).fetchone() is not None
+
+
+def save_trainset(pg, tid, row, name, units):
+    """Write a trainset's new name and slim units; on a rename, carry the trips (and
+    composites) naming it along: every user's for a public set, the owner's for a
+    personal one. `row` is its stored username, is_admin and old_name."""
+    pg.execute(
+        """
+        UPDATE trainsets
+        SET name = :name, units_json = :units_json, updated_at = NOW()
+        WHERE id = :id
+        """,
+        {"name": name, "units_json": json.dumps(units), "id": tid},
+    )
+    old_name = row['old_name']
+    if name == old_name:
+        return
+    if row['is_admin']:
+        pg.execute(
+            "UPDATE trips SET material_type_advanced = :new WHERE material_type_advanced = :old",
+            {"new": name, "old": old_name},
+        )
+        _rename_in_composites(pg, old_name, name)
+    else:
+        user_id = get_user_id(row['username'])
+        pg.execute(
+            "UPDATE trips SET material_type_advanced = :new WHERE user_id = :user AND material_type_advanced = :old",
+            {"new": name, "old": old_name, "user": user_id},
+        )
+        _rename_in_composites(pg, old_name, name, user_id)
 
 
 def _dup_name_error(name, is_admin_set):

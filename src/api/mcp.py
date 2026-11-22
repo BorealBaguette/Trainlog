@@ -37,7 +37,7 @@ from flask.sessions import SecureCookieSession
 from werkzeug.exceptions import HTTPException
 
 from src.api import mcp_form as form
-from src.api import mcp_wagons
+from src.api import mcp_trainsets, mcp_wagons
 from src.api.motis import TRANSIT_MODES, _tz, departures_payload
 from src.consts import TripTypes
 from src.currency import get_available_currencies
@@ -318,7 +318,7 @@ def _trip_write_schema(plan=False, update=False):
 
 
 def _build_tools(user) -> list:
-    return (mcp_wagons.TOOLS if mcp_wagons.allowed(user) else []) + [
+    return (mcp_wagons.TOOLS + mcp_trainsets.TOOLS if mcp_wagons.allowed(user) else []) + [
         # ── lookups ─────────────────────────────────────────────────────────
         {
             "name": "search_stations",
@@ -1209,7 +1209,7 @@ def _list_trainsets(user, args) -> list[dict]:
     query = (args.get("query") or "").strip().lower()
     with pg_session() as pg:
         rows = pg.execute(
-            "SELECT name, is_admin, units_json FROM trainsets WHERE is_admin OR username = :u"
+            "SELECT id, name, is_admin, units_json FROM trainsets WHERE is_admin OR username = :u"
             " ORDER BY is_admin, name", {"u": user.username}).fetchall()
         labels = {}
         out = []
@@ -1222,7 +1222,7 @@ def _list_trainsets(user, args) -> list[dict]:
             if missing:
                 labels.update({w["name"]: w["label"] for w in pg.execute(
                     "SELECT name, label FROM wagons WHERE name = ANY(:n)", {"n": missing})})
-            out.append({"name": r["name"], "public": bool(r["is_admin"]), "cars": len(units),
+            out.append({"id": r["id"], "name": r["name"], "public": bool(r["is_admin"]), "cars": len(units),
                         "composition": [labels.get(n, n) for n in names]})
     return out
 
@@ -1365,6 +1365,8 @@ def _call_tool(name: str, args: dict, user) -> str:
         return out(_list_tags(user))
     if name in mcp_wagons.NAMES and mcp_wagons.allowed(user):
         return out(mcp_wagons.call(name, args))
+    if name in mcp_trainsets.NAMES and mcp_wagons.allowed(user):
+        return out(mcp_trainsets.call(name, args))
     if name == "list_tickets":
         return out(_list_tickets(user))
     if name == "list_friends":
@@ -1664,7 +1666,7 @@ MAX_BATCH = 20
 DESTRUCTIVE_TOOLS = {
     "delete_trip", "update_trip", "delete_plan", "update_plan", "delete_plan_trip",
     "update_plan_trip", "delete_plan_cost", "update_plan_cost", "import_trips_to_plan",
-} | mcp_wagons.DESTRUCTIVE
+} | mcp_wagons.DESTRUCTIVE | mcp_trainsets.DESTRUCTIVE
 IDEMPOTENT_TOOLS = {"reorder_plan_trips", "assign_trip_cost", "update_plan", "update_plan_cost"}
 
 
