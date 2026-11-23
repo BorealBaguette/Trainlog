@@ -107,8 +107,16 @@
       <option value="trips">{{ sortTrips|default('Trip count') }}</option>
       <option value="distance">{{ sortDistance|default('Distance') }}</option>
       <option value="created">{{ sortCreated|default('Date created') }}</option>
+      <option value="start">{{ sortStartDate }}</option>
     </select>
     <span class="text-muted" id="pl-count" style="font-size:.82rem; white-space:nowrap;"></span>
+  </div>
+  {# Rail-pass travel days summed over the plans shown (narrow them with the search to
+     compare a few), once at least two of them track pass days. #}
+  <div class="text-muted small mb-3" id="pl-pass-total" hidden>
+    <i class="bi bi-ticket-perforated"></i> {{ planPassDays }}: <strong id="pl-pass-req"></strong>
+    <span id="pl-pass-opt-wrap">+<span id="pl-pass-opt"></span> {{ planPassOptional|lower }}</span>
+    · <span id="pl-pass-n"></span>
   </div>
 
   <!-- Active plans -->
@@ -118,6 +126,8 @@
          data-name="{{ p.name | lower }}"
          data-modified="{{ p.last_modified or p.created or '' }}"
          data-created="{{ p.created or '' }}"
+         data-start="{{ p.start_date or '' }}"
+         {% if p.pass_days_enabled %}data-pass-req="{{ p.pass_required }}" data-pass-opt="{{ p.pass_optional }}"{% endif %}
          data-trips="{{ p.trip_count }}"
          data-distance="{{ p.total_distance_km | round | int }}">
       <div class="pl-icon"><i class="bi bi-map"></i></div>
@@ -126,6 +136,8 @@
         {% if p.description %}<div class="pl-desc">{{ p.description }}</div>{% endif %}
         <div class="pl-stats">
           <span class="pl-chip chip-count"><i class="bi bi-signpost-split"></i>{{ p.trip_count }}</span>
+          {% if p.pass_days_enabled %}<span class="pl-chip" title="{{ planPassDays }}"><i class="bi bi-ticket-perforated"></i>{{ p.pass_required }}{% if p.pass_optional %} +{{ p.pass_optional }} {{ planPassOptional|lower }}{% endif %}</span>{% endif %}
+          {% if p.start_date %}<span class="pl-chip"><i class="bi bi-calendar-event"></i><span class="pl-date" data-date="{{ p.start_date }}">{{ p.start_date }}</span></span>{% endif %}
           {# How far the plan has been logged as real trips (partial validation). #}
           {% if p.validated_count %}
           <span class="pl-chip" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ p.validated_count }}/{{ p.trip_count }}</span>
@@ -225,12 +237,33 @@
   });
 })();
 
+function updatePassTotal() {
+  var box = document.getElementById('pl-pass-total');
+  if (!box) return;
+  var req = 0, opt = 0, n = 0;
+  document.querySelectorAll('#plan-list .pl-item').forEach(function (el) {
+    if (el.style.display === 'none' || el.dataset.passReq === undefined) return;
+    req += parseInt(el.dataset.passReq, 10) || 0;
+    opt += parseInt(el.dataset.passOpt, 10) || 0;
+    n++;
+  });
+  box.hidden = n < 2;
+  document.getElementById('pl-pass-req').textContent = req;
+  document.getElementById('pl-pass-opt').textContent = opt;
+  document.getElementById('pl-pass-opt-wrap').hidden = !opt;
+  var forms = {{ planCountPlans|tojson }};
+  document.getElementById('pl-pass-n').textContent =
+    typeof pluralize === 'function' ? pluralize(forms, n) : (forms.other || '').replace('{n}', n);
+}
+
 function updateCount() {
+  updatePassTotal();
   var items = document.querySelectorAll('#plan-list .pl-item');
   var visible = Array.from(items).filter(function(el) { return el.style.display !== 'none'; }).length;
   var total = items.length;
   var el = document.getElementById('pl-count');
-  if (el) el.textContent = visible < total ? (visible + ' / ' + total) : (total ? total + '' : '');
+  // Only while a search narrows the list ("2 / 5"); a bare total read as noise.
+  if (el) el.textContent = visible < total ? (visible + ' / ' + total) : '';
 }
 
 function filterPlans() {
@@ -257,6 +290,8 @@ function sortPlans() {
     if (key === 'trips')    return parseInt(b.dataset.trips) - parseInt(a.dataset.trips);
     if (key === 'distance') return parseInt(b.dataset.distance) - parseInt(a.dataset.distance);
     if (key === 'created')  return (b.dataset.created || '').localeCompare(a.dataset.created || '');
+    // Chronological, soonest first; plans with no date at all go last.
+    if (key === 'start')    return (a.dataset.start || '9999').localeCompare(b.dataset.start || '9999');
     return (b.dataset.modified || '').localeCompare(a.dataset.modified || '');
   });
   var anchor = document.getElementById('plan-no-match');
@@ -264,5 +299,14 @@ function sortPlans() {
 }
 
 updateCount();
+
+// Start dates, in the viewer's language.
+(function () {
+  var fmt = new Intl.DateTimeFormat("{{ langId }}" || undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  document.querySelectorAll('.pl-date').forEach(function (el) {
+    var p = (el.dataset.date || '').split('-');
+    if (p.length === 3) el.textContent = fmt.format(new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])));
+  });
+})();
 </script>
 {% endblock %}

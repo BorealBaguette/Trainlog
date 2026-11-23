@@ -306,7 +306,7 @@ def _fetch_plan(plan_uuid):
                    ST_AsGeoJSON(
                        ST_Segmentize(pt.geom::geography, :segment)::geometry
                    ) AS route
-            FROM plan_trips pt
+            FROM plan_trips_resolved pt
             JOIN plans p ON p.uid = pt.plan_id
             WHERE p.uuid = :uuid AND pt.geom IS NOT NULL
               AND COALESCE(pt.visibility, 'private') = 'public'

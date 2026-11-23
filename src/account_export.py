@@ -67,7 +67,7 @@ def build_account_data_csvs(user: User) -> dict[str, str]:
                 pg,
                 """
                 SELECT uid, uuid, name, description, anchor_date, archived,
-                       visibility, validated_tag_uuid, created, last_modified
+                       visibility, validated_tag_uuid, pass_days_enabled, created, last_modified
                 FROM plans WHERE user_id = :user_id
                 """,
                 {"user_id": user_id},
@@ -83,7 +83,7 @@ def build_account_data_csvs(user: User) -> dict[str, str]:
                    trip_type, operator, line_name, material_type,
                    material_type_advanced, reg, seat, notes, trip_length,
                    countries, price, currency, purchase_date, visibility,
-                   carbon, power_type, co2_override, validated_trip_id,
+                   carbon, power_type, co2_override, validated_trip_id, linked_trip_id,
                    created, last_modified,
                    (
                        SELECT json_agg(json_build_array(ST_Y(dp.geom), ST_X(dp.geom)) ORDER BY dp.path)
@@ -96,6 +96,18 @@ def build_account_data_csvs(user: User) -> dict[str, str]:
         for row in plan_trip_rows:
             row["path"] = _encode_geojson_path(row.get("path"))
         files["plan_trips.csv"] = _csv_text(plan_trip_rows)
+        files["plan_pass_days.csv"] = _csv_text(
+            _rows(
+                pg,
+                """
+                SELECT d.plan_id, d.day_key, d.status
+                FROM plan_pass_days d
+                JOIN plans p ON p.uid = d.plan_id
+                WHERE p.user_id = :user_id
+                """,
+                {"user_id": user_id},
+            )
+        )
         files["plan_costs.csv"] = _csv_text(
             _rows(
                 pg,

@@ -316,7 +316,7 @@ def _plan_summary(pg, uuid):
                COUNT(pt.uid) AS trips,
                COALESCE(SUM(pt.trip_length), 0) AS distance
         FROM plans p
-        LEFT JOIN plan_trips pt ON pt.plan_id = p.uid
+        LEFT JOIN plan_trips_resolved pt ON pt.plan_id = p.uid
         WHERE p.uuid = :uuid
         GROUP BY p.uid
         """,
@@ -361,7 +361,7 @@ def plan_image(uuid, ext):
                        ELSE (value->>'elec')::numeric
                             + COALESCE((value->>'nonelec')::numeric, 0)
                    END) AS km
-            FROM plan_trips pt, LATERAL jsonb_each(pt.countries::jsonb)
+            FROM plan_trips_resolved pt, LATERAL jsonb_each(pt.countries::jsonb)
             -- LIKE, not just NOT NULL: a leg whose countries were never
             -- computed stores '', and ''::jsonb is an error, not an empty map.
             WHERE pt.plan_id = :plan_id AND pt.countries LIKE '{%' AND key != 'UN'

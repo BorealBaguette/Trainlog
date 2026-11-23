@@ -174,7 +174,7 @@ def _owned_plan_trip(plan: dict, plan_trip_uid) -> dict:
     """One leg (with its path as GeoJSON) of an already-ownership-checked plan."""
     with pg_session() as pg:
         row = pg.execute(
-            "SELECT *, ST_AsGeoJSON(geom) AS geojson FROM plan_trips"
+            "SELECT *, ST_AsGeoJSON(geom) AS geojson FROM plan_trips_resolved"
             " WHERE uid = :uid AND plan_id = :pid",
             {"uid": int(plan_trip_uid), "pid": plan["uid"]},
         ).fetchone()
@@ -1003,6 +1003,8 @@ def _plan_trip_detail(r: dict, stops=True) -> dict:
         "visibility": r.get("visibility"),
         "cost_uid": r.get("cost_id"),
         "logged_trip_id": r.get("validated_trip_id"),
+        # One of the user's trips, linked into the plan: read-only here (edit the trip).
+        "linked_trip_id": r.get("linked_trip_id"),
         "sort_order": r.get("sort_order"),
     }
     if stops:
@@ -1552,6 +1554,9 @@ def _call_tool(name: str, args: dict, user) -> str:
     if name == "update_plan_trip":
         plan = _owned_plan(args.get("plan_uuid"), uid)
         pt = _owned_plan_trip(plan, args.get("plan_trip_uid"))
+        if pt.get("linked_trip_id"):
+            raise ValueError(f"This leg is trip {pt['linked_trip_id']}, linked into the plan:"
+                             " change it with update_trip.")
         changes = {k: v for k, v in args.items() if k not in ("plan_uuid", "plan_trip_uid")}
         if not changes:
             raise ValueError("Nothing to update.")

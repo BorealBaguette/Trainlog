@@ -501,6 +501,13 @@
         </h2>
     </div>
     <form autocomplete="off" action="javascript:void(0);" method="GET">
+        {% if plan_uuid and plan_name %}
+        {# A plan leg: one click back to the plan it belongs to. #}
+        <div class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-3" role="alert" style="font-size:0.95rem;">
+          <span style="font-size:1.2rem;">🗺️</span>
+          <span>{{ plans|default('Plans') }}: <a class="alert-link" href="{{ url_for('plan_view', username=username, plan_uuid=plan_uuid) }}">{{ plan_name }}</a></span>
+        </div>
+        {% endif %}
         <!-- TODO: accommodation, poi, restaurant: they have different fields -->
         <!-- Origin -->
         <div class="mb-3" id="originGroup">

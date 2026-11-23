@@ -240,7 +240,7 @@
       {% if plan_uuid %}
       <div class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-3" role="alert" style="font-size:0.95rem;">
         <span style="font-size:1.2rem;">🗺️</span>
-        <span>{{ addingToPlan|default('Adding a trip to plan') }}: <strong>{{ plan_name|default('') }}</strong></span>
+        <span>{{ addingToPlan|default('Adding a trip to plan') }}: <a class="alert-link" href="{{ url_for('plan_view', username=username, plan_uuid=plan_uuid) }}">{{ plan_name|default('') }}</a></span>
       </div>
       {% endif %}
       {% if vehicle_type == 'air' %}

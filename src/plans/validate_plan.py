@@ -13,6 +13,7 @@ import uuid as uuid_lib
 from datetime import datetime, time as dtime, timedelta
 
 from src.paths import geom_geojson_to_coords
+from src.plans.bulk import align_stops_to_start
 from src.pg import get_or_create_pg_session
 from src.sql.plans import archive_plan_query, get_plan_costs_query, get_plan_trips_query
 from src.trips.create_trip import create_trip
@@ -30,6 +31,7 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
     username = get_username(plan["user_id"])
     now = datetime.now()
     created_ids = []
+    linked_ids = []  # trips linked into the plan: they join the voyage's tag too
     cost_to_trips = {}  # plan_costs.uid -> [created trip_id, ...]
     tag_uuid = plan.get("validated_tag_uuid")
     wanted = set(plan_trip_uids) if plan_trip_uids is not None else None
@@ -41,10 +43,15 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
             # Already logged in an earlier batch, or not part of this one.
             if pt["validated_trip_id"] is not None:
                 continue
+            # Already one of the user's trips (linked in): nothing to log.
+            if pt["linked_trip_id"] is not None:
+                linked_ids.append(pt["linked_trip_id"])
+                continue
             if wanted is not None and pt["uid"] not in wanted:
                 continue
             coords = geom_geojson_to_coords(pt["geojson"])  # [[lat,lng],...]
             path = [{"lat": c[0], "lng": c[1]} for c in coords]
+            waypoints = pt["waypoints"]
 
             if pt["timing_mode"] == "relative" and pt["start_day"] is not None:
                 if pt["start_time"] is not None and pt["end_time"] is not None:
@@ -75,6 +82,10 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
                         dtime(0, 0, 1),
                     )
                     utc_start = utc_end = None
+                # The stops were picked on whatever day the run was searched for: onto
+                # the leg's real day, with the run re-dated, so the logged trip still
+                # refreshes from Transitous.
+                waypoints = align_stops_to_start(waypoints, start_dt)
             else:
                 # precise / onlyDate / unknown -> use the stored materialised values.
                 start_dt = pt["start_datetime"]
@@ -104,7 +115,7 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
                 material_type_advanced=pt["material_type_advanced"],
                 seat=pt["seat"],
                 reg=pt["reg"],
-                waypoints=pt["waypoints"],
+                waypoints=waypoints,
                 notes=pt["notes"],
                 price=pt["price"],
                 currency=pt["currency"],
@@ -199,7 +210,7 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
                     "UPDATE plans SET validated_tag_uuid = :tag_uuid WHERE uid = :uid",
                     {"tag_uuid": tag_uuid, "uid": plan["uid"]},
                 )
-            for trip_id in created_ids:
+            for trip_id in created_ids + linked_ids:
                 pg.execute(
                     "INSERT INTO tags_associations (tag_id, trip_id)"
                     " VALUES (:tag_id, :trip_id) ON CONFLICT (tag_id, trip_id) DO NOTHING",
@@ -210,7 +221,7 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
         # stays active so the legs still to come can be worked on.
         remaining = pg.execute(
             "SELECT COUNT(*) FROM plan_trips WHERE plan_id = :plan_id"
-            " AND validated_trip_id IS NULL",
+            " AND validated_trip_id IS NULL AND linked_trip_id IS NULL",
             {"plan_id": plan["uid"]},
         ).fetchone()[0]
         if remaining == 0:

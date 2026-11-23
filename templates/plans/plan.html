@@ -6,11 +6,11 @@
 {% set vtypes = ['train','bus','tram','metro','air','helicopter','ferry','car','walk','cycle','aerialway','funicular','rail','scooter','ski','accommodation','poi','restaurant'] %}
 
 <style>
-  .plan-wrap { max-width: 920px; }
+  .plan-wrap { max-width: 1100px; }
   .plan-head h2 { font-weight: 700; letter-spacing: -.01em; }
   .plan-toolbar .btn { border-radius: 8px; }
   /* stat tiles */
-  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
   .stat-tile { background: var(--plan-surface); border: 1px solid light-dark(var(--bs-border-color), var(--plan-border));
                border-radius: 12px; padding: .85rem 1rem; }
   .stat-tile .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: light-dark(#8a909a, var(--plan-faint)); }
@@ -68,6 +68,51 @@
                   letter-spacing: .05em; color: light-dark(#6b7280, var(--plan-sep-label)); white-space: nowrap; }
   .plan-day-sep .day-sep-line { flex: 1 1 auto; height: 1px;
                   background: light-dark(var(--bs-border-color), var(--plan-border)); }
+  .plan-day-sep .day-sep-date { font-size: .74rem; color: light-dark(#9ca3af, var(--plan-faint)); white-space: nowrap; }
+  /* Rail-pass travel day mark on a day separator: none (faint) / required / optional. */
+  .pass-chip { display: inline-flex; align-items: center; gap: .25rem; font-size: .72rem; font-weight: 600;
+               border-radius: 999px; padding: .1rem .55rem; border: 1px dashed light-dark(#cbd2db, var(--plan-border));
+               background: transparent; color: light-dark(#9ca3af, var(--plan-faint)); white-space: nowrap; }
+  button.pass-chip { cursor: pointer; }
+  .pass-chip.pass-required { border: 1px solid #2563eb; background: rgba(37,99,235,.12); color: light-dark(#1d4ed8, #93b4ff); }
+  .pass-chip.pass-optional { border: 1px dashed #2563eb; color: light-dark(#1d4ed8, #93b4ff); }
+  /* Calendar, drawn like a date-range picker: the trip's days one continuous band,
+     departure days solid circles, weekends told apart by their colour, days outside
+     the trip faded. */
+  .plan-cal { border: 1px solid light-dark(#e5e7eb, var(--plan-border)); border-radius: 12px; padding: .85rem 1rem;
+              background: var(--plan-surface); }
+  .plan-cal-head { display: flex; align-items: center; justify-content: center; gap: .5rem 1.5rem; flex-wrap: wrap; margin-bottom: .75rem; }
+  .plan-cal-summary { font-weight: 600; }
+  /* Months of a fixed width, centred: a short plan's one or two months sit in the
+     middle rather than against the left edge. */
+  .plan-cal-months { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem 2.5rem; }
+  .plan-cal-months > div { flex: 0 1 280px; min-width: 220px; }
+  .cal-month-name { font-size: .8rem; font-weight: 700; margin-bottom: .25rem; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 3px; text-align: center; font-size: .78rem; }
+  .cal-grid .cal-wd { font-size: .66rem; color: light-dark(#9ca3af, var(--plan-faint)); padding-bottom: .2rem; }
+  .cal-grid .cal-wd.we { color: light-dark(#c2410c, #f0a07a); }
+  .cal-grid .cal-d { position: relative; height: 28px; display: flex; align-items: center; justify-content: center;
+                     color: light-dark(#374151, var(--plan-body)); }
+  .cal-grid .cal-d > span { width: 26px; height: 26px; border-radius: 50%; display: inline-flex;
+                            align-items: center; justify-content: center; }
+  .cal-grid .cal-d.we { color: light-dark(#c2410c, #f0a07a); }
+  .cal-grid .cal-d.out { opacity: .4; }
+  .cal-grid .cal-d.in { background: light-dark(rgba(75,120,214,.13), var(--plan-accent-soft)); }
+  .cal-grid .cal-d.rs { border-top-left-radius: 14px; border-bottom-left-radius: 14px; }
+  .cal-grid .cal-d.re { border-top-right-radius: 14px; border-bottom-right-radius: 14px; }
+  .cal-grid .cal-d.dep > span { background: light-dark(#4b78d6, var(--plan-accent)); color: #fff; font-weight: 700; }
+  .cal-grid .cal-d.today > span { box-shadow: inset 0 0 0 1.5px light-dark(#1f2937, var(--plan-body)); }
+  .cal-grid .cal-d.pass-required::after, .cal-grid .cal-d.pass-optional::after {
+      content: ""; position: absolute; left: 50%; bottom: -1px; transform: translateX(-50%);
+      width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; }
+  .cal-grid .cal-d.pass-optional::after { background: transparent; box-shadow: inset 0 0 0 1.2px #f59e0b; }
+  .cal-legend { display: flex; gap: .4rem 1.1rem; flex-wrap: wrap; align-items: center; font-size: .74rem;
+                color: light-dark(#6b7280, var(--plan-sep-label)); margin-top: .75rem; justify-content: center; }
+  .cal-legend i { display: inline-block; vertical-align: -2px; margin-right: .35rem; }
+  .cal-legend .lg-dep { width: .85rem; height: .85rem; border-radius: 50%; background: #4b78d6; }
+  .cal-legend .lg-span { width: 1.4rem; height: .85rem; border-radius: 999px; background: rgba(75,120,214,.18); }
+  .cal-legend .lg-we { width: .85rem; height: .85rem; border-radius: 50%; border: 1.5px solid #c2410c; }
+  .cal-legend .lg-pass { width: .45rem; height: .45rem; border-radius: 50%; background: #f59e0b; vertical-align: 0; }
   /* Overnight marker: a moon on the day transition (Day N -> Day N+1), so the
      "runs through the night" fact sits with its cause rather than on a separate row. */
   .ovn-moon { color: var(--plan-moon); margin: 0 .05rem; }
@@ -79,15 +124,33 @@
                  margin-left: .35rem; white-space: nowrap; text-decoration: none; }
   .logged-pill:hover { color: #1f2937; background: rgba(107,114,128,.22); }
   .logged-pill i { margin-right: .2rem; }
-  /* Per-leg selection for "log as trips". Off by default — "log as trips" then logs
-     the whole plan as it always did; the settings panel turns picking on, which is
-     when the tick boxes and the select-all bar appear (nothing ticked to start). */
-  .leg-pick, .plan-pick-bar { display: none; }
-  .plan-picking .leg-pick { flex: 0 0 auto; display: flex; align-items: center; }
-  .leg-pick input { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; }
-  .plan-picking .plan-pick-bar { display: flex; align-items: center; gap: .5rem;
-                   font-size: .82rem; color: #6b7280; margin: 0 .15rem .6rem; }
-  .plan-pick-bar input { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; }
+  /* Per-leg selection, as on the trips list: tick legs, then act on them from the
+     bar that appears at the bottom (edit, shift, duplicate, log, delete). Nothing
+     ticked = "log as trips" logs the whole plan. */
+  .leg-pick { flex: 0 0 auto; display: flex; align-items: center; }
+  .leg-pick input, .plan-pick-bar input { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; }
+  .plan-pick-bar { display: flex; align-items: center; gap: .5rem;
+                   font-size: .82rem; color: #6b7280; margin: 0 1rem .6rem; }
+  /* One of the user's trips linked in: the plan's fixed part. Greyed and dashed, it
+     reads as settled and not editable here; it links to the trip it is. */
+  .plan-leg.leg-linked { background: light-dark(#f4f5f7, var(--plan-sunken)); border-style: dashed;
+                         border-left: 4px solid light-dark(#9ca3af, var(--plan-faint)); }
+  .plan-leg.leg-linked .leg-route { color: light-dark(#4b5563, var(--plan-body)); }
+  .linked-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #4b5563;
+                 background: rgba(107,114,128,.14); border-radius: 999px; padding: .05rem .5rem;
+                 margin-left: .35rem; white-space: nowrap; text-decoration: none; }
+  a.linked-pill:hover { color: #1f2937; background: rgba(107,114,128,.22); }
+  .linked-pill i { margin-right: .2rem; }
+  .plan-leg.leg-selected { border-color: light-dark(#4b78d6, var(--plan-accent)); }
+  .plan-sel-bar { position: sticky; bottom: .75rem; z-index: 20; display: none;
+                  align-items: center; gap: .35rem; flex-wrap: wrap; margin-top: .75rem;
+                  padding: .5rem .75rem; border-radius: 12px;
+                  background: light-dark(#fff, var(--plan-surface));
+                  border: 1px solid light-dark(#cbd2db, var(--plan-border-hover));
+                  box-shadow: 0 4px 18px light-dark(rgba(0,0,0,.12), var(--plan-shadow)); }
+  .plan-sel-bar.show { display: flex; }
+  .plan-sel-bar .sel-count { font-weight: 600; margin-right: .35rem; }
+  .plan-sel-bar .btn { border-radius: 8px; }
   /* Toolbar menus size to their longest item ("Copy to user…" used to spill out of
      the box) rather than to Bootstrap's 10rem default. */
   .plan-toolbar .dropdown-menu { min-width: max-content; }
@@ -114,6 +177,9 @@
       {% if plan_map_url %}
       <a class="btn btn-sm btn-outline-secondary" href="{{ plan_map_url }}"><i class="bi bi-map"></i> {{ planMapView }}</a>
       {% endif %}
+      {% if plan_calendar %}
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#planCalendar" title="{{ planCalendar }}"><i class="bi bi-calendar3"></i> {{ planCalendar }}</button>
+      {% endif %}
       {% if plan_copy_url %}
       <form method="post" action="{{ plan_copy_url }}">
         <button class="btn btn-sm btn-outline-primary" type="submit" title="{{ planSaveCopyHint }}"><i class="bi bi-files"></i> {{ planSaveCopy }}</button>
@@ -131,7 +197,7 @@
         </ul>
       </div>
       {% if plan_unlogged_count %}
-      <button class="btn btn-sm btn-success" onclick="planValidate()"><i class="bi bi-journal-check"></i> {{ logAsTrips|default('Log as trips') }}<span class="pick-count ms-1"></span></button>
+      <button class="btn btn-sm btn-success" onclick="planValidate()"><i class="bi bi-journal-check"></i> {{ logAsTrips|default('Log as trips') }}</button>
       {% endif %}
       <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#planSettings" title="{{ user_settings|default('Settings') }}"><i class="bi bi-gear"></i></button>
       <div class="dropdown">
@@ -143,6 +209,9 @@
               <button class="dropdown-item" type="submit"><i class="bi {{ 'bi-arrow-up-circle' if plan.archived else 'bi-archive' }} me-2"></i>{{ (unarchive|default('Unarchive')) if plan.archived else (archive|default('Archive')) }}</button>
             </form>
           </li>
+          {% if plan_unlogged_count %}
+          <li><button class="dropdown-item" type="button" onclick="planShiftAll()"><i class="bi bi-calendar-range me-2"></i>{{ planShiftAll }}</button></li>
+          {% endif %}
           <li>
             <form method="post" action="{{ url_for('duplicate_plan_route', username=username, plan_uuid=plan.uuid) }}">
               <button class="dropdown-item" type="submit"><i class="bi bi-files me-2"></i>{{ duplicate|default('Duplicate') }}</button>
@@ -208,30 +277,40 @@
       {# The link is the itinerary; the map view sits one button away on that page. #}
       <div class="plan-share-link d-flex gap-2 align-items-center flex-wrap mt-2">
         <input type="text" class="form-control form-control-sm" id="planShareUrl" readonly style="max-width:380px;"
-               value="{{ url_for('public_plan_itinerary', plan_uuid=plan.uuid, _external=True) }}"/>
+               value="{{ plan_share_url }}"/>
         <button class="btn btn-sm btn-outline-primary" type="button" onclick="planCopyShareUrl(this)"><i class="bi bi-clipboard"></i> {{ copy }}</button>
       </div>
     </div>
 
-    {% if plan_unlogged_count %}
-    <!-- Log only part of the plan: turns the per-leg tick boxes on. Off by default,
-         so "log as trips" logs the whole plan as it always did. -->
+    <!-- Rail-pass travel days (Interrail, …): off until turned on; then each day of
+         the plan can be marked from its separator in the list. -->
     <div class="p-3 rounded mt-2" style="background:light-dark(#f7f8fa, var(--plan-sunken)); border:1px solid light-dark(#e5e7eb, var(--plan-border));">
-      <label class="small text-muted mb-1 d-block">{{ logAsTrips|default('Log as trips') }}</label>
-      <button class="btn btn-sm btn-outline-primary" type="button" id="planPickToggle" onclick="planTogglePicking()">
-        <i class="bi bi-check2-square"></i> {{ planSelectLegs }}
-      </button>
+      <form method="post" action="{{ url_for('plan_pass_days_route', username=username, plan_uuid=plan.uuid) }}" class="d-flex gap-2 align-items-center flex-wrap">
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="planPassSwitch" {% if plan.pass_days_enabled %}checked{% endif %}
+                 onchange="this.form.action.value = this.checked ? 'enable' : 'disable'; this.form.submit();"/>
+          <label class="form-check-label small" for="planPassSwitch">{{ planPassTrack }} <i class="bi bi-info-circle text-muted" title="{{ planPassDaysHint }}"></i></label>
+        </div>
+        <input type="hidden" name="action" value=""/>
+        {% if plan.pass_days_enabled %}
+        <button class="btn btn-sm btn-outline-primary ms-sm-auto" type="submit" onclick="this.form.action.value='mark_train'"><i class="bi bi-train-front"></i> {{ planPassMarkTrain }}</button>
+        {% endif %}
+      </form>
     </div>
-    {% endif %}
 
-    <!-- Move existing real trips into this plan (by id) -->
+    <!-- Existing trips into this plan, by id: linked (they stay trips, the plan's fixed
+         part) or moved (they become plan legs and leave the trips). -->
     <form method="post" action="{{ url_for('import_trips_to_plan_route', username=username, plan_uuid=plan.uuid) }}"
           class="p-3 rounded mt-2" style="background:light-dark(#f7f8fa, var(--plan-sunken)); border:1px solid light-dark(#e5e7eb, var(--plan-border));"
-          onsubmit="return confirm('{{ confirmImportTrips|default('Move these trips into the plan? They will be removed from your trips.') }}');">
-      <label class="small text-muted mb-1 d-block">{{ importTrips|default('Move trips into this plan') }}</label>
+          onsubmit="return this.mode.value === 'link' || confirm({{ confirmImportTrips|tojson }});">
+      <label class="small text-muted mb-1 d-block">{{ planFromMyTrips }} <i class="bi bi-info-circle" title="{{ planLinkVsMoveHint }}"></i></label>
       <div class="d-flex gap-2 align-items-center flex-wrap">
-        <input type="text" name="trip_ids" placeholder="{{ importTripsHint|default('Trip ids, comma-separated (e.g. 1042, 1043)') }}" required class="form-control form-control-sm" style="max-width:380px;"/>
-        <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-box-arrow-in-down"></i> {{ importTripsBtn|default('Move in') }}</button>
+        <input type="text" name="trip_ids" placeholder="{{ importTripsHint }}" required class="form-control form-control-sm" style="max-width:340px;"/>
+        <select name="mode" class="form-select form-select-sm" style="max-width:220px;">
+          <option value="link">{{ planLinkTrips }}</option>
+          <option value="move">{{ planMoveTrips }}</option>
+        </select>
+        <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-check-lg"></i> {{ submit }}</button>
       </div>
     </form>
   </div>
@@ -247,14 +326,38 @@
        views) are counted here rather than silently dropped. #}
     <div class="stat-tile"><div class="lbl">{{ totalTrips|default('Trips') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.count }}">{{ plan_stats.count }}</span>{% if num_hidden_trips %}<span class="text-muted" style="font-size:.8rem; font-weight:600;"> +{{ num_hidden_trips }} {{ trip_view_hidden_trips_singular if num_hidden_trips == 1 else trip_view_hidden_trips_plural }}</span>{% endif %}</div></div>
     {% if plan_stats.has_span %}
-    <div class="stat-tile" title="{{ planSpanHint|default('From the first departure to the last arrival') }}"><div class="lbl">{{ totalDuration|default('Total duration') }}</div><div class="val"><span class="fmt-dur" data-s="{{ plan_stats.span_seconds }}">{{ plan_stats.span_h }}</span></div></div>
+    <div class="stat-tile" title="{{ planSpanHint|default('From the first departure to the last arrival') }}"><div class="lbl">{{ totalDuration|default('Total duration') }}</div><div class="val">{% if plan_span_days and plan_stats.span_seconds >= 172800 %}{# A multi-day plan: its days, as the calendar counts them, not "2m. 6j 6h 2min". #}<span class="fmt-days" data-n="{{ plan_span_days }}">{{ plan_span_days }}</span>{% else %}<span class="fmt-dur" data-s="{{ plan_stats.span_seconds }}">{{ plan_stats.span_h }}</span>{% endif %}</div></div>
     {% endif %}
     <div class="stat-tile" title="{{ travelTimeHint|default('Time actually spent on transport (excludes stays, activities and meals)') }}"><div class="lbl">{{ planTravelTime|default('Travel time') }}</div><div class="val"><span class="fmt-dur" data-s="{{ plan_stats.total_duration }}">{{ plan_stats.total_duration_h or '—' }}</span></div></div>
     <div class="stat-tile"><div class="lbl">{{ totalLength|default('Total distance') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.total_distance_km }}">{{ plan_stats.total_distance_km }}</span> km</div></div>
+    {% if plan.pass_days_enabled %}
+    <div class="stat-tile" title="{{ planPassDaysHint }}"><div class="lbl">{{ planPassDays }}</div><div class="val"><span id="passReqCount">{{ plan_pass_required }}</span><span class="text-muted" style="font-size:.9rem; font-weight:600;" id="passOptWrap"{% if not plan_pass_optional %} hidden{% endif %}> +<span id="passOptCount">{{ plan_pass_optional }}</span> <span style="font-weight:500;">{{ planPassOptional|lower }}</span></span></div></div>
+    {% endif %}
     {% if plan_stats.has_price %}
     <div class="stat-tile"><div class="lbl">{{ price|default('Price') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.total_price }}">{{ plan_stats.total_price }}</span> {{ plan_stats.user_currency }}</div></div>
     {% endif %}
   </div>
+
+  {% if plan_calendar %}
+  <!-- Calendar: the plan's days on real dates (Day N from the Day-1 date), to see
+       which weekdays it takes. Opened from the toolbar; remembered per browser. -->
+  <div class="collapse mb-4" id="planCalendar">
+    <div class="plan-cal">
+      <div class="plan-cal-head">
+        <span class="plan-cal-summary" id="planCalSummary"></span>
+        {% if plan_editable and plan_has_relative %}
+        <form method="post" action="{{ url_for('plan_anchor_route', username=username, plan_uuid=plan.uuid) }}" class="d-flex gap-2 align-items-center">
+          <label class="small text-muted mb-0 text-nowrap" for="planCalAnchor">{{ day }} 1 =</label>
+          <input type="date" class="form-control form-control-sm" id="planCalAnchor" name="anchor_date" value="{{ plan.anchor_date }}" onchange="this.form.submit()" style="max-width:170px;"/>
+        </form>
+        {% elif plan_has_relative %}
+        <span class="small text-muted">{{ day }} 1 = <span class="fmt-date-short" data-date="{{ plan.anchor_date }}">{{ plan.anchor_date }}</span></span>
+        {% endif %}
+      </div>
+      <div class="plan-cal-months" id="planCalMonths"></div>
+    </div>
+  </div>
+  {% endif %}
 
   {% if plan_stats.per_type %}
   <div class="breakdown mb-4">
@@ -319,14 +422,10 @@
 
   <!-- trips -->
   {% if plan_trips %}
-  {% if plan_editable and plan_unlogged_count %}
-  {# Picking mode (turned on in the settings): which legs "log as trips" turns into
-     real trips. Hidden — and nothing ticked — until then. #}
+  {% if plan_editable %}
   <div class="plan-pick-bar">
     <input type="checkbox" id="plan-pick-all" class="form-check-input"/>
     <label for="plan-pick-all" class="mb-0" style="cursor:pointer;">{{ planSelectAllLegs }}</label>
-    <span class="pick-count"></span>
-    <button class="btn btn-sm btn-link p-0 ms-1" type="button" onclick="planTogglePicking(false)">{{ cancel }}</button>
   </div>
   {% endif %}
   <ul class="plan-list" id="plan-trip-list">
@@ -335,7 +434,7 @@
     {% set t = item.trip %}
     {# Departure-day key: relative legs group by Day N, dated legs by their date.
        Unanchored legs (no day / no date) carry no key and never start a new group. #}
-    {% set day_key = ('D' ~ t.day_number) if t.day_number is not none else (('A' ~ t.start_date) if t.start_date else None) %}
+    {% set day_key = item.day_key %}
     {# Overnight: arrival lands on a later day than departure. Relative legs compare
        Day numbers; dated legs carry a "(+N)" suffix on the arrival time (formatTrip). #}
     {% set is_overnight = (t.day_number is not none and t.end_day_number and t.end_day_number != t.day_number) or (t.end_time and '(+' in t.end_time) %}
@@ -343,28 +442,36 @@
     <li class="plan-day-sep">
       <span class="day-sep-label">
         {% if t.day_number is not none %}{{ day|default('Day') }} {{ t.day_number }}
-        {% else %}<span class="fmt-date" data-date="{{ t.start_date }}">{{ t.start_date }}</span>{% endif %}
+        {% else %}<span class="fmt-date" data-date="{{ item.cal_start }}">{{ item.cal_start }}</span>{% endif %}
       </span>
+      {# Day N on the Day-1 date, so its weekday shows. #}
+      {% if t.day_number is not none %}<span class="day-sep-date fmt-date-short" data-date="{{ item.cal_start }}" data-weekday="1">{{ item.cal_start }}</span>{% endif %}
       <span class="day-sep-line"></span>
+      {% if plan.pass_days_enabled %}
+      {% set mark = plan_pass_marks.get(day_key, '') %}
+      {% if plan_editable %}
+      <button type="button" class="pass-chip pass-{{ mark or 'none' }}" data-key="{{ day_key }}" data-status="{{ mark }}" data-date="{{ item.cal_start }}" title="{{ planPassToggleHint }}">
+        <i class="bi bi-ticket-perforated"></i><span class="pass-lbl"></span>
+      </button>
+      {% elif mark %}
+      <span class="pass-chip pass-{{ mark }}" data-status="{{ mark }}"><i class="bi bi-ticket-perforated"></i><span class="pass-lbl"></span></span>
+      {% endif %}
+      {% endif %}
     </li>
     {% set daysep.prev = day_key %}
     {% endif %}
-    <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}{% if t.booked %} leg-booked{% endif %}{% if t.validated_trip_id %} leg-logged{% endif %}" data-uid="{{ t.uid }}">
-      {% if plan_editable and plan_unlogged_count %}
+    <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}{% if t.booked %} leg-booked{% endif %}{% if t.validated_trip_id %} leg-logged{% endif %}{% if t.linked_trip_id %} leg-linked{% endif %}" data-uid="{{ t.uid }}">
+      {% if plan_editable %}
+      {# Logged legs can still be ticked (to delete or duplicate them); edits,
+         shifts and logging pass them by. #}
       <div class="leg-pick">
-        {% if t.validated_trip_id %}
-        {# Already a real trip — nothing left to log, so no tick box (kept as an empty
-           cell so the rows still line up). #}
-        <span style="display:inline-block; width:1.05rem;"></span>
-        {% else %}
         <input type="checkbox" class="form-check-input leg-pick-box" value="{{ t.uid }}"
-               title="{{ planLogSelectedHint }}"/>
-        {% endif %}
+               data-logged="{{ 1 if (t.validated_trip_id or t.linked_trip_id) else 0 }}"/>
       </div>
       {% endif %}
       <div class="leg-icon"><img src="{{ static_autoversion('images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
-        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}{% if t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}{% if t.validated_trip_id %}{% if plan_editable %}<a class="logged-pill" href="{{ url_for('public_trip', tripIds=t.validated_trip_id) }}" target="_blank" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</a>{% else %}<span class="logged-pill" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</span>{% endif %}{% endif %}</div>
+        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}{% if t.linked_trip_id %}{% if plan_editable %}<a class="linked-pill" href="{{ url_for('public_trip', tripIds=t.linked_trip_id) }}" target="_blank" title="{{ planLinkedHint }}"><i class="bi bi-lock-fill"></i>{{ planLinkedPill }}</a>{% else %}<span class="linked-pill"><i class="bi bi-lock-fill"></i>{{ planLinkedPill }}</span>{% endif %}{% elif t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}{% if t.validated_trip_id %}{% if plan_editable %}<a class="logged-pill" href="{{ url_for('public_trip', tripIds=t.validated_trip_id) }}" target="_blank" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</a>{% else %}<span class="logged-pill" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</span>{% endif %}{% endif %}</div>
         {% if item.impossible %}
         <div class="leg-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ impossibleConnection|default('Departs before the previous leg arrives') }}</div>
         {% endif %}
@@ -394,7 +501,7 @@
         {% if t.notes %}
         <div class="leg-meta text-truncate" style="font-style:italic;"><i class="bi bi-sticky" style="margin-right:4px;"></i>{{ t.notes }}</div>
         {% endif %}
-        {% if plan_editable and plan_costs %}
+        {% if plan_editable and plan_costs and not t.linked_trip_id %}
         <div class="leg-meta mt-1">
           <i class="bi bi-tag" style="color:light-dark(#98a0ab, var(--plan-action-fg));"></i>
           <select class="leg-cost-select" data-uid="{{ t.uid }}" style="border:1px solid light-dark(#e5e7eb, var(--plan-border)); border-radius:6px; font-size:.8rem; padding:.05rem .3rem; color:light-dark(#6b7280, var(--plan-sep-label));">
@@ -415,18 +522,39 @@
         <button class="btn btn-sm plan-move" data-dir="1" title="{{ moveDown|default('Move down') }}"><i class="bi bi-arrow-down"></i></button>
         {% endif %}
         {# A logged leg is a real trip now: it is edited there, not here. #}
+        {# A linked trip is edited as the trip it is, and only unlinked from here. #}
+        {% if t.linked_trip_id %}
+        <a class="btn btn-sm" title="{{ edit|default('Edit') }}"
+           href="{{ url_for('edit_copy_trip', username=username, tripId=t.linked_trip_id, edit_copy_type='edit') }}"><i class="bi bi-pencil"></i></a>
+        <form method="post" action="{{ url_for('delete_plan_trip_route', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}" onsubmit="return confirm({{ planUnlinkConfirm|tojson }});">
+          <button class="btn btn-sm act-del" type="submit" title="{{ planUnlink }}"><i class="bi bi-link-45deg"></i><i class="bi bi-x"></i></button>
+        </form>
+        {% else %}
         {% if not t.validated_trip_id %}
         <a class="btn btn-sm" title="{{ edit|default('Edit') }}"
            href="{{ url_for('plan_trip_editor', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}"><i class="bi bi-pencil"></i></a>
         {% endif %}
-        <form method="post" action="{{ url_for('delete_plan_trip_route', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}" onsubmit="return confirm('{{ confirmDeletePlanTrip|default('Delete this trip?') }}');">
+        <form method="post" action="{{ url_for('delete_plan_trip_route', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}" onsubmit="return confirm({{ confirmDeletePlanTrip|default('Delete this trip?')|tojson }});">
           <button class="btn btn-sm act-del" type="submit" title="{{ delete|default('Delete') }}"><i class="bi bi-trash3"></i></button>
         </form>
+        {% endif %}
       </div>
       {% endif %}
     </li>
     {% endfor %}
   </ul>
+  {% if plan_editable %}
+  <div class="plan-sel-bar" id="planSelBar">
+    <span class="sel-count"><i class="bi bi-check2-square"></i> <span id="planSelCount">0</span></span>
+    <button class="btn btn-sm btn-primary" type="button" onclick="planBulkOpen()"><i class="bi bi-pencil-square"></i> {{ massEdit }}</button>
+    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="planBulk('duplicate')"><i class="bi bi-files"></i> {{ duplicate }}</button>
+    {% if plan_unlogged_count %}
+    <button class="btn btn-sm btn-outline-success" type="button" onclick="planValidate()"><i class="bi bi-journal-check"></i> {{ logAsTrips }}</button>
+    {% endif %}
+    <button class="btn btn-sm btn-outline-danger" type="button" onclick="planBulkDelete()"><i class="bi bi-trash3"></i> {{ delete }}</button>
+    <button class="btn btn-sm btn-link text-muted ms-auto" type="button" onclick="planSelectAll(false)" title="{{ cancel }}"><i class="bi bi-x-lg"></i></button>
+  </div>
+  {% endif %}
   {% else %}
   <div class="text-center text-muted py-5">
     <div style="font-size:2.5rem; line-height:1;">🗺️</div>
@@ -438,35 +566,101 @@
 </div>
 
 {% if plan_editable %}
-<!-- Edit modal -->
-<div class="modal fade" id="planEditModal" tabindex="-1">
+<!-- Bulk edit of the ticked legs (as the trips list's mass edit): only the fields
+     touched are sent; "—" leaves a field as each leg has it. -->
+<div class="modal fade" id="planBulkModal" tabindex="-1">
   <div class="modal-dialog">
-    <form class="modal-content" id="planEditForm" method="post" action="">
-      <input type="hidden" name="precision" value="relative"/>
-      <div class="modal-header"><h5 class="modal-title">{{ edit|default('Edit') }} {{ singularTrip|default('trip') }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>{{ massEdit }} (<span class="bulk-count"></span>)</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <div class="row g-2 mb-2">
-          <div class="col"><label class="form-label small">{{ newTripStart|default('Departure') }}: Day</label><input type="number" min="1" name="planStartDay" id="e_startDay" class="form-control"/></div>
-          <div class="col"><label class="form-label small">{{ time|default('Time') }}</label><input type="time" name="planStartTime" id="e_startTime" class="form-control"/></div>
+        <div class="mb-3" id="bulkShiftGroup">
+          <label class="form-label">{{ shiftTimes }}</label>
+          <div class="d-flex gap-2 align-items-center flex-wrap">
+            <input type="number" class="form-control" id="bulkShiftDays" style="width:5rem" placeholder="0"/>
+            <span class="text-muted small">{{ wrapped_days }}</span>
+            <input type="number" class="form-control" id="bulkShiftHours" style="width:5rem" placeholder="0"/>
+            <span class="text-muted small">{{ hours }}</span>
+            <input type="number" class="form-control" id="bulkShiftMinutes" style="width:5rem" placeholder="0"/>
+            <span class="text-muted small">{{ minutes }}</span>
+          </div>
         </div>
-        <div class="row g-2 mb-2">
-          <div class="col"><label class="form-label small">{{ newTripEnd|default('Arrival') }}: Day</label><input type="number" min="1" name="planEndDay" id="e_endDay" class="form-control"/></div>
-          <div class="col"><label class="form-label small">{{ time|default('Time') }}</label><input type="time" name="planEndTime" id="e_endTime" class="form-control"/></div>
+        <div id="bulkFieldsGroup">
+          <div class="mb-3"><label class="form-label">{{ operator }}</label><input type="text" class="form-control bulk-field" data-field="operator"/></div>
+          <div class="mb-3"><label class="form-label">{{ lineName }}</label><input type="text" class="form-control bulk-field" data-field="line_name"/></div>
+          <div class="mb-3"><label class="form-label">{{ material_type }}</label><input type="text" class="form-control bulk-field" data-field="material_type"/></div>
+          <div class="row g-2 mb-3">
+            <div class="col"><label class="form-label">{{ reg }}</label><input type="text" class="form-control bulk-field" data-field="reg"/></div>
+            <div class="col"><label class="form-label">{{ seat }}</label><input type="text" class="form-control bulk-field" data-field="seat"/></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ notes }}</label>
+            <textarea class="form-control bulk-field" data-field="notes" rows="2"></textarea>
+            <div class="d-flex gap-3 mt-1">
+              <div class="form-check"><input class="form-check-input" type="radio" name="bulkNotesMode" id="bulkNotesReplace" value="replace" checked><label class="form-check-label" for="bulkNotesReplace">{{ notesReplace }}</label></div>
+              <div class="form-check"><input class="form-check-input" type="radio" name="bulkNotesMode" id="bulkNotesAppend" value="append"><label class="form-check-label" for="bulkNotesAppend">{{ notesAppend }}</label></div>
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col">
+              <label class="form-label">{{ visibility }}</label>
+              <select class="form-select bulk-field" data-field="visibility">
+                <option value="">—</option>
+                <option value="public">{{ visibility_public }}</option>
+                <option value="friends">{{ visibility_friends }}</option>
+                <option value="private">{{ visibility_private }}</option>
+              </select>
+            </div>
+            <div class="col">
+              <label class="form-label">{{ bookedLabel }}</label>
+              <select class="form-select" id="bulkBooked">
+                <option value="">—</option>
+                <option value="1">{{ bookedLabel }}</option>
+                <option value="0">{{ planNotBooked }}</option>
+              </select>
+            </div>
+          </div>
+          {% if plan_costs %}
+          <div class="mb-3">
+            <label class="form-label">{{ sharedCosts }}</label>
+            <select class="form-select" id="bulkCost">
+              <option value="">—</option>
+              <option value="0">{{ noCost }}</option>
+              {% for c in plan_costs %}<option value="{{ c.uid }}">{{ c.name }}</option>{% endfor %}
+            </select>
+          </div>
+          {% endif %}
         </div>
-        <div class="mb-2"><label class="form-label small">{{ operator|default('Operator') }}</label><input type="text" name="operator" id="e_operator" class="form-control"/></div>
-        <div class="mb-2"><label class="form-label small">{{ lineName|default('Line') }}</label><input type="text" name="line_name" id="e_line" class="form-control"/></div>
-        <div class="mb-2"><label class="form-label small">{{ notes|default('Notes') }}</label><textarea name="notes" id="e_notes" class="form-control" rows="2"></textarea></div>
-        <div class="mb-2"><label class="form-label small">{{ visibility|default('Visibility') }}</label>
-          <select name="visibility" id="e_visibility" class="form-select">
-            <option value="public">public</option><option value="friends">friends</option><option value="private">private</option>
-          </select>
-        </div>
-        <p class="small text-muted mb-0">Editing here keeps the existing route. To change the route, delete and re-add the trip.</p>
       </div>
-      <div class="modal-footer"><button type="submit" class="btn btn-primary">{{ save|default('Save') }}</button></div>
-    </form>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel }}</button>
+        <button type="button" class="btn btn-primary" id="bulkSubmit" onclick="planBulkSubmit()">{{ submit }}</button>
+      </div>
+    </div>
   </div>
 </div>
+
+{% if plan_unlogged_count %}
+<!-- Log as trips: the Day-1 date relative legs are anchored to. -->
+<div class="modal fade" id="planLogModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-journal-check me-2"></i>{{ logAsTrips }} (<span id="planLogCount"></span>)</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        {% if plan_has_relative %}
+        <label class="form-label" for="planLogDate">{{ day }} 1 =</label>
+        <input type="date" class="form-control" id="planLogDate" value="{{ plan.anchor_date }}" required/>
+        {% else %}
+        <p class="mb-0">{{ confirmLogAsTrips }}</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel }}</button>
+        <button type="button" class="btn btn-success" onclick="planLogSubmit()">{{ logAsTrips }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- Shared cost edit modal -->
 <div class="modal fade" id="costEditModal" tabindex="-1">
@@ -534,6 +728,161 @@
   });
 })();
 
+// Multi-day spans: "67 days".
+document.querySelectorAll('.fmt-days').forEach(function (el) {
+  var n = parseInt(el.dataset.n, 10);
+  if (typeof pluralize === 'function' && !isNaN(n)) el.textContent = pluralize({{ planCalDays|tojson }}, n);
+});
+
+// Short dates (day separators of Day N legs, the calendar's Day-1 caption): with the
+// weekday where asked, which is what a Day N plan wants to know.
+(function () {
+  var LOC = "{{ langId }}" || 'en';
+  var plain = new Intl.DateTimeFormat(LOC, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  var withWd = new Intl.DateTimeFormat(LOC, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  document.querySelectorAll('.fmt-date-short').forEach(function (el) {
+    var p = (el.dataset.date || '').split('-');
+    if (p.length !== 3) return;
+    el.textContent = (el.dataset.weekday ? withWd : plain).format(new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])));
+  });
+})();
+
+{% if plan_calendar %}
+// Calendar: month grids from the plan's first day to its last, the trip's span
+// shaded, departure days solid, pass travel days dotted, weekends tinted.
+var planCal = {{ plan_calendar|tojson }};
+function planCalRender() {
+  var LOC = "{{ langId }}" || 'en';
+  var info = {};
+  try { var l = new Intl.Locale(LOC); info = (l.getWeekInfo ? l.getWeekInfo() : l.weekInfo) || {}; } catch (e) {}
+  var firstDay = info.firstDay || 1;            // 1 = Monday … 7 = Sunday
+  var weekend = info.weekend || [6, 7];
+  var iso = function (d) { return d.toISOString().slice(0, 10); };
+  var parse = function (s) { var p = s.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); };
+  var isoDay = function (d) { return d.getUTCDay() || 7; };
+  var start = parse(planCal.start), end = parse(planCal.end), today = iso(new Date());
+  var monthFmt = new Intl.DateTimeFormat(LOC, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  var wdFmt = new Intl.DateTimeFormat(LOC, { weekday: 'narrow', timeZone: 'UTC' });
+  var box = document.getElementById('planCalMonths');
+  box.innerHTML = '';
+  var m = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  for (var shown = 0; m <= end && shown < 24; shown++) {
+    var wrap = document.createElement('div');
+    var name = document.createElement('div');
+    name.className = 'cal-month-name';
+    name.textContent = monthFmt.format(m);
+    wrap.appendChild(name);
+    var grid = document.createElement('div');
+    grid.className = 'cal-grid';
+    for (var i = 0; i < 7; i++) {
+      var wd = ((firstDay - 1 + i) % 7) + 1;   // ISO weekday of this column
+      var h = document.createElement('div');
+      h.className = 'cal-wd' + (weekend.indexOf(wd) !== -1 ? ' we' : '');
+      h.textContent = wdFmt.format(new Date(Date.UTC(2024, 0, wd)));   // 2024-01-01 is a Monday
+      grid.appendChild(h);
+    }
+    var lead = (isoDay(m) - firstDay + 7) % 7;
+    for (var k = 0; k < lead; k++) grid.appendChild(document.createElement('div'));
+    for (var d = new Date(m); d.getUTCMonth() === m.getUTCMonth(); d.setUTCDate(d.getUTCDate() + 1)) {
+      var key = iso(d), info2 = planCal.days[key] || {};
+      var cell = document.createElement('div');
+      cell.className = 'cal-d';
+      var col = (isoDay(d) - firstDay + 7) % 7;
+      var last = new Date(d); last.setUTCDate(d.getUTCDate() + 1);
+      if (weekend.indexOf(isoDay(d)) !== -1) cell.classList.add('we');
+      if (d >= start && d <= end) {
+        cell.classList.add('in');
+        // The band's rounded ends: the trip's first and last day, and each week row's.
+        if (+d === +start || col === 0 || d.getUTCDate() === 1) cell.classList.add('rs');
+        if (+d === +end || col === 6 || last.getUTCMonth() !== d.getUTCMonth()) cell.classList.add('re');
+      } else {
+        cell.classList.add('out');
+      }
+      if (info2.legs) cell.classList.add('dep');
+      if (info2.pass) cell.classList.add('pass-' + info2.pass);
+      if (key === today) cell.classList.add('today');
+      var num = document.createElement('span');
+      num.textContent = d.getUTCDate();
+      cell.appendChild(num);
+      grid.appendChild(cell);
+    }
+    wrap.appendChild(grid);
+    box.appendChild(wrap);
+    m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1));
+  }
+  var legend = document.createElement('div');
+  legend.className = 'cal-legend';
+  legend.innerHTML = '<span><i class="lg-dep"></i></span><span><i class="lg-span"></i></span><span><i class="lg-we"></i></span>'
+    {% if plan.pass_days_enabled %}+ '<span><i class="lg-pass"></i></span>'{% endif %};
+  var labels = [{{ planCalDepartures|tojson }}, {{ planCalSpan|tojson }}, {{ planCalWeekend|tojson }}, {{ planPassDays|tojson }}];
+  legend.querySelectorAll('span').forEach(function (sp, i) { sp.appendChild(document.createTextNode(labels[i])); });
+  box.parentNode.appendChild(legend);
+  // "3 Sept → 12 Sept · 10 days · 8 weekdays"
+  var days = Math.round((end - start) / 86400000) + 1, work = 0;
+  for (var x = new Date(start); x <= end; x.setUTCDate(x.getUTCDate() + 1)) if (weekend.indexOf(isoDay(x)) === -1) work++;
+  var dFmt = new Intl.DateTimeFormat(LOC, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  var plural = typeof pluralize === 'function' ? pluralize : function (f, n) { return (f.other || f).replace('{n}', n); };
+  document.getElementById('planCalSummary').textContent =
+    (days > 1 ? dFmt.format(start) + ' \u2192 ' + dFmt.format(end) : dFmt.format(start)) + ' \u00b7 ' +
+    plural({{ planCalDays|tojson }}, days) + ' \u00b7 ' + plural({{ planCalWorkdays|tojson }}, work);
+}
+(function () {
+  var el = document.getElementById('planCalendar');
+  var rendered = false;
+  var draw = function () { if (!rendered) { planCalRender(); rendered = true; } };
+  el.addEventListener('show.bs.collapse', draw);
+  el.addEventListener('shown.bs.collapse', function () { try { localStorage.setItem('planCalOpen', '1'); } catch (e) {} });
+  el.addEventListener('hidden.bs.collapse', function () { try { localStorage.removeItem('planCalOpen'); } catch (e) {} });
+  var open = location.hash === '#planCalendar';
+  try { open = open || localStorage.getItem('planCalOpen') === '1'; } catch (e) {}
+  if (open) { draw(); el.classList.add('show'); }
+})();
+{% endif %}
+
+{% if plan.pass_days_enabled %}
+// Rail-pass travel days: each day's mark, and the counts (one per calendar date;
+// required wins over optional, as on the server).
+var PASS_LABELS = { required: {{ planPassRequired|tojson }}, optional: {{ planPassOptional|tojson }}, '': '' };
+function passRefresh() {
+  var byDate = {};
+  document.querySelectorAll('.pass-chip').forEach(function (c) {
+    var st = c.dataset.status || '';
+    c.className = 'pass-chip pass-' + (st || 'none');
+    c.querySelector('.pass-lbl').textContent = PASS_LABELS[st];
+    if (st && c.dataset.date && byDate[c.dataset.date] !== 'required') byDate[c.dataset.date] = st;
+  });
+  var req = 0, opt = 0;
+  Object.keys(byDate).forEach(function (d) { if (byDate[d] === 'required') req++; else opt++; });
+  var r = document.getElementById('passReqCount'), o = document.getElementById('passOptCount');
+  if (r) r.textContent = req;
+  if (o) { o.textContent = opt; document.getElementById('passOptWrap').hidden = !opt; }
+  if (typeof planCal !== 'undefined') {
+    Object.keys(planCal.days).forEach(function (d) { delete planCal.days[d].pass; });
+    Object.keys(byDate).forEach(function (d) { (planCal.days[d] = planCal.days[d] || { legs: 0 }).pass = byDate[d]; });
+    if (document.getElementById('planCalMonths').children.length) {
+      var lg = document.querySelector('.cal-legend'); if (lg) lg.remove();
+      planCalRender();
+    }
+  }
+}
+{% if plan_editable %}
+document.querySelectorAll('button.pass-chip').forEach(function (c) {
+  c.addEventListener('click', function () {
+    var next = { '': 'required', required: 'optional', optional: '' }[c.dataset.status || ''];
+    var prev = c.dataset.status || '';
+    c.dataset.status = next;
+    passRefresh();
+    fetch({{ url_for('plan_pass_day_route', username=username, plan_uuid=plan.uuid)|tojson }}, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ day_key: c.dataset.key, status: next })
+    }).then(function (r) { if (!r.ok) throw new Error(r.status); })
+      .catch(function () { c.dataset.status = prev; passRefresh(); });
+  });
+});
+{% endif %}
+passRefresh();
+{% endif %}
+
 {% if plan_editable %}
 {% if is_owner %}
 // Site-owner only: copy this plan into another account (see copy_plan_to_user_route).
@@ -559,84 +908,138 @@ function planCopyShareUrl(btn) {
   else { document.execCommand('copy'); done(); }
 }
 
-// Picking mode: off by default, so "log as trips" logs the whole plan the way it
-// always did. Turned on from the settings panel, it reveals a tick box per unlogged
-// leg (none ticked to start) and the button then logs only what is ticked.
-function planPickedUids() {
+// Selection, as on the trips list: tick legs, act on them from the bar. With nothing
+// ticked, "log as trips" logs the whole plan.
+var PLAN_BULK_URL = {{ url_for('bulk_plan_trips_route', username=username, plan_uuid=plan.uuid)|tojson }};
+function planPickedUids(unloggedOnly) {
   return Array.from(document.querySelectorAll('.leg-pick-box:checked'))
+              .filter(function(b){ return !unloggedOnly || b.dataset.logged !== '1'; })
               .map(function(b){ return b.value; });
-}
-function planPicking() {
-  return document.body.classList.contains('plan-picking');
 }
 function planPickRefresh() {
   var boxes = document.querySelectorAll('.leg-pick-box');
   var picked = planPickedUids().length;
-  document.querySelectorAll('.pick-count').forEach(function(el){
-    el.textContent = planPicking() ? '(' + picked + '/' + boxes.length + ')' : '';
-  });
+  boxes.forEach(function(b){ b.closest('.plan-leg').classList.toggle('leg-selected', b.checked); });
+  var bar = document.getElementById('planSelBar');
+  if (bar) bar.classList.toggle('show', picked > 0);
+  var n = document.getElementById('planSelCount');
+  if (n) n.textContent = picked;
   var all = document.getElementById('plan-pick-all');
   if (all) {
     all.checked = picked === boxes.length && boxes.length > 0;
     all.indeterminate = picked > 0 && picked < boxes.length;
   }
 }
-function planTogglePicking(on) {
-  var want = on === undefined ? !planPicking() : on;
-  document.body.classList.toggle('plan-picking', want);
-  if (!want) {
-    // Leaving picking mode clears the selection, so the button goes back to
-    // meaning "log the whole plan".
-    document.querySelectorAll('.leg-pick-box').forEach(function(b){ b.checked = false; });
-  }
+function planSelectAll(on) {
+  document.querySelectorAll('.leg-pick-box').forEach(function(b){ b.checked = on; });
   planPickRefresh();
-  if (want) {
-    var list = document.getElementById('plan-trip-list');
-    if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
 }
 document.querySelectorAll('.leg-pick-box').forEach(function(b){
   b.addEventListener('change', planPickRefresh);
 });
 (function () {
   var all = document.getElementById('plan-pick-all');
-  if (!all) return;
-  all.addEventListener('change', function () {
-    document.querySelectorAll('.leg-pick-box').forEach(function(b){ b.checked = all.checked; });
-    planPickRefresh();
-  });
+  if (all) all.addEventListener('change', function () { planSelectAll(all.checked); });
 })();
 
-function planValidate() {
-  // Not picking -> log everything still unlogged (an empty trip_uids means "all").
-  var uids = planPicking() ? planPickedUids() : [];
-  if (planPicking() && !uids.length) { alert({{ planNoLegsSelected|tojson }}); return; }
-  {% if plan_has_relative %}
-  // Relative (Day N) legs need a real Day-1 date to anchor to.
-  var d = prompt("{{ validatePrompt|default('Start date for Day 1 (YYYY-MM-DD):') }}", "{{ plan.anchor_date }}");
-  if (!d) return;
-  document.getElementById('plan-validate-date').value = d;
-  {% else %}
-  // Fully precise-dated plan: the trips already carry their dates, just log them.
-  if (!confirm("{{ confirmLogAsTrips|default('Log this plan as real trips?') }}")) return;
-  {% endif %}
-  document.getElementById('plan-validate-uids').value = uids.join(',');
-  document.getElementById('plan-validate-form').submit();
+function planBulkPost(body) {
+  return fetch(PLAN_BULK_URL, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+  }).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (d) {
+      if (!r.ok || !d.success) throw new Error(d.error || r.status);
+      return d;
+    });
+  });
+}
+function planBulk(action) {
+  var uids = planPickedUids();
+  if (!uids.length) return;
+  planBulkPost({action: action, uids: uids})
+    .then(function () { location.reload(); }, function (e) { alert(e.message); });
+}
+function planBulkDelete() {
+  var n = planPickedUids().length;
+  if (!n) return;
+  var msg = n === 1 ? {{ confirmDeletePlanTrip|default('Delete this trip?')|tojson }}
+                    : {{ confirmMultiDelete|tojson }}.replace('${tripNumber}', n);
+  if (confirm(msg)) planBulk('delete');
 }
 
-var planEditModal = new bootstrap.Modal(document.getElementById('planEditModal'));
-function planEdit(t) {
-  document.getElementById('planEditForm').action =
-    "{{ url_for('plan_view', username=username, plan_uuid=plan.uuid) }}".replace(/\/$/, '') + "/trip/" + t.uid + "/edit";
-  document.getElementById('e_startDay').value = t.start_day || 1;
-  document.getElementById('e_startTime').value = t.start_time || '';
-  document.getElementById('e_endDay').value = t.end_day || t.start_day || 1;
-  document.getElementById('e_endTime').value = t.end_time || '';
-  document.getElementById('e_operator').value = t.operator || '';
-  document.getElementById('e_line').value = t.line_name || '';
-  document.getElementById('e_notes').value = t.notes || '';
-  document.getElementById('e_visibility').value = t.visibility || 'public';
-  planEditModal.show();
+// Mass edit / shift. Fields only count once touched ("—" / empty = unchanged).
+var planBulkModal = new bootstrap.Modal(document.getElementById('planBulkModal'));
+var planBulkDirty = new Set();
+var planBulkUids = [];
+document.querySelectorAll('#planBulkModal .bulk-field').forEach(function (el) {
+  ['input', 'change'].forEach(function (ev) {
+    el.addEventListener(ev, function () { planBulkDirty.add(el.dataset.field); });
+  });
+});
+function planBulkOpen(uids, shiftOnly) {
+  planBulkUids = uids || planPickedUids(true);
+  if (!planBulkUids.length) return;
+  planBulkDirty.clear();
+  document.querySelectorAll('#planBulkModal input, #planBulkModal textarea').forEach(function (el) {
+    if (el.type !== 'radio') el.value = '';
+  });
+  document.querySelectorAll('#planBulkModal select').forEach(function (el) { el.value = ''; });
+  document.getElementById('bulkNotesReplace').checked = true;
+  document.getElementById('bulkFieldsGroup').style.display = shiftOnly ? 'none' : '';
+  document.querySelectorAll('#planBulkModal .bulk-count').forEach(function (el) { el.textContent = planBulkUids.length; });
+  planBulkModal.show();
+}
+// The whole plan a few days earlier or later.
+function planShiftAll() {
+  var uids = Array.from(document.querySelectorAll('.leg-pick-box'))
+                  .filter(function (b) { return b.dataset.logged !== '1'; })
+                  .map(function (b) { return b.value; });
+  planBulkOpen(uids, true);
+  setTimeout(function () { document.getElementById('bulkShiftDays').focus(); }, 300);
+}
+function planBulkSubmit() {
+  var num = function (id) { return parseInt(document.getElementById(id).value, 10) || 0; };
+  var shift = num('bulkShiftDays') * 1440 + num('bulkShiftHours') * 60 + num('bulkShiftMinutes');
+  var fields = {};
+  planBulkDirty.forEach(function (f) {
+    var el = document.querySelector('#planBulkModal .bulk-field[data-field="' + f + '"]');
+    if (f === 'visibility' && !el.value) return;
+    fields[f] = el.value.trim();
+  });
+  var booked = document.getElementById('bulkBooked').value;
+  var cost = document.getElementById('bulkCost');
+  var body = {action: 'edit', uids: planBulkUids, fields: fields, shift_minutes: shift,
+              notes_append: document.getElementById('bulkNotesAppend').checked};
+  if (booked !== '') body.booked = booked === '1';
+  if (cost && cost.value !== '') body.cost_id = parseInt(cost.value, 10);
+  if (!shift && !Object.keys(fields).length && body.booked === undefined && body.cost_id === undefined) {
+    planBulkModal.hide();
+    return;
+  }
+  var btn = document.getElementById('bulkSubmit');
+  btn.disabled = true;
+  planBulkPost(body).then(function () { location.reload(); },
+                         function (e) { btn.disabled = false; alert(e.message); });
+}
+
+var planLogModalEl = document.getElementById('planLogModal');
+var planLogModal = planLogModalEl ? new bootstrap.Modal(planLogModalEl) : null;
+var planLogUids = [];
+function planValidate() {
+  // Ticked legs (still to log) when there are some, else the whole plan (empty = all).
+  planLogUids = planPickedUids(true);
+  if (planPickedUids().length && !planLogUids.length) { alert({{ planNoLegsSelected|tojson }}); return; }
+  document.getElementById('planLogCount').textContent =
+    planLogUids.length || {{ plan_unlogged_count|default(0)|tojson }};
+  planLogModal.show();
+}
+function planLogSubmit() {
+  var d = document.getElementById('planLogDate');
+  if (d) {
+    if (!d.value) { d.reportValidity(); return; }
+    document.getElementById('plan-validate-date').value = d.value;
+  }
+  document.getElementById('plan-validate-uids').value = planLogUids.join(',');
+  document.getElementById('plan-validate-form').submit();
 }
 
 // Reorder: up/down swap, then POST the new uid order. Reload afterwards so the

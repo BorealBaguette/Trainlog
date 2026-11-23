@@ -34,6 +34,49 @@ def _timing_from_trip(r):
     }
 
 
+def copy_trip_into_plan(pg, r, plan_uid, user_id, sort_order, now):
+    """Write trip row `r` (a trips mapping) into plan `plan_uid` as a plain plan leg
+    with absolute timing. Returns the new plan_trips uid."""
+    pres = pg.execute(get_user_lines_query(), {"ids": [r["trip_id"]]}).fetchone()
+    coords = (
+        json.loads(pres._mapping["path"])
+        if pres and pres._mapping["path"]
+        else []
+    )
+    plan_trip = PlanTrip(
+        plan_id=plan_uid,
+        user_id=user_id,
+        origin_station=r["origin_station"],
+        destination_station=r["destination_station"],
+        trip_type=r["trip_type"],
+        operator=r["operator"],
+        line_name=r["line_name"],
+        material_type=r["material_type"],
+        material_type_advanced=r["material_type_advanced"],
+        reg=r["reg"],
+        seat=r["seat"],
+        notes=r["notes"],
+        trip_length=r["trip_length"],
+        estimated_trip_duration=r["estimated_trip_duration"],
+        countries=r["countries"],
+        price=r["price"],
+        currency=r["currency"],
+        purchase_date=r["purchase_date"],
+        # A real trip with a price was actually paid → booked.
+        booked=r["price"] not in (None, ""),
+        waypoints=r["waypoints"],
+        visibility=r["visibility"],
+        power_type=r["power_type"],
+        co2_override=r["co2_override"],
+        path=coords,
+        timing=_timing_from_trip(r),
+        sort_order=sort_order,
+        created=now,
+        last_modified=now,
+    )
+    return create_plan_trip(plan_trip, pg_session=pg)
+
+
 def import_trips_to_plan(plan, trip_ids, pg_session=None):
     """Move the given trips (only those owned by the plan's owner) into `plan`. Returns
     the list of trip ids actually moved."""
@@ -52,45 +95,7 @@ def import_trips_to_plan(plan, trip_ids, pg_session=None):
             if row is None:
                 continue  # not found or not owned -> skip
             r = row._mapping
-            pres = pg.execute(get_user_lines_query(), {"ids": [tid]}).fetchone()
-            coords = (
-                json.loads(pres._mapping["path"])
-                if pres and pres._mapping["path"]
-                else []
-            )
-
-            plan_trip = PlanTrip(
-                plan_id=plan["uid"],
-                user_id=plan["user_id"],
-                origin_station=r["origin_station"],
-                destination_station=r["destination_station"],
-                trip_type=r["trip_type"],
-                operator=r["operator"],
-                line_name=r["line_name"],
-                material_type=r["material_type"],
-                material_type_advanced=r["material_type_advanced"],
-                reg=r["reg"],
-                seat=r["seat"],
-                notes=r["notes"],
-                trip_length=r["trip_length"],
-                estimated_trip_duration=r["estimated_trip_duration"],
-                countries=r["countries"],
-                price=r["price"],
-                currency=r["currency"],
-                purchase_date=r["purchase_date"],
-                # An imported real trip with a price was actually paid → booked.
-                booked=r["price"] not in (None, ""),
-                waypoints=r["waypoints"],
-                visibility=r["visibility"],
-                power_type=r["power_type"],
-                co2_override=r["co2_override"],
-                path=coords,
-                timing=_timing_from_trip(r),
-                sort_order=next_order,
-                created=now,
-                last_modified=now,
-            )
-            create_plan_trip(plan_trip, pg_session=pg)
+            copy_trip_into_plan(pg, r, plan["uid"], plan["user_id"], next_order, now)
             next_order += 1
 
             # Move = delete the original trip + its path and tag links.
@@ -101,3 +106,36 @@ def import_trips_to_plan(plan, trip_ids, pg_session=None):
 
     logger.info(f"Moved {len(moved)} trips into plan {plan['uid']}")
     return moved
+
+
+def link_trips_to_plan(plan, trip_ids, pg_session=None):
+    """Link the given trips (only those owned by the plan's owner) into `plan`, at the
+    end, without copying them: the fixed part of a plan, read live from the trips (see
+    plan_trips_resolved). A trip already in the plan is skipped. Returns the ids
+    linked."""
+    now = datetime.now()
+    linked = []
+    with get_or_create_pg_session(pg_session) as pg:
+        next_order = pg.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM plan_trips WHERE plan_id = :p",
+            {"p": plan["uid"]},
+        ).scalar()
+        for tid in trip_ids:
+            row = pg.execute(
+                """
+                INSERT INTO plan_trips (plan_id, user_id, sort_order, timing_mode,
+                                        linked_trip_id, created, last_modified)
+                SELECT :plan_id, :user_id, :sort_order, 'linked', trip_id, :now, :now
+                FROM trips WHERE trip_id = :tid AND user_id = :user_id
+                ON CONFLICT (plan_id, linked_trip_id) WHERE linked_trip_id IS NOT NULL
+                DO NOTHING
+                RETURNING linked_trip_id
+                """,
+                {"plan_id": plan["uid"], "user_id": plan["user_id"], "sort_order": next_order,
+                 "tid": int(tid), "now": now},
+            ).fetchone()
+            if row is not None:
+                linked.append(row[0])
+                next_order += 1
+    logger.info(f"Linked {len(linked)} trips into plan {plan['uid']}")
+    return linked

@@ -79,6 +79,52 @@ def resolve_operators(
     }
 
 
+def operator_logos_for_texts(
+    texts: Iterable[tuple[str | None, str | None]], pg_session_=None
+) -> dict[tuple[str, str], list[dict[str, str | None]]]:
+    """For rows that hold an operator text but no trip_operators rows (plan legs):
+    {(operator text, trip type): [{"operator_name", "logo_url"}, ...]} in the order
+    typed, each through the aliases (CFF -> the SBB logo, still labelled CFF), with the
+    current logo. Names that match nothing come back with logo_url None."""
+    by_bucket: dict[str, set[str]] = {}
+    pairs = {(t, ty) for t, ty in texts if t}
+    for raw, trip_type in pairs:
+        by_bucket.setdefault(operator_bucket(trip_type), set()).update(split_operators(raw))
+    if not pairs:
+        return {}
+
+    with get_or_create_pg_session(pg_session_) as pg:
+        resolved = {
+            bucket: resolve_operators(names, bucket, pg_session_=pg)
+            for bucket, names in by_bucket.items()
+        }
+        ids = {info["operator_id"] for r in resolved.values() for info in r.values()}
+        logos = {}
+        if ids:
+            for row in pg.execute(
+                """
+                SELECT DISTINCT ON (operator_id) operator_id, logo_url
+                FROM operator_logos
+                WHERE operator_id = ANY(:ids)
+                ORDER BY operator_id, effective_date DESC NULLS LAST, uid DESC
+                """,
+                {"ids": list(ids)},
+            ).fetchall():
+                logos[row[0]] = row[1]
+
+    out = {}
+    for raw, trip_type in pairs:
+        pool = resolved.get(operator_bucket(trip_type), {})
+        out[(raw, trip_type)] = [
+            {
+                "operator_name": name,
+                "logo_url": logos.get(pool[name]["operator_id"]) if name in pool else None,
+            }
+            for name in split_operators(raw)
+        ]
+    return out
+
+
 def find_operator_ids(name: str, exact: bool = False, pg_session_=None) -> list[int]:
     """Operators whose canonical name or any alias matches `name`.
 

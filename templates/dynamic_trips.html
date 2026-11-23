@@ -1235,7 +1235,7 @@
             <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export fa-fw"></i>  {{export}}</li>
             {% if not isPublic %}
             <li class="dropdown-item" onclick="bulkTicketPicker.open();"><i class="bi bi-ticket-perforated-fill fa-fw" style="display:inline-block"></i>  {{associate_ticket}}</li>
-            <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot fa-fw"></i>  {{ moveToPlan|default('Move to a plan') }}</li>
+            <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot fa-fw"></i>  {{ addToPlan }}</li>
             <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags fa-fw"></i>  {{manage_tags}}</li>
             {% endif %}
             <li class="dropdown-item" onclick="exportGpx();"><i class="fa-solid fa-route fa-fw"></i>  {{exportGpx}}</li>
@@ -1296,7 +1296,7 @@
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="planSearchModalLabel">{{ moveToPlan|default('Move to a plan') }}</h5>
+        <h5 class="modal-title" id="planSearchModalLabel">{{ addToPlan }}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -1304,9 +1304,11 @@
           <label for="planSearchInput" class="form-label">{{ selectPlan|default('Select a plan') }}</label>
           <select id="planSearchInput" class="form-select"></select>
         </div>
+        <p class="small text-muted mt-3 mb-0">{{ planLinkVsMoveHint }}</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" onclick="moveSelectedToPlan($('#planSearchInput').val())">{{submit}}</button>
+        <button type="button" class="btn btn-outline-primary" onclick="moveSelectedToPlan($('#planSearchInput').val())"><i class="fa-solid fa-right-to-bracket"></i> {{ planMoveTrips }}</button>
+        <button type="button" class="btn btn-primary" onclick="moveSelectedToPlan($('#planSearchInput').val(), true)"><i class="fa-solid fa-link"></i> {{ planLinkTrips }}</button>
       </div>
     </div>
   </div>
@@ -4266,8 +4268,9 @@ function attachSelectedTrips(ticket_ids, replace){
     });
 }
 
-function moveSelectedToPlan(plan_uuid){
-    if (!plan_uuid || !confirm("{{ confirmImportTrips|default('Move these trips into the plan? They will be removed from your trips.') }}")) return;
+// link: the trips stay trips, shown in the plan as its fixed part; otherwise they move.
+function moveSelectedToPlan(plan_uuid, link){
+    if (!plan_uuid || (!link && !confirm({{ confirmImportTrips|tojson }}))) return;
 
     const form = document.createElement('form');
     form.method = 'post';
@@ -4277,6 +4280,13 @@ function moveSelectedToPlan(plan_uuid){
     input.name = 'trip_ids';
     input.value = checkedTrips;
     form.appendChild(input);
+    if (link) {
+        const mode = document.createElement('input');
+        mode.type = 'hidden';
+        mode.name = 'mode';
+        mode.value = 'link';
+        form.appendChild(mode);
+    }
     document.body.appendChild(form);
     form.submit();
 }

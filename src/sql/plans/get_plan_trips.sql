@@ -8,7 +8,7 @@ SELECT pt.*,
         WHERE l.operator_id = o.operator_id
         ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
         LIMIT 1) AS logo_url
-FROM plan_trips pt
+FROM plan_trips_resolved pt
 -- short_name is not unique; pick one operator deterministically (mirrors get_trip.sql).
 LEFT JOIN LATERAL (
     SELECT operator_id

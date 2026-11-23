@@ -17,3 +17,4 @@ SET timing_mode = :timing_mode,
     visibility = :visibility,
     last_modified = :last_modified
 WHERE uid = :uid AND user_id = :user_id
+  AND linked_trip_id IS NULL  -- a linked trip is edited as the trip it is

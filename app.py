@@ -18,6 +18,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta, UTC
+from datetime import time as dtime
 from decimal import Decimal
 from glob import glob
 from io import BytesIO, StringIO
@@ -228,7 +229,7 @@ from src.global_map import (
     build_status,
     get_cache_path,
 )
-from src.operators import find_operator_ids, get_trip_operator_logos
+from src.operators import find_operator_ids, get_trip_operator_logos, operator_logos_for_texts
 from src.captcha import check_solution, new_challenge
 from src.pg import setup_db, pg_session
 from src.search_terms import like_pattern
@@ -327,7 +328,13 @@ from src.plans.update_plan_trip_full import update_plan_trip_full
 from src.plans.delete_plan import delete_plan, delete_plan_trip
 from src.plans.duplicate_plan import duplicate_plan
 from src.plans.validate_plan import validate_plan
-from src.plans.import_trips import import_trips_to_plan
+from src.plans.bulk import (
+    BulkError,
+    bulk_delete_plan_trips,
+    bulk_duplicate_plan_trips,
+    bulk_edit_plan_trips,
+)
+from src.plans.import_trips import import_trips_to_plan, link_trips_to_plan
 from src.carbon import *
 from src.account_export import build_account_data_csvs
 from src.delete_account import delete_account_data
@@ -5417,30 +5424,75 @@ def savePlanTrip(username):
 # itinerary+map (new_trip.html), validatable into real trips.
 # ---------------------------------------------------------------------------
 
-def _plan_chrono_key(pt):
+def _plan_chrono_key(pt, anchor):
     """Chronological anchor key for a plan-trip, or None when the leg is unanchored
-    (no day and no date) and therefore freely reorderable. Relative (Day N) legs sort
-    before absolute dated ones (mirrors the historical ordering); within a day,
-    untimed legs come after timed ones. Arrival day/time is the final tie-break so an
-    overnight leg (it arrives on a later day) always sinks to the end of its departure
-    day — nothing can depart on that day after you've already travelled into the next."""
+    (no day and no date) and therefore freely reorderable.
+
+    Day N legs are placed on `anchor` (the plan's Day-1 preview date) so they
+    interleave with dated legs — a booked flight linked into a plan of Day N
+    possibilities sits on its own day among them. Within a day, untimed legs come
+    after timed ones. Arrival is the final tie-break so an overnight leg (it arrives
+    on a later day) always sinks to the end of its departure day — nothing can depart
+    on that day after you've already travelled into the next."""
     if pt["start_day"] is not None:  # relative leg
-        st = pt["start_time"]
-        ed = pt["end_day"] or pt["start_day"]
-        return (0, pt["start_day"], (1,) if st is None else (0, st), ed)
-    if pt["start_datetime"] is not None:  # absolute dated leg (precise / onlyDate)
-        return (1, pt["start_datetime"], pt["end_datetime"] or pt["start_datetime"])
+        st, et = pt["start_time"], pt["end_time"]
+        day = anchor + timedelta(days=pt["start_day"] - 1)
+        end_day = anchor + timedelta(days=(pt["end_day"] or pt["start_day"]) - 1)
+        end = datetime.combine(end_day, et or st or dtime.max)
+        return (day, 1 if st is None else 0, st or dtime.min, end)
+    sdt = pt["start_datetime"]
+    if sdt is not None:  # absolute dated leg (precise / onlyDate)
+        untimed = pt["timing_mode"] == "onlyDate"
+        return (sdt.date(), 1 if untimed else 0, dtime.min if untimed else sdt.time(),
+                pt["end_datetime"] or sdt)
     return None  # undated (unknown) -> no anchor
 
 
-def _plan_display_order(rows):
+def _plan_leg_days(pt, anchor):
+    """{"day_key", "cal_start", "cal_end"} for a plan leg — see build_plan_trip_list."""
+    if pt["start_day"] is not None:
+        end_day = max(pt["end_day"] or pt["start_day"], pt["start_day"])
+        return {"day_key": f"D{pt['start_day']}",
+                "cal_start": (anchor + timedelta(days=pt["start_day"] - 1)).isoformat(),
+                "cal_end": (anchor + timedelta(days=end_day - 1)).isoformat()}
+    if pt["start_datetime"] is not None:
+        start = pt["start_datetime"].date()
+        end = max((pt["end_datetime"] or pt["start_datetime"]).date(), start)
+        return {"day_key": f"A{start.isoformat()}",
+                "cal_start": start.isoformat(), "cal_end": end.isoformat()}
+    return {"day_key": None, "cal_start": None, "cal_end": None}
+
+
+def _plan_day_date(day_key, anchor):
+    """The calendar date of a plan day key ('D<n>' on the Day-1 date, 'A<date>')."""
+    if day_key.startswith("D"):
+        return anchor + timedelta(days=int(day_key[1:]) - 1)
+    return date.fromisoformat(day_key[1:])
+
+
+def plan_pass_day_counts(marks, day_dates):
+    """(required, optional) travel days: `marks` {day_key: status} counted only for
+    days the plan has (`day_dates` {day_key: date}). Two keys on one calendar date
+    (a Day N and a dated leg the same day) are one day; required wins."""
+    by_date = {}
+    for key, status in marks.items():
+        when = day_dates.get(key)
+        if when is None:
+            continue
+        if by_date.get(when) != "required":
+            by_date[when] = status
+    required = sum(1 for s in by_date.values() if s == "required")
+    return required, len(by_date) - required
+
+
+def _plan_display_order(rows, anchor=RELATIVE_REF_DATE):
     """Display order for plan legs. `rows` arrive in user order (sort_order, uid).
     Anchored legs are re-sorted chronologically among themselves — their relative
     order is dictated by their day/time, not by the arrows — while unanchored legs
     keep exactly the slot the user put them in. The sort is stable, so legs with an
     identical key (e.g. two untimed legs on the same day) still follow the user
     order and thus stay swappable."""
-    keyed = [(_plan_chrono_key(r._mapping), r) for r in rows]
+    keyed = [(_plan_chrono_key(r._mapping, anchor), r) for r in rows]
     anchored_slots = [i for i, (k, _) in enumerate(keyed) if k is not None]
     anchored_sorted = sorted(
         (keyed[i] for i in anchored_slots), key=lambda kr: kr[0]
@@ -5472,7 +5524,7 @@ def plan_hidden_leg_count(plan, author):
         return 0
     with pg_session() as pg:
         return pg.execute(
-            "SELECT COUNT(*) FROM plan_trips WHERE plan_id = :plan_id"
+            "SELECT COUNT(*) FROM plan_trips_resolved WHERE plan_id = :plan_id"
             " AND COALESCE(visibility, 'private') <> ALL(:allowed)",
             {"plan_id": plan["uid"], "allowed": list(allowed)},
         ).fetchone()[0]
@@ -5526,17 +5578,30 @@ def build_plan_trip_list(plan_uuid, allowed_visibilities=None):
             "per_leg": round(per_leg, 2), "per_leg_orig": round(per_leg_orig, 2),
         }
 
+    # Every operator of every leg, through the aliases, as the trips' own pages do
+    # (the SQL's logo_url only knew the first name, by exact spelling).
+    leg_operators = operator_logos_for_texts(
+        (r._mapping["operator"], r._mapping["trip_type"]) for r in rows
+    )
+
     tripList = []
     total_price = total_carbon = total_distance = 0
     prev_end_pos = None  # arrival position of the previous timed leg, for connection checks
-    ordered = _plan_display_order(rows)
+    anchor = plan._mapping["anchor_date"] or RELATIVE_REF_DATE
+    ordered = _plan_display_order(rows, anchor)
+    # Day N legs on the Day-1 preview date, in seconds, for comparing them with dated
+    # legs (span, connections).
+    anchor_shift = (anchor - RELATIVE_REF_DATE).days * 86400.0
     for idx, (chrono_key, r) in enumerate(ordered):
         pt = r._mapping
         coords = geom_geojson_to_coords(pt["geojson"])
         # Impossible connection: this timed leg departs before the previous one arrives.
-        # Positions are timezone-correct and anchor-independent (see _plan_leg_positions),
-        # so neither a timezone boundary nor anchor_date drift can fabricate a conflict.
+        # Positions are timezone-correct (see _plan_leg_positions); Day N legs are moved
+        # onto the Day-1 preview date so they compare with dated legs (a linked flight).
         cur_start_pos, cur_end_pos = _plan_leg_positions(pt, coords)
+        if pt["start_day"] is not None:
+            cur_start_pos = None if cur_start_pos is None else cur_start_pos + anchor_shift
+            cur_end_pos = None if cur_end_pos is None else cur_end_pos + anchor_shift
         impossible = (
             prev_end_pos is not None
             and cur_start_pos is not None
@@ -5580,6 +5645,14 @@ def build_plan_trip_list(plan_uuid, allowed_visibilities=None):
             "logo_url": pt["logo_url"],
             "operator_name": pt["operator"] or "",
         }
+        ops = leg_operators.get((pt["operator"], pt["trip_type"])) or []
+        if len(ops) > 1:
+            # Several operators: one logo (or name chip) each, as on a trip's map.
+            trip["multi_operators"] = ops
+            trip.pop("logo_url", None)
+            trip.pop("operator_name", None)
+        elif ops:
+            trip["logo_url"] = ops[0]["logo_url"] or pt["logo_url"]
         trip = formatTrip(trip)
         trip["utc_filtered_start_datetime"] = usdt if usdt is not None else sdt
         trip["utc_filtered_end_datetime"] = uedt if uedt is not None else edt
@@ -5597,6 +5670,15 @@ def build_plan_trip_list(plan_uuid, allowed_visibilities=None):
         # Already logged as a real trip (partial validation) -> never logged again,
         # and the plan view links the leg to the trip it produced.
         trip["validated_trip_id"] = pt["validated_trip_id"]
+        # One of the user's own trips, linked in: fixed, read from the trip, edited there.
+        trip["linked_trip_id"] = pt["linked_trip_id"]
+        if pt["linked_trip_id"] and pt["linked_ticket_ids"]:
+            # Its tickets as on the trip page; its share of them counts in the plan's price.
+            trip.update(trip_ticket_fields(pt["linked_ticket_ids"], pt["linked_trip_id"], user_currency))
+            if trip.get("ticket_price_in_user_currency") is not None:
+                trip["user_currency"] = user_currency
+                trip["linked_ticket_price"] = trip["ticket_price_in_user_currency"]
+                total_price += trip["ticket_price_in_user_currency"]
         trip["cost_id"] = pt["cost_id"]
         # A leg on a shared cost renders like a ticketed trip (reuse the ticket UI).
         cinfo = cost_by_id.get(pt["cost_id"])
@@ -5633,9 +5715,13 @@ def build_plan_trip_list(plan_uuid, allowed_visibilities=None):
              "weekday_mismatch": weekday_mismatch,
              "can_up": idx > 0 and can_swap(chrono_key, ordered[idx - 1][0]),
              "can_down": idx < len(ordered) - 1 and can_swap(chrono_key, ordered[idx + 1][0]),
-             # UTC-epoch departure/arrival used by compute_plan_stats for the span
-             # (timezone-correct, anchor-independent — see _plan_leg_positions).
-             "pos_start": cur_start_pos, "pos_end": cur_end_pos}
+             # UTC-epoch departure/arrival (Day N legs on the Day-1 preview date), used by
+             # compute_plan_stats for the span: first departure to last arrival.
+             "span_start": cur_start_pos, "span_end": cur_end_pos,
+             # The plan day it departs on ('D<n>' for Day N, 'A<date>' for a dated leg:
+             # the day separators, and the pass-day marks), and the calendar dates it
+             # covers (Day N on the Day-1 date). None for an undated leg.
+             **_plan_leg_days(pt, anchor)}
         )
 
     priceDict = {
@@ -5719,7 +5805,36 @@ def plan_list(username):
     user = User.query.filter_by(username=username).first()
     with pg_session() as pg:
         rows = pg.execute(get_user_plans_query(), {"user_id": user.uid}).fetchall()
+        # Rail-pass travel days of the plans that track them: the marks whose day the
+        # plan still has, with that day's calendar date (see plan_pass_day_counts).
+        pass_rows = pg.execute(
+            """
+            SELECT d.plan_id, d.day_key, d.status, p.anchor_date
+            FROM plan_pass_days d
+            JOIN plans p ON p.uid = d.plan_id
+            WHERE p.user_id = :user_id AND p.pass_days_enabled
+              AND EXISTS (
+                  SELECT 1 FROM plan_trips_resolved pt
+                  WHERE pt.plan_id = d.plan_id
+                    AND CASE WHEN d.day_key LIKE 'D%'
+                             THEN pt.start_day = CAST(substr(d.day_key, 2) AS integer)
+                             ELSE pt.start_day IS NULL
+                                  AND CAST(pt.start_datetime AS date) = CAST(substr(d.day_key, 2) AS date)
+                        END
+              )
+            """,
+            {"user_id": user.uid},
+        ).fetchall()
     plans = [dict(r._mapping) for r in rows]
+    marks, dates = {}, {}
+    for r in pass_rows:
+        m = r._mapping
+        marks.setdefault(m["plan_id"], {})[m["day_key"]] = m["status"]
+        dates.setdefault(m["plan_id"], {})[m["day_key"]] = _plan_day_date(
+            m["day_key"], m["anchor_date"] or RELATIVE_REF_DATE)
+    for p in plans:
+        p["pass_required"], p["pass_optional"] = plan_pass_day_counts(
+            marks.get(p["uid"], {}), dates.get(p["uid"], {}))
     return render_template(
         "plans/plan_list.html",
         title="Plans",
@@ -5813,7 +5928,7 @@ def compute_plan_stats(trip_list, costs=None):
     `span` is the end-to-end length of the whole trip — first departure to last
     arrival — i.e. "is this a 3-day or a 5-hour trip", independent of how much of that
     time is spent actually moving. It reads the per-leg positions attached by
-    build_plan_trip_list (timezone-correct, anchor-independent)."""
+    build_plan_trip_list (timezone-correct; Day N legs on the Day-1 preview date)."""
     # Stays/stops aren't travelling and shouldn't inflate the trip's duration or span.
     NON_TRAVEL = ("poi", "accommodation", "restaurant")
     total_duration = total_distance = total_price = 0.0
@@ -5830,12 +5945,14 @@ def compute_plan_stats(trip_list, costs=None):
         dist = float(t.get("trip_length") or 0)
         price = t.get("price_in_user_currency")
         price = float(price) if price not in (None, "") else 0.0
+        # A linked trip paid through a ticket: its share of the ticket.
+        price += float(t.get("linked_ticket_price") or 0)
         if t.get("user_currency"):
             user_currency = t["user_currency"]
         if travels:
             # Timezone-correct, anchor-independent positions (see _plan_leg_positions);
             # day numbers feed the fallback when the plan is day-only (no clock times).
-            ps, pe = item.get("pos_start"), item.get("pos_end")
+            ps, pe = item.get("span_start"), item.get("span_end")
             if ps is not None and pe is not None:
                 pos_starts.append(ps)
                 pos_ends.append(pe)
@@ -5933,7 +6050,9 @@ def _plan_itinerary_context(plan, username, allowed_visibilities=None):
     # Legs still to be logged: the "log as trips" control is pointless without one,
     # and only these carry a tick box.
     plan_unlogged_count = sum(
-        1 for item in trip_list if item["trip"].get("validated_trip_id") is None
+        1 for item in trip_list
+        if item["trip"].get("validated_trip_id") is None
+        and item["trip"].get("linked_trip_id") is None  # already a trip
     )
     # Localised vehicle-type names for the add-trip dropdown / breakdown (the lang
     # keys are the type ids themselves: train -> "Train", poi -> "Activity", ...).
@@ -5946,10 +6065,58 @@ def _plan_itinerary_context(plan, username, allowed_visibilities=None):
             "accommodation", "poi", "restaurant", "other",
         ]
     }
+    # Plan days (the day separators) and their calendar dates, Day N on the Day-1 date.
+    anchor = plan["anchor_date"] or RELATIVE_REF_DATE
+    day_dates = {
+        item["day_key"]: _plan_day_date(item["day_key"], anchor)
+        for item in trip_list if item.get("day_key")
+    }
+    # Rail-pass travel days (Interrail, …), when the plan tracks them.
+    pass_marks = {}
+    if plan.get("pass_days_enabled"):
+        with pg_session() as pg:
+            pass_marks = {
+                r[0]: r[1]
+                for r in pg.execute(
+                    "SELECT day_key, status FROM plan_pass_days WHERE plan_id = :p",
+                    {"p": plan["uid"]},
+                ).fetchall()
+            }
+    pass_required, pass_optional = plan_pass_day_counts(pass_marks, day_dates)
+    # Calendar: every date from the first departure to the last arrival, with the
+    # departures on each and its pass mark.
+    calendar = None
+    starts = [item["cal_start"] for item in trip_list if item.get("cal_start")]
+    if starts:
+        cal_days = {}
+        for item in trip_list:
+            if item.get("cal_start"):
+                d = cal_days.setdefault(item["cal_start"], {"legs": 0})
+                d["legs"] += 1
+        for key, status in pass_marks.items():
+            when = day_dates.get(key)
+            if when is not None:
+                d = cal_days.setdefault(when.isoformat(), {"legs": 0})
+                if d.get("pass") != "required":
+                    d["pass"] = status
+        calendar = {
+            "start": min(starts),
+            "end": max(item["cal_end"] for item in trip_list if item.get("cal_end")),
+            "days": cal_days,
+        }
     return dict(
         title=plan["name"],
         plan=plan,
         plan_trips=trip_list,
+        plan_pass_marks=pass_marks,
+        plan_pass_required=pass_required,
+        plan_pass_optional=pass_optional,
+        plan_calendar=calendar,
+        # Calendar days from the first departure to the last arrival (inclusive).
+        plan_span_days=(
+            (date.fromisoformat(calendar["end"]) - date.fromisoformat(calendar["start"])).days + 1
+            if calendar else None
+        ),
         plan_stats=stats,
         plan_costs=plan_costs,
         plan_has_relative=plan_has_relative,
@@ -5974,6 +6141,8 @@ def plan_view(username, plan_uuid):
         plan_editable=True,
         plan_copy_url=None,
         plan_map_url=url_for("public_plan", plan_uuid=plan_uuid),
+        # https behind the proxy (a bare _external url comes out as http://).
+        plan_share_url=external_url("public_plan_itinerary", plan_uuid=plan_uuid),
         num_hidden_trips=0,
         **_plan_itinerary_context(plan, username),
         **lang[session["userinfo"]["lang"]],
@@ -6165,6 +6334,10 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
     save-as-trips time (validate_plan)."""
     plan = get_owned_plan(plan_uuid, username)
     pt = _get_plan_trip_row(plan, plan_trip_uid)
+    if pt["linked_trip_id"]:
+        # A linked trip is edited as the trip it is.
+        return redirect(url_for("edit_copy_trip", username=username,
+                                tripId=pt["linked_trip_id"], edit_copy_type="edit"))
 
     coords = geom_geojson_to_coords(pt["geojson"])  # [[lat,lng],...]
     # Routing waypoints are just the endpoints (+ any stored waypoints), NOT every geom
@@ -6232,6 +6405,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         unknownType=None,
         precision=precision,
         tripId=plan_trip_uid,
+        plan_name=plan["name"],
         origin=pt["origin_station"],
         destination=pt["destination_station"],
         trip=pt,
@@ -6286,6 +6460,8 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
     independently of the plan's anchor_date (see process_plan_dates)."""
     plan = get_owned_plan(plan_uuid, username)
     pt = _get_plan_trip_row(plan, plan_trip_uid)
+    if pt["linked_trip_id"]:
+        abort(409)  # a linked trip is edited as the trip it is
     save_plan_trip_edit(plan, pt, dict(request.form))
     # edit_copy posts via AJAX and redirects client-side.
     return ""
@@ -6385,6 +6561,128 @@ def reorder_plan_trips_route(username, plan_uuid):
     return ("", 204)
 
 
+@app.route("/u/<username>/plan/<plan_uuid>/bulk", methods=["POST"])
+@login_required
+def bulk_plan_trips_route(username, plan_uuid):
+    """The plan page's selection bar: one action on the ticked legs.
+    JSON {action: edit|delete|duplicate, uids: [...], fields, notes_append,
+    shift_minutes, booked, cost_id} (see src/plans/bulk.py)."""
+    plan = get_owned_plan(plan_uuid, username)
+    data = request.get_json(silent=True) or {}
+    try:
+        uids = [int(u) for u in data.get("uids") or []]
+    except (TypeError, ValueError):
+        return jsonify({"error": "uids"}), 400
+    if not uids:
+        return jsonify({"error": "uids"}), 400
+    action = data.get("action")
+    L = lang[session["userinfo"]["lang"]]
+    try:
+        if action == "delete":
+            count = bulk_delete_plan_trips(plan, uids)
+        elif action == "duplicate":
+            count = bulk_duplicate_plan_trips(plan, uids)
+        elif action == "edit":
+            booked = data.get("booked")
+            cost_id = data.get("cost_id")
+            count = bulk_edit_plan_trips(
+                plan,
+                uids,
+                fields=data.get("fields") or {},
+                notes_append=bool(data.get("notes_append")),
+                shift_minutes=int(data.get("shift_minutes") or 0),
+                booked=None if booked in (None, "") else bool(booked),
+                cost_id=None if cost_id in (None, "") else int(cost_id),
+            )
+        else:
+            return jsonify({"error": "action"}), 400
+    except BulkError as e:
+        message = L["planShiftBeforeDay1"] if str(e) == "before_day_1" else str(e)
+        return jsonify({"error": message}), 400
+    except (TypeError, ValueError):
+        return jsonify({"error": "bad request"}), 400
+    return jsonify({"success": 1, "count": count})
+
+
+PASS_DAY_KEY = re.compile(r"^(D[0-9]{1,4}|A[0-9]{4}-[0-9]{2}-[0-9]{2})$")
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/pass_days", methods=["POST"])
+@login_required
+def plan_pass_days_route(username, plan_uuid):
+    """Rail-pass travel days (Interrail, …). Form `action`: "enable" / "disable"
+    tracking, or "mark_train" — every day with a train leg becomes a required travel
+    day, without touching the days already marked."""
+    plan = get_owned_plan(plan_uuid, username)
+    action = request.form.get("action")
+    with pg_session() as pg:
+        if action in ("enable", "disable"):
+            pg.execute(
+                "UPDATE plans SET pass_days_enabled = :on, last_modified = :now WHERE uid = :uid",
+                {"on": action == "enable", "now": datetime.now(), "uid": plan["uid"]},
+            )
+        elif action == "mark_train":
+            anchor = plan["anchor_date"] or RELATIVE_REF_DATE
+            keys = {
+                _plan_leg_days(r._mapping, anchor)["day_key"]
+                for r in pg.execute(
+                    "SELECT start_day, end_day, start_datetime, end_datetime"
+                    " FROM plan_trips_resolved WHERE plan_id = :p AND trip_type = 'train'",
+                    {"p": plan["uid"]},
+                ).fetchall()
+            } - {None}
+            for key in keys:
+                pg.execute(
+                    "INSERT INTO plan_pass_days (plan_id, day_key, status)"
+                    " VALUES (:p, :k, 'required') ON CONFLICT DO NOTHING",
+                    {"p": plan["uid"], "k": key},
+                )
+        else:
+            abort(400)
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/pass_day", methods=["POST"])
+@login_required
+def plan_pass_day_route(username, plan_uuid):
+    """Mark one plan day: JSON {day_key, status: "required" | "optional" | ""}."""
+    plan = get_owned_plan(plan_uuid, username)
+    data = request.get_json(silent=True) or {}
+    key, status = str(data.get("day_key") or ""), data.get("status") or ""
+    if not PASS_DAY_KEY.match(key) or status not in ("required", "optional", ""):
+        return jsonify({"error": "bad request"}), 400
+    with pg_session() as pg:
+        if status:
+            pg.execute(
+                "INSERT INTO plan_pass_days (plan_id, day_key, status) VALUES (:p, :k, :s)"
+                " ON CONFLICT (plan_id, day_key) DO UPDATE SET status = EXCLUDED.status",
+                {"p": plan["uid"], "k": key, "s": status},
+            )
+        else:
+            pg.execute(
+                "DELETE FROM plan_pass_days WHERE plan_id = :p AND day_key = :k",
+                {"p": plan["uid"], "k": key},
+            )
+    return jsonify({"success": 1})
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/anchor", methods=["POST"])
+@login_required
+def plan_anchor_route(username, plan_uuid):
+    """Set the Day-1 date alone (from the calendar), leaving the rest of the plan."""
+    plan = get_owned_plan(plan_uuid, username)
+    try:
+        anchor_date = date.fromisoformat(request.form.get("anchor_date", ""))
+    except ValueError:
+        abort(400)
+    with pg_session() as pg:
+        pg.execute(
+            "UPDATE plans SET anchor_date = :d, last_modified = :now WHERE uid = :uid",
+            {"d": anchor_date, "now": datetime.now(), "uid": plan["uid"]},
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid) + "#planCalendar")
+
+
 @app.route("/u/<username>/plan/<plan_uuid>/cost", methods=["POST"])
 @login_required
 def submit_plan_cost_route(username, plan_uuid):
@@ -6460,13 +6758,36 @@ def set_plan_trip_cost_route(username, plan_uuid, plan_trip_uid):
     return ("", 204)
 
 
+def _trip_ids_from_refs(text):
+    """Trip ids from what a user can paste: share links or their keys
+    (…/public/trip/sK7f2Qw9, sK7f2Qw9 — every trip behind it), trip page or edit URLs
+    (…/edit/1042), old "1,2,3" lists, bare ids; mixed, separated by spaces or commas.
+    Unknown keys are skipped. Ownership is the caller's to check."""
+    ids = []
+    for token in re.split(r"[\s,;]+", text or ""):
+        # A URL: its last path segment (no query or fragment) is the reference.
+        token = token.split("?")[0].split("#")[0].rstrip("/").rsplit("/", 1)[-1]
+        if token.isdigit():
+            ids.append(int(token))
+        elif token:
+            try:
+                ids.extend(int(i) for i in parse_trip_ids(token))
+            except ValueError:
+                continue
+    return list(dict.fromkeys(ids))
+
+
 @app.route("/u/<username>/plan/<plan_uuid>/import_trips", methods=["POST"])
 @login_required
 def import_trips_to_plan_route(username, plan_uuid):
-    """Move existing real trips (comma/space separated ids) into the plan."""
+    """Bring existing trips (share links, keys or ids: _trip_ids_from_refs) into the plan: linked (mode
+    "link": they stay trips, shown read-only as the plan's fixed part) or moved (the
+    default: they become plan legs and leave the trips)."""
     plan = get_owned_plan(plan_uuid, username)
-    ids = [int(x) for x in re.findall(r"\d+", request.form.get("trip_ids", ""))]
-    if ids:
+    ids = _trip_ids_from_refs(request.form.get("trip_ids", ""))
+    if ids and request.form.get("mode") == "link":
+        link_trips_to_plan(plan, ids)
+    elif ids:
         import_trips_to_plan(plan, ids)
     return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
 
@@ -6609,12 +6930,15 @@ def copy_plan_route(username, plan_uuid):
     either side do not propagate."""
     plan = _plan_public_or_403(plan_uuid)
     user = User.query.filter_by(username=username).first()
+    author = User.query.filter_by(uid=plan["user_id"]).first()
     suffix = lang[session["userinfo"]["lang"]]["copySuffix"]
     new_uuid = duplicate_plan(
         plan["uuid"],
         user.uid,
         name=f"{plan['name']} {suffix}",
         require_same_user=False,
+        # Only the legs this viewer is shown (their own visibility, as on the shared view).
+        visibilities=_plan_leg_visibilities_for(author) if author else ("public",),
     )
     if new_uuid is None:
         abort(404)

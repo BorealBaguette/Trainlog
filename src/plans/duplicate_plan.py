@@ -39,9 +39,12 @@ _PLAN_TRIP_COPY_COLS = (
 )
 
 
-def duplicate_plan(plan_uuid, user_id, name=None, pg_session=None, require_same_user=True):
+def duplicate_plan(plan_uuid, user_id, name=None, pg_session=None, require_same_user=True,
+                   visibilities=None):
     """Clone a plan into user_id's account. Returns the new plan's uuid, or None if the
-    plan does not exist (or, when require_same_user, was created by someone else)."""
+    plan does not exist (or, when require_same_user, was created by someone else).
+    `visibilities` (None = all) keeps only the legs with those visibilities: a copy of
+    someone else's plan holds what its copier could see, nothing more."""
     now = datetime.now()
     new_uuid = str(uuid.uuid4())
 
@@ -63,6 +66,17 @@ def duplicate_plan(plan_uuid, user_id, name=None, pg_session=None, require_same_
                 "last_modified": now,
             },
         ).fetchone()[0]
+
+        # Rail-pass travel days: the setting and the marked days.
+        pg.execute(
+            "UPDATE plans SET pass_days_enabled = :on WHERE uid = :uid",
+            {"on": bool(src.get("pass_days_enabled")), "uid": new_plan_uid},
+        )
+        pg.execute(
+            "INSERT INTO plan_pass_days (plan_id, day_key, status)"
+            " SELECT :new, day_key, status FROM plan_pass_days WHERE plan_id = :old",
+            {"new": new_plan_uid, "old": src["uid"]},
+        )
 
         # Clone shared costs first, building old->new id map for leg remapping.
         cost_map = {}
@@ -89,21 +103,43 @@ def duplicate_plan(plan_uuid, user_id, name=None, pg_session=None, require_same_
         else:
             cost_expr = "NULL"
 
+        # Trips linked into the plan stay linked in a copy in the same account (the
+        # possibilities built around the same booked flight). Another account can't
+        # link someone else's trip: it gets them as plain legs, as they are now.
+        keep_links = src["user_id"] == user_id
         pg.execute(
             f"""
-            INSERT INTO plan_trips ({_PLAN_TRIP_COPY_COLS}, user_id, plan_id, cost_id, created, last_modified)
-            SELECT {_PLAN_TRIP_COPY_COLS}, :new_user_id, :new_plan_uid, {cost_expr}, :created, :last_modified
+            INSERT INTO plan_trips ({_PLAN_TRIP_COPY_COLS}, user_id, plan_id, cost_id, linked_trip_id, created, last_modified)
+            SELECT {_PLAN_TRIP_COPY_COLS}, :new_user_id, :new_plan_uid, {cost_expr},
+                   linked_trip_id, :created, :last_modified
             FROM plan_trips
-            WHERE plan_id = :old_plan_uid
+            WHERE plan_id = :old_plan_uid AND (linked_trip_id IS NULL OR :keep_links)
+              AND (CAST(:visibilities AS text[]) IS NULL
+                   OR COALESCE(visibility, 'private') = ANY(CAST(:visibilities AS text[])))
             """,
             {
                 "new_user_id": user_id,
                 "new_plan_uid": new_plan_uid,
                 "old_plan_uid": src["uid"],
+                "keep_links": keep_links,
+                "visibilities": list(visibilities) if visibilities is not None else None,
                 "created": now,
                 "last_modified": now,
             },
         )
+        if not keep_links:
+            from src.plans.import_trips import copy_trip_into_plan
+
+            for leg in pg.execute(
+                "SELECT t.*, pt.sort_order AS leg_order FROM plan_trips pt"
+                " JOIN trips t ON t.trip_id = pt.linked_trip_id"
+                " WHERE pt.plan_id = :old_plan_uid AND (CAST(:visibilities AS text[]) IS NULL"
+                " OR COALESCE(t.visibility, 'private') = ANY(CAST(:visibilities AS text[])))",
+                {"old_plan_uid": src["uid"],
+                 "visibilities": list(visibilities) if visibilities is not None else None},
+            ).fetchall():
+                copy_trip_into_plan(pg, leg._mapping, new_plan_uid, user_id,
+                                    leg._mapping["leg_order"], now)
 
     logger.info(f"Duplicated plan {src['uid']} -> {new_plan_uid} ({new_uuid})")
     return new_uuid
