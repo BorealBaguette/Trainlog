@@ -2729,13 +2729,19 @@ var table = $('#tripRows');
 
     function autoFitCookieName() { return isCardLayout() ? 'autoFitCard' : 'autoFitTable'; }
 
-    function autoRowCount() {
+    function autoFitMetrics() {
         var fallback = AUTO_FIT_FALLBACK[isCardLayout() ? 'card' : 'table'];
         var stored = (getCookie(autoFitCookieName()) || '').split(':');
         var rowH = parseFloat(stored[0]) || fallback.row;
         var chromeH = parseFloat(stored[1]);
         if (!(chromeH >= 0)) chromeH = fallback.chrome;
-        var fits = Math.floor((window.innerHeight - chromeH - AUTO_FIT_BUFFER) / rowH);
+        return { rowH: rowH, chromeH: chromeH };
+    }
+
+    // From the stored metrics unless given others.
+    function autoRowCount(m) {
+        m = m || autoFitMetrics();
+        var fits = Math.floor((window.innerHeight - m.chromeH - AUTO_FIT_BUFFER) / m.rowH);
         return Math.max(AUTO_ROWS_MIN, Math.min(AUTO_ROWS_MAX, fits));
     }
 
@@ -3257,7 +3263,15 @@ function recordAutoFitMetrics() {
     var below = spaceBelow(last.get(0));
     if (!(rowH > 0) || above < 0 || below < 0) return;
 
-    setCookie(autoFitCookieName(), rowH.toFixed(2) + ':' + Math.round(above + below), 30);
+    // The median depends on the rows on show, which with auto depend on the median:
+    // wrapping station names flipped the count by one on every reload. A measurement
+    // replaces the stored one only if it moves the count by two rows or more; else the
+    // stored one is rewritten so the cookie does not expire.
+    var m = { rowH: rowH, chromeH: above + below };
+    if (getCookie(autoFitCookieName()) && Math.abs(autoRowCount(m) - autoRowCount()) < 2) {
+        m = autoFitMetrics();
+    }
+    setCookie(autoFitCookieName(), m.rowH.toFixed(2) + ':' + Math.round(m.chromeH), 30);
 }
 
 // Update ?next= on the href just before navigation so it reflects the current URL (including filters/sort/page)
