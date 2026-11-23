@@ -2789,7 +2789,7 @@ var table = $('#tripRows');
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
     /* With "show upcoming" on, the descending timeline reads [far future … now …
        oldest past], so its first page is the most distant plan. Ask the backend to
-       centre the first load on now instead — but only that load, and only when the
+       open on the page holding now instead — but only that load, and only when the
        URL did not name a page, since an explicit ?page= is the user's own choice.
        Any later draw (paging, sorting, searching) leaves the offset alone. */
     if (_urlSortParam) {
@@ -2963,7 +2963,7 @@ var table = $('#tripRows');
         }
     }
 }).on('xhr.dt', function(e, settings, json) {
-    // The anchored draw asked for offset 0 and was answered with the rows around now
+    // The anchored draw asked for offset 0 and was answered with the page holding now
     // instead. `xhr` fires before the table is drawn, so writing the offset the server
     // actually used here is enough for the pager and the "showing x to y" line to
     // describe the rows about to appear. One-shot: the flag is cleared either way, so
@@ -3005,10 +3005,8 @@ var table = $('#tripRows');
     }
     var _pi = tableObject.page.info();
     if (_anchoredDraw) {
-        // The anchored offset is not a page the user asked for, and it is not one
-        // either: it lands mid-grid, so ?page= could not reproduce it anyway. Leaving
-        // it out of the URL is also what lets a reload anchor again rather than
-        // freeze on whatever page number now happened to fall in today.
+        // Not a page the user asked for. Leaving it out of the URL lets a reload
+        // anchor again rather than freeze on whatever page now fell in today.
         url.searchParams.delete('page');
         _anchoredDraw = false;
     } else if (_pi.page > 0) {

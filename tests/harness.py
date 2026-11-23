@@ -154,9 +154,10 @@ def login(username):
     return client
 
 
-def make_trip(username, visibility="public", trip_type="train"):
-    """A finished Paris → Lyon trip; returns its id."""
-    now = datetime(2025, 5, 1, 10, 0)
+def make_trip(username, visibility="public", trip_type="train", start=None):
+    """A two-hour Paris → Lyon trip, finished unless `start` says otherwise;
+    returns its id."""
+    now = start or datetime(2025, 5, 1, 10, 0)
     trip = Trip(
         username=username,
         user_id=uid(username),
