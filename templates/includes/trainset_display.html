@@ -149,11 +149,16 @@
        text ellipsises at the car's width; the full name stays in the title tooltip. */
     .ts-strip .compo-wagon { padding-bottom: 19px; }
     .compo-compact .ts-strip .compo-wagon { padding-bottom: 16px; }
-    .ts-nom {
+    /* Out-of-flow placement, with enough specificity to survive page-wide span rules:
+       the itinerary's ".events span { position: relative }" (0,1,1) outranked a bare
+       .ts-nom, put the label back in flow and spread the cars apart on the trip page. */
+    .ts-strip .compo-wagon > .ts-nom {
         position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
         width: calc(100% - 4px);          /* full-length plate, 4px clear of its neighbours */
         margin-top: 0;
         box-sizing: border-box;
+    }
+    .ts-nom {
         font-size: 0.6rem; color: light-dark(#ccc, var(--bs-tertiary-color)); text-align: center;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
