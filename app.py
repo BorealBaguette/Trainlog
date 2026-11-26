@@ -15091,5 +15091,6 @@ with app.app_context():
         create_authDb()
     authDb.create_all()
     ensure_auth_db_columns()
+    theme_module.ensure_theme_columns()
 
 setup_db()

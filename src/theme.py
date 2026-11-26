@@ -49,8 +49,8 @@ def save_settings(user, form, userinfo):
 
 
 def init_app(app):
-    with app.app_context():
-        ensure_theme_columns()
+    # ensure_theme_columns() is called from app.py after authDb.create_all(): on a
+    # fresh auth.db the user table does not exist yet at this point.
 
     @app.context_processor
     def inject_theme():
