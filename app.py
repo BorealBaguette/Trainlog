@@ -10597,12 +10597,14 @@ def user_settings_app(username):
     }), 200
 
 
-@app.route("/u/<username>/dynamic/<time>")
+@app.route("/u/<username>/dynamic/<any(projects, trips):time>")
 def redirect_dynamic_trips(username, time):
     return redirect(url_for("dynamic_trips", username=username, time=time), code=301)
 
 
-@app.route("/u/<username>/<time>")
+# Only the two real values, so /u/x/wp-login.php is not a page: the logged-out
+# shortcut (user_shortcut) relies on this to 404 scanner probes.
+@app.route("/u/<username>/<any(projects, trips):time>")
 @login_required
 def dynamic_trips(username, time=None):
     """
@@ -14937,17 +14939,20 @@ def get_flag(code):
 def user_shortcut(subpath):
     user = getUser()
     qs = request.query_string.decode("latin-1")
-    if user != "public":
-        target = f"/u/{user}/{subpath}"
-        adapter = app.url_map.bind(request.host)
-        try:
-            endpoint, _ = adapter.match(target, method=request.method)
-            if endpoint == "user_shortcut":
-                abort(404)
-        except RequestRedirect:
-            pass
-        except (NotFound, MethodNotAllowed):
+    # Only shortcuts to a real /u/<user>/ page go anywhere; anything else is a
+    # 404, logged in or not. Logged-out scanners probing /wp-login.php, /.env…
+    # used to be sent to the login page: ~900k renders a month.
+    target = f"/u/{user if user != 'public' else '_'}/{subpath}"
+    adapter = app.url_map.bind(request.host)
+    try:
+        endpoint, _ = adapter.match(target, method=request.method)
+        if endpoint == "user_shortcut":
             abort(404)
+    except RequestRedirect:
+        pass
+    except (NotFound, MethodNotAllowed):
+        abort(404)
+    if user != "public":
         if qs:
             target = f"{target}?{qs}"
         return redirect(target, 307)
