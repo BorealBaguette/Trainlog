@@ -1104,14 +1104,24 @@ function buildRouteTimelineHtml(wps, route) {
       + (times ? '<small class="rt-time">' + esc(times) + '</small>' : '') + '</li>';
   }
   var last = wps.length - 1;
-  // The trip's own start and end, when it has them: a stop's times win where there are some
-  function tripTime(v, planned) {
-    if (v && v.length === 16) return v.slice(11);
-    return /^\d{1,2}:\d{2}$/.test(planned || '') ? planned : '';
+  // The trip's own start and end, when it has them: a stop's times win where there are some.
+  // Only the fields of the trip's own timing are read: the form always fills newTripStart
+  // from the precise fields, which default to now. Exact dates (or no precision given) use
+  // those; Day + time uses the plan's times; date only and unknown have no times.
+  var precision = newTrip.precision || 'preciseDates';
+  function tripTime(precise, planned) {
+    if (precision === 'preciseDates') return precise && precise.length === 16 ? precise.slice(11) : '';
+    if (precision === 'relative') return /^\d{1,2}:\d{2}$/.test(planned || '') ? planned : '';
+    return '';
   }
   function toMinutes(t) { var p = t.split(':'); return +p[0] * 60 + +p[1]; }
   var startTime = tripTime(newTrip.newTripStart, newTrip.planStartTime);
   var endTime = tripTime(newTrip.newTripEnd, newTrip.planEndTime);
+  // Without times, a duration given on the form (date only, unknown, Day + duration) shows
+  // at the arrival instead.
+  var durationS = Number(newTrip.onlyDateDuration);
+  var durationLabel = precision !== 'preciseDates' && !startTime && !endTime && durationS > 0
+    ? secondsToDhm(durationS, document.documentElement.lang || undefined) : '';
 
   // The minutes each point is known to be left (dep) or arrived at (arr): a stop's own times
   function anchor(which) {
@@ -1134,7 +1144,7 @@ function buildRouteTimelineHtml(wps, route) {
     // The ends' platforms are the trip's own (picked on the form), not the stop's.
     function withTrack(t, track) { return [t, trackLabel(track)].filter(Boolean).join(' \u00b7 '); }
     if (i === 0) return item('rt-end', waypointLabel(wp) || origLabel, times || withTrack(startTime, newTrip.departurePlatform));
-    if (i === last) return item('rt-end', waypointLabel(wp) || destLabel, times || withTrack(endTime, newTrip.arrivalPlatform));
+    if (i === last) return item('rt-end', waypointLabel(wp) || destLabel, times || withTrack(endTime || durationLabel, newTrip.arrivalPlatform));
     var name = waypointLabel(wp);
     if (!times && guessed[i] != null) {
       var g = Math.round(guessed[i]) % 1440;

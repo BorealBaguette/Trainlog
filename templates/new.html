@@ -1879,11 +1879,6 @@
       });
     });
 
-    $('form').on('submit', function() {
-      if (!$('#delayToggle').is(':checked'))
-        $('#departureDelayMinutes, #arrivalDelayMinutes').val('');
-    });
-
     // Hide delays when precision is not precise dates
     function updateDelayAvailability() {
       var isPrecise = $('#radioPreciseDates').is(':checked');

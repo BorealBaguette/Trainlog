@@ -530,6 +530,13 @@ function toRouting(data, routingUrl, type){
   var newTrip = Object.assign({}, ...data.map((x) => ({[x.name]: x.value})));
 
   newTrip = processFormDates(newTrip);
+  // Delays unticked: drop them. The minutes inputs keep their values while hidden
+  // (re-ticking brings them back), and the button's onclick reads the form before any
+  // submit handler could empty them.
+  if ($('#delayToggle').length && !$('#delayToggle').is(':checked')) {
+    newTrip["departure_delay"] = "";
+    newTrip["arrival_delay"] = "";
+  }
 
   // What the station fields held (the trip keeps the entries instead), for Back.
   var stationState = {}, ends = {};
