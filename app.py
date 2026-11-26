@@ -3103,6 +3103,11 @@ def signup():
     ]
 
     if request.method == "POST":
+        # API clients (the mobile app) post with ?raw=1 and get JSON back
+        raw = request.args.get("raw") == "1"
+        if raw and request.form.get("locale") in lang:
+            session["userinfo"]["lang"] = request.form["locale"]
+
         # The hidden "website" field is a honeypot: people never see it, form
         # fillers fill it in
         if request.form.get("website"):
@@ -3117,6 +3122,8 @@ def signup():
                 getIp(request),
                 getRequestData(request),
             )
+            if raw:
+                return jsonify({"error": lang[session["userinfo"]["lang"]]["captchaFailed"], "code": captcha_error}), 403
             flash(lang[session["userinfo"]["lang"]]["captchaFailed"])
             return redirect(url_for("signup"))
 
@@ -3128,15 +3135,23 @@ def signup():
         regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
 
         if not (username and password and email):
+            if raw:
+                return jsonify({"error": lang[session["userinfo"]["lang"]]["signupCantEmpty"]}), 400
             flash(lang[session["userinfo"]["lang"]]["signupCantEmpty"])
             return redirect(url_for("signup"))
         elif not re.match(regex, email):
+            if raw:
+                return jsonify({"error": lang[session["userinfo"]["lang"]]["invalidEmail"]}), 400
             flash(lang[session["userinfo"]["lang"]]["invalidEmail"])
             return redirect(url_for("signup"))
         elif any(c in username for c in ('@', '.', '<', '>')):
+            if raw:
+                return jsonify({"error": lang[session["userinfo"]["lang"]]["usernameNoEmail"]}), 400
             flash(lang[session["userinfo"]["lang"]]["usernameNoEmail"])
             return redirect(url_for("signup"))
         elif username in unauthorised_usernames:
+            if raw:
+                return jsonify({"error": lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(u=username, a=email)}), 409
             flash(
                 lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(
                     u=username, a=email
@@ -3184,11 +3199,16 @@ def signup():
             session["logged_in"] = username
             session["logged_in_user_id"] = new_user.uid
 
+            if raw:
+                return jsonify({"username": username}), 200
+
             # Straight to their (empty) map, whose welcome card points at the first trip
             return redirect(url_for("user_home", username=username))
 
         except sqlalchemy.exc.IntegrityError as e:
             print(e)
+            if raw:
+                return jsonify({"error": lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(u=username, a=email)}), 409
             flash(
                 lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(
                     u=username, a=email
