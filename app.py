@@ -212,6 +212,7 @@ from src.api.mcp import blueprint as mcp_blueprint
 from src.api.trainset import public_trainset_info, trainset_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
+from src.api.aircraft import aircraft_blueprint
 from src.api.station_cleanup import station_cleanup_blueprint
 from src.api.station_explorer import station_explorer_blueprint
 from src.api.station_map import station_map_blueprint
@@ -408,6 +409,7 @@ app.register_blueprint(mcp_blueprint)
 app.register_blueprint(trainset_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
+app.register_blueprint(aircraft_blueprint)
 app.register_blueprint(station_cleanup_blueprint)
 app.register_blueprint(station_explorer_blueprint)
 app.register_blueprint(station_map_blueprint)
@@ -13219,6 +13221,8 @@ def leaderboard(type):
         template = "leaderboard_carbon.html"
     elif type == "wagons":
         template = "leaderboard_wagons.html"
+    elif type == "aircraft":
+        template = "leaderboard_aircraft.html"
     else:
         template = "leaderboard.html"
 
@@ -13227,6 +13231,7 @@ def leaderboard(type):
         "countries": "leaderboardCountries",
         "train_countries": "leaderboardTrainCountries",
         "wagons": "leaderboardWagonsTitle",
+        "aircraft": "aircraftTypesTitle",
         "train": "leaderboardTrainTitle",
         "bus": "leaderboardBusTitle",
         "air": "leaderboardAirTitle",
