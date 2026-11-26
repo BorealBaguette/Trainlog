@@ -3,7 +3,6 @@ import logging
 import os
 import re
 import smtplib
-import sqlite3
 import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -28,9 +27,6 @@ from src.sql.trips import get_current_trip_query
 from src.users import Friendship, User, authDb
 
 logger = logging.getLogger(__name__)
-
-authConn = sqlite3.connect(DbNames.AUTH_DB.value, check_same_thread=False)
-authConn.row_factory = sqlite3.Row
 
 owner = load_config()["owner"]["username"]
 

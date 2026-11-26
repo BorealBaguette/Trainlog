@@ -15092,5 +15092,9 @@ with app.app_context():
     authDb.create_all()
     ensure_auth_db_columns()
     theme_module.ensure_theme_columns()
+    # auth.db must stay in WAL mode. The mode is stored in the file, so a rebuilt
+    # or restored copy silently loses it (2026-11-26 recovery); no-op when set.
+    with authDb.engine.connect() as conn:
+        conn.execute(sqlalchemy.text("PRAGMA journal_mode=WAL"))
 
 setup_db()

@@ -13,10 +13,7 @@ from src.health.recorder import (  # noqa: F401
     worker_exit,
 )
 
-# Workers grow by about 3 KB per request served and never give it back: prod
-# workers reached ~2 GB each after 3 days (600k requests), 16 GB of 23.5 GB.
-# Replace each worker after ~20k requests (a few hours at current traffic);
-# with --preload a new worker is a cheap fork. The jitter keeps the 8 from
-# restarting at the same moment.
-max_requests = 20000
-max_requests_jitter = 2000
+# No max_requests: workers grow ~3 KB per request (~2 GB each after 3 days),
+# but recycling them was followed within 30 min by a corrupted auth.db
+# (2026-11-26, first round of re-forks from a master up for hours). Off until
+# forking later in the master's life is shown to be safe for SQLite.
