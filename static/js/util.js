@@ -1073,9 +1073,12 @@ function sanitize(string) {
 }
 
 function manualCopyHandler(){
-  ['originManualLat', 'destinationManualLat'].forEach(function(inputId) {
-    var lastValue = document.getElementById(inputId).value;
-    document.getElementById(inputId).addEventListener('paste', function (e) {
+  ['originManualLat', 'destinationManualLat', 'addLat'].forEach(function(inputId) {
+    var inputEl = document.getElementById(inputId);
+    if (!inputEl) return;
+
+    var lastValue = inputEl.value;
+    inputEl.addEventListener('paste', function (e) {
         var pastedData = (e.clipboardData || window.clipboardData).getData('text');
 
         if (pastedData !== lastValue) {
