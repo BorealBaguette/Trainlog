@@ -1085,6 +1085,7 @@ function manualCopyHandler(){
           // Existing regex patterns
           var englishFormat = /^(\-?\d+(\.\d+)?)[,\/\s\u00A0]*(\-?\d+(\.\d+)?)$/;
           var internationalFormat = /^(\-?\d+(,\d+)?)[;\s\u00A0]*(\-?\d+(,\d+)?)$/;
+          var stupidGoogleFormat = /^(\-?\d+(?:,\d+)?)[,\/\s\u00A0]+(\-?\d+(?:,\d+)?)$/; // at least for NL locale, Google Maps copies coords using a comma as both a delimiter and as decimals
 
         // 2. Check if it matches your existing formats
         if (englishFormat.test(strippedData)) {
@@ -1101,6 +1102,12 @@ function manualCopyHandler(){
             e.preventDefault();
             document.getElementById(inputId).value = coordinates[0];
             document.getElementById(inputId.replace('Lat', 'Lng')).value = coordinates[1];
+        } else if (stupidGoogleFormat.test(strippedData)) {
+          // Split by comma
+          const match = strippedData.match(stupidGoogleFormat)
+          e.preventDefault();
+          document.getElementById(inputId).value = match[1].replace(',','.');
+          document.getElementById(inputId.replace('Lat', 'Lng')).value = match[2].replace(',','.');
         }
         lastValue = document.getElementById(inputId).value;
       }
