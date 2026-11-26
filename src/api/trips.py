@@ -41,7 +41,21 @@ def bulk_copy_trips(username):
     if len(new_trip_ids) != len(trip_ids):
         abort(500)
 
-    return jsonify({"newTrips": new_trip_ids})
+    return jsonify({"newTrips": new_trip_ids, "list": _list_for(new_trip_ids)})
+
+
+def _list_for(trip_ids: list[int]) -> str:
+    """Which of the user's lists shows the last of these trips: "projects" when it
+    is still ahead (a project, or starting in the future, the projects list's own
+    split), else "trips". Projects sort after every dated trip, so the last trip is
+    upcoming exactly when any of them is."""
+    with pg_session() as pg:
+        upcoming = pg.execute(
+            "SELECT bool_or(is_project OR (utc_start_datetime IS NOT NULL AND NOW() <= utc_start_datetime))"
+            " FROM trips WHERE trip_id = ANY(:ids)",
+            {"ids": trip_ids},
+        ).scalar()
+    return "projects" if upcoming else "trips"
 
 
 def _trips_visible_to_user(trip_ids: list[int], current_user_id: int) -> bool:
@@ -64,13 +78,16 @@ def _trips_visible_to_user(trip_ids: list[int], current_user_id: int) -> bool:
         if current_user_id == trip_user_id:
             continue
 
-        if visibility == 'private':
+        if visibility == "private":
             return False
 
-        trip_owner = user_cache.get(trip_user_id) or User.query.filter_by(uid=trip_user_id).first()
+        trip_owner = (
+            user_cache.get(trip_user_id)
+            or User.query.filter_by(uid=trip_user_id).first()
+        )
         user_cache[trip_user_id] = trip_owner
 
-        if visibility == 'friends':
+        if visibility == "friends":
             if trip_user_id in friend_cache:
                 continue
             if current_user_is_friend_with(trip_owner.username):
