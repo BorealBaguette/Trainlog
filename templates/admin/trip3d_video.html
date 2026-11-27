@@ -50,6 +50,7 @@
   #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
   #v-panel { overflow-y: auto; }
   #v-panel input[type=checkbox] { width: auto; margin: 0; }
+  #v-adv summary { color: var(--v-dim); font-size: .8rem; cursor: pointer; }
   #v-panel .v-check { display: inline-flex; align-items: center; gap: 7px; color: var(--v-fg); font-size: .8rem; margin: 0; cursor: pointer; }
   /* The photos picked, as thumbnails: where each lands on the route, or why it does not */
   #v-photo-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 6px; }
@@ -120,10 +121,26 @@
         <div style="color: var(--v-dim); font-size: .7rem; margin-top: 3px">{{ video3dPhotosHint }}</div></div>
     </div>
     <label class="v-check"><input id="v-hl" type="checkbox" checked> {{ video3dHighlights }}</label>
-    <div class="v-row">
-      <div style="flex:1"><label>{{ video3dMaxSize }}</label>
-        <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
-    </div>
+    <details id="v-adv">
+      <summary>{{ video3dAdvanced }}</summary>
+      <div class="v-row" style="margin-top: 6px">
+        <div style="flex:1"><label>{{ video3dCodec }}</label>
+          <select id="v-codec" class="form-select form-select-sm">
+            <option value="av1" selected>{{ video3dCodecAv1 }}</option><option value="vp9">VP9</option>
+            <option value="avc">{{ video3dCodecAvc }}</option></select></div>
+      </div>
+      <div class="v-row" style="margin-top: 6px">
+        <div style="flex:1"><label>{{ video3dBitrate }}</label>
+          <input id="v-rate" type="number" min="0.5" max="200" step="0.5" class="form-control form-control-sm"></div>
+        <div style="flex:1"><label>{{ video3dKeyframes }}</label>
+          <input id="v-kf" type="number" min="1" max="60" step="1" value="10" class="form-control form-control-sm"></div>
+      </div>
+      <div class="v-row" style="margin-top: 6px">
+        <div style="flex:1"><label>{{ video3dMaxSize }}</label>
+          <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
+      </div>
+      <label class="v-check" style="margin-top: 8px"><input id="v-lossless" type="checkbox"> {{ video3dLossless }}</label>
+    </details>
     <button id="v-apply" disabled>{{ video3dApply }}</button>
     <button id="v-play">▶ {{ video3dPreview }}</button>
     <button id="v-render">⬇ {{ video3dRender }}</button>
@@ -176,7 +193,7 @@ const TILESERVER = BG || {{ tileserver | tojson }};
 document.getElementById('v-bg').value = BG || '';
 const LEN = new URLSearchParams(location.search).get('len');
 const MB = new URLSearchParams(location.search).get('mb');
-if (MB) document.getElementById('v-mb').value = MB;
+if (MB) { document.getElementById('v-mb').value = MB; document.getElementById('v-adv').open = true; }
 const LOGO = {{ static_autoversion('images/logo_square.png') | tojson }};
 const TRIP_LOGOS = {{ url_for('static', filename='images/icons/trip_logos/') | tojson }};
 const FLAGS = {{ url_for('static', filename='images/flags/') | tojson }};
@@ -2660,6 +2677,14 @@ async function setup() {
   // Empty: the length follows the journey; else the seconds asked for (at least 15)
   lenSel.placeholder = fill(T.auto, { n: autoLength() });
   const asked = () => Math.max(15, Math.min(3600, Math.round(Number(lenSel.value))));
+  // The encoding (Advanced), read when rendering: no Apply needed. The bitrate left empty
+  // follows the frame's size and the codec, AV1 and VP9 needing fewer bits for the same picture
+  const $codec = document.getElementById('v-codec'), $rate = document.getElementById('v-rate'), $kf = document.getElementById('v-kf');
+  const $lossless = document.getElementById('v-lossless');
+  $lossless.addEventListener('change', () => { $rate.disabled = $lossless.checked; });
+  const CODEC_NAMES = { av1: 'AV1', vp9: 'VP9', avc: 'H.264' };
+  const autoRate = codec => W * H * FPS * { av1: 0.13, vp9: 0.16, avc: 0.22 }[codec];
+  $codec.addEventListener('change', () => { $rate.placeholder = (autoRate($codec.value) / 1e6).toFixed(1); });
   const applySettings = () => {
     useHighlights = $hl.checked;
     lenSel.placeholder = fill(T.auto, { n: autoLength() });
@@ -2667,6 +2692,7 @@ async function setup() {
     [W, H] = format();
     scale = Math.min(W, H) / 1080;
     document.getElementById('v-res').textContent = `${W} × ${H} px · ${FPS} fps · ${Math.round(JOURNEY + INTRO + DIVE + BACK + OUTRO)} s`;
+    $rate.placeholder = (autoRate($codec.value) / 1e6).toFixed(1);
     planJourney();
     smoothCamera();
     layoutStage();
@@ -2869,7 +2895,7 @@ async function setup() {
   };
   // Whether an encoding really works: Firefox says yes to some it then fails to configure
   // (the failure only comes later, through the error callback), so one frame is tried
-  const encodes = async config => {
+  const encodes = async (config, options) => {
     let failed = false;
     const encoder = new VideoEncoder({ output: () => {}, error: () => { failed = true; } });
     try {
@@ -2877,7 +2903,7 @@ async function setup() {
       const canvas = new OffscreenCanvas(config.width, config.height), g = canvas.getContext('2d');
       g.fillStyle = '#123'; g.fillRect(0, 0, config.width, config.height);
       const frame = new VideoFrame(canvas, { timestamp: 0 });
-      encoder.encode(frame, { keyFrame: true });
+      encoder.encode(frame, { keyFrame: true, ...options });
       frame.close();
       await encoder.flush();
     } catch (e) { failed = true; }
@@ -2894,11 +2920,11 @@ async function setup() {
     let wake = null;
     try { wake = await navigator.wakeLock?.request('screen'); } catch (e) { /* not allowed here */ }
     try {
-      // The first encoding the browser takes: H.264 High, Main or Baseline at level 4.0 (enough
-      // for 1080p at 30 fps; Firefox refuses higher levels), level 5.1 for larger custom sizes,
-      // else VP9
-      // With a size asked for, the bitrate capped to fit it whatever the length (8 % kept for
-      // the MP4's own overhead), held constant so the encoder cannot overshoot it
+      // The codec chosen, else the next the browser takes (AV1, VP9, then H.264), each at the
+      // lowest level fitting the frame (Firefox refuses H.264 above 4.0, enough for 1080p30)
+      // Variable bitrate, spending more on fast moves than on a still title; with a size asked
+      // for, capped to fit it whatever the length (8 % kept for the MP4's own overhead) and
+      // held constant so the encoder cannot overshoot it
       // The music's encoding: AAC, which every player reads, else Opus (Firefox); none at all
       // in a browser without either, the video then made silent
       let audio = null;
@@ -2908,26 +2934,33 @@ async function setup() {
           try { if ((await AudioEncoder.isConfigSupported(c)).supported) { audio = { config: c, mux: m }; break; } } catch (e) { /* next */ }
         }
       }
-      const mb = Number(document.getElementById('v-mb').value);
+      // Lossless: AV1 or VP9 at quantizer 0 on the software encoder (the browser's H.264 has no
+      // lossless mode, a graphics card's encoder may not honour it); no bitrate, no size cap
+      const lossless = $lossless.checked;
+      const mb = lossless ? 0 : Number(document.getElementById('v-mb').value);
       const cap = mb > 0 ? mb * 1e6 * 8 * 0.92 / duration() - (audio ? 128000 : 0) : Infinity;
-      const base = { width: W, height: H, bitrate: Math.min(W * H >= 1920 * 1080 ? 14e6 : 8e6, cap),
-        bitrateMode: 'constant', framerate: FPS };
-      let config = null, mux = null;
-      for (const [codec, m] of [['avc1.640028', 'avc'], ['avc1.4d0028', 'avc'], ['avc1.42e028', 'avc'], ['avc1.640033', 'avc'], ['vp09.00.40.08', 'vp9'], ['vp09.00.51.08', 'vp9']]) {
-        for (const bitrateMode of ['constant', 'variable']) {
-          const c = { ...base, bitrateMode, codec, ...(m === 'avc' ? { avc: { format: 'avc' } } : {}) };
-          try { if ((await VideoEncoder.isConfigSupported(c)).supported && await encodes(c)) { config = c; mux = m; break; } } catch (e) { /* next */ }
+      const codecs = { av1: ['av01.0.08M.08', 'av01.0.09M.08', 'av01.0.12M.08', 'av01.0.13M.08'],
+        vp9: ['vp09.00.40.08', 'vp09.00.51.08'], avc: ['avc1.640028', 'avc1.4d0028', 'avc1.42e028', 'avc1.640033'] };
+      const order = [$codec.value, ...['av1', 'vp9', 'avc'].filter(m => m !== $codec.value)].filter(m => !lossless || m !== 'avc');
+      let config = null, mux = null, frameOptions = {};
+      for (const [codec, m] of order.flatMap(m => codecs[m].map(c => [c, m]))) {
+        const bitrate = Math.min(Number($rate.value) > 0 ? Number($rate.value) * 1e6 : autoRate(m), cap);
+        const options = lossless ? { [m]: { quantizer: 0 } } : {};
+        for (const bitrateMode of lossless ? ['quantizer'] : cap < Infinity ? ['constant', 'variable'] : ['variable', 'constant']) {
+          const c = lossless ? { width: W, height: H, bitrateMode, framerate: FPS, codec, hardwareAcceleration: 'prefer-software' }
+            : { width: W, height: H, bitrate, bitrateMode, framerate: FPS, codec, ...(m === 'avc' ? { avc: { format: 'avc' } } : {}) };
+          try { if ((await VideoEncoder.isConfigSupported(c)).supported && await encodes(c, options)) { config = c; mux = m; frameOptions = options; break; } } catch (e) { /* next */ }
         }
         if (config) break;
       }
-      if (!config) throw new Error('no video encoding (H.264 or VP9) available in this browser');
+      if (!config) throw new Error(lossless ? 'no lossless encoding (AV1 or VP9) available in this browser' : 'no video encoding (AV1, VP9 or H.264) available in this browser');
       const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), fastStart: 'in-memory',
         video: { codec: mux, width: W, height: H },
         ...(audio ? { audio: { codec: audio.mux, sampleRate: 48000, numberOfChannels: 2 } } : {}) });
       let failure = null;
       const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { failure = e; } });
       encoder.configure(config);
-      const frames = Math.round(duration() * FPS), canvas = document.createElement('canvas'), started = performance.now();
+      const frames = Math.round(duration() * FPS), gop = Math.round(Math.max(1, Number($kf.value) || 10) * FPS), canvas = document.createElement('canvas'), started = performance.now();
       canvas.width = W; canvas.height = H;
       const cx = canvas.getContext('2d');
       for (let i = 0; i < frames; i++) {
@@ -2940,7 +2973,7 @@ async function setup() {
         cx.drawImage(map.getCanvas(), 0, 0, W, H);
         cx.drawImage(hud, 0, 0);
         const frame = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
-        encoder.encode(frame, { keyFrame: i % (FPS * 2) === 0 });
+        encoder.encode(frame, { keyFrame: i % gop === 0, ...frameOptions });
         frame.close();
         while (encoder.encodeQueueSize > 8) await sleep(10);
         // Time left at the pace so far, once a few frames have set it
@@ -2983,12 +3016,13 @@ async function setup() {
       a.href = URL.createObjectURL(blob);
       a.download = `${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'trip'}-${H}p.mp4`;
       a.click();
-      status(fill(T.done, { n: (blob.size / 1e6).toFixed(1) }) + (musicFile && !audio ? ' (no music: this browser cannot encode audio)' : ''), 100);
+      status(fill(T.done, { n: (blob.size / 1e6).toFixed(1) }) + ` · ${CODEC_NAMES[mux]}${lossless ? ' lossless' : ''}` + (musicFile && !audio ? ' (no music: this browser cannot encode audio)' : ''), 100);
     } catch (e) {
       status(fill(T.failed, { e: e.message }));
     } finally {
       wake?.release().catch(() => {});
       buttons.forEach(b => (b.disabled = false));
+      $rate.disabled = $lossless.checked;
       markPending();
       show(0, true);
     }
