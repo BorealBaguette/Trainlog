@@ -977,30 +977,53 @@ async function setup() {
   let lineLift = 0;
   function ribbon(points, width, rgb, order, { opacity = 1, upright = false, xray = false } = {}) {
     if (points.length < 2) return;
-    const pos = [], idx = [];
-    for (let i = 0; i < points.length; i++) {
-      const a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)];
-      let nx = -(b[1] - a[1]), ny = b[0] - a[0];
-      const len = Math.hypot(nx, ny) || 1;
-      nx /= len; ny /= len;
-      const h = width / 2, p = points[i];
-      if (upright) pos.push(p[0], p[1], p[2] + h, p[0], p[1], p[2] - h);
-      else pos.push(p[0] + nx * h, p[1] + ny * h, p[2], p[0] - nx * h, p[1] - ny * h, p[2]);
-      if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+    const pos = [], idx = [], h = width / 2, n = points.length;
+    // Each segment's own side direction (a repeated point takes its neighbour's): the side
+    // taken from the points either side, as it was, turned at random where a path doubled
+    // back on itself (a ferry's manoeuvres), the points either side then nearly one, and
+    // twisted the strip into hooks
+    const sides = [];
+    for (let i = 0; i + 1 < n; i++) {
+      const dx = points[i + 1][0] - points[i][0], dy = points[i + 1][1] - points[i][1], len = Math.hypot(dx, dy);
+      sides.push(len > 1e-6 ? [-dy / len, dx / len] : null);
     }
-    // Round joins where the line turns sharply (a hairpin): the strip's corners there
-    // pinch or splay, and a disc over the bend closes it
-    if (!upright) for (let i = 1; i + 1 < points.length; i++) {
-      const a = points[i - 1], p = points[i], b = points[i + 1];
-      const t1 = Math.atan2(p[1] - a[1], p[0] - a[0]), t2 = Math.atan2(b[1] - p[1], b[0] - p[0]);
-      if (Math.abs(((t2 - t1 + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < Math.PI / 5) continue;
-      const c = pos.length / 3, h = width / 2;
+    for (let i = 1; i < sides.length; i++) if (!sides[i]) sides[i] = sides[i - 1];
+    for (let i = sides.length - 2; i >= 0; i--) if (!sides[i]) sides[i] = sides[i + 1];
+    if (!sides[0]) return;
+    // A pair of vertices across the line at p, joined to the pair before unless it starts anew
+    let prev = -1;
+    const across = (p, [nx, ny], stretch, join = true) => {
+      const c = pos.length / 3;
+      if (upright) pos.push(p[0], p[1], p[2] + h, p[0], p[1], p[2] - h);
+      else pos.push(p[0] + nx * h * stretch, p[1] + ny * h * stretch, p[2], p[0] - nx * h * stretch, p[1] - ny * h * stretch, p[2]);
+      if (join && prev >= 0) idx.push(prev, prev + 1, c, prev + 1, c + 1, c);
+      prev = c;
+    };
+    const disc = p => {
+      const c = pos.length / 3;
       pos.push(p[0], p[1], p[2]);
       for (let j = 0; j <= 12; j++) {
         pos.push(p[0] + Math.cos(Math.PI * j / 6) * h, p[1] + Math.sin(Math.PI * j / 6) * h, p[2]);
         if (j) idx.push(c, c + j, c + j + 1);
       }
+    };
+    across(points[0], sides[0], 1);
+    for (let i = 1; i + 1 < n; i++) {
+      const a = sides[i - 1], b = sides[i], cos = a[0] * b[0] + a[1] * b[1];
+      if (upright || cos > 0.5) {
+        // A bend under 60°: mitred, the corner pushed out so the strip keeps its width
+        const mx = a[0] + b[0], my = a[1] + b[1], ml = Math.hypot(mx, my) || 1;
+        const m = [mx / ml, my / ml];
+        across(points[i], m, 1 / Math.max(0.5, m[0] * a[0] + m[1] * a[1]));
+      } else {
+        // Sharper (a hairpin, a ferry turning back): the strip cut there, each side square to
+        // its own segment, and a disc over the corner closing it
+        across(points[i], a, 1);
+        across(points[i], b, 1, false);
+        disc(points[i]);
+      }
     }
+    across(points[n - 1], sides[sides.length - 1], 1);
     // Rounded ends: a half disc past each end (where runs meet, the two overlap into a round
     // join; the outline's, wider, draws the rim around the core's)
     if (!upright) for (const [p, q] of [[points[0], points[1]], [points[points.length - 1], points[points.length - 2]]]) {
@@ -2716,15 +2739,25 @@ async function setup() {
     playing = requestAnimationFrame(tick);
   });
 
+  // A pause timed by a worker: a hidden tab's own timers are slowed to once a second, then once a
+  // minute, a worker's are not
+  const ticker = new Worker(URL.createObjectURL(new Blob(['onmessage = e => setTimeout(() => postMessage(e.data[0]), e.data[1]);'], { type: 'text/javascript' })));
+  const sleepers = new Map();
+  let sleeperId = 0;
+  ticker.onmessage = e => { sleepers.get(e.data)?.(); sleepers.delete(e.data); };
+  const sleep = ms => new Promise(r => { const id = ++sleeperId; sleepers.set(id, r); ticker.postMessage([id, ms]); });
   // Each frame: the camera moved, waited on until its terrain and map have loaded, then
   // the map and the HUD composited and handed to the encoder with its exact timestamp
-  const settled = () => new Promise(resolve => {
-    let done = false;
-    const finish = () => { if (!done) { done = true; resolve(); } };
-    const timer = setTimeout(finish, 6000);
-    const check = () => { if (map.areTilesLoaded() && !map.isMoving()) { clearTimeout(timer); map.once('render', finish); map.triggerRepaint(); } else map.once('idle', check); };
-    requestAnimationFrame(check);
-  });
+  // Polled on a worker's clock and drawn by hand rather than waited on through the map's own
+  // frames: in a hidden tab (another tab in front, the screen locked) the browser stops those
+  // and slows the page's timers to once a minute, the encoder sat unused, and the browser took
+  // it back mid-render ("Codec reclaimed due to inactivity")
+  const settled = async () => {
+    const end = performance.now() + 6000;
+    while (!map.areTilesLoaded() && performance.now() < end) await sleep(25);
+    // Drawn once more with everything it waited for
+    map.redraw();
+  };
   // Whether an encoding really works: Firefox says yes to some it then fails to configure
   // (the failure only comes later, through the error callback), so one frame is tried
   const encodes = async config => {
@@ -2747,6 +2780,10 @@ async function setup() {
     if (playing) document.getElementById('v-play').click();
     const buttons = document.querySelectorAll('#v-panel button, #v-panel select, #v-panel input');
     buttons.forEach(b => (b.disabled = true));
+    // The screen kept on while it renders, so the computer does not lock or sleep on its own
+    // halfway (where the browser allows it; none in Firefox before 126)
+    let wake = null;
+    try { wake = await navigator.wakeLock?.request('screen'); } catch (e) { /* not allowed here */ }
     try {
       // The first encoding the browser takes: H.264 High, Main or Baseline at level 4.0 (enough
       // for 1080p at 30 fps; Firefox refuses higher levels), level 5.1 for larger custom sizes,
@@ -2796,7 +2833,7 @@ async function setup() {
         const frame = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
         encoder.encode(frame, { keyFrame: i % (FPS * 2) === 0 });
         frame.close();
-        while (encoder.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 10));
+        while (encoder.encodeQueueSize > 8) await sleep(10);
         // Time left at the pace so far, once a few frames have set it
         const left = (performance.now() - started) / (i + 1) * (frames - i - 1) / 1000;
         const eta = i >= 10 ? ` · ${fill(T.eta, { t: `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}` })}` : '';
@@ -2841,6 +2878,7 @@ async function setup() {
     } catch (e) {
       status(fill(T.failed, { e: e.message }));
     } finally {
+      wake?.release().catch(() => {});
       buttons.forEach(b => (b.disabled = false));
       markPending();
       show(0, true);
