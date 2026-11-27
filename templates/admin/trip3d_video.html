@@ -1191,15 +1191,15 @@ async function setup() {
       }
       return [best[0] * R, best[1]];
     });
+    const offsets = views.map(v => v[0]);
+    // The steeper view held a little either side, so it is there before the walls close in
+    pt = movingAverage(movingAverage(runningMin(spread(views.map(v => v[1])), GT, 3), GT, 3), GT, 3);
     const off = spread(offsets);
     const ox = movingAverage(movingAverage(off.map(Math.cos), GT, 5), GT, 5);
     const oy = movingAverage(movingAverage(off.map(Math.sin), GT, 5), GT, 5);
     [hx, hy] = [hx.map((x, i) => x * ox[i] - hy[i] * oy[i]), hy.map((y, i) => y * ox[i] + hx[i] * oy[i])];
   };
   const smoothCamera = () => {
-    const offsets = views.map(v => v[0]);
-    // The steeper view held a little either side, so it is there before the walls close in
-    pt = movingAverage(movingAverage(runningMin(spread(views.map(v => v[1])), GT, 3), GT, 3), GT, 3);
     // On the camera's own clock, the photo pauses left out (camClock): it holds still while a
     // photo is shown, rather than drifting on with its smoothing, and goes on from there after
     GT = [];
