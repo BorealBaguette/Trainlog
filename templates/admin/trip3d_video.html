@@ -48,6 +48,19 @@
   #v-bar { height: 6px; background: var(--v-btn); border-radius: 3px; overflow: hidden; }
   #v-bar div { height: 100%; width: 0; background: var(--v-accent); transition: width .2s; }
   #v-status { color: var(--v-dim); font-size: .75rem; min-height: 1.2em; }
+  #v-panel { overflow-y: auto; }
+  #v-panel input[type=checkbox] { width: auto; margin: 0; }
+  #v-panel .v-check { display: inline-flex; align-items: center; gap: 7px; color: var(--v-fg); font-size: .8rem; margin: 0; cursor: pointer; }
+  /* The photos picked, as thumbnails: where each lands on the route, or why it does not */
+  #v-photo-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 6px; }
+  #v-photo-list:empty { display: none; }
+  #v-panel .v-ph { position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: var(--v-btn); }
+  #v-panel .v-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #v-panel .v-ph.v-off img { opacity: .35; filter: grayscale(1); }
+  #v-panel .v-ph span { position: absolute; left: 0; right: 0; bottom: 0; font-size: .6rem; padding: 1px 3px; background: rgba(0,0,0,.62);
+    color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #v-panel .v-ph button { position: absolute; top: 2px; right: 2px; padding: 0; width: 18px; height: 18px; border-radius: 50%;
+    background: rgba(0,0,0,.6); color: #fff; font-size: .6rem; line-height: 18px; }
   /* Phones: the frame on top, the controls under it, the page scrolling */
   @media (max-width: 800px) {
     html, body { overflow: auto; }
@@ -101,6 +114,13 @@
         <div style="color: var(--v-dim); font-size: .7rem; margin-top: 3px">{{ video3dMusicRights }}</div></div>
     </div>
     <div class="v-row">
+      <div style="flex:1"><label>{{ video3dPhotos }}</label>
+        <input id="v-photos" type="file" accept="image/*" multiple class="form-control form-control-sm">
+        <div id="v-photo-list"></div>
+        <div style="color: var(--v-dim); font-size: .7rem; margin-top: 3px">{{ video3dPhotosHint }}</div></div>
+    </div>
+    <label class="v-check"><input id="v-hl" type="checkbox" checked> {{ video3dHighlights }}</label>
+    <div class="v-row">
       <div style="flex:1"><label>{{ video3dMaxSize }}</label>
         <input id="v-mb" type="number" min="1" step="1" class="form-control form-control-sm" placeholder="{{ video3dNoLimit }}"></div>
     </div>
@@ -124,7 +144,16 @@ const T = {{ {'tunnel': video3dTunnel, 'bridge': video3dBridge, 'altitude': vide
   'highest': video3dHighest, 'cruise': video3dCruise, 'descent': video3dDescent, 'climb': video3dClimb,
   'ready': video3dReady, 'terrain': video3dTerrain, 'rendering': video3dRendering,
   'done': video3dDone, 'eta': video3dEta, 'licensedToTrainlog': licensedToTrainlog, 'preview': video3dPreview, 'failed': video3dFailed, 'auto': video3dAuto, 'stops': motisStops, 'tunnels': video3dTunnels,
-  'transfers': video3dTransfers, 'inTunnels': video3dInTunnels} | tojson }};
+  'transfers': video3dTransfers, 'inTunnels': video3dInTunnels, 'photos': video3dPhotos, 'photoUnplaced': video3dPhotoUnplaced,
+  'photoUnreadable': video3dPhotoUnreadable, 'lowest': video3dLowest, 'longestTunnel': video3dLongestTunnel,
+  'highestBridge': video3dHighestBridge, 'aboveValley': video3dAboveValley, 'tripsCount': video3dTripsCount,
+  'countries': video3dCountries, 'photosCount': video3dPhotosCount} | tojson }};
+// The trip types' names, for the end card's breakdown
+const TYPE_NAMES = {{ {'train': train, 'bus': bus, 'tram': tram, 'metro': metro, 'air': air, 'ferry': ferry, 'aerialway': aerialway,
+  'car': car, 'walk': walk, 'cycle': cycle, 'helicopter': helicopter, 'funicular': funicular, 'rail': rail, 'scooter': scooter,
+  'ski': ski, 'other': other, 'poi': poi} | tojson }};
+// Photos' EXIF (time and place) read in the browser, loaded on the first photo picked
+const EXIFR = 'https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.esm.mjs';
 const LANG = {{ (langId or 'en') | tojson }};
 // A premium member's videos say so under the name, with the site's premium gem: the trips'
 // owner's membership, once the trips are in
@@ -431,7 +460,7 @@ async function setup() {
   // Facts for the cards and the chips
   const tunnels = runs.filter(r => r.kind === 'tunnel').map(r => ({ from: dist[r.s], to: dist[r.e], s: r.s, e: r.e }));
   nameTunnels(tunnels, coords);
-  const bridges = runs.filter(r => r.kind === 'bridge').map(r => ({ from: dist[r.s], to: dist[r.e] }));
+  const bridges = runs.filter(r => r.kind === 'bridge').map(r => ({ from: dist[r.s], to: dist[r.e], s: r.s, e: r.e }));
   const tunnelLen = tunnels.reduce((a, t) => a + t.to - t.from, 0);
   const zr = z.map(v => v - LIFT);
   // A distance as people write it: one decimal under 100 km, whole km above, with the
@@ -536,6 +565,91 @@ async function setup() {
   const facts = { km: (total - gapSpans.reduce((a, g) => a + g.to - g.from, 0)) / 1000, flownKm: flown / 1000,
     tunnels: tunnels.length, tunnelKm: tunnelLen / 1000, bridges: bridges.length,
     top: onGround.length ? maxOf(onGround) : null, cruise: flown ? maxOf(zr.filter((_, k) => isAir[k])) : null, climb, descent };
+
+  // Highlights the train stops at for a moment, with a callout: the journey's highest point
+  // (when it stands well above both ends, not at a station), its lowest when under the sea, the
+  // longest tunnel (2 km and more, at its portal) and the bridge standing highest over its
+  // valley (40 m and more, at its middle). One per kilometre at most, in that order of interest
+  const highlights = [];
+  {
+    const m = n => `${Math.round(n).toLocaleString(LANG)} m`;
+    const inner = k => d[k] > total * 0.04 && d[k] < total * 0.96;
+    let kTop = -1, kLow = -1;
+    for (let k = 0; k < S.length; k++) {
+      if (isAir[k] || S[k].kind === 'gap' || S[k].type === 'ferry') continue;
+      if (kTop < 0 || zr[k] > zr[kTop]) kTop = k;
+      if (kLow < 0 || zr[k] < zr[kLow]) kLow = k;
+    }
+    const lowEnd = Math.min(zr[0], zr[S.length - 1]);
+    if (!flat && kTop >= 0 && inner(kTop) && zr[kTop] - lowEnd > 150)
+      highlights.push({ kind: 'top', d: d[kTop], title: T.highest, value: m(zr[kTop]), icon: '\uf6fc' });
+    if (kLow >= 0 && inner(kLow) && zr[kLow] < -10)
+      highlights.push({ kind: 'low', d: d[kLow], title: T.lowest, value: m(zr[kLow]), icon: '\ue097' });
+    const longest = [...tunnels].sort((a, b) => (b.to - b.from) - (a.to - a.from))[0];
+    if (longest && longest.to - longest.from >= 2000)
+      highlights.push({ kind: 'tunnel', d: longest.from + 1, title: T.longestTunnel, value: kmText((longest.to - longest.from) / 1000),
+        icon: '\uf557', tunnel: longest });
+    let high = null;
+    for (const b of bridges) {
+      if (b.to - b.from < 100) continue;
+      let clear = 0;
+      for (let k = at[b.s]; k <= at[b.e]; k++) if (ground[k] != null) clear = Math.max(clear, zr[k] - ground[k]);
+      if (clear >= 40 && (!high || clear > high.clear)) high = { b, clear };
+    }
+    if (high) {
+      const len = high.b.to - high.b.from;
+      highlights.push({ kind: 'bridge', d: (high.b.from + high.b.to) / 2, title: T.highestBridge,
+        value: len >= 1000 ? kmText(len / 1000) : m(len), sub: fill(T.aboveValley, { n: Math.round(high.clear) }), icon: '\ue4c8' });
+    }
+    for (let i = highlights.length - 1; i > 0; i--)
+      if (highlights.slice(0, i).some(h => Math.abs(h.d - highlights[i].d) < 1000)) highlights.splice(i, 1);
+  }
+  // The photos picked, each placed on the route (placePhoto)
+  let photos = [];
+  // Where on the route a photo was taken (ph.d, metres along it; null when it is not on it).
+  // By its GPS position: the nearest point of each pass within reach (1.5 km, 10 km on a
+  // flight), the pass nearest its time when the route goes by several times. By its time alone
+  // when it has no position, or one off the route: its UTC instant against the journey's clock,
+  // else its camera time against the local clock. A photo taken between two trips (a hop) is
+  // placed at the station the first one ends at
+  const placePhoto = ph => {
+    ph.d = null;
+    if (ph.error) return;
+    const passes = [];
+    if (ph.lat != null) {
+      let best = null;
+      for (let k = 0; k < S.length; k++) {
+        const dd = S[k].kind === 'gap' ? Infinity : haversine([ph.lng, ph.lat], [S[k].lng, S[k].lat]);
+        if (dd > (isAir[k] ? 10000 : 1500)) { if (best) passes.push(best); best = null; continue; }
+        if (!best || dd < best.dist) best = { k, dist: dd };
+      }
+      if (best) passes.push(best);
+    }
+    const clock = ph.utc != null ? s => realAt(s) : ph.local != null ? s => localAt(s)?.getTime() ?? null : null;
+    const target = ph.utc ?? ph.local;
+    let byTime = null;
+    if (clock && clock(0) != null) {
+      const t0 = clock(0), t1 = clock(total), slack = 20 * 60000;
+      if (target >= t0 - slack && target <= t1 + slack) {
+        byTime = target <= t0 ? 0 : target >= t1 ? total : null;
+        for (let k = 1, ps = 0, pt = t0; byTime == null && k < S.length; k++) {
+          const t = clock(d[k]);
+          if (t == null) continue;
+          if (t >= target) byTime = ps + (d[k] - ps) * ((target - pt) / ((t - pt) || 1));
+          ps = d[k]; pt = t;
+        }
+        byTime ??= total;
+      }
+    }
+    if (passes.length) {
+      const pick = byTime != null && passes.length > 1
+        ? passes.reduce((a, b) => (Math.abs(d[a.k] - byTime) <= Math.abs(d[b.k] - byTime) ? a : b))
+        : passes.reduce((a, b) => (a.dist <= b.dist ? a : b));
+      ph.d = d[pick.k];
+    } else ph.d = byTime;
+    const hop = ph.d != null && gapSpans.find(g => ph.d > g.from && ph.d < g.to);
+    if (hop) ph.d = hop.from;
+  };
 
   // ── three.js inside MapLibre ───────────────────────────────────────────────────
   const lngs = S.map(p => p.lng), lats = S.map(p => p.lat);
@@ -836,10 +950,13 @@ async function setup() {
     [hx, hy] = [hx.map((x, i) => x * ox[i] - hy[i] * oy[i]), hy.map((y, i) => y * ox[i] + hx[i] * oy[i])];
   };
   const smoothCamera = () => {
+    // On the camera's own clock, the photo pauses left out (camClock): it holds still while a
+    // photo is shown, rather than drifting on with its smoothing, and goes on from there after
     GT = [];
-    for (let t = 0; t < JOURNEY; t += GS) GT.push(t);
-    GT.push(JOURNEY);
-    const ss = GT.map(t => journeyAt(t).s), sp = GT.map(legSpeed);
+    const camEnd = camClock(JOURNEY);
+    for (let t = 0; t < camEnd; t += GS) GT.push(t);
+    GT.push(camEnd);
+    const ss = GT.map(t => journeyAt(fromCamClock(t)).s), sp = GT.map(t => legSpeed(fromCamClock(t)));
     // In flight, the speed of the moment rather than the leg's mean: slow at take-off and landing,
     // the view comes close (8 km at least) to watch the climb; at cruise it opens on the route
     const pace = ss.map((s, i) => (isAir[pointAt(s).k]
@@ -881,14 +998,29 @@ async function setup() {
     airy = movingAverage(movingAverage(ss.map(s => (isAir[pointAt(s).k] ? 1 : 0)), GT, 4), GT, 4);
     turnToSlope(aim);
   };
+  // The camera's clock: the journey's, with the time spent on photos taken out, and back
+  const photoLegs = () => pauseLegs.filter(p => p.pause.kind === 'photo');
+  const camClock = t => t - photoLegs().reduce((a, p) => a + Math.max(0, Math.min(t, p.t1) - p.t0), 0);
+  const fromCamClock = c => { let t = c; for (const p of photoLegs()) if (t > p.t0) t += p.t1 - p.t0; return t; };
   // The camera at a time of the journey
   const chase = t => {
-    const c = Math.max(0, Math.min(JOURNEY, t)), k = Math.min(GT.length - 2, Math.floor(c / GS));
+    const tr = Math.max(0, Math.min(JOURNEY, t)), c = Math.min(GT[GT.length - 1], camClock(tr));
+    const k = Math.min(GT.length - 2, Math.floor(c / GS));
     const u = (c - GT[k]) / ((GT[k + 1] - GT[k]) || 1);
-    return { center: [lerp(cLng[k], cLng[k + 1], u), lerp(cLat[k], cLat[k + 1], u)], zoom: lerp(zm[k], zm[k + 1], u),
+    // While the train stops at a highlight, the camera swings slowly round it and closes in a
+    // little, one way then the other, eased in and out over the pause and a little either side
+    // (at a photo it holds still: see camClock)
+    let orbit = 0, closer = 0;
+    pauseLegs.filter(p => p.pause.kind === 'highlight').forEach((p, i) => {
+      const a = p.t0 - 0.9, b = p.t1 + 0.9;
+      if (tr <= a || tr >= b) return;
+      const w = Math.sin(Math.PI * (tr - a) / (b - a)) ** 2;
+      orbit += (i % 2 ? -1 : 1) * 24 * w; closer = Math.max(closer, 0.45 * w);
+    });
+    return { center: [lerp(cLng[k], cLng[k + 1], u), lerp(cLat[k], cLat[k + 1], u)], zoom: lerp(zm[k], zm[k + 1], u) + closer,
       elevation: lerp(el[k], el[k + 1], u),
       pitch: 62 + 14 * lerp(airy[k], airy[k + 1], u),
-      bearing: Math.atan2(lerp(hy[k], hy[k + 1], u), lerp(hx[k], hx[k + 1], u)) * 180 / Math.PI + 65 * lerp(airy[k], airy[k + 1], u) };
+      bearing: Math.atan2(lerp(hy[k], hy[k + 1], u), lerp(hx[k], hx[k + 1], u)) * 180 / Math.PI + 65 * lerp(airy[k], airy[k + 1], u) + orbit };
   };
   const overview = (north = false) => {
     // Fitted from straight above, within the margins the frames keep clear for the title and
@@ -918,12 +1050,13 @@ async function setup() {
   // ── Timeline ───────────────────────────────────────────────────────────────────
   // Overview with the title, a dive to the start, the journey, a pull back to the overview
   // with the trip's numbers
-  const INTRO = 3.2, DIVE = 2.4, BACK = 2.4, OUTRO = 3.6;
+  // The closing card unfolds section by section (end card), so it holds longer
+  const INTRO = 3.2, DIVE = 2.4, BACK = 2.4, OUTRO = 5.5;
   let JOURNEY = 30 - INTRO - DIVE - BACK - OUTRO;
   // The opening overview along the journey; the closing one north up, as on a map
   const ov = overview(), ovEnd = overview(true);
   function frameAt(t) {
-    let cam, s, title = 0, card = 0, headOn = true, dwell = null, speed = legSpeed(JOURNEY), jt = JOURNEY;
+    let cam, s, title = 0, card = 0, cardT = 0, headOn = true, dwell = null, pause = null, speed = legSpeed(JOURNEY), jt = JOURNEY;
     if (t < INTRO) {
       const u = t / INTRO;
       cam = { ...ov, zoom: ov.zoom - 0.15 + 0.15 * u };
@@ -934,22 +1067,23 @@ async function setup() {
       const u = ease((t - INTRO) / DIVE);
       cam = mix(ov, chase(0), u); s = 0; speed = legSpeed(0); jt = 0;
     } else if (t < INTRO + DIVE + JOURNEY) {
-      ({ s, dwell } = journeyAt(t - INTRO - DIVE));
+      ({ s, dwell, pause } = journeyAt(t - INTRO - DIVE));
       cam = chase(t - INTRO - DIVE); speed = legSpeed(t - INTRO - DIVE); jt = t - INTRO - DIVE;
     } else if (t < INTRO + DIVE + JOURNEY + BACK) {
       const u = ease((t - INTRO - DIVE - JOURNEY) / BACK);
       cam = mix(chase(JOURNEY), { ...ovEnd, bearing: -3 }, u); s = total;
     } else {
       const u = (t - INTRO - DIVE - JOURNEY - BACK) / OUTRO;
-      cam = { ...ovEnd, bearing: -3 + 3 * Math.min(1, u * 1.5) }; s = total; card = Math.min(1, u / 0.18); headOn = false;
+      cam = { ...ovEnd, bearing: -3 + 3 * Math.min(1, u * 1.5) }; s = total; card = Math.min(1, u / 0.12); headOn = false;
+      cardT = t - INTRO - DIVE - JOURNEY - BACK;
     }
-    return { cam, s, title, card, headOn, dwell, speed, jt, whole: t < INTRO + DIVE / 2 };
+    return { cam, s, title, card, cardT, headOn, dwell, pause, speed, jt, whole: t < INTRO + DIVE / 2 };
   }
   const duration = () => INTRO + DIVE + JOURNEY + BACK + OUTRO;
 
   // The journey's timing: legs between the stations it halts at, each starting and ending at
   // rest (eased, their time shared by distance), and a wait at each
-  let plan = [], halting = new Set(), nearby = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [], countryChanges = [];
+  let plan = [], pauseLegs = [], useHighlights = true, halting = new Set(), nearby = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [], countryChanges = [];
   const planJourney = () => {
     // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
     // first, then the stops the timetable waits longest at; the train runs through the rest
@@ -987,7 +1121,13 @@ async function setup() {
     const riding = total - hops.reduce((a, g) => a + g.to - g.from, 0);
     // A transfer holds twice as long as a stop on the way
     const waitOf = st => (st.transfer ? 2 * wait : wait);
-    const moving = Math.max(1, JOURNEY - halts.reduce((a, st) => a + waitOf(st), 0) - hops.length * HOP);
+    // The pauses at highlights and photos (pausePoints), a leg ending at each
+    const pauses = pausePoints(halts);
+    const pauseAt = s => pauses.filter(p => Math.abs(p.d - s) < 1);
+    cuts.push(...pauses.map(p => p.d).filter(v => !cuts.some(c => Math.abs(c - v) < 1)));
+    cuts.sort((a, b) => a - b);
+    const moving = Math.max(1, JOURNEY - halts.reduce((a, st) => a + waitOf(st), 0) - hops.length * HOP
+      - pauses.reduce((a, p) => a + p.len, 0));
     // The share of the moving time for the stretch a..b: each trip by the square root of the
     // time it took (by distance when a trip has no times), split within it by distance. The
     // root keeps the long trips longer without the short ones flashing past
@@ -1001,13 +1141,22 @@ async function setup() {
     };
     plan = [];
     let t = 0;
+    // Each pause played once, at the first cut it matches (two cuts under a metre apart, where
+    // two trips meet, both matched it, and the photo was shown twice)
+    const pauseHere = s => { for (const p of pauseAt(s).filter(p => !p.done)) { p.done = true; plan.push({ t0: t, t1: t + p.len, s0: s, s1: s, pause: p }); t += p.len; } };
+    pauseHere(0);
+    const waited = new Set();
     for (let i = 0; i + 1 < cuts.length; i++) {
       const a = cuts[i], b = cuts[i + 1], dt = isHop(a, b) ? HOP : moving * share(a, b);
       plan.push({ t0: t, t1: t + dt, s0: a, s1: b, air: !isHop(a, b) && isAir[pointAt((a + b) / 2).k] });
       t += dt;
-      const halt = halts.find(st => Math.abs(st.d - b) < 1);
-      if (halt && i + 1 < cuts.length - 1) { plan.push({ t0: t, t1: t + waitOf(halt), s0: b, s1: b, stop: halt }); t += waitOf(halt); }
+      // Each halt waited at once, as each pause (where two trips meet under a metre apart, its
+      // two cuts both matched it, and the train waited twice)
+      const halt = halts.find(st => !waited.has(st) && Math.abs(st.d - b) < 1);
+      if (halt && i + 1 < cuts.length - 1) { waited.add(halt); plan.push({ t0: t, t1: t + waitOf(halt), s0: b, s1: b, stop: halt }); t += waitOf(halt); }
+      pauseHere(b);
     }
+    pauseLegs = plan.filter(p => p.pause);
     // A flight's time: its climb and its descent (under 8000 m) a quarter and more
     // each, being what is worth watching, the cruise the rest (45 %) going by fast; within the
     // climb and the descent, the lower the slower. Shared by time rather than by distance, as a
@@ -1041,7 +1190,7 @@ async function setup() {
     }
     // When each trip starts and ends on the journey's clock, for its train sliding in and out
     const timeAt = s => {
-      const leg = plan.find(p => !p.stop && s <= p.s1 + 0.5) || plan[plan.length - 1];
+      const leg = plan.find(p => !p.stop && !p.pause && s <= p.s1 + 0.5) || plan[plan.length - 1];
       return leg.s1 > leg.s0 ? leg.t0 + (Math.min(Math.max(s, leg.s0), leg.s1) - leg.s0) / (leg.s1 - leg.s0) * (leg.t1 - leg.t0) : leg.t0;
     };
     for (const t of tripSpans) { t.tIn = timeAt(t.from); t.tOut = timeAt(t.to); }
@@ -1064,20 +1213,46 @@ async function setup() {
     stationTimes = new Map();
     for (const st of stations) {
       if (!st.major && !halting.has(st)) continue;
-      const leg = plan.find(p => !p.stop && p.s1 >= st.d - 1) || plan[plan.length - 1];
-      const arr = st.d <= 1 ? 0 : leg.t1, wait = plan.find(p => p.stop === st);
-      stationTimes.set(st, { arr, dep: st.d >= total - 1 ? JOURNEY : wait ? wait.t1 : arr });
+      const leg = plan.find(p => !p.stop && !p.pause && p.s1 >= st.d - 1) || plan[plan.length - 1];
+      // Leaving after its wait and any pause there (a photo taken at the station)
+      const waits = plan.filter(p => (p.stop === st || p.pause) && Math.abs(p.s0 - st.d) < 1);
+      const arr = st.d <= 1 ? 0 : leg.t1;
+      stationTimes.set(st, { arr, dep: st.d >= total - 1 ? JOURNEY : waits.length ? Math.max(...waits.map(p => p.t1)) : arr });
     }
+  };
+  // The photo and highlight pauses: each at its place, photos at one spot (or by a halt, or an
+  // end) gathered onto it, a photo held 2.5 s and a highlight 2.4 s; together at most half the
+  // journey, all shortened alike beyond that
+  const PHOTO_PAUSE = 2.5, HIGHLIGHT_PAUSE = 2.4;
+  const pausePoints = (halts = []) => {
+    const list = [
+      ...(useHighlights ? highlights.map(h => ({ d: h.d, kind: 'highlight', item: h, len: HIGHLIGHT_PAUSE })) : []),
+      ...photos.filter(ph => ph.d != null).map(ph => ({ d: ph.d, kind: 'photo', item: ph, len: PHOTO_PAUSE })),
+    ].sort((a, b) => a.d - b.d || (a.kind === 'highlight' ? -1 : 1));
+    const anchors = [0, total, ...halts.map(st => st.d)];
+    let prev = null;
+    for (const p of list) {
+      const near = anchors.find(a => Math.abs(a - p.d) < 50);
+      if (near != null) p.d = near;
+      else if (prev != null && p.d - prev < 30) p.d = prev;
+      prev = p.d;
+    }
+    const sum = list.reduce((a, p) => a + p.len, 0), k = Math.min(1, JOURNEY * 0.5 / (sum || 1));
+    list.forEach(p => { p.len *= k; });
+    return list;
   };
   // The mean speed (m/s of video) of the leg running at time t; at a halt, the leg before it
   const legSpeed = t => {
     const i = Math.max(0, plan.findIndex(p => t <= p.t1));
-    const leg = plan[i].stop ? plan[i - 1] || plan[i + 1] : plan[i];
+    let j = i;
+    while (j > 0 && (plan[j].stop || plan[j].pause)) j--;
+    const leg = plan[j].stop || plan[j].pause ? plan.find(p => !p.stop && !p.pause) : plan[j];
     return leg && leg.t1 > leg.t0 ? (leg.s1 - leg.s0) / (leg.t1 - leg.t0) : total / Math.max(1, JOURNEY);
   };
   const journeyAt = t => {
     const leg = plan.find(p => t <= p.t1) || plan[plan.length - 1];
     if (leg.stop) return { s: leg.s0, dwell: leg.stop };
+    if (leg.pause) return { s: leg.s0, dwell: null, pause: { ...leg.pause, u: Math.max(0, Math.min(1, (t - leg.t0) / ((leg.t1 - leg.t0) || 1))) } };
     const T = (leg.t1 - leg.t0) || 1, x = Math.max(0, Math.min(T, t - leg.t0));
     // A flight along its time table (planJourney): slow low down, fast at cruise
     if (leg.table) {
@@ -1099,7 +1274,7 @@ async function setup() {
   const font = (w, px) => `${w} ${Math.max(10, Math.round(px * scale))}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
   // Font Awesome glyphs (the page's stylesheet), drawn ahead of the numbers
   const FA = { route: '\uf4d7', plane: '\uf072', tunnel: '\uf557', mountain: '\uf6fc', up: '\ue098', down: '\ue097',
-    calendar: '\uf133', stop: '\uf3c5', transfer: '\uf362' };
+    calendar: '\uf133', stop: '\uf3c5', transfer: '\uf362', camera: '\uf030', flag: '\uf024', clock: '\uf017', trips: '\uf0cb' };
   const transfers = stops.filter(st => st.transfer).length, onWay = stops.length - transfers;
   // The trip leaving a station (the last one arriving, at the end)
   const typeAfter = st => (tripSpans.find(t => t.to > st.d + 1) || tripSpans[tripSpans.length - 1]).type;
@@ -1269,6 +1444,126 @@ async function setup() {
       .applyMatrix4(camera.projectionMatrix);
     return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H };
   };
+  // The same, or null when the point is behind the camera (seen from low, the route behind
+  // it projected back onto the screen mirrored)
+  const lineOnScreenIfAhead = s => {
+    const c = Math.max(0, Math.min(total, s));
+    let k = Math.max(0, d.findIndex(v => v > c) - 1);
+    if (c >= total || k > P.length - 2) k = P.length - 2;
+    const t = Math.max(0, Math.min(1, (c - d[k]) / ((d[k + 1] - d[k]) || 1)));
+    const v = new THREE.Vector4(lerp(P[k][0], P[k + 1][0], t), lerp(P[k][1], P[k + 1][1], t), lerp(P[k][2], P[k + 1][2], t), 1)
+      .applyMatrix4(camera.projectionMatrix);
+    if (v.w <= 0) return null;
+    return { x: (v.x / v.w + 1) / 2 * W, y: (1 - v.y / v.w) / 2 * H };
+  };
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const easeOut = t => 1 - (1 - t) ** 3;
+  // Overshooting a little before settling, for things popping in
+  const easeBack = t => 1 + 2.2 * (t - 1) ** 3 + 1.2 * (t - 1) ** 2;
+  // A photo's pin on the route: its thumbnail in a white ring on a short stem, pointing down
+  // at where it was taken
+  const PIN_R = 21;
+  function drawPin(ph, x, y, alpha, grow = 1) {
+    const u = scale, r = PIN_R * u * grow, cy = y - r - 12 * u * grow;
+    g2.save();
+    g2.globalAlpha = alpha;
+    g2.shadowColor = 'rgba(0,0,0,0.45)'; g2.shadowBlur = 8 * u; g2.shadowOffsetY = 2 * u;
+    g2.fillStyle = '#fff';
+    g2.beginPath(); g2.moveTo(x, y); g2.lineTo(x - 7 * u * grow, cy + r * 0.7); g2.lineTo(x + 7 * u * grow, cy + r * 0.7); g2.closePath(); g2.fill();
+    g2.beginPath(); g2.arc(x, cy, r + 3 * u, 0, Math.PI * 2); g2.fill();
+    g2.restore();
+    g2.save();
+    g2.globalAlpha = alpha;
+    g2.beginPath(); g2.arc(x, cy, r, 0, Math.PI * 2); g2.clip();
+    g2.drawImage(ph.thumb, x - r, cy - r, 2 * r, 2 * r);
+    g2.restore();
+    return { x, y: cy, r };
+  }
+  // A highlight's callout while the train stops at it: a pulse on the line, a stem, and a card
+  // with its icon, what it is and its figure; above the point, or below when that is too high
+  function drawCallout(h, u01) {
+    const u = scale, p = lineOnScreenIfAhead(h.d);
+    if (!p) return;
+    const a = Math.min(clamp01(u01 / 0.12), clamp01((1 - u01) / 0.1)), pop = easeBack(clamp01(u01 / 0.22));
+    if (a <= 0) return;
+    g2.save();
+    g2.globalAlpha = a;
+    for (const phase of [0, 0.5]) {
+      const x = ((u01 * 2.2 + phase) % 1);
+      g2.beginPath(); g2.arc(p.x, p.y, (10 + 34 * x) * u, 0, Math.PI * 2);
+      g2.lineWidth = 3 * u; g2.strokeStyle = `rgba(255,255,255,${(1 - x) * 0.8})`; g2.stroke();
+    }
+    g2.beginPath(); g2.arc(p.x, p.y, 8 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
+    g2.lineWidth = 3.5 * u; g2.strokeStyle = color; g2.stroke();
+    // The card's size
+    const title = h.title.toUpperCase(), name = h.tunnel?.name || null;
+    g2.font = font(700, 15); const w1 = g2.measureText(title).width;
+    g2.font = font(800, 34); const w2 = g2.measureText(h.value).width;
+    const sub = [name, h.sub].filter(Boolean).join(' · ');
+    g2.font = font(500, 17); const w3 = sub ? g2.measureText(sub).width : 0;
+    const icon = 46 * u, cw = Math.min(W - 2 * 24 * u, icon + 18 * u + Math.max(w1, w2, w3) + 34 * u), ch = (sub ? 92 : 72) * u;
+    const stem = 64 * u, above = p.y - stem - ch > 150 * u;
+    const cx = Math.max(24 * u, Math.min(W - 24 * u - cw, p.x - cw / 2)), cy = above ? p.y - stem - ch : p.y + stem;
+    g2.beginPath(); g2.moveTo(p.x, p.y + (above ? -10 : 10) * u); g2.lineTo(p.x, above ? cy + ch : cy);
+    g2.lineWidth = 2.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.9)'; g2.stroke();
+    // Popping out of its stem
+    g2.translate(p.x, above ? cy + ch : cy); g2.scale(pop, pop); g2.translate(-p.x, -(above ? cy + ch : cy));
+    g2.shadowColor = 'rgba(0,0,0,0.4)'; g2.shadowBlur = 16 * u; g2.shadowOffsetY = 4 * u;
+    roundRect(cx, cy, cw, ch, 16 * u); g2.fillStyle = 'rgba(14,19,26,0.88)'; g2.fill();
+    g2.shadowBlur = 0; g2.shadowOffsetY = 0;
+    roundRect(cx, cy, cw, ch, 16 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = hexA(color, 0.9); g2.stroke();
+    const ix = cx + 17 * u + icon / 2, iy = cy + ch / 2;
+    g2.beginPath(); g2.arc(ix, iy, icon / 2, 0, Math.PI * 2); g2.fillStyle = color; g2.fill();
+    g2.font = faFont(21); g2.fillStyle = '#fff'; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+    g2.fillText(h.icon, ix, iy + 1 * u);
+    const tx = ix + icon / 2 + 16 * u;
+    g2.textAlign = 'left'; g2.textBaseline = 'alphabetic';
+    g2.font = font(700, 15); g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.fillText(title, tx, cy + 27 * u);
+    g2.font = font(800, 34); g2.fillStyle = '#fff'; g2.fillText(h.value, tx, cy + 62 * u);
+    if (sub) {
+      g2.font = font(500, 17); g2.fillStyle = 'rgba(255,255,255,0.8)';
+      let s = sub;
+      while (s.length > 3 && g2.measureText(s).width > cw - (tx - cx) - 14 * u) s = s.slice(0, -2) + '…';
+      g2.fillText(s, tx, cy + 84 * u);
+    }
+    g2.restore();
+  }
+  // A photo while the train stops at it: out of its pin to a print filling most of the frame,
+  // tilted a touch, the picture drifting slowly closer, with its date and time; then back into
+  // its pin. The map dims behind it
+  const photoTime = ph => (ph.local != null
+    ? new Date(ph.local).toLocaleString(LANG, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) : null);
+  function drawPhotoPause(ph, u01) {
+    const u = scale, k = Math.min(easeOut(clamp01(u01 / 0.17)), easeOut(clamp01((1 - u01) / 0.15)));
+    const pin = lineOnScreenIfAhead(ph.d);
+    const from = pin && pin.x > -50 && pin.x < W + 50 && pin.y > -50 && pin.y < H + 50
+      ? { x: pin.x, y: pin.y - (PIN_R + 12) * u } : { x: W / 2, y: H * 0.62 };
+    g2.save();
+    g2.fillStyle = `rgba(6,9,14,${0.5 * k})`; g2.fillRect(0, 0, W, H);
+    const iw = ph.img.width, ih = ph.img.height, border = 14 * u, cap = 48 * u;
+    const fit = Math.min(W * 0.82 / iw, (H * 0.8 - cap - border) / ih);
+    const pw = iw * fit, phh = ih * fit, fw = pw + 2 * border, fh = phh + border + cap;
+    const size = lerp(2 * PIN_R * u / fw, 1, k), cx = lerp(from.x, W / 2, k), cy = lerp(from.y, H / 2, k);
+    g2.translate(cx, cy); g2.rotate(lerp(-0.12, -0.018, k)); g2.scale(size, size);
+    g2.shadowColor = 'rgba(0,0,0,0.55)'; g2.shadowBlur = 40 * u; g2.shadowOffsetY = 12 * u;
+    roundRect(-fw / 2, -fh / 2, fw, fh, 8 * u); g2.fillStyle = '#fbfaf7'; g2.fill();
+    g2.shadowColor = 'transparent';
+    // The picture, drifting 5 % closer over its time on screen
+    const zoom = 1 + 0.05 * u01, x0 = -fw / 2 + border, y0 = -fh / 2 + border;
+    g2.save(); g2.beginPath(); g2.rect(x0, y0, pw, phh); g2.clip();
+    g2.drawImage(ph.img, x0 - pw * (zoom - 1) / 2, y0 - phh * (zoom - 1) / 2, pw * zoom, phh * zoom);
+    g2.restore();
+    g2.textBaseline = 'middle'; g2.fillStyle = '#2a2f36';
+    const ly = fh / 2 - cap / 2;
+    const when = photoTime(ph);
+    if (when) {
+      g2.font = faFont(17); g2.textAlign = 'left'; g2.fillText(FA.camera, x0 + 2 * u, ly);
+      g2.font = font(600, 21); g2.fillText(when, x0 + 30 * u, ly);
+    }
+    g2.font = font(600, 21); g2.textAlign = 'right'; g2.fillStyle = '#6a717b';
+    g2.fillText(kmText(ph.d / 1000), x0 + pw, ly);
+    g2.restore();
+  }
 
   function drawHud(f) {
     g2.clearRect(0, 0, W, H);
@@ -1473,6 +1768,22 @@ async function setup() {
       g2.globalAlpha = 1; g2.textBaseline = 'alphabetic';
     }
 
+    // The photos' pins along the route, wherever on screen (all of them over the closing
+    // overview), those still ahead a little fainter; the one opening out not, it leaves its pin.
+    // Above the profile strip while it shows
+    if (f.title < 0.99 && photos.length) {
+      g2.save();
+      if (f.card < 0.5) { g2.beginPath(); g2.rect(0, 0, W, H - (flat ? 0 : pad + 136 * u)); g2.clip(); }
+      for (const ph of [...photos].filter(ph => ph.d != null && ph.thumb).sort((a, b) => b.d - a.d)) {
+        if (f.pause?.item === ph) continue;
+        const p = lineOnScreenIfAhead(ph.d);
+        if (!p || p.x < -40 * u || p.x > W + 40 * u || p.y < 0 || p.y > H + 60 * u) continue;
+        drawPin(ph, p.x, p.y, (1 - f.title) * (ph.d <= f.s + 1 ? 1 : 0.8) * (1 - 0.4 * f.card));
+      }
+      g2.restore();
+    }
+    if (f.pause?.kind === 'highlight' && f.card < 0.5) drawCallout(f.pause.item, f.pause.u);
+
     // A chip while in a tunnel or on a bridge
     // Only for a structure on screen for at least 1.5 s at the video's speed: a shorter one
     // just flashed it; fading over the first and last fifth of its time
@@ -1664,50 +1975,237 @@ async function setup() {
       }
       g2.shadowBlur = 0; g2.textAlign = 'left'; g2.globalAlpha = 1;
     }
-    if (f.card > 0.01) {
-      g2.globalAlpha = f.card;
-      const stats = [[kmText(facts.km), T.distance, FA.route],
-        // Tunnels only when there are some
-        facts.tunnels && [kmText(facts.tunnelKm), `${plural(T.inTunnels, facts.tunnels)} (${Math.round(facts.tunnelKm / ((facts.km - facts.flownKm) || 1) * 100)} %)`, FA.tunnel],
-        facts.top != null ? [`${Math.round(facts.top)} m`, T.highest, FA.mountain] : [`${Math.round(facts.cruise)} m`, T.cruise, FA.plane],
-        [`${Math.round(facts.descent)} m`, T.descent, FA.down], [`${Math.round(facts.climb)} m`, T.climb, FA.up]].filter(Boolean);
-      // Heights only where there are some
-      if (flat) stats.splice(0, stats.length, ...stats.filter(([, , icon]) => ![FA.mountain, FA.down, FA.up, FA.plane].includes(icon)));
-      // A narrow frame keeps the first three
-      if (W < 900) stats.length = 3;
-      const cw = Math.min(W - 2 * pad, 1100 * u), ch = 300 * u, cx = (W - cw) / 2, cy = (H - ch) / 2;
-      roundRect(cx, cy, cw, ch, 22 * u); g2.fillStyle = 'rgba(12,16,22,0.78)'; g2.fill();
-      g2.textAlign = 'center'; g2.fillStyle = '#fff'; g2.textBaseline = 'alphabetic';
-      const head = fitTitle(name, cw - 60 * u, 800, 40, 24);
-      g2.font = font(800, head.px);
-      head.lines.forEach((l, i) => g2.fillText(l, W / 2, cy + (head.lines.length > 1 ? 52 : 70) * u + i * head.px * 1.1 * u));
-      const colW = cw / stats.length;
-      stats.forEach(([v, l, icon], i) => {
-        const x = cx + colW * (i + 0.5);
-        g2.font = faFont(26); g2.fillStyle = color; g2.fillText(icon, x, cy + 132 * u);
-        g2.font = font(800, 40); g2.fillStyle = '#fff'; g2.fillText(v, x, cy + 182 * u);
-        g2.font = font(500, 19); g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.fillText(l, x, cy + 215 * u);
-      });
-      // The credits of every train drawing shown, under the card, wrapped over a few lines
-      const credits = W >= 1280 && wagonCredit(allUnits);
-      if (credits) {
-        g2.font = font(500, 14); g2.fillStyle = 'rgba(255,255,255,0.8)';
-        g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
-        const lines = [];
-        for (const word of credits.split(' ')) {
-          const line = lines.length ? `${lines[lines.length - 1]} ${word}` : word;
-          if (lines.length && g2.measureText(line).width <= cw) lines[lines.length - 1] = line; else lines.push(word);
-        }
-        lines.slice(0, 4).forEach((l, i) => g2.fillText(l, W / 2, cy + ch + (28 + i * 20) * u));
-        g2.shadowBlur = 0;
-      }
-      g2.textAlign = 'left'; g2.globalAlpha = 1;
-    }
+    if (f.card > 0.01) drawEndCard(f, pad);
+    if (f.pause?.kind === 'photo') drawPhotoPause(f.pause.item, f.pause.u);
     // Trainlog and the map's credits, always
     if (logo.complete && logo.naturalWidth) drawBrand(Math.round(W - pad - brand.w), Math.round(pad - 4 * u), brand);
     g2.font = font(400, 13); g2.fillStyle = 'rgba(255,255,255,0.75)'; g2.textAlign = 'right'; g2.textBaseline = 'alphabetic';
     g2.fillText('© OpenStreetMap contributors · © Mapterhorn · MapLibre', W - 12 * u, H - 10 * u);
     g2.textAlign = 'left';
+  }
+
+  // ── The end card ───────────────────────────────────────────────────────────────
+  // The journey's numbers counting up, then one section after another: each kind of trip's
+  // share (a bar and its legend), a line of counts (trips, countries, time on the way, photos),
+  // the countries' flags, the operators' logos and the photos as small prints. What does not
+  // fit the frame is left out, the last sections first
+  const byType = (() => {
+    const m = new Map();
+    for (const t of tripSpans) {
+      const e = m.get(t.type) || { type: t.type, m: 0, n: 0 };
+      e.m += t.to - t.from; e.n++; m.set(t.type, e);
+    }
+    return [...m.values()].sort((a, b) => b.m - a.m);
+  })();
+  const typedTotal = byType.reduce((a, e) => a + e.m, 0) || 1;
+  // The countries in the order the journey enters them
+  const countryList = [...new Set((data.countries.length ? data.countries.map(c => c[1]) : tripSpans.flatMap(t => t.flags)).filter(Boolean))];
+  const logoList = [...new Set(tripSpans.flatMap(t => t.logos))];
+  const travelMin = tripSpans.every(t => t.minutes) ? tripSpans.reduce((a, t) => a + t.minutes, 0) : null;
+  const hoursMinutes = min => {
+    const unit = (n, u) => new Intl.NumberFormat(LANG, { style: 'unit', unit: u, unitDisplay: 'narrow' }).format(n);
+    const h = Math.floor(min / 60), m = Math.round(min % 60);
+    return h ? (m ? `${unit(h, 'hour')} ${unit(m, 'minute')}` : unit(h, 'hour')) : unit(m, 'minute');
+  };
+  function drawEndCard(f, pad) {
+    const u = scale, ct = f.cardT, cw = Math.min(W - 2 * pad, 1100 * u), inner = cw - 64 * u;
+    const head = fitTitle(name, inner, 800, 40, 24);
+    const when = day ? `${day}${endDay ? ` → ${endDay.trim()}` : ''}` : null;
+    // The figures: [value, how it reads, label, icon]
+    const m = v => `${Math.round(v).toLocaleString(LANG)} m`;
+    const stats = [[facts.km, kmText, T.distance, FA.route],
+      facts.tunnels && [facts.tunnelKm, kmText, `${plural(T.inTunnels, facts.tunnels)} (${Math.round(facts.tunnelKm / ((facts.km - facts.flownKm) || 1) * 100)} %)`, FA.tunnel],
+      facts.top != null ? [facts.top, m, T.highest, FA.mountain] : [facts.cruise, m, T.cruise, FA.plane],
+      [facts.descent, m, T.descent, FA.down], [facts.climb, m, T.climb, FA.up]].filter(Boolean);
+    if (flat) stats.splice(0, stats.length, ...stats.filter(([, , , icon]) => ![FA.mountain, FA.down, FA.up, FA.plane].includes(icon)));
+    if (W < 900) stats.length = Math.min(stats.length, 3);
+    // Each kind's legend item, laid out in centred rows
+    g2.font = font(700, 18);
+    const legend = byType.map(e => {
+      const label = TYPE_NAMES[e.type] || e.type, pct = Math.round(e.m / typedTotal * 100);
+      const rest = `${kmText(e.m / 1000)} · ${pct < 1 ? '<1' : pct} %`;
+      g2.font = font(700, 18); const lw = g2.measureText(label).width;
+      g2.font = font(500, 18); const rw = g2.measureText(rest).width;
+      return { e, label, rest, lw, w: 12 * u + 8 * u + 22 * u + 8 * u + lw + 8 * u + rw };
+    });
+    const rows = [];
+    for (const it of legend) {
+      const row = rows[rows.length - 1];
+      if (row && row.w + 26 * u + it.w <= inner) { row.items.push(it); row.w += 26 * u + it.w; } else rows.push({ items: [it], w: it.w });
+    }
+    const shots = photos.filter(ph => ph.d != null && ph.thumb).sort((a, b) => a.d - b.d);
+    const counts = [tripSpans.length > 1 && [FA.trips, plural(T.tripsCount, tripSpans.length)],
+      countryList.length > 1 && [FA.flag, plural(T.countries, countryList.length)],
+      travelMin && [FA.clock, hoursMinutes(travelMin)],
+      shots.length && [FA.camera, plural(T.photosCount, shots.length)]].filter(Boolean);
+    const logos = logoList.map(operatorLogo).filter(Boolean);
+
+    const sections = [
+      { key: 'head', h: head.lines.length * head.px * 1.12 * u + (when ? 32 * u : 0) },
+      { key: 'stats', h: 122 * u },
+      byType.length > 1 && { key: 'types', h: 16 * u + 20 * u + rows.length * 32 * u },
+      counts.length && { key: 'counts', h: 34 * u },
+      countryList.length > 1 && { key: 'flags', h: 40 * u },
+      logos.length && { key: 'logos', h: 44 * u },
+      shots.length && { key: 'photos', h: 112 * u },
+    ].filter(Boolean);
+    const gap = 24 * u, padY = 40 * u;
+    const heightOf = () => 2 * padY + sections.reduce((a, s) => a + s.h, 0) + gap * (sections.length - 1);
+    for (const key of ['photos', 'logos', 'flags', 'counts', 'types']) {
+      if (heightOf() <= H - 2 * pad - 60 * u) break;
+      const i = sections.findIndex(s => s.key === key);
+      if (i >= 0) sections.splice(i, 1);
+    }
+    const ch = heightOf(), cx = (W - cw) / 2, cy = Math.max(pad * 0.5, (H - ch) / 2 - 16 * u), x0 = cx + 32 * u;
+
+    g2.save();
+    g2.globalAlpha = f.card;
+    g2.shadowColor = 'rgba(0,0,0,0.45)'; g2.shadowBlur = 40 * u; g2.shadowOffsetY = 10 * u;
+    roundRect(cx, cy, cw, ch, 24 * u); g2.fillStyle = 'rgba(12,16,22,0.84)'; g2.fill();
+    g2.restore();
+    // Its top edge in the kinds' colours, by their shares
+    g2.save();
+    g2.globalAlpha = f.card;
+    roundRect(cx, cy, cw, ch, 24 * u); g2.clip();
+    let ex = cx;
+    for (const e of byType) { const w = e.m / typedTotal * cw; g2.fillStyle = COLOR[e.type] || color; g2.fillRect(ex, cy, w + 1, 6 * u); ex += w; }
+    g2.restore();
+
+    let y = cy + padY;
+    sections.forEach((sec, i) => {
+      const t = ct - (0.2 + 0.3 * i), a = easeOut(clamp01(t / 0.45));
+      g2.save();
+      g2.globalAlpha = f.card * a;
+      g2.translate(0, (1 - a) * 16 * u);
+      g2.textBaseline = 'alphabetic'; g2.textAlign = 'center';
+      if (sec.key === 'head') {
+        g2.font = font(800, head.px); g2.fillStyle = '#fff';
+        head.lines.forEach((l, j) => g2.fillText(l, W / 2, y + head.px * 0.85 * u + j * head.px * 1.12 * u));
+        if (when) {
+          g2.font = font(500, 21); g2.fillStyle = 'rgba(255,255,255,0.66)';
+          g2.fillText(when, W / 2, y + head.lines.length * head.px * 1.12 * u + 22 * u);
+        }
+      } else if (sec.key === 'stats') {
+        const k = easeOut(clamp01(t / 1.5)), colW = inner / stats.length;
+        stats.forEach(([v, text, label, icon], j) => {
+          const x = x0 + colW * (j + 0.5);
+          g2.font = faFont(26); g2.fillStyle = color; g2.fillText(icon, x, y + 28 * u);
+          g2.font = font(800, 40); g2.fillStyle = '#fff'; g2.fillText(text(v * k), x, y + 78 * u);
+          g2.font = font(500, 19); g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.fillText(label, x, y + 110 * u);
+        });
+      } else if (sec.key === 'types') {
+        // The bar filling from the left, then the legend's items one by one
+        const grow = easeOut(clamp01(t / 1.1)), bh = 16 * u;
+        roundRect(x0, y, inner, bh, bh / 2); g2.fillStyle = 'rgba(255,255,255,0.1)'; g2.fill();
+        g2.save(); roundRect(x0, y, Math.max(bh, inner * grow), bh, bh / 2); g2.clip();
+        let bx = x0;
+        for (const e of byType) { const w = e.m / typedTotal * inner; g2.fillStyle = COLOR[e.type] || color; g2.fillRect(bx, y, w + 0.5, bh); bx += w; }
+        g2.restore();
+        let n = 0;
+        rows.forEach((row, r) => {
+          let ix = W / 2 - row.w / 2;
+          const iy = y + bh + 20 * u + r * 32 * u + 10 * u;
+          for (const it of row.items) {
+            const ia = clamp01((t - 0.35 - 0.12 * n++) / 0.3);
+            g2.globalAlpha = f.card * a * ia;
+            g2.beginPath(); g2.arc(ix + 6 * u, iy, 6 * u, 0, Math.PI * 2); g2.fillStyle = COLOR[it.e.type] || color; g2.fill();
+            let tx = ix + 20 * u;
+            const icon = typeIcon(it.e.type);
+            if (icon) { const img = shrink(icon, Math.round(22 * u), true); g2.drawImage(img, Math.round(tx), Math.round(iy - img.height / 2)); }
+            tx += 30 * u;
+            g2.textAlign = 'left'; g2.textBaseline = 'middle';
+            g2.font = font(700, 18); g2.fillStyle = '#fff'; g2.fillText(it.label, tx, iy + 1 * u);
+            g2.font = font(500, 18); g2.fillStyle = 'rgba(255,255,255,0.68)'; g2.fillText(it.rest, tx + it.lw + 8 * u, iy + 1 * u);
+            ix += it.w + 26 * u;
+          }
+        });
+      } else if (sec.key === 'counts') {
+        g2.fillStyle = 'rgba(255,255,255,0.9)';
+        iconLine(counts, W / 2, y + 24 * u, 23, 600);
+      } else if (sec.key === 'flags' || sec.key === 'logos') {
+        // In a centred row, each popping in after the one before; as many as fit, then "+n"
+        const flags = sec.key === 'flags';
+        const items = flags ? countryList.map(flagImage) : logos;
+        const ih = flags ? 30 * u : 26 * u, padX = flags ? 0 : 9 * u, between = flags ? 10 * u : 12 * u;
+        const widths = items.map(img => (img ? (flags ? ih * (img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1.5)
+          : Math.min(120 * u, ih * img.naturalWidth / (img.naturalHeight || 1))) + 2 * padX : 0));
+        let count = 0, wsum = 0;
+        for (const w of widths) { if (wsum + w + (count ? between : 0) > inner - 60 * u) break; wsum += w + (count ? between : 0); count++; }
+        const more = items.length - count;
+        g2.font = font(700, 18);
+        const moreW = more > 0 ? g2.measureText(`+${more}`).width + between : 0;
+        let ix = W / 2 - (wsum + moreW) / 2;
+        const mid = y + (flags ? 20 : 22) * u;
+        for (let j = 0; j < count; j++) {
+          const img = items[j], w = widths[j];
+          const pop = easeBack(clamp01((t - 0.06 * j) / 0.35));
+          if (img && pop > 0) {
+            g2.save();
+            g2.translate(ix + w / 2, mid); g2.scale(pop, pop);
+            const bh = ih + 2 * (flags ? 0 : 7 * u);
+            g2.shadowColor = 'rgba(0,0,0,0.35)'; g2.shadowBlur = 6 * u; g2.shadowOffsetY = 2 * u;
+            roundRect(-w / 2, -bh / 2, w, bh, (flags ? 4 : 8) * u); g2.fillStyle = '#fff'; g2.fill();
+            g2.shadowColor = 'transparent';
+            if (flags) {
+              g2.save(); roundRect(-w / 2, -bh / 2, w, bh, 4 * u); g2.clip(); g2.drawImage(img, -w / 2, -bh / 2, w, bh); g2.restore();
+              roundRect(-w / 2, -bh / 2, w, bh, 4 * u); g2.lineWidth = 1.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.stroke();
+            } else {
+              const lw = w - 2 * padX, small = shrink(img, Math.max(1, Math.round(lw)));
+              g2.drawImage(small, Math.round(-lw / 2), Math.round(-small.height / 2));
+            }
+            g2.restore();
+          }
+          ix += w + between;
+        }
+        if (more > 0) {
+          g2.textAlign = 'left'; g2.textBaseline = 'middle'; g2.fillStyle = 'rgba(255,255,255,0.75)';
+          g2.globalAlpha = f.card * a * clamp01((t - 0.06 * count) / 0.3);
+          g2.fillText(`+${more}`, ix, mid);
+        }
+      } else if (sec.key === 'photos') {
+        // Small prints, tilted one way and the other
+        const sz = 92 * u, between = 18 * u, fits = Math.max(1, Math.floor((inner + between) / (sz + between)));
+        const shown = shots.slice(0, fits), more = shots.length - shown.length;
+        let ix = W / 2 - (shown.length * (sz + between) - between) / 2;
+        shown.forEach((ph, j) => {
+          const pop = easeBack(clamp01((t - 0.08 * j) / 0.4));
+          if (pop <= 0) { ix += sz + between; return; }
+          g2.save();
+          g2.translate(ix + sz / 2, y + 56 * u); g2.rotate((j % 2 ? 1 : -1) * 0.07); g2.scale(pop, pop);
+          g2.shadowColor = 'rgba(0,0,0,0.45)'; g2.shadowBlur = 10 * u; g2.shadowOffsetY = 3 * u;
+          g2.fillStyle = '#fbfaf7'; g2.fillRect(-sz / 2, -sz / 2, sz, sz);
+          g2.shadowColor = 'transparent';
+          const b = 5 * u;
+          g2.drawImage(ph.thumb, -sz / 2 + b, -sz / 2 + b, sz - 2 * b, sz - 2 * b);
+          if (more > 0 && j === shown.length - 1) {
+            g2.fillStyle = 'rgba(10,14,20,0.6)'; g2.fillRect(-sz / 2 + b, -sz / 2 + b, sz - 2 * b, sz - 2 * b);
+            g2.font = font(800, 26); g2.fillStyle = '#fff'; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+            g2.fillText(`+${more + 1}`, 0, 0);
+          }
+          g2.restore();
+          ix += sz + between;
+        });
+      }
+      g2.restore();
+      y += sec.h + gap;
+    });
+
+    // The credits of every train drawing shown, under the card, wrapped over a few lines
+    const credits = W >= 1280 && wagonCredit(allUnits);
+    if (credits) {
+      g2.save();
+      g2.globalAlpha = f.card;
+      g2.font = font(500, 14); g2.fillStyle = 'rgba(255,255,255,0.8)'; g2.textAlign = 'center';
+      g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
+      const lines = [];
+      for (const word of credits.split(' ')) {
+        const line = lines.length ? `${lines[lines.length - 1]} ${word}` : word;
+        if (lines.length && g2.measureText(line).width <= cw) lines[lines.length - 1] = line; else lines.push(word);
+      }
+      lines.slice(0, Math.max(1, Math.floor((H - cy - ch - 20 * u) / (20 * u)))).slice(0, 4)
+        .forEach((l, i) => g2.fillText(l, W / 2, cy + ch + (28 + i * 20) * u));
+      g2.restore();
+    }
   }
 
   // ── Playing and rendering ──────────────────────────────────────────────────────
@@ -1744,13 +2242,21 @@ async function setup() {
   const autoLength = () => {
     const timed = tripSpans.every(t => t.minutes);
     const ride = tripSpans.reduce((x, t) => x + 1.6 * Math.sqrt(timed ? t.minutes : (t.to - t.from) / 1000), 0);
-    const journey = ride + Math.min(stops.length, Math.floor(ride / 4)) * 0.5 + gapSpans.length * 1.5;
+    // and the pauses at highlights and photos
+    const pausing = (useHighlights ? highlights.length * HIGHLIGHT_PAUSE : 0) + photos.filter(ph => ph.d != null).length * PHOTO_PAUSE;
+    const journey = ride + Math.min(stops.length, Math.floor(ride / 4)) * 0.5 + gapSpans.length * 1.5 + pausing;
     return Math.round(Math.max(20, journey + INTRO + DIVE + BACK + OUTRO));
   };
+  // Highlights on unless the address says ?hl=0
+  const $hl = document.getElementById('v-hl');
+  if (new URLSearchParams(location.search).get('hl') === '0') $hl.checked = false;
+  useHighlights = $hl.checked;
   // Empty: the length follows the journey; else the seconds asked for (at least 15)
   lenSel.placeholder = fill(T.auto, { n: autoLength() });
   const asked = () => Math.max(15, Math.min(3600, Math.round(Number(lenSel.value))));
   const applySettings = () => {
+    useHighlights = $hl.checked;
+    lenSel.placeholder = fill(T.auto, { n: autoLength() });
     JOURNEY = (lenSel.value === '' ? autoLength() : asked()) - INTRO - DIVE - BACK - OUTRO;
     [W, H] = format();
     scale = Math.min(W, H) / 1080;
@@ -1768,29 +2274,29 @@ async function setup() {
   if (LEN) lenSel.value = LEN;
   const bgSel = document.getElementById('v-bg'), $apply = document.getElementById('v-apply');
   const $mb = document.getElementById('v-mb');
-  const chosen = () => ({ len: lenSel.value, size: sizeSel.value, w: $w.value, h: $h.value, bg: bgSel.value, mb: $mb.value });
+  const chosen = () => ({ len: lenSel.value, size: sizeSel.value, w: $w.value, h: $h.value, bg: bgSel.value, mb: $mb.value, hl: $hl.checked });
   let applied = chosen();
   const markPending = () => {
     const now = chosen(), custom = now.size === 'custom';
     const changed = { 'v-len': now.len !== applied.len, 'v-size': now.size !== applied.size,
       'v-w': custom && now.w !== applied.w, 'v-h': custom && now.h !== applied.h, 'v-bg': now.bg !== applied.bg,
-      'v-mb': now.mb !== applied.mb };
+      'v-mb': now.mb !== applied.mb, 'v-hl': now.hl !== applied.hl };
     for (const [id, c] of Object.entries(changed)) document.getElementById(id).classList.toggle('v-pending', c);
     $apply.disabled = !Object.values(changed).some(Boolean);
   };
-  for (const el of [lenSel, sizeSel, $w, $h, bgSel, $mb]) { el.addEventListener('input', markPending); el.addEventListener('change', markPending); }
+  for (const el of [lenSel, sizeSel, $w, $h, bgSel, $mb, $hl]) { el.addEventListener('input', markPending); el.addEventListener('change', markPending); }
   sizeSel.addEventListener('change', () => { $custom.hidden = sizeSel.value !== 'custom'; });
   $apply.addEventListener('click', () => {
     const now = chosen();
     // Every option in the address alike (?size=&len=&bg=&mb=), so a link keeps the video as set
     const url = new URL(location.href), [w, h] = format();
-    for (const [key, value] of [['size', `${w}x${h}`], ['len', now.len], ['bg', now.bg], ['mb', now.mb]]) {
+    for (const [key, value] of [['size', `${w}x${h}`], ['len', now.len], ['bg', now.bg], ['mb', now.mb], ['hl', now.hl ? '' : '0']]) {
       if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
     }
     url.hash = '';
     if (now.bg !== applied.bg) { location.href = url.toString(); return; }
     // The size limit alone is only read on rendering: nothing to rebuild for it
-    if (['len', 'size', 'w', 'h'].some(k => now[k] !== applied[k])) applySettings();
+    if (['len', 'size', 'w', 'h', 'hl'].some(k => now[k] !== applied[k])) applySettings();
     history.replaceState(null, '', url.toString());
     applied = now;
     markPending();
@@ -1798,6 +2304,51 @@ async function setup() {
   applySettings();
   status(T.ready, 0);
   uncover();
+
+  // Photos from the user's own device, as the music: read here and never sent anywhere. Each
+  // placed on the route from its EXIF place and time (placePhoto), listed with where it landed;
+  // the video rebuilt with each change. The other options keep their own Apply
+  const $photos = document.getElementById('v-photos'), $plist = document.getElementById('v-photo-list');
+  const refreshTimeline = () => {
+    applySettings();
+    // What applySettings just used is applied now; a new background still waits for Apply
+    const now = chosen();
+    applied = { ...now, bg: applied.bg, mb: applied.mb };
+    markPending();
+  };
+  const listPhotos = () => {
+    photos.sort((a, b) => (a.d ?? Infinity) - (b.d ?? Infinity));
+    $plist.replaceChildren(...photos.map(ph => {
+      const el = document.createElement('div');
+      el.className = `v-ph${ph.d == null ? ' v-off' : ''}`;
+      el.title = ph.name;
+      if (ph.thumbUrl) { const img = document.createElement('img'); img.src = ph.thumbUrl; el.append(img); }
+      const cap = document.createElement('span');
+      cap.textContent = ph.error ? T.photoUnreadable : ph.d == null ? T.photoUnplaced : `${kmText(ph.d / 1000)}${photoTime(ph) ? ` · ${photoTime(ph)}` : ''}`;
+      el.append(cap);
+      const x = document.createElement('button');
+      x.type = 'button'; x.textContent = '✕';
+      x.addEventListener('click', () => { photos = photos.filter(p => p !== ph); listPhotos(); refreshTimeline(); });
+      el.append(x);
+      return el;
+    }));
+  };
+  $photos.addEventListener('change', async () => {
+    const files = [...$photos.files].filter(file => !photos.some(p => p.key === `${file.name}|${file.size}|${file.lastModified}`));
+    $photos.value = '';
+    if (!files.length) return;
+    $photos.disabled = true;
+    for (const [i, file] of files.entries()) {
+      status(`${T.photos} ${i + 1} / ${files.length}…`, (i + 1) / files.length * 100);
+      const ph = await readPhoto(file);
+      placePhoto(ph);
+      photos.push(ph);
+    }
+    $photos.disabled = false;
+    listPhotos();
+    refreshTimeline();
+    status(T.ready, 0);
+  });
 
   let playing = null;
   // Music from the user's own device, mixed in here and never sent anywhere: faded in over the
@@ -2053,6 +2604,60 @@ async function nameTunnels(tunnels, coords) {
       if (best && bestD < (t.to - t.from) / 2 + 100) t.name = best.name;
     }
   } catch (e) { /* no names: the chips say TUNNEL */ }
+}
+
+// A photo picked from the device: its place (GPS) and its time from EXIF, the camera's own
+// clock (`local`, as if UTC) and, when the camera wrote its offset or the GPS its time, the
+// UTC instant (`utc`); the picture decoded upright and at most 1600 px a side, and a square
+// thumbnail. A file the browser cannot draw (HEIC outside Safari) is kept, marked unreadable
+let exifrModule = null;
+async function readPhoto(file) {
+  const ph = { name: file.name, key: `${file.name}|${file.size}|${file.lastModified}`, lat: null, lng: null, local: null, utc: null };
+  try {
+    const mod = await (exifrModule ??= import(EXIFR)), exifr = mod.parse ? mod : mod.default;
+    const tags = (await exifr.parse(file, { tiff: true, exif: true, gps: true, reviveValues: false, translateValues: false }).catch(() => null)) || {};
+    const gps = await exifr.gps(file).catch(() => null);
+    if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude) && (gps.latitude || gps.longitude)) {
+      ph.lat = gps.latitude; ph.lng = gps.longitude;
+    }
+    const stamp = v => {
+      const m = String(v || '').match(/^(\d{4})[:-](\d\d)[:-](\d\d)[ T](\d\d):(\d\d)(?::(\d\d))?/);
+      return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) : null;
+    };
+    ph.local = stamp(tags.DateTimeOriginal) ?? stamp(tags.CreateDate) ?? stamp(tags.DateTimeDigitized);
+    const off = String(tags.OffsetTimeOriginal || tags.OffsetTime || '').match(/^([+-])(\d\d):?(\d\d)$/);
+    if (ph.local != null && off) ph.utc = ph.local - (off[1] === '-' ? -1 : 1) * (+off[2] * 60 + +off[3]) * 60000;
+    const gday = String(tags.GPSDateStamp || '').match(/(\d{4}):(\d\d):(\d\d)/), gtime = tags.GPSTimeStamp;
+    if (ph.utc == null && gday && Array.isArray(gtime) && gtime.length >= 3) {
+      const [h, mi, se] = gtime.map(Number);
+      ph.utc = Date.UTC(+gday[1], +gday[2] - 1, +gday[3], h, mi, Math.floor(se));
+    }
+  } catch (e) { /* no EXIF: neither place nor time */ }
+  try {
+    const bmp = await createImageBitmap(file);
+    // Halved step by step to the size kept, for a clean picture
+    let src = bmp, w = bmp.width, h = bmp.height;
+    const k = Math.min(1, 1600 / Math.max(w, h)), tw = Math.round(w * k), th = Math.round(h * k);
+    while (w / 2 >= tw && w > 1) {
+      const c = document.createElement('canvas');
+      c.width = Math.round(w / 2); c.height = Math.round(h / 2);
+      c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+      [src, w, h] = [c, c.width, c.height];
+    }
+    const img = document.createElement('canvas');
+    img.width = tw; img.height = th;
+    const g = img.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, tw, th);
+    bmp.close();
+    const thumb = document.createElement('canvas');
+    thumb.width = thumb.height = 200;
+    const side = Math.min(tw, th), tg = thumb.getContext('2d');
+    tg.imageSmoothingQuality = 'high';
+    tg.drawImage(img, (tw - side) / 2, (th - side) / 2, side, side, 0, 0, 200, 200);
+    Object.assign(ph, { img, thumb, thumbUrl: thumb.toDataURL('image/jpeg', 0.85) });
+  } catch (e) { ph.error = true; }
+  return ph;
 }
 
 // Several trips as one journey, in order: their paths joined (the hop from one trip's end
