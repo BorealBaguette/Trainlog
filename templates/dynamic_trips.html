@@ -2731,13 +2731,19 @@ var table = $('#tripRows');
 
     function autoFitCookieName() { return isCardLayout() ? 'autoFitCard' : 'autoFitTable'; }
 
-    function autoRowCount() {
+    function autoFitMetrics() {
         var fallback = AUTO_FIT_FALLBACK[isCardLayout() ? 'card' : 'table'];
         var stored = (getCookie(autoFitCookieName()) || '').split(':');
         var rowH = parseFloat(stored[0]) || fallback.row;
         var chromeH = parseFloat(stored[1]);
         if (!(chromeH >= 0)) chromeH = fallback.chrome;
-        var fits = Math.floor((window.innerHeight - chromeH - AUTO_FIT_BUFFER) / rowH);
+        return { rowH: rowH, chromeH: chromeH };
+    }
+
+    // From the stored metrics unless given others.
+    function autoRowCount(m) {
+        m = m || autoFitMetrics();
+        var fits = Math.floor((window.innerHeight - m.chromeH - AUTO_FIT_BUFFER) / m.rowH);
         return Math.max(AUTO_ROWS_MIN, Math.min(AUTO_ROWS_MAX, fits));
     }
 
@@ -2791,7 +2797,7 @@ var table = $('#tripRows');
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
     /* With "show upcoming" on, the descending timeline reads [far future … now …
        oldest past], so its first page is the most distant plan. Ask the backend to
-       centre the first load on now instead — but only that load, and only when the
+       open on the page holding now instead — but only that load, and only when the
        URL did not name a page, since an explicit ?page= is the user's own choice.
        Any later draw (paging, sorting, searching) leaves the offset alone. */
     if (_urlSortParam) {
@@ -2965,7 +2971,7 @@ var table = $('#tripRows');
         }
     }
 }).on('xhr.dt', function(e, settings, json) {
-    // The anchored draw asked for offset 0 and was answered with the rows around now
+    // The anchored draw asked for offset 0 and was answered with the page holding now
     // instead. `xhr` fires before the table is drawn, so writing the offset the server
     // actually used here is enough for the pager and the "showing x to y" line to
     // describe the rows about to appear. One-shot: the flag is cleared either way, so
@@ -3007,10 +3013,8 @@ var table = $('#tripRows');
     }
     var _pi = tableObject.page.info();
     if (_anchoredDraw) {
-        // The anchored offset is not a page the user asked for, and it is not one
-        // either: it lands mid-grid, so ?page= could not reproduce it anyway. Leaving
-        // it out of the URL is also what lets a reload anchor again rather than
-        // freeze on whatever page number now happened to fall in today.
+        // Not a page the user asked for. Leaving it out of the URL lets a reload
+        // anchor again rather than freeze on whatever page now fell in today.
         url.searchParams.delete('page');
         _anchoredDraw = false;
     } else if (_pi.page > 0) {
@@ -3261,7 +3265,15 @@ function recordAutoFitMetrics() {
     var below = spaceBelow(last.get(0));
     if (!(rowH > 0) || above < 0 || below < 0) return;
 
-    setCookie(autoFitCookieName(), rowH.toFixed(2) + ':' + Math.round(above + below), 30);
+    // The median depends on the rows on show, which with auto depend on the median:
+    // wrapping station names flipped the count by one on every reload. A measurement
+    // replaces the stored one only if it moves the count by two rows or more; else the
+    // stored one is rewritten so the cookie does not expire.
+    var m = { rowH: rowH, chromeH: above + below };
+    if (getCookie(autoFitCookieName()) && Math.abs(autoRowCount(m) - autoRowCount()) < 2) {
+        m = autoFitMetrics();
+    }
+    setCookie(autoFitCookieName(), m.rowH.toFixed(2) + ':' + Math.round(m.chromeH), 30);
 }
 
 // Update ?next= on the href just before navigation so it reflects the current URL (including filters/sort/page)

@@ -9710,14 +9710,14 @@ def get_trips_api_internal(username, is_public=False):
     # Now-anchor: with upcoming trips folded in, the descending timeline runs
     # [far future … now … oldest past], so its first page is the most distant plan —
     # useless as a landing page. When the client asks for it (first draw only, no
-    # explicit ?page=), the offset is moved so that "now" sits mid-page instead.
+    # explicit ?page=), the offset is moved to the page holding "now" instead.
     # Only for the temporal descending order, where "above/below now" means anything.
     anchor_now = (
         request.form.get("anchorNow", type=int, default=0) == 1
         and include_planned == 1
         and sort_column_name == "temporal"
         and sort_direction == "desc"
-        # "All rows" has no page to centre.
+        # "All rows" has no page to land on.
         and length is not None
     )
 
@@ -9940,13 +9940,12 @@ def get_trips_api_internal(username, is_public=False):
         count_row = pg.execute(count_query, search_params).fetchone()
         records_filtered = count_row[0]
 
-        # Centre the requested page on now: half a page of upcoming trips above the
-        # boundary, the rest of the page below it. The offset stops being a multiple
-        # of the page length, which DataTables displays happily; the next page click
-        # snaps back to its own grid.
+        # Land on the page holding the first past trip (the last page when every
+        # trip is upcoming). It stays on the page grid, so paging away and back
+        # shows the same rows.
         if anchor_now:
-            now_offset = count_row[1]
-            start = max(0, now_offset - length // 2)
+            now_offset = min(count_row[1], max(records_filtered - 1, 0))
+            start = now_offset // length * length
 
         # Fetch the actual page data
         search_params.update({
