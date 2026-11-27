@@ -63,7 +63,18 @@ from src.sql.plans import (
     update_plan_visibility_query,
 )
 from src.sql.stations import get_airports_query
-from src.sql.trips import get_material_types_query, get_operators_query
+from src.sql.trips import (
+    get_dynamic_user_trips_query,
+    get_material_types_query,
+    get_operators_query,
+)
+from src.trip_search import (
+    FILTER_FIELDS,
+    PUBLIC_HIDDEN_FIELDS,
+    base_type_filter,
+    filter_conditions,
+    parse_filters,
+)
 from src.trips import update_trip_type
 from src.trips.delete_trip import delete_trip as _delete_trip
 from src.users import Friendship, User
@@ -317,6 +328,42 @@ def _trip_write_schema(plan=False, update=False):
     return props
 
 
+# Not filterable on a friend's trips: get_trip leaves them out for friends.
+PRIVATE_FILTER_FIELDS = PUBLIC_HIDDEN_FIELDS | {"notes"}
+
+TRIP_FILTERS = {
+    "username": {"type": "string", "description": "Read this friend's trips (read-only). Omit for your own."},
+    "trip_type": {"type": "string", "enum": [t.value for t in TripTypes]},
+    "upcoming_only": {"type": "boolean", "description": "Only future / planned trips."},
+    "from_date": {"type": "string", "description": "Only trips starting on/after YYYY-MM-DD."},
+    "to_date": {"type": "string", "description": "Only trips starting on/before YYYY-MM-DD."},
+    "filters": {
+        "type": "array",
+        "description": (
+            "The trips page's field filters, ANDed. Text matches are case- and accent-insensitive "
+            "substrings; `exact` matches the whole value; `*` and `?` are wildcards. operator "
+            "matches any one of a trip's operators, under any alias of it. material_type also "
+            "matches trainsets and aircraft names. start_datetime, trip_length (km), "
+            "trip_duration_seconds ('2h'), trip_speed (km/h) and price take comparisons and "
+            "ranges ('>=2024-03', '2024-01..2024-06'). uid and ticket_ids take ids, countries "
+            "ISO codes. The value '' with `exact` matches trips where the field is unset; "
+            "add `negate` for set. price, ticket_ids and notes only on your own trips."
+        ),
+        "items": {
+            "type": "object",
+            "properties": {
+                "field": {"type": "string", "enum": sorted(FILTER_FIELDS)},
+                "values": {"type": "array", "items": {"type": "string"}, "description": "Alternatives, ORed."},
+                "exact": {"type": "boolean"},
+                "negate": {"type": "boolean", "description": "Trips matching none of the values."},
+            },
+            "required": ["field", "values"],
+        },
+    },
+    "tag_id": {"type": "integer", "description": "Only trips with this tag (list_tags). Own trips only."},
+}
+
+
 def _build_tools(user) -> list:
     return (mcp_wagons.TOOLS + mcp_trainsets.TOOLS if mcp_wagons.allowed(user) else []) + [
         # ── lookups ─────────────────────────────────────────────────────────
@@ -473,22 +520,22 @@ def _build_tools(user) -> list:
         {
             "name": "list_trips",
             "description": (
-                "List trips, most recent first, as a compact summary per trip. "
+                "List trips, most recent first, undated plans on top and undated past "
+                "trips last, as a compact summary per trip (unset fields left out). "
+                "Returns {total, trips, next_offset}: pass next_offset as `offset` for the "
+                "next page; an empty page has no total. "
                 "By default lists the authenticated user's own trips (all "
-                "visibilities, including price). Pass `username` to read a "
-                "FRIEND's trips instead: this is read-only and only returns their "
-                "public/friends-visibility trips, with private fields (price, "
-                "notes, seat, booking refs) omitted. Use get_trip for everything about one."
+                "visibilities, including price, seat, tags and tickets). Pass `username` "
+                "to read a FRIEND's trips instead: this is read-only and only returns their "
+                "public/friends-visibility trips, with private fields (price, notes, seat, "
+                "tags, tickets) omitted. Use get_trip for everything about one."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "username": {"type": "string", "description": "Read this friend's trips (read-only). Omit for your own."},
-                    "trip_type": {"type": "string", "enum": [t.value for t in TripTypes]},
-                    "upcoming_only": {"type": "boolean", "description": "Only future / planned trips."},
-                    "from_date": {"type": "string", "description": "Only trips starting on/after YYYY-MM-DD."},
-                    "to_date": {"type": "string", "description": "Only trips starting on/before YYYY-MM-DD."},
+                    **TRIP_FILTERS,
                     "limit": {"type": "integer", "description": "Max trips to return (default 50, max 500)."},
+                    "offset": {"type": "integer", "description": "Trips to skip (default 0)."},
                 },
                 "required": [],
             },
@@ -814,25 +861,35 @@ def _clean(d):
 
 
 def _trip_summary(r: dict, include_private: bool = True) -> dict:
-    """Compact per-trip summary. When include_private is False (friend reads),
-    price/currency are dropped so a friend never sees what was paid."""
+    """Compact per-trip summary of a FilteredTrips row. include_private is False for
+    friend reads, which leave out what get_trip leaves out for friends."""
     out = {
-        "id": r["trip_id"],
-        "type": r["trip_type"],
+        "id": r["uid"],
+        "type": r["type"],
         "origin": r["origin_station"],
         "destination": r["destination_station"],
         "start": _iso(r.get("start_datetime")),
         "end": _iso(r.get("end_datetime")),
         "operator": r.get("operator"),
         "line_name": r.get("line_name"),
+        "material_type": r.get("material_type"),
+        "reg": r.get("reg"),
+        "power_type": r.get("power_type"),
         "distance_km": _km(r.get("trip_length")),
         "is_project": r.get("is_project"),
         "visibility": r.get("visibility"),
     }
     if include_private:
-        out["price"] = r.get("price")
-        out["currency"] = r.get("currency")
-    return out
+        out.update({
+            "price": r.get("price"),
+            "currency": r.get("currency"),
+            "seat": r.get("seat"),
+            "has_notes": r.get("has_notes") or None,
+            "tags": sorted(({"id": t["tag_id"], "name": t["name"]} for t in r.get("tags") or []),
+                           key=lambda t: t["name"]),
+            "ticket_ids": r.get("ticket_ids"),
+        })
+    return _clean(out)
 
 
 def _timing_out(start, end, manual_duration, is_project):
@@ -1271,6 +1328,112 @@ def _list_tickets(user) -> list[dict]:
                     "valid_from": _iso(r["valid_from"]), "valid_until": _iso(r["valid_until"])}) for r in rows]
 
 
+# ── trip queries ──────────────────────────────────────────────────────────────
+
+
+def _trips_owner(user, username) -> tuple[bool, int]:
+    """(own, uid) of the trips to read: the user's own, or a friend's read-only."""
+    username = (username or "").strip()
+    if not username or username == user.username:
+        return True, user.uid
+    target = User.query.filter_by(username=username).first()
+    if target is None or not _are_friends(user.uid, target.uid):
+        # Don't disclose whether the user exists.
+        raise ValueError("No such friend, or you are not friends with them.")
+    return False, target.uid
+
+
+def _filtered_trips(user, args):
+    """(query, where, params, own) for list_trips: the trips page's
+    FilteredTrips with its filters (src/trip_search.py), past and future together."""
+    own, target_uid = _trips_owner(user, args.get("username"))
+
+    filters = []
+    for i, entry in enumerate(args.get("filters") or []):
+        if not isinstance(entry, dict) or entry.get("field") not in FILTER_FIELDS:
+            raise ValueError(f"filters[{i}].field must be one of {sorted(FILTER_FIELDS)}.")
+        values = entry.get("values")
+        if isinstance(values, (str, int, float)):
+            values = [values]
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"filters[{i}].values must be a list of values.")
+        filters.append({"field": entry["field"], "values": [str(v) for v in values],
+                        "exact": bool(entry.get("exact")), "negate": bool(entry.get("negate"))})
+    private = {f["field"] for f in filters} & PRIVATE_FILTER_FIELDS
+    if args.get("tag_id") is not None:
+        private.add("tag_id")
+    if not own and private:
+        raise ValueError(f"{', '.join(sorted(private))}: only on your own trips.")
+
+    parsed = parse_filters(json.dumps(filters))
+    if len(parsed) != len(filters):
+        raise ValueError("Each filter needs a value; an empty one only with exact: true.")
+    clauses, params = filter_conditions(parsed)
+    params["user_id"] = target_uid
+
+    if not own:
+        # FRIEND_VISIBLE is a fixed tuple of trusted literals (no user input).
+        allowed = ", ".join(f"'{v}'" for v in FRIEND_VISIBLE)
+        clauses.append(f"visibility IN ({allowed})")
+    trip_types = {t.value for t in TripTypes}
+    base_type = base_type_filter(parsed, trip_types)
+    if args.get("trip_type"):
+        if args["trip_type"] not in trip_types:
+            raise ValueError(f"trip_type must be one of {sorted(trip_types)}.")
+        clauses.append("type = :trip_type")
+        params["trip_type"] = args["trip_type"]
+        base_type = [args["trip_type"]]
+    if base_type:
+        params["base_type"] = base_type
+    if args.get("upcoming_only"):
+        clauses.append("(is_project OR utc_filtered_start_datetime >= NOW())")
+    if args.get("from_date"):
+        clauses.append("start_datetime >= :from_date")
+        params["from_date"] = form.iso_date(args["from_date"], "from_date")
+    if args.get("to_date"):
+        clauses.append("start_datetime < CAST(:to_date AS date) + 1")
+        params["to_date"] = form.iso_date(args["to_date"], "to_date")
+    tag_id = form.integer(args, "tag_id")
+    if tag_id is not None:
+        clauses.append("EXISTS (SELECT 1 FROM tags_associations ta"
+                       " WHERE ta.trip_id = FilteredTrips.uid AND ta.tag_id = :tag_id)")
+        params["tag_id"] = tag_id
+
+    query = get_dynamic_user_trips_query(base_type_filter=bool(base_type), all_trips=True)
+    return query, " AND ".join(clauses) or "TRUE", params, own
+
+
+def _list_trips(user, args) -> dict:
+    query, where, params, own = _filtered_trips(user, args)
+    params["limit"] = min(form.integer(args, "limit", 1) or 50, 500)
+    params["offset"] = form.integer(args, "offset", 0) or 0
+    with pg_session() as pg:
+        rows = pg.execute(
+            query + f"""
+            SELECT uid, type, origin_station, destination_station,
+                   start_datetime, end_datetime, operator, line_name,
+                   material_type, reg, power_type,
+                   trip_length, price, currency, is_project, visibility, seat,
+                   COALESCE(notes, '') <> '' AS has_notes, tags, ticket_ids,
+                   COUNT(*) OVER () AS total
+            FROM FilteredTrips
+            WHERE {where}
+            ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
+                     utc_filtered_start_datetime DESC NULLS LAST,
+                     uid DESC
+            LIMIT :limit OFFSET :offset
+            """,
+            params,
+        ).fetchall()
+    trips = [_trip_summary(dict(r._mapping), include_private=own) for r in rows]
+    result = {"trips": trips}
+    if rows:  # an empty page has no row to carry the total
+        result["total"] = rows[0].total
+    if params["offset"] + len(trips) < result.get("total", 0):
+        result["next_offset"] = params["offset"] + len(trips)
+    return result
+
+
 # ── writes ────────────────────────────────────────────────────────────────────
 
 
@@ -1379,52 +1542,7 @@ def _call_tool(name: str, args: dict, user) -> str:
 
     # ── trips ───────────────────────────────────────────────────────────────
     if name == "list_trips":
-        limit = max(1, min(int(args.get("limit") or 50), 500))
-        # Whose trips? Default own; an explicit username reads a friend's, read-only.
-        target_username = (args.get("username") or "").strip()
-        own = not target_username or target_username == user.username
-        if own:
-            target_uid = uid
-        else:
-            target = User.query.filter_by(username=target_username).first()
-            if target is None or not _are_friends(uid, target.uid):
-                # Don't disclose whether the user exists.
-                raise ValueError("No such friend, or you are not friends with them.")
-            target_uid = target.uid
-
-        clauses = ["user_id = :target_uid"]
-        params = {"target_uid": target_uid, "limit": limit}
-        if not own:
-            # FRIEND_VISIBLE is a fixed tuple of trusted literals (no user input).
-            allowed = ", ".join(f"'{v}'" for v in FRIEND_VISIBLE)
-            clauses.append(f"visibility IN ({allowed})")
-        if args.get("trip_type"):
-            clauses.append("trip_type = :trip_type")
-            params["trip_type"] = args["trip_type"]
-        if args.get("upcoming_only"):
-            clauses.append("(is_project OR COALESCE(utc_start_datetime, start_datetime) >= NOW())")
-        if args.get("from_date"):
-            clauses.append("start_datetime >= :from_date")
-            params["from_date"] = form.iso_date(args["from_date"], "from_date")
-        if args.get("to_date"):
-            clauses.append("start_datetime < CAST(:to_date AS date) + 1")
-            params["to_date"] = form.iso_date(args["to_date"], "to_date")
-        with pg_session() as pg:
-            rows = pg.execute(
-                f"""
-                SELECT trip_id, trip_type, origin_station, destination_station,
-                       start_datetime, end_datetime, operator, line_name,
-                       trip_length, price, currency, is_project, visibility
-                FROM trips
-                WHERE {" AND ".join(clauses)}
-                ORDER BY (is_project AND utc_start_datetime IS NULL) DESC,
-                         COALESCE(utc_start_datetime, start_datetime) DESC NULLS LAST,
-                         trip_id DESC
-                LIMIT :limit
-                """,
-                params,
-            ).fetchall()
-        return out([_trip_summary(dict(r._mapping), include_private=own) for r in rows])
+        return out(_list_trips(user, args))
 
     if name == "get_trip":
         try:
