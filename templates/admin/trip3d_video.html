@@ -344,6 +344,238 @@ const typeIcon = type => {
   return img.complete && img.naturalWidth ? img : null;
 };
 
+// A figure for a trip without a train's cars to draw (a walk, a car, a flight...), passing
+// like the train does: drawn facing left, the way it goes, in its type's colour, its legs,
+// wheels and waves going with the journey's moving clock (still at halts). In units of s, the
+// figure's scale; the ground at y = 0, up negative
+const TAU = Math.PI * 2, INK = '#141a22', GLASS = '#bfe0f5', FAR = '#b6bec8';
+const pathOf = (g, pts) => { g.beginPath(); pts.forEach(([x, y], i) => g[i ? 'lineTo' : 'moveTo'](x, y)); };
+// A limb or a bar: its outline, then the stroke
+const bar = (g, pts, w, col, o) => {
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  pathOf(g, pts); g.strokeStyle = INK; g.lineWidth = w + 2 * o; g.stroke();
+  g.strokeStyle = col; g.lineWidth = w; g.stroke();
+};
+const shape = (g, build, col, o) => { build(); g.fillStyle = col; g.fill(); g.lineJoin = 'round'; g.lineWidth = o; g.strokeStyle = INK; g.stroke(); };
+const poly = (g, pts, col, o) => shape(g, () => { pathOf(g, pts); g.closePath(); }, col, o);
+const disc = (g, x, y, r, col, o) => shape(g, () => { g.beginPath(); g.arc(x, y, r, 0, TAU); }, col, o);
+// The knee (or elbow) of a limb from a to b, bent towards the front (left) or the back
+const joint = (a, b, l1, l2, front = true) => {
+  const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1e-6, dd = Math.min(d, (l1 + l2) * 0.999);
+  const along = (l1 * l1 - l2 * l2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, l1 * l1 - along * along));
+  const ux = dx / d, uy = dy / d, px = a[0] + ux * along, py = a[1] + uy * along;
+  const k1 = [px - uy * h, py + ux * h], k2 = [px + uy * h, py - ux * h];
+  return (k1[0] < k2[0]) === front ? k1 : k2;
+};
+// A head, the torso under it, from the hip to the shoulders
+const body = (g, s, hip, sh, col, o, head = col) => {
+  bar(g, [hip, sh], 0.11 * s, col, o);
+  disc(g, sh[0] - 0.035 * s, sh[1] - 0.13 * s, 0.085 * s, head, o);
+};
+// A road wheel turned by `a`: tyre, rim, three spokes (a small one plain)
+const wheel = (g, s, x, y, r, a) => {
+  g.beginPath(); g.arc(x, y, r, 0, TAU); g.fillStyle = INK; g.fill();
+  g.beginPath(); g.arc(x, y, r * 0.6, 0, TAU); g.fillStyle = '#cfd5dc'; g.fill();
+  if (r >= 0.1 * s) {
+    g.strokeStyle = '#6b737d'; g.lineWidth = r * 0.16; g.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const b = a + i * TAU / 3;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(b) * r * 0.5, y + Math.sin(b) * r * 0.5); g.stroke();
+    }
+  }
+  g.beginPath(); g.arc(x, y, r * 0.16, 0, TAU); g.fillStyle = INK; g.fill();
+};
+// How far the ground goes by under a figure (in s a second of the moving clock), for its wheels
+const ROLL = 1.2;
+const FIGURES = {
+  walk: { w: 0.75, h: 1.12, draw(g, s, m, col, o) {
+    const ph = m * TAU * 1.6, L = 0.27 * s, hx = 0.42 * s;
+    // Each leg swung from the hip, its knee bending as it comes forward; the arms the other way
+    const limbs = [0, Math.PI].map(off => {
+      const a = 0.42 * Math.sin(ph + off), b = 0.75 * Math.max(0, Math.cos(ph + off));
+      const knee = [hx - L * Math.sin(a), L * Math.cos(a)];
+      return { a: -0.45 * Math.sin(ph + off), knee, foot: [knee[0] - L * Math.sin(a - b), knee[1] + L * Math.cos(a - b)] };
+    });
+    // The lower foot on the ground
+    const hy = -Math.max(...limbs.map(l => l.foot[1])) - 0.02 * s, hip = [hx, hy], sh = [hx - 0.05 * s, hy - 0.33 * s];
+    const leg = (l, c) => bar(g, [hip, [l.knee[0], l.knee[1] + hy], [l.foot[0], l.foot[1] + hy]], 0.075 * s, c, o);
+    const arm = (l, c) => {
+      const el = [sh[0] - 0.16 * s * Math.sin(l.a), sh[1] + 0.16 * s * Math.cos(l.a)];
+      bar(g, [sh, el, [el[0] - 0.15 * s * Math.sin(l.a + 0.4), el[1] + 0.15 * s * Math.cos(l.a + 0.4)]], 0.065 * s, c, o);
+    };
+    arm(limbs[1], FAR); leg(limbs[1], FAR);
+    // The backpack
+    shape(g, () => { g.beginPath(); g.roundRect(hx - 0.01 * s, sh[1] + 0.01 * s, 0.16 * s, 0.26 * s, 0.05 * s); }, col, o);
+    body(g, s, hip, sh, '#fff', o);
+    leg(limbs[0], '#fff'); arm(limbs[0], '#fff');
+  } },
+  cycle: { w: 1.28, h: 1.2, draw(g, s, m, col, o) {
+    const r = 0.25 * s, fx = 0.3 * s, rx = 0.98 * s, wy = -r, rot = -m * ROLL * s / r;
+    for (const x of [rx, fx]) {
+      g.beginPath(); g.arc(x, wy, r, 0, TAU); g.lineWidth = 0.06 * s; g.strokeStyle = INK; g.stroke();
+      g.lineWidth = 0.012 * s; g.strokeStyle = '#cfd5dc';
+      for (let i = 0; i < 6; i++) {
+        const b = rot + i * TAU / 6;
+        g.beginPath(); g.moveTo(x, wy); g.lineTo(x + Math.cos(b) * r * 0.92, wy + Math.sin(b) * r * 0.92); g.stroke();
+      }
+      g.beginPath(); g.arc(x, wy, 0.035 * s, 0, TAU); g.fillStyle = INK; g.fill();
+    }
+    const bb = [0.62 * s, wy + 0.02 * s], seat = [0.72 * s, wy - 0.42 * s], head = [0.37 * s, wy - 0.36 * s], hb = [0.33 * s, wy - 0.5 * s];
+    // Pedalling: the cranks turn a little slower than the wheels
+    const c = -m * TAU * 1.1, crank = k => [bb[0] + 0.1 * s * Math.cos(c + k * Math.PI), bb[1] + 0.1 * s * Math.sin(c + k * Math.PI)];
+    const hip = [seat[0] + 0.01 * s, seat[1] - 0.04 * s], sh = [0.48 * s, hip[1] - 0.3 * s];
+    const leg = (k, col2) => { const p = crank(k); bar(g, [hip, joint(hip, p, 0.29 * s, 0.29 * s), p], 0.075 * s, col2, o); };
+    leg(1, FAR);
+    const frame = '#e8ecf0', fw = 0.045 * s;
+    bar(g, [[rx, wy], bb, seat, [rx, wy]], fw, frame, o);
+    bar(g, [seat, head, bb], fw, frame, o);
+    bar(g, [[fx, wy], head, hb, [hb[0] - 0.06 * s, hb[1] + 0.03 * s]], fw, frame, o);
+    bar(g, [[seat[0] - 0.05 * s, seat[1]], [seat[0] + 0.06 * s, seat[1]]], 0.05 * s, INK, 0);
+    bar(g, [crank(0), crank(1)], 0.03 * s, INK, 0);
+    body(g, s, hip, sh, col, o, '#fff');
+    leg(0, '#fff');
+    bar(g, [sh, joint(sh, hb, 0.18 * s, 0.18 * s, false), hb], 0.065 * s, '#fff', o);
+  } },
+  scooter: { w: 0.85, h: 1.12, draw(g, s, m, col, o) {
+    const wr = 0.075 * s, rot = -m * ROLL * s / wr, ph = m * TAU * 0.8, k = (1 - Math.cos(ph)) / 2;
+    const hip = [0.42 * s, (-0.6 + 0.05 * k) * s], sh = [0.31 * s, hip[1] - 0.31 * s], hand = [0.2 * s, -0.8 * s];
+    const stand = [0.38 * s, -0.16 * s];
+    // The kick: pushing along the ground behind the deck, then lifted forward again
+    const kick = [(0.46 + 0.22 * k) * s, (-0.02 - (Math.sin(ph) < 0 ? 0.12 * -Math.sin(ph) : 0)) * s];
+    const leg = (p, c) => bar(g, [hip, joint(hip, p, 0.32 * s, 0.32 * s), p], 0.075 * s, c, o);
+    leg(kick, FAR);
+    bar(g, [[0.12 * s, -wr], [0.2 * s, -0.8 * s]], 0.045 * s, col, o);
+    bar(g, [[0.14 * s, -0.8 * s], [0.27 * s, -0.8 * s]], 0.04 * s, INK, 0);
+    bar(g, [[0.15 * s, -0.13 * s], [0.72 * s, -0.13 * s]], 0.05 * s, col, o);
+    wheel(g, s, 0.12 * s, -wr, wr, rot); wheel(g, s, 0.7 * s, -wr, wr, rot);
+    body(g, s, hip, sh, '#fff', o);
+    leg(stand, '#fff');
+    bar(g, [sh, joint(sh, hand, 0.16 * s, 0.16 * s, false), hand], 0.065 * s, '#fff', o);
+  } },
+  car: { w: 1.75, h: 0.72, draw(g, s, m, col, o) {
+    const r = 0.16 * s, rot = -m * ROLL * s / r, dy = 0.008 * s * Math.sin(m * 9);
+    const P = pts => pts.map(([x, y]) => [x * s, y * s + dy]);
+    poly(g, P([[0.05, -0.2], [0.03, -0.37], [0.08, -0.43], [0.45, -0.46], [0.68, -0.68], [1.2, -0.68], [1.48, -0.47], [1.68, -0.44], [1.72, -0.24], [1.68, -0.2]]), col, o);
+    poly(g, P([[0.52, -0.47], [0.7, -0.63], [0.93, -0.63], [0.93, -0.47]]), GLASS, o * 0.6);
+    poly(g, P([[0.98, -0.47], [0.98, -0.63], [1.18, -0.63], [1.38, -0.47]]), GLASS, o * 0.6);
+    bar(g, P([[0.955, -0.45], [0.955, -0.24]]), o * 0.6, INK, 0);
+    disc(g, 0.07 * s, -0.36 * s + dy, 0.035 * s, '#ffe9a8', o * 0.6);
+    disc(g, 1.69 * s, -0.4 * s + dy, 0.028 * s, '#ff5a4f', o * 0.6);
+    for (const x of [0.4, 1.35]) {
+      g.beginPath(); g.arc(x * s, -r, r * 1.2, Math.PI, TAU); g.fillStyle = INK; g.fill();
+      wheel(g, s, x * s, -r, r, rot);
+    }
+  } },
+  bus: { w: 2.5, h: 0.98, draw(g, s, m, col, o) {
+    const r = 0.15 * s, rot = -m * ROLL * s / r, dy = 0.006 * s * Math.sin(m * 7);
+    const box = (x, y, w, h, rr, c, oo = o) => shape(g, () => { g.beginPath(); g.roundRect(x * s, y * s + dy, w * s, h * s, rr * s); }, c, oo);
+    box(0.03, -0.95, 2.44, 0.8, 0.08, col);
+    box(0.03, -0.42, 2.44, 0.06, 0, '#fff', 0);
+    box(0.08, -0.87, 0.34, 0.4, 0.05, GLASS, o * 0.6);
+    box(0.12, -0.925, 0.26, 0.04, 0.01, '#ffb300', 0);
+    box(0.48, -0.84, 0.24, 0.64, 0.02, GLASS, o * 0.6);
+    bar(g, [[0.6 * s, -0.84 * s + dy], [0.6 * s, -0.2 * s + dy]], o * 0.6, INK, 0);
+    for (let x = 0.8; x + 0.25 <= 2.42; x += 0.32) box(x, -0.84, 0.26, 0.32, 0.03, GLASS, o * 0.6);
+    disc(g, 0.07 * s, -0.27 * s + dy, 0.03 * s, '#ffe9a8', o * 0.6);
+    for (const x of [0.3, 2.02]) {
+      g.beginPath(); g.arc(x * s, -r, r * 1.22, Math.PI, TAU); g.fillStyle = INK; g.fill();
+      wheel(g, s, x * s, -r, r, rot);
+    }
+  } },
+  air: { w: 2.4, h: 0.9, draw(g, s, m, col, o) {
+    const cy = (-0.42 + 0.025 * Math.sin(m * 1.5)) * s;
+    const P = pts => pts.map(([x, y]) => [x * s, cy + y * s]);
+    // The air streaming past behind it
+    g.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const p = (m * 1.6 + i * 0.37) % 1;
+      g.globalAlpha = (1 - p) * 0.7; g.strokeStyle = '#fff'; g.lineWidth = 0.02 * s;
+      g.beginPath(); g.moveTo((1.9 + p * 0.3) * s, cy + (-0.06 + i * 0.07) * s); g.lineTo((2.1 + p * 0.3) * s, cy + (-0.06 + i * 0.07) * s); g.stroke();
+    }
+    g.globalAlpha = 1;
+    poly(g, P([[1.45, -0.09], [1.7, -0.42], [1.84, -0.42], [1.8, -0.09]]), col, o);
+    shape(g, () => {
+      g.beginPath(); g.moveTo(0.25 * s, cy - 0.1 * s); g.lineTo(1.5 * s, cy - 0.1 * s); g.lineTo(1.84 * s, cy - 0.15 * s);
+      g.lineTo(1.86 * s, cy - 0.08 * s); g.lineTo(1.55 * s, cy + 0.1 * s); g.lineTo(0.25 * s, cy + 0.1 * s);
+      g.bezierCurveTo(0.08 * s, cy + 0.1 * s, 0.02 * s, cy + 0.03 * s, 0.06 * s, cy - 0.03 * s);
+      g.bezierCurveTo(0.1 * s, cy - 0.09 * s, 0.18 * s, cy - 0.1 * s, 0.25 * s, cy - 0.1 * s); g.closePath();
+    }, '#f4f6f8', o);
+    poly(g, P([[0.22, 0.02], [1.55, 0.02], [1.53, 0.045], [0.2, 0.045]]), col, 0);
+    poly(g, P([[1.6, -0.05], [1.86, -0.07], [1.9, -0.03], [1.65, -0.01]]), '#dfe4ea', o * 0.7);
+    g.fillStyle = '#5a6b7c';
+    for (let x = 0.36; x <= 1.42; x += 0.07) { g.beginPath(); g.arc(x * s, cy - 0.035 * s, 0.017 * s, 0, TAU); g.fill(); }
+    poly(g, P([[0.1, -0.035], [0.15, -0.07], [0.24, -0.07], [0.23, -0.03]]), '#3a4a5c', 0);
+    poly(g, P([[0.75, 0.03], [1.02, 0.03], [1.28, 0.2], [1.15, 0.2]]), '#dfe4ea', o);
+    shape(g, () => { g.beginPath(); g.roundRect(0.7 * s, cy + 0.08 * s, 0.24 * s, 0.09 * s, 0.04 * s); }, '#cfd5dc', o);
+  } },
+  ferry: { w: 2.1, h: 1.12, draw(g, s, m, col, o) {
+    const wl = -0.2 * s, bob = 0.02 * s * Math.sin(m * 1.7), rock = 0.025 * Math.sin(m * 1.2);
+    g.save(); g.translate(1.0 * s, wl + bob); g.rotate(rock); g.translate(-1.0 * s, -wl);
+    const P = pts => pts.map(([x, y]) => [x * s, wl + y * s]);
+    poly(g, P([[1.2, -0.68], [1.24, -0.9], [1.42, -0.9], [1.4, -0.68]]), col, o);
+    poly(g, P([[1.235, -0.86], [1.42, -0.86], [1.425, -0.9], [1.24, -0.9]]), INK, 0);
+    poly(g, P([[0.75, -0.68], [1.45, -0.68], [1.45, -0.48], [0.75, -0.48]]), '#f4f6f8', o);
+    poly(g, P([[0.5, -0.5], [1.68, -0.5], [1.68, -0.22], [0.5, -0.22]]), '#f4f6f8', o);
+    g.fillStyle = '#3a4a5c';
+    for (let x = 0.82; x < 1.4; x += 0.11) g.fillRect(x * s, wl - 0.63 * s, 0.07 * s, 0.07 * s);
+    for (let x = 0.58; x < 1.62; x += 0.1) g.fillRect(x * s, wl - 0.43 * s, 0.06 * s, 0.07 * s);
+    poly(g, P([[0, -0.27], [1.96, -0.22], [1.9, 0.06], [0.25, 0.06]]), col, o);
+    poly(g, P([[0.06, -0.15], [1.93, -0.12], [1.925, -0.09], [0.08, -0.12]]), '#fff', 0);
+    g.restore();
+    // The sea, its waves running back past the ship
+    g.beginPath(); g.moveTo(-0.05 * s, 0);
+    for (let x = -0.05; x <= 2.15; x += 0.02) g.lineTo(x * s, wl + 0.025 * s * Math.sin(x * 7 - m * 3));
+    g.lineTo(2.15 * s, 0); g.closePath();
+    g.fillStyle = 'rgba(70,140,215,0.6)'; g.fill();
+    g.beginPath();
+    for (let x = -0.05; x <= 2.15; x += 0.02) g[x > -0.05 ? 'lineTo' : 'moveTo'](x * s, wl + 0.025 * s * Math.sin(x * 7 - m * 3));
+    g.lineWidth = 0.025 * s; g.strokeStyle = 'rgba(255,255,255,0.85)'; g.stroke();
+  } },
+  aerialway: { w: 1.4, h: 1.15, draw(g, s, m, col, o) {
+    const cableY = x => (-1.1 + 0.08 * x / 1.4) * s, gx = 0.7 * s, gy = cableY(0.7);
+    const fade = g.createLinearGradient(0, 0, 1.4 * s, 0);
+    fade.addColorStop(0, 'rgba(20,26,34,0)'); fade.addColorStop(0.2, INK); fade.addColorStop(0.8, INK); fade.addColorStop(1, 'rgba(20,26,34,0)');
+    g.beginPath(); g.moveTo(0, cableY(0)); g.lineTo(1.4 * s, cableY(1.4)); g.lineWidth = 0.03 * s; g.strokeStyle = fade; g.stroke();
+    // Swaying under the cable
+    g.save(); g.translate(gx, gy); g.rotate(0.05 * Math.sin(m * 1.8));
+    bar(g, [[0, 0], [0, 0.18 * s], [0.12 * s, 0.3 * s]], 0.035 * s, '#6b737d', o * 0.6);
+    shape(g, () => { g.beginPath(); g.roundRect(-0.27 * s, 0.3 * s, 0.54 * s, 0.6 * s, 0.1 * s); }, col, o);
+    shape(g, () => { g.beginPath(); g.roundRect(-0.21 * s, 0.37 * s, 0.42 * s, 0.25 * s, 0.05 * s); }, GLASS, o * 0.6);
+    bar(g, [[0, 0.37 * s], [0, 0.62 * s]], o * 0.6, INK, 0);
+    g.restore();
+    disc(g, gx, gy, 0.04 * s, '#cfd5dc', o * 0.6);
+  } },
+  ski: { w: 1.35, h: 1.0, draw(g, s, m, col, o) {
+    const c = 0.02 * s * Math.sin(m * 3), P = pts => pts.map(([x, y]) => [x * s, y * s]);
+    // Snow thrown up behind
+    for (let i = 0; i < 5; i++) {
+      const p = (m * 1.4 + i / 5) % 1;
+      g.globalAlpha = (1 - p) * 0.8; g.beginPath();
+      g.arc((0.98 + p * 0.32) * s, (-0.05 - p * 0.14 + 0.03 * Math.sin(i * 7)) * s, (0.03 + p * 0.04) * s, 0, TAU);
+      g.fillStyle = '#fff'; g.fill();
+    }
+    g.globalAlpha = 1;
+    const hip = [0.58 * s, -0.47 * s + c], sh = [0.4 * s, -0.75 * s + c];
+    bar(g, [hip, [0.44 * s, -0.3 * s + c], [0.56 * s, -0.07 * s]], 0.075 * s, FAR, o);
+    bar(g, P([[0.02, -0.1], [0.06, -0.05], [0.12, -0.03], [1.0, -0.03]]), 0.035 * s, col, o);
+    bar(g, [hip, [0.4 * s, -0.3 * s + c], [0.52 * s, -0.07 * s]], 0.075 * s, '#fff', o);
+    body(g, s, hip, sh, col, o, '#fff');
+    const hand = [0.24 * s, -0.52 * s + c];
+    bar(g, [hand, [0.78 * s, -0.04 * s]], 0.02 * s, INK, 0);
+    bar(g, [sh, [0.3 * s, -0.6 * s + c], hand], 0.065 * s, '#fff', o);
+  } },
+};
+// A figure drawn apart, a margin round it for its outline
+const figureArt = (type, m, s) => {
+  const fig = FIGURES[type], M = 0.06;
+  const cv = document.createElement('canvas');
+  cv.width = Math.ceil((fig.w + 2 * M) * s); cv.height = Math.ceil((fig.h + 2 * M) * s);
+  const g = cv.getContext('2d');
+  g.translate(M * s, (fig.h + M) * s);
+  fig.draw(g, s, m, COLOR[type] || '#888', 0.03 * s);
+  return { canvas: cv, w: cv.width, h: cv.height, ground: M * s };
+};
+
 await document.fonts.load('900 20px "Font Awesome 6 Free"', '\uf4d7').catch(() => {});
 // A failure (trips not found or not one's own, a map that will not load) stays on the cover
 await setup().catch(e => stuck(`${e.message || e}`));
@@ -1267,6 +1499,20 @@ async function setup() {
     const f = x < r ? v * x * x / (2 * r) : x > T - r ? 1 - v * (T - x) ** 2 / (2 * r) : v * (x - r / 2);
     return { s: leg.s0 + (leg.s1 - leg.s0) * f, dwell: null };
   };
+  // The journey's moving clock at time t: its time less the halts and pauses so far, easing
+  // in and out with the legs (journeyAt), for the figures' legs and wheels
+  const motionAt = t => {
+    let m = 0;
+    for (const p of plan) {
+      if (t <= p.t0) break;
+      if (p.stop || p.pause) continue;
+      const T = (p.t1 - p.t0) || 1, x = Math.min(T, t - p.t0);
+      if (x >= T) { m += T; continue; }
+      const r = Math.min(0.6, T / 3), v = 1 / (T - r);
+      m += T * (x < r ? v * x * x / (2 * r) : x > T - r ? 1 - v * (T - x) ** 2 / (2 * r) : v * (x - r / 2));
+    }
+    return m;
+  };
 
   // ── HUD ────────────────────────────────────────────────────────────────────────
   // A recorded track has a name but no destination
@@ -1625,8 +1871,11 @@ async function setup() {
     }
 
     // The train itself, when its exact composition was saved: its cars to scale, right-aligned
-    // above the profile strip, with their credit; only in a frame wide enough for it (1280 px)
+    // above the profile strip, with their credit; only in a frame wide enough for it (1280 px).
+    // Without cars, a figure for the trip's type (a hiker, a car, a plane...) passing the same way
     const now = tripSpans.find(t => f.s <= t.to) || tripSpans[tripSpans.length - 1];
+    let art = null;
+    const room = W - 2 * pad;
     if (W >= 1280 && now.units.length && f.title < 0.99 && f.card < 0.99) {
       // Drawn once each car's picture has loaded or failed to; a car without one (no drawing,
       // or its file missing) is drawn as a plain car of typical length, so the train keeps its
@@ -1641,9 +1890,9 @@ async function setup() {
         // A car's length and height in metres: from its drawing, else a 20 m coach 3.6 m high
         const dims = ({ c, img }) => (img ? [img.naturalWidth / (c.px_per_meter || 10), img.naturalHeight / (c.px_per_meter || 10)] : [20, 3.6]);
         const metres = cars.reduce((a, car) => a + dims(car)[0], 0);
-        const room = W - 2 * pad, perMetre = Math.max(22 * u / 4, Math.min(34 * u / 4, room / metres));
+        const perMetre = Math.max(22 * u / 4, Math.min(34 * u / 4, room / metres));
         const sizes = cars.map(car => ({ img: car.img, w: dims(car)[0] * perMetre, h: dims(car)[1] * perMetre }));
-        const trainW = sizes.reduce((a, x) => a + x.w, 0), shownW = Math.min(trainW, room);
+        const trainW = sizes.reduce((a, x) => a + x.w, 0);
         const trainH = Math.max(...sizes.map(x => x.h));
         // The whole train drawn apart, then placed: a long one is cut at the strip's right end
         // (where it fades out), so on its way in and out the rest of it passes into view
@@ -1662,45 +1911,52 @@ async function setup() {
           }
           x += w;
         }
-        const bottom = H - pad - (flat ? 0 : 128 * u + 14 * u), top = bottom - trainH;
-        // A passing train: in from the right as its trip starts, on out to the left as it ends,
-        // over a fifth of the trip's time on screen each (1.5 to 3 s, at most half of a short
-        // trip), so one train is gone before the next comes
-        const onScreen = now.tOut - now.tIn, rest = W - pad - shownW;
-        const slide = Math.min(onScreen / 2, Math.max(1.5, Math.min(3, onScreen * 0.2)));
-        const k01 = v => Math.max(0, Math.min(1, v));
-        const kIn = k01((f.jt - now.tIn) / slide), kOut = k01((f.jt - (now.tOut - slide)) / slide);
-        const dx = (1 - kIn) ** 3 * (W + 20 * u - rest) - kOut ** 3 * (rest + trainW + 20 * u);
-        let shown = strip, sx = Math.round(rest + dx);
-        if (trainW > room) {
-          // Cut at the strip's right end with a fade, on a frame-wide row so it stays put there
-          // while the train moves through it
-          const row = document.createElement('canvas');
-          row.width = W; row.height = strip.height;
-          const rg = row.getContext('2d'), edge = W - pad, fade = Math.min(120 * u, room / 3);
-          rg.drawImage(strip, sx, 0);
-          rg.globalCompositeOperation = 'destination-out';
-          const grad = rg.createLinearGradient(edge - fade, 0, edge, 0);
-          grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,1)');
-          rg.fillStyle = grad; rg.fillRect(edge - fade, 0, fade, row.height);
-          rg.fillStyle = '#000'; rg.fillRect(edge, 0, W - edge, row.height);
-          shown = row; sx = 0;
-        }
-        g2.globalAlpha = (1 - f.title) * (1 - f.card);
-        g2.save(); g2.shadowColor = 'rgba(0,0,0,0.45)'; g2.shadowBlur = 6 * u; g2.shadowOffsetY = 2 * u;
-        g2.drawImage(shown, sx, Math.round(top));
-        g2.restore();
-        const credit = wagonCredit(now.units);
-        // The credit with the train, fading as it comes and goes
-        g2.globalAlpha *= 1 - Math.min(1, Math.abs(dx) / Math.max(1, shownW * 0.5));
-        if (credit) {
-          g2.font = font(500, 13); g2.textAlign = 'right'; g2.textBaseline = 'alphabetic'; g2.fillStyle = 'rgba(255,255,255,0.85)';
-          g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
-          g2.fillText(credit, W - pad, top - 6 * u);
-          g2.shadowBlur = 0; g2.textAlign = 'left';
-        }
-        g2.globalAlpha = 1;
+        art = { canvas: strip, w: trainW, h: trainH, ground: 0, credit: wagonCredit(now.units) };
       }
+    } else if (!now.units.length && FIGURES[now.type] && f.title < 0.99 && f.card < 0.99) {
+      // About 48 px a unit: a hiker 54 px tall, a car 35
+      const fig = figureArt(now.type, motionAt(f.jt), 48 * u);
+      art = { ...fig, credit: null };
+    }
+    if (art) {
+      const trainW = art.w, shownW = Math.min(trainW, room);
+      const bottom = H - pad - (flat ? 0 : 128 * u + 14 * u) + art.ground, top = bottom - art.h;
+      // A passing train: in from the right as its trip starts, on out to the left as it ends,
+      // over a fifth of the trip's time on screen each (1.5 to 3 s, at most half of a short
+      // trip), so one train is gone before the next comes
+      const onScreen = now.tOut - now.tIn, rest = W - pad - shownW + art.ground;
+      const slide = Math.min(onScreen / 2, Math.max(1.5, Math.min(3, onScreen * 0.2)));
+      const k01 = v => Math.max(0, Math.min(1, v));
+      const kIn = k01((f.jt - now.tIn) / slide), kOut = k01((f.jt - (now.tOut - slide)) / slide);
+      const dx = (1 - kIn) ** 3 * (W + 20 * u - rest) - kOut ** 3 * (rest + trainW + 20 * u);
+      let shown = art.canvas, sx = Math.round(rest + dx);
+      if (trainW > room) {
+        // Cut at the strip's right end with a fade, on a frame-wide row so it stays put there
+        // while the train moves through it
+        const row = document.createElement('canvas');
+        row.width = W; row.height = shown.height;
+        const rg = row.getContext('2d'), edge = W - pad, fade = Math.min(120 * u, room / 3);
+        rg.drawImage(shown, sx, 0);
+        rg.globalCompositeOperation = 'destination-out';
+        const grad = rg.createLinearGradient(edge - fade, 0, edge, 0);
+        grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,1)');
+        rg.fillStyle = grad; rg.fillRect(edge - fade, 0, fade, row.height);
+        rg.fillStyle = '#000'; rg.fillRect(edge, 0, W - edge, row.height);
+        shown = row; sx = 0;
+      }
+      g2.globalAlpha = (1 - f.title) * (1 - f.card);
+      g2.save(); g2.shadowColor = 'rgba(0,0,0,0.45)'; g2.shadowBlur = 6 * u; g2.shadowOffsetY = 2 * u;
+      g2.drawImage(shown, sx, Math.round(top));
+      g2.restore();
+      // The credit with the train, fading as it comes and goes
+      g2.globalAlpha *= 1 - Math.min(1, Math.abs(dx) / Math.max(1, shownW * 0.5));
+      if (art.credit) {
+        g2.font = font(500, 13); g2.textAlign = 'right'; g2.textBaseline = 'alphabetic'; g2.fillStyle = 'rgba(255,255,255,0.85)';
+        g2.shadowColor = 'rgba(0,0,0,0.8)'; g2.shadowBlur = 4 * u;
+        g2.fillText(art.credit, W - pad, top - 6 * u);
+        g2.shadowBlur = 0; g2.textAlign = 'left';
+      }
+      g2.globalAlpha = 1;
     }
 
     // Stations: only those the video halts at (with the ends and connections), each shown on
