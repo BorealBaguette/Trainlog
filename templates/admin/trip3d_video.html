@@ -1459,7 +1459,7 @@ async function setup() {
 
   // The journey's timing: legs between the stations it halts at, each starting and ending at
   // rest (eased, their time shared by distance), and a wait at each
-  let plan = [], pauseLegs = [], useHighlights = true, halting = new Set(), nearby = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [], countryChanges = [];
+  let plan = [], pauseLegs = [], useHighlights = true, halting = new Set(), passTimes = new Map(), stationTimes = new Map(), dayChanges = [], zoneChanges = [], countryChanges = [];
   const planJourney = () => {
     // At most one halt per 4 s of journey (a dozen in 30 s was stop-and-go): connections
     // first, then the stops the timetable waits longest at; the train runs through the rest
@@ -1477,17 +1477,6 @@ async function setup() {
       halts.push(st);
     }
     halts.sort((a, b) => a.d - b.d);
-    // Each stop run through named on the chip of the nearest halt or end: the 5 closest to it,
-    // then how many more
-    const named = [stations[0], ...halts, stations[stations.length - 1]], passed = new Map();
-    for (const st of stops.filter(st => !halts.includes(st))) {
-      const h = named.reduce((x, y) => (Math.abs(y.d - st.d) < Math.abs(x.d - st.d) ? y : x));
-      passed.set(h, [...(passed.get(h) || []), st]);
-    }
-    nearby = new Map([...passed].map(([h, list]) => {
-      list.sort((a, b) => Math.abs(a.d - h.d) - Math.abs(b.d - h.d));
-      return [h, { list: list.slice(0, 5), more: list.length - 5 }];
-    }));
     const wait = Math.min(0.5, JOURNEY * 0.15 / Math.max(1, halts.length));
     halting = new Set(halts);
     // The hops between trips: crossed in HOP seconds each, whatever their length
@@ -1595,6 +1584,8 @@ async function setup() {
       const arr = st.d <= 1 ? 0 : leg.t1;
       stationTimes.set(st, { arr, dep: st.d >= total - 1 ? JOURNEY : waits.length ? Math.max(...waits.map(p => p.t1)) : arr });
     }
+    // The stops run through: when the train passes each
+    passTimes = new Map(stops.filter(st => !halting.has(st)).map(st => [st, timeAt(st.d)]));
   };
   // The photo and highlight pauses: each at its place, photos at one spot (or by a halt, or an
   // end) gathered onto it, a photo held 2.5 s and a highlight 2.4 s; together at most half the
@@ -1795,9 +1786,9 @@ async function setup() {
       return l + '…';
     }), px: min };
   }
-  // The chip's icon, in the route's colour: a train front for a station, a portal for a
+  // The chip's icon, in the colour of the trip under way: a train front for a station, a portal for a
   // tunnel, a deck on arches for a bridge
-  function chipIcon(kind, x, y, r) {
+  function chipIcon(kind, x, y, r, color) {
     g2.save();
     g2.strokeStyle = color; g2.fillStyle = color; g2.lineWidth = r * 0.28; g2.lineCap = 'round'; g2.lineJoin = 'round';
     if (kind === 'station') {
@@ -1874,6 +1865,7 @@ async function setup() {
   function drawCallout(h, u01) {
     const u = scale, p = lineOnScreenIfAhead(h.d);
     if (!p) return;
+    const color = COLOR[S[Math.min(S.length - 2, pointAt(h.d).k)].type] || COLOR.train;
     const a = Math.min(clamp01(u01 / 0.12), clamp01((1 - u01) / 0.1)), pop = easeBack(clamp01(u01 / 0.22));
     if (a <= 0) return;
     g2.save();
@@ -2121,25 +2113,43 @@ async function setup() {
         if (a <= 0) { labelSide.delete(st); continue; }
         visible.push({ st, a, p: lineOnScreen(st.d) });
       }
+      // The stops run through after them (their labels give way): from 2.5 s before the train
+      // passes to 1.5 s after
+      for (const [st, t] of passTimes) {
+        const a = clamp01((jt - (t - 2.5)) / 0.5) * clamp01((t + 1.5 - jt) / 0.5);
+        if (a <= 0) { labelSide.delete(st); continue; }
+        visible.push({ st, a, p: lineOnScreen(st.d), passing: true });
+      }
       // Clipped above the profile strip
       g2.save();
       g2.beginPath(); g2.rect(0, 0, W, H - pad - 136 * u); g2.clip();
-      g2.font = font(700, 22);
-      const taken = [], th = 26 * u;
-      for (const { st, a, p } of visible) {
+      const taken = [];
+      for (const { st, a, p, passing } of visible) {
         g2.globalAlpha = a * (1 - f.card);
-        // A transfer: a badge in the colour of the trip it changes to, with its icon; a stop
-        // on the way (and the ends): a white dot
+        g2.font = passing ? font(600, 17) : font(700, 22);
+        const th = (passing ? 20 : 26) * u;
+        // A transfer: a pin above the line, from the colour of the trip arriving to that of
+        // the one leaving, with its icon; a stop on the way (and the ends): a white dot
         const mark = st.transfer && stationMark(st), icon = st.transfer && !mark && typeIcon(typeAfter(st));
+        const b = 28 * u, lift = (mark || icon) ? b + 8 * u : 0;
         if (mark || icon) {
-          const b = 30 * u, bg = COLOR[typeAfter(st)] || color;
-          roundRect(p.x - b / 2, p.y - b / 2, b, b, 8 * u); g2.fillStyle = bg; g2.fill();
-          g2.lineWidth = 3 * u; g2.strokeStyle = '#fff'; g2.stroke();
-          if (mark) drawMark(mark, p.x, p.y, 10 * u, '#fff', bg);
+          const by = p.y - lift + b / 2, before = COLOR[typeBefore(st)] || color, after = COLOR[typeAfter(st)] || color;
+          const bg = g2.createLinearGradient(p.x - b / 2, 0, p.x + b / 2, 0);
+          bg.addColorStop(0.3, before); bg.addColorStop(0.7, after);
+          g2.beginPath(); g2.moveTo(p.x - 6 * u, by + b / 2 - 1); g2.lineTo(p.x, p.y - 4 * u); g2.lineTo(p.x + 6 * u, by + b / 2 - 1);
+          g2.fillStyle = '#fff'; g2.fill();
+          roundRect(p.x - b / 2, by - b / 2, b, b, 8 * u); g2.fillStyle = bg; g2.fill();
+          g2.lineWidth = 2.5 * u; g2.strokeStyle = '#fff'; g2.stroke();
+          if (mark) drawMark(mark, p.x, by, 9 * u, '#fff', bg);
           else {
-            const iw = Math.round(20 * u), img = shrink(icon, iw, true);
-            g2.drawImage(img, Math.round(p.x - iw / 2), Math.round(p.y - img.height / 2));
+            const iw = Math.round(18 * u), img = shrink(icon, iw, true);
+            g2.drawImage(img, Math.round(p.x - iw / 2), Math.round(by - img.height / 2));
           }
+          g2.beginPath(); g2.arc(p.x, p.y, 4 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
+          g2.lineWidth = 2 * u; g2.strokeStyle = '#141a22'; g2.stroke();
+        } else if (passing) {
+          g2.beginPath(); g2.arc(p.x, p.y, 5 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
+          g2.lineWidth = 2.5 * u; g2.strokeStyle = '#141a22'; g2.stroke();
         } else {
           g2.beginPath(); g2.arc(p.x, p.y, 8 * u, 0, Math.PI * 2); g2.fillStyle = '#fff'; g2.fill();
           g2.lineWidth = 3.5 * u; g2.strokeStyle = '#141a22'; g2.stroke();
@@ -2151,9 +2161,10 @@ async function setup() {
           const across = Math.abs(q.x - r.x) > Math.abs(q.y - r.y);
           labelSide.set(st, across ? 'above' : (q.x + r.x) / 2 > p.x ? 'left' : 'right');
         }
-        const tw = g2.measureText(st.name).width, side = labelSide.get(st), gap = (st.transfer ? 22 : 14) * u;
+        // Beside a transfer's pin, or over it
+        const tw = g2.measureText(st.name).width, side = labelSide.get(st), gap = (lift ? 22 : passing ? 10 : 14) * u;
         const box = { w: tw, h: th, x: side === 'above' ? p.x - tw / 2 : side === 'right' ? p.x + gap : p.x - gap - tw,
-          y: side === 'above' ? p.y - gap - th : p.y - th / 2 };
+          y: side === 'above' ? p.y - lift - gap / 2 - th : p.y - lift / 2 - th / 2 };
         // Two at once only if apart; else the one appearing later waits
         if (!taken.some(o => box.x < o.x + o.w + 6 * u && o.x < box.x + box.w + 6 * u && box.y < o.y + o.h && o.y < box.y + box.h)) {
           taken.push(box);
@@ -2161,7 +2172,7 @@ async function setup() {
           g2.shadowColor = 'rgba(0,0,0,0.75)'; g2.shadowBlur = 8 * u;
           g2.lineWidth = 4 * u; g2.strokeStyle = 'rgba(20,26,34,0.9)'; g2.lineJoin = 'round';
           g2.strokeText(st.name, box.x, box.y + 2 * u);
-          g2.shadowBlur = 0; g2.fillStyle = '#fff'; g2.fillText(st.name, box.x, box.y + 2 * u);
+          g2.shadowBlur = 0; g2.fillStyle = passing ? 'rgba(255,255,255,0.88)' : '#fff'; g2.fillText(st.name, box.x, box.y + 2 * u);
         }
       }
       g2.restore();
@@ -2199,10 +2210,7 @@ async function setup() {
       const len = chipFor.to - chipFor.from, size = len >= 1000 ? (len / 1000).toFixed(1) + ' km' : Math.round(len) + ' m';
       const stopLabel = st => (st.transfer ? `${st.name.toUpperCase()} · ${st.arr || ''} → ${st.dep || ''}`
         : `${st.name.toUpperCase()} · ${st.dep || st.arr || ''}`.replace(/ · $/, ''));
-      const near = chipFor.stop && nearby.get(chipFor.stop);
-      const parts = chipFor.stop ? [chipFor.stop, ...(near?.list || [])].sort((a, b) => a.d - b.d).map(stopLabel) : null;
-      if (near?.more > 0) parts.push(`+${near.more}`);
-      const label = parts ? parts.join('  /  ')
+      const label = chipFor.stop ? stopLabel(chipFor.stop)
         : chipFor.name ? `${chipFor.name.toUpperCase()}${/tunnel|tunel|túnel|galleri/i.test(chipFor.name) ? '' : ` ${T.tunnel.toUpperCase()}`} · ${size}`
         : `${(inT ? T.tunnel : T.bridge).toUpperCase()} · ${size}`;
       const edge = Math.min(len / 5, speed * 0.4), tt = chipFor.stop && stationTimes.get(chipFor.stop);
@@ -2211,16 +2219,8 @@ async function setup() {
       g2.globalAlpha = Math.max(0, fade);
       g2.font = font(700, 24);
       const roomL = cornerRight + 24 * u, roomR = W - pad - logoW - 24 * u;
-      // Several stations wider than the room at the top: on two lines, split where they are most
-      // even, and smaller if still wider than the frame
-      let lines = [label];
-      if (parts && parts.length > 1 && g2.measureText(label).width + 64 * u > roomR - roomL) {
-        const split = k => [parts.slice(0, k).join('  /  '), parts.slice(k).join('  /  ')];
-        const widest = ls => Math.max(...ls.map(l => g2.measureText(l).width));
-        let best = 1;
-        for (let k = 2; k < parts.length; k++) if (widest(split(k)) < widest(split(best))) best = k;
-        lines = split(best);
-      }
+      // Smaller if wider than the frame
+      const lines = [label];
       let px = 24;
       const fit = (W - 2 * pad - 64 * u) / Math.max(...lines.map(l => g2.measureText(l).width));
       if (fit < 1) g2.font = font(700, (px = Math.max(14, 24 * fit)));
@@ -2229,19 +2229,25 @@ async function setup() {
       const cw = tw + 64 * u, ch = 50 * u + (lines.length - 1) * lineH;
       let cx = Math.max(roomL, Math.min((W - cw) / 2, roomR - cw)), cy = pad;
       if (cx + cw > roomR) { cx = pad; cy = pad + dateRow + (corner.lines.length * corner.px * 1.15 + 60) * u; }
-      // A transfer's chip in the colour of the trip it changes to, white on it
+      // A transfer's chip from the colour of the trip arriving to that of the one leaving, white on it
       const dark = inT && !chipFor.stop, change = chipFor.stop?.transfer;
+      const before = change && (COLOR[typeBefore(chipFor.stop)] || color), after = change && (COLOR[typeAfter(chipFor.stop)] || color);
+      let changeFill = null;
+      if (change) {
+        changeFill = g2.createLinearGradient(cx, 0, cx + cw, 0);
+        changeFill.addColorStop(0.25, before); changeFill.addColorStop(0.75, after);
+      }
       chipBox = { x: cx, y: cy, w: cw, h: ch };
       roundRect(cx, cy, cw, ch, 25 * u);
-      g2.fillStyle = change ? COLOR[typeAfter(chipFor.stop)] || color : dark ? 'rgba(20,26,34,0.82)' : 'rgba(255,255,255,0.88)'; g2.fill();
+      g2.fillStyle = change ? changeFill : dark ? 'rgba(20,26,34,0.82)' : 'rgba(255,255,255,0.88)'; g2.fill();
       if (change) { g2.lineWidth = 2.5 * u; g2.strokeStyle = 'rgba(255,255,255,0.9)'; g2.stroke(); }
       // A station shows its own glyph, else the icon of the trip leaving it (arriving, at the last)
       const mark = chipFor.stop && stationMark(chipFor.stop), icon = chipFor.stop && !mark && typeIcon(typeAfter(chipFor.stop));
-      if (mark) drawMark(mark, cx + 24 * u, cy + ch / 2, 13 * u, change ? '#fff' : '#141a22', change ? COLOR[typeAfter(chipFor.stop)] || color : '#fff');
+      if (mark) drawMark(mark, cx + 24 * u, cy + ch / 2, 13 * u, change ? '#fff' : '#141a22', change ? before : '#fff');
       else if (icon) {
         const iw = Math.round(28 * u), img = shrink(icon, iw, change);
         g2.drawImage(img, Math.round(cx + 24 * u - iw / 2), Math.round(cy + ch / 2 - img.height / 2));
-      } else chipIcon(chipFor.stop ? 'station' : inT ? 'tunnel' : 'bridge', cx + 24 * u, cy + ch / 2, 9 * u);
+      } else chipIcon(chipFor.stop ? 'station' : inT ? 'tunnel' : 'bridge', cx + 24 * u, cy + ch / 2, 9 * u, COLOR[S[Math.min(S.length - 2, pointAt(f.s).k)].type] || color);
       g2.fillStyle = dark || change ? '#fff' : '#141a22'; g2.textBaseline = 'middle';
       lines.forEach((l, i) => g2.fillText(l, cx + (chipFor.stop ? 46 : 40) * u, cy + ch / 2 + 1 + (i - (lines.length - 1) / 2) * lineH));
       g2.globalAlpha = 1;
@@ -2489,7 +2495,7 @@ async function setup() {
         const k = easeOut(clamp01(t / 1.5)), colW = inner / stats.length;
         stats.forEach(([v, text, label, icon], j) => {
           const x = x0 + colW * (j + 0.5);
-          g2.font = faFont(26); g2.fillStyle = color; g2.fillText(icon, x, y + 28 * u);
+          g2.font = faFont(26); g2.fillStyle = byType.length === 1 ? COLOR[byType[0].type] || color : 'rgba(255,255,255,0.85)'; g2.fillText(icon, x, y + 28 * u);
           g2.font = font(800, 40); g2.fillStyle = '#fff'; g2.fillText(text(v * k), x, y + 78 * u);
           g2.font = font(500, 19); g2.fillStyle = 'rgba(255,255,255,0.7)'; g2.fillText(label, x, y + 110 * u);
         });
