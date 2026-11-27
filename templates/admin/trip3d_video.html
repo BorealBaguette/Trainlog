@@ -1121,7 +1121,11 @@ async function setup() {
   // video (3.5 s for the aim point, 5 s for turns and zoom), so it moves the same way whatever
   // the trip's or the video's length; rebuilt when the length changes
   const GS = 0.05;
-  let GT = [], cLng, cLat, hx, hy, zm, el, airy;
+  // The camera's usual tilt from the vertical (pt: lower where a valley's walls would hide the train)
+  const PITCH = 62;
+  // The types whose camera faces uphill on a slope rather than the way they go (turnToSlope)
+  const SLOPE_TYPES = new Set(['funicular', 'aerialway', 'ski', 'walk', 'cycle']);
+  let GT = [], cLng, cLat, hx, hy, zm, el, airy, pt;
   const cosLat = Math.cos(bounds.getCenter().lat * Math.PI / 180);
   // The camera's side. On a sustained slope it faces uphill, the mountain behind the train,
   // whichever way the train goes (a ski day's runs up and down would otherwise swing it round
@@ -1136,9 +1140,11 @@ async function setup() {
       const p = aim[i], kx = 1 / (111320 * Math.cos(p.lat * R)), ky = 1 / 111320;
       return (b, t) => terrainAt(p.lng + Math.sin(b) * t * kx, p.lat + Math.cos(b) * t * ky);
     };
-    // Uphill at the train, as a vector as long as the slope is steep (full at 30 %)
+    // Uphill at the train, as a vector as long as the slope is steep (full at 30 %); only for
+    // the ways that go up and down a mountain (a ski day, a hike, a cable car). A train, a bus
+    // or a car is followed the way it goes, whatever the slope beside it
     const ups = idx.map(i => {
-      if (airy[i] > 0.5) return [0, 0];
+      if (airy[i] > 0.5 || !SLOPE_TYPES.has(S[aim[i].k].type)) return [0, 0];
       const at = near(i), g = (a, b) => (a != null && b != null ? (a - b) / 300 : 0);
       const gx = g(at(Math.PI / 2, 150), at(-Math.PI / 2, 150)), gy = g(at(0, 150), at(Math.PI, 150));
       const up = Math.atan2(gx, gy), steep = Math.min(1, Math.hypot(gx, gy) / 0.3);
@@ -1156,25 +1162,34 @@ async function setup() {
     const pull = i => Math.max(0, Math.min(1, (Math.hypot(ux[i], uy[i]) - 0.15) / 0.2));
     [hx, hy] = [hx.map((x, i) => x * (1 - pull(i)) + ux[i] / (Math.hypot(ux[i], uy[i]) || 1) * pull(i)),
       hy.map((y, i) => y * (1 - pull(i)) + uy[i] / (Math.hypot(ux[i], uy[i]) || 1) * pull(i))];
-    // Then the nearest bearing to it that sees the train over the terrain
-    const offsets = idx.map(i => {
-      if (airy[i] > 0.5) return 0;
+    // Then the nearest bearing to it that sees the train over the terrain; where none does (the
+    // bottom of a deep valley, its walls close on both sides), the camera looks down more
+    // steeply, down to 35° from the vertical, as little as it takes
+    const views = idx.map(i => {
+      if (airy[i] > 0.5) return [0, PITCH];
       const p = aim[i], e = el[i], h = Math.atan2(hy[i], hx[i]), at = near(i);
-      const mpp = 40075016 * cosLat / (512 * 2 ** zm[i]), reach = 1.5 * H * mpp * Math.sin(62 * R);
-      let best = 0, bestScore = Infinity;
-      for (let o = -100; o <= 100; o += 20) {
-        const b = h + o * R;
-        // Highest the terrain rises between the camera and the train, against the 28° the
-        // camera looks down at it from (a few degrees spare)
-        let rise = -Infinity;
-        for (let k = 1; k <= 10; k++) {
-          const t = reach * k / 10, z = at(b + Math.PI, t);
-          if (z != null) rise = Math.max(rise, Math.atan2(z - e, t) / R);
+      // The train's own height, not the camera's smoothed one (above it at a valley's bottom);
+      // in a tunnel, the ground over it
+      const zt = S[p.k].kind === 'tunnel' && ground[p.k] != null ? Math.max(zr[p.k], ground[p.k]) : zr[p.k];
+      const dist = 1.5 * H * 40075016 * cosLat / (512 * 2 ** zm[i]);
+      let best = [0, PITCH], bestScore = Infinity;
+      for (let pitch = PITCH; pitch >= 35; pitch -= 9) {
+        const reach = dist * Math.sin(pitch * R), sight = Math.atan2(e + dist * Math.cos(pitch * R) - zt, reach) / R;
+        for (let o = -100; o <= 100; o += 20) {
+          const b = h + o * R;
+          // Highest the terrain rises between the camera and the train, as seen from the
+          // train, against its line of sight to the camera (a few degrees spare). Sampled
+          // closer near the train, where a valley's walls stand
+          let rise = -Infinity;
+          for (let k = 1; k <= 14; k++) {
+            const t = reach * (k / 14) ** 2, z = at(b + Math.PI, t);
+            if (z != null) rise = Math.max(rise, Math.atan2(z - zt, t) / R);
+          }
+          const score = Math.max(0, rise - (sight - 5)) + Math.abs(o) / 25 + (PITCH - pitch) / 6;
+          if (score < bestScore) { bestScore = score; best = [o, pitch]; }
         }
-        const score = Math.max(0, rise - 22) + Math.abs(o) / 25;
-        if (score < bestScore) { bestScore = score; best = o; }
       }
-      return best * R;
+      return [best[0] * R, best[1]];
     });
     const off = spread(offsets);
     const ox = movingAverage(movingAverage(off.map(Math.cos), GT, 5), GT, 5);
@@ -1182,6 +1197,9 @@ async function setup() {
     [hx, hy] = [hx.map((x, i) => x * ox[i] - hy[i] * oy[i]), hy.map((y, i) => y * ox[i] + hx[i] * oy[i])];
   };
   const smoothCamera = () => {
+    const offsets = views.map(v => v[0]);
+    // The steeper view held a little either side, so it is there before the walls close in
+    pt = movingAverage(movingAverage(runningMin(spread(views.map(v => v[1])), GT, 3), GT, 3), GT, 3);
     // On the camera's own clock, the photo pauses left out (camClock): it holds still while a
     // photo is shown, rather than drifting on with its smoothing, and goes on from there after
     GT = [];
@@ -1251,7 +1269,7 @@ async function setup() {
     });
     return { center: [lerp(cLng[k], cLng[k + 1], u), lerp(cLat[k], cLat[k + 1], u)], zoom: lerp(zm[k], zm[k + 1], u) + closer,
       elevation: lerp(el[k], el[k + 1], u),
-      pitch: 62 + 14 * lerp(airy[k], airy[k + 1], u),
+      pitch: lerp(pt[k], pt[k + 1], u) + 14 * lerp(airy[k], airy[k + 1], u),
       bearing: Math.atan2(lerp(hy[k], hy[k + 1], u), lerp(hx[k], hx[k + 1], u)) * 180 / Math.PI + 65 * lerp(airy[k], airy[k + 1], u) + orbit };
   };
   const overview = (north = false) => {
