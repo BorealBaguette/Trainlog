@@ -426,13 +426,14 @@ const FIGURES = {
     const hip = [seat[0] + 0.01 * s, seat[1] - 0.04 * s], sh = [0.48 * s, hip[1] - 0.3 * s];
     const leg = (k, col2) => { const p = crank(k); bar(g, [hip, joint(hip, p, 0.29 * s, 0.29 * s), p], 0.075 * s, col2, o); };
     leg(1, FAR);
-    const frame = '#e8ecf0', fw = 0.045 * s;
+    // The bike in the cycle colour, the rider white like the other people
+    const frame = col, fw = 0.045 * s;
     bar(g, [[rx, wy], bb, seat, [rx, wy]], fw, frame, o);
     bar(g, [seat, head, bb], fw, frame, o);
     bar(g, [[fx, wy], head, hb, [hb[0] - 0.06 * s, hb[1] + 0.03 * s]], fw, frame, o);
     bar(g, [[seat[0] - 0.05 * s, seat[1]], [seat[0] + 0.06 * s, seat[1]]], 0.05 * s, INK, 0);
     bar(g, [crank(0), crank(1)], 0.03 * s, INK, 0);
-    body(g, s, hip, sh, col, o, '#fff');
+    body(g, s, hip, sh, '#fff', o);
     leg(0, '#fff');
     bar(g, [sh, joint(sh, hb, 0.18 * s, 0.18 * s, false), hb], 0.065 * s, '#fff', o);
   } },
@@ -522,14 +523,6 @@ const FIGURES = {
     poly(g, P([[0, -0.27], [1.96, -0.22], [1.9, 0.06], [0.25, 0.06]]), col, o);
     poly(g, P([[0.06, -0.15], [1.93, -0.12], [1.925, -0.09], [0.08, -0.12]]), '#fff', 0);
     g.restore();
-    // The sea, its waves running back past the ship
-    g.beginPath(); g.moveTo(-0.05 * s, 0);
-    for (let x = -0.05; x <= 2.15; x += 0.02) g.lineTo(x * s, wl + 0.025 * s * Math.sin(x * 7 - m * 3));
-    g.lineTo(2.15 * s, 0); g.closePath();
-    g.fillStyle = 'rgba(70,140,215,0.6)'; g.fill();
-    g.beginPath();
-    for (let x = -0.05; x <= 2.15; x += 0.02) g[x > -0.05 ? 'lineTo' : 'moveTo'](x * s, wl + 0.025 * s * Math.sin(x * 7 - m * 3));
-    g.lineWidth = 0.025 * s; g.strokeStyle = 'rgba(255,255,255,0.85)'; g.stroke();
   } },
   aerialway: { w: 1.4, h: 1.15, draw(g, s, m, col, o) {
     const cableY = x => (-1.1 + 0.08 * x / 1.4) * s, gx = 0.7 * s, gy = cableY(0.7);
@@ -559,7 +552,8 @@ const FIGURES = {
     bar(g, [hip, [0.44 * s, -0.3 * s + c], [0.56 * s, -0.07 * s]], 0.075 * s, FAR, o);
     bar(g, P([[0.02, -0.1], [0.06, -0.05], [0.12, -0.03], [1.0, -0.03]]), 0.035 * s, col, o);
     bar(g, [hip, [0.4 * s, -0.3 * s + c], [0.52 * s, -0.07 * s]], 0.075 * s, '#fff', o);
-    body(g, s, hip, sh, col, o, '#fff');
+    // The skis in the ski colour, the skier white like the other people
+    body(g, s, hip, sh, '#fff', o);
     const hand = [0.24 * s, -0.52 * s + c];
     bar(g, [hand, [0.78 * s, -0.04 * s]], 0.02 * s, INK, 0);
     bar(g, [sh, [0.3 * s, -0.6 * s + c], hand], 0.065 * s, '#fff', o);
