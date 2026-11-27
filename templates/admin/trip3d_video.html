@@ -559,15 +559,124 @@ const FIGURES = {
     bar(g, [sh, [0.3 * s, -0.6 * s + c], hand], 0.065 * s, '#fff', o);
   } },
 };
+// Rail vehicles without a saved composition: a plain one of their kind, on its wheels like the
+// saved cars' drawings
+// A car's body from x to x + w (units), plain in its colour, its windows and bogies; `nose`: a
+// sloped cab at the front (left); `round`: a tram's rounded front
+const railcar = (g, s, x, w, col, o, { top = -0.74, bottom = -0.2, nose = 0, round = 0, windows = [-0.6, -0.45], wr = 0.07 } = {}) => {
+  const X = v => v * s;
+  for (const bx of [x + 0.22, x + w - 0.22]) {
+    g.fillStyle = INK; g.fillRect(X(bx - 0.17), X(bottom), X(0.34), X(0.06));
+    for (const k of [-0.09, 0.09]) wheel(g, s, X(bx + k), -(0.06 + wr) * s, wr * s, 0);
+  }
+  shape(g, () => {
+    g.beginPath();
+    if (nose) {
+      g.moveTo(X(x), X(bottom)); g.lineTo(X(x), X(bottom + (top - bottom) * 0.45));
+      g.lineTo(X(x + nose), X(top)); g.lineTo(X(x + w), X(top)); g.lineTo(X(x + w), X(bottom)); g.closePath();
+    } else g.roundRect(X(x), X(top), X(w), X(bottom - top), round ? [X(round), X(0.04), X(0.04), X(round)] : X(0.04));
+  }, col, o);
+  // The windscreen along a cab's nose, then the windows
+  const [wt, wb] = windows;
+  if (nose) poly(g, [[X(x + nose * 0.35), X(top + (bottom - top) * 0.35)], [X(x + nose * 0.95), X(top + 0.05)], [X(x + nose * 1.1), X(top + 0.05)], [X(x + nose * 1.1), X(top + (bottom - top) * 0.35)]], GLASS, o * 0.6);
+  const from = x + (nose ? nose * 1.3 : round ? 0.2 : 0.12), to = x + w - 0.1;
+  for (let wx = from; wx + 0.18 <= to; wx += 0.26) shape(g, () => { g.beginPath(); g.roundRect(X(wx), X(wt), X(0.18), X(wb - wt), X(0.03)); }, GLASS, o * 0.5);
+};
+const pantograph = (g, s, x, top, o) => bar(g, [[(x - 0.08) * s, top * s], [(x + 0.06) * s, (top - 0.12) * s], [(x - 0.06) * s, (top - 0.18) * s], [(x + 0.1) * s, (top - 0.18) * s]], 0.018 * s, '#6b737d', o * 0.5);
+Object.assign(FIGURES, {
+  // A locomotive and four coaches, a coach about six times as long as it is tall, as the
+  // saved trains' drawings are
+  train: { w: 13.8, h: 0.95, draw(g, s, m, col, o) {
+    const dy = 0.004 * s * Math.sin(m * 13);
+    g.save(); g.translate(0, dy);
+    pantograph(g, s, 1.15, -0.74, o);
+    railcar(g, s, 0.05, 1.5, col, o, { nose: 0.4 });
+    for (let i = 0; i < 4; i++) {
+      const x = 1.6 + i * 3.05;
+      g.fillStyle = INK; g.fillRect((x - 0.05) * s, -0.6 * s, 0.05 * s, 0.3 * s);
+      railcar(g, s, x, 3.0, col, o);
+    }
+    disc(g, 0.1 * s, -0.3 * s, 0.03 * s, '#ffe9a8', o * 0.6);
+    g.restore();
+  } },
+  // Five sections, long ones joined by short ones carrying the pantographs
+  tram: { w: 6.8, h: 0.98, draw(g, s, m, col, o) {
+    const opts = { top: -0.74, bottom: -0.12, windows: [-0.64, -0.36], wr: 0.05 };
+    let x = 0.05;
+    [1.6, 0.9, 1.6, 0.9, 1.6].forEach((w, i) => {
+      if (i % 2) pantograph(g, s, x + w / 2, -0.74, o);
+      railcar(g, s, x, w, col, o, i ? opts : { ...opts, round: 0.2 });
+      x += w + 0.05;
+    });
+    disc(g, 0.12 * s, -0.24 * s, 0.03 * s, '#ffe9a8', o * 0.6);
+  } },
+  metro: { w: 8.25, h: 0.82, draw(g, s, m, col, o) {
+    const dy = 0.004 * s * Math.sin(m * 13);
+    g.save(); g.translate(0, dy);
+    for (let i = 0; i < 4; i++) {
+      const x = 0.05 + i * 2.05;
+      if (i) { g.fillStyle = INK; g.fillRect((x - 0.05) * s, -0.6 * s, 0.05 * s, 0.3 * s); }
+      railcar(g, s, x, 2.0, col, o);
+    }
+    disc(g, 0.1 * s, -0.3 * s, 0.03 * s, '#ffe9a8', o * 0.6);
+    g.restore();
+  } },
+  funicular: { w: 1.7, h: 1.12, draw(g, s, m, col, o) {
+    // Tilted as on its incline, climbing to the left, the car stepped so its compartments sit level
+    const a = 15 * Math.PI / 180;
+    g.save(); g.translate(1.65 * s, 0); g.rotate(a); g.translate(-1.65 * s, 0);
+    for (const bx of [0.5, 1.2]) {
+      g.fillStyle = INK; g.fillRect((bx - 0.15) * s, -0.2 * s, 0.3 * s, 0.06 * s);
+      for (const k of [-0.08, 0.08]) wheel(g, s, (bx + k) * s, -0.12 * s, 0.06 * s, 0);
+    }
+    g.restore();
+    const P = (x, y) => { const c = Math.cos(a), sn = Math.sin(a), dx = x - 1.65; return [(1.65 + dx * c) * s, (dx * sn + y) * s]; };
+    for (let i = 0; i < 3; i++) {
+      const x0 = 0.3 + i * 0.37, x1 = x0 + 0.37, base = P(x0, -0.18)[1] / s, end = P(x1, -0.18)[1] / s;
+      const yTop = Math.min(base, end) - 0.5;
+      poly(g, [[x0 * s, yTop * s], [x1 * s, yTop * s], [x1 * s, end * s], [x0 * s, base * s]].map(([x, y]) => [P(x / s, 0)[0], y]), col, o);
+      shape(g, () => { g.beginPath(); g.roundRect(P(x0 + 0.06, 0)[0], (yTop + 0.08) * s, 0.25 * s * Math.cos(a), 0.2 * s, 0.03 * s); }, GLASS, o * 0.5);
+    }
+  } },
+});
+// The odd ones out (rail of another kind: a monorail, a rack railway, a rail bike...): a
+// monorail car, its long rounded nose and no wheels in sight
+FIGURES.rail = { w: 6.75, h: 0.86, draw(g, s, m, col, o) {
+  // Three cars, a rounded nose at each end
+  const X = v => v * s, dy = 0.004 * s * Math.sin(m * 11);
+  g.save(); g.translate(0, dy);
+  for (let i = 0; i < 3; i++) {
+    const x = 0.05 + i * 2.25, nose = X(0.33), flat = X(0.08);
+    if (i) { g.fillStyle = INK; g.fillRect(X(x - 0.05), X(-0.6), X(0.05), X(0.3)); }
+    shape(g, () => { g.beginPath(); g.roundRect(X(x), X(-0.8), X(2.2), X(0.66), [i === 0 ? nose : flat, i === 2 ? nose : flat, i === 2 ? X(0.2) : flat, i === 0 ? X(0.2) : flat]); }, col, o);
+    if (i === 0) shape(g, () => { g.beginPath(); g.roundRect(X(0.14), X(-0.7), X(0.24), X(0.24), [X(0.18), X(0.03), X(0.03), X(0.03)]); }, GLASS, o * 0.5);
+    for (let wx = x + (i === 0 ? 0.45 : 0.15); wx + 0.18 <= x + (i === 2 ? 1.85 : 2.1); wx += 0.26) shape(g, () => { g.beginPath(); g.roundRect(X(wx), X(-0.66), X(0.18), X(0.2), X(0.03)); }, GLASS, o * 0.5);
+  }
+  disc(g, X(0.14), X(-0.28), 0.03 * s, '#ffe9a8', o * 0.6);
+  g.restore();
+} };
+// The rail vehicles drawn as pixel art, to sit with the saved trains' drawings: at half size with
+// hard edges and 1 px outlines, then doubled without smoothing
+const PIXEL_ART = new Set(['train', 'tram', 'metro', 'funicular', 'rail']);
 // A figure drawn apart, a margin round it for its outline
 const figureArt = (type, m, s) => {
-  const fig = FIGURES[type], M = 0.06;
+  const fig = FIGURES[type], M = 0.06, px = PIXEL_ART.has(type) ? 2 : 1, d = s / px;
   const cv = document.createElement('canvas');
-  cv.width = Math.ceil((fig.w + 2 * M) * s); cv.height = Math.ceil((fig.h + 2 * M) * s);
+  cv.width = Math.ceil((fig.w + 2 * M) * d); cv.height = Math.ceil((fig.h + 2 * M) * d);
   const g = cv.getContext('2d');
-  g.translate(M * s, (fig.h + M) * s);
-  fig.draw(g, s, m, COLOR[type] || '#888', 0.03 * s);
-  return { canvas: cv, w: cv.width, h: cv.height, ground: M * s };
+  g.translate(M * d, (fig.h + M) * d);
+  fig.draw(g, d, m, COLOR[type] || '#888888', px > 1 ? 1 : 0.03 * s);
+  if (px === 1) return { canvas: cv, w: cv.width, h: cv.height, ground: M * s };
+  // Edges made hard: each pixel there or not
+  const img = g.getImageData(0, 0, cv.width, cv.height), a = img.data;
+  for (let i = 3; i < a.length; i += 4) a[i] = a[i] < 110 ? 0 : 255;
+  g.putImageData(img, 0, 0);
+  const big = document.createElement('canvas');
+  big.width = cv.width * px; big.height = cv.height * px;
+  const bg = big.getContext('2d');
+  bg.imageSmoothingEnabled = false;
+  bg.drawImage(cv, 0, 0, big.width, big.height);
+  return { canvas: big, w: big.width, h: big.height, ground: M * s };
 };
 
 await document.fonts.load('900 20px "Font Awesome 6 Free"', '\uf4d7').catch(() => {});
