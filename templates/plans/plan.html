@@ -94,7 +94,7 @@
     .leg-pick { position: absolute; left: 0; bottom: .8rem; width: 36px; justify-content: center; z-index: 1; }
     .plan-leg:has(.leg-actions) .leg-body { padding-right: 34px; }
     .plan-leg .leg-route, .plan-leg .leg-meta { white-space: normal; overflow: visible; }
-    .leg-route { font-weight: 700; font-size: .95rem; line-height: 1.35;
+    .leg-route { font-weight: 600; font-size: .86rem; line-height: 1.3;
                  color: light-dark(#4b5563, var(--plan-body)); overflow-wrap: break-word; }
     .leg-st { display: flex; align-items: baseline; gap: 4px; padding: 1px 0; }
     .leg-st .st-flag { flex: 0 0 auto; }
@@ -102,6 +102,7 @@
     .leg-route .booked-pill, .leg-route .linked-pill, .leg-route .logged-pill { margin: .2rem .35rem 0 0; }
     .leg-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px .85em; margin-top: .3rem; font-size: .8rem; }
     .leg-meta .m-start { display: none; }
+    .leg-meta.leg-notes { display: block; }
     .leg-meta .m-when::before, .leg-meta .m::before {
       display: inline-block; width: 1em; margin-right: .3em; text-align: center;
       position: relative; top: -1px; color: light-dark(#adb5bd, var(--plan-faint));
@@ -555,7 +556,7 @@
           {% if svc %}<span class="m m-svc">{{ svc|join(' · ') }}</span>{% endif %}
         </div>
         {% if t.notes %}
-        <div class="leg-meta text-truncate" style="font-style:italic;"><i class="bi bi-sticky" style="margin-right:4px;"></i>{{ t.notes }}</div>
+        <div class="leg-meta leg-notes text-truncate" style="font-style:italic;"><i class="bi bi-sticky" style="margin-right:4px;"></i>{{ t.notes }}</div>
         {% endif %}
         {% if plan_editable and plan_costs and not t.linked_trip_id %}
         <div class="leg-meta mt-1">
