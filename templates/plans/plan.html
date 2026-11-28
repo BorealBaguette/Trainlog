@@ -1,5 +1,8 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
+{# Station names are stored with their flag in front ("🇳🇴 Bergen"); split it off so
+   on a phone a long name wraps under its own first letter, not under the flag. #}
+{% macro station(name) %}{% if name and name[0] >= '\U0001F1E6' and name[0] <= '\U0001F1FF' %}<span class="leg-st"><span class="st-flag">{{ name[:2] }}</span> <span>{{ name[2:]|trim }}</span></span>{% else %}<span class="leg-st"><span>{{ name }}</span></span>{% endif %}{% endmacro %}
 
 {% include nav %}
 
@@ -24,6 +27,22 @@
   .breakdown td { border: 0; border-top: 1px solid light-dark(#f0f1f3, var(--plan-hairline)); background: transparent;
                   padding: .5rem .9rem; vertical-align: middle; color: light-dark(#374151, var(--plan-body)); }
   .breakdown tbody tr:hover td { background: light-dark(#fafbfc, var(--plan-row-hover)); }
+  .breakdown .bd-count { display: none; }
+  /* On a phone the summary has to fit without side-scrolling: three small tiles a row,
+     and the breakdown drops the type's name (its icon says it) and folds the trip
+     count in beside the icon to free a column. */
+  @media (max-width: 575.98px) {
+    .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+    .stat-tile { padding: .5rem .6rem; border-radius: 10px; }
+    .stat-tile .lbl { font-size: .6rem; letter-spacing: .02em; line-height: 1.2; }
+    .stat-tile .val { font-size: 1rem; margin-top: .15rem; }
+    .breakdown table { font-size: .85rem; }
+    .breakdown thead th, .breakdown td { padding: .45rem .55rem; white-space: nowrap; }
+    .breakdown .bd-trips, .breakdown .bd-label, .breakdown .bd-perleg { display: none; }
+    .breakdown .bd-count { display: inline; font-size: .78rem; font-weight: 600; color: light-dark(#8a909a, var(--plan-faint)); }
+    .breakdown .bd-type img { margin-right: 4px !important; }
+    .breakdown td:first-child:not(.bd-type) { white-space: normal; }
+  }
   /* trip timeline */
   .plan-list { list-style: none; padding: 0; margin: 0; }
   .plan-leg { display: flex; align-items: center; gap: .9rem; padding: .8rem 1rem;
@@ -58,6 +77,44 @@
   .leg-actions .btn { border: 0; color: light-dark(#98a0ab, var(--plan-action-fg)); padding: .25rem .45rem; }
   .leg-actions .btn:hover { color: light-dark(#1f2937, var(--plan-action-hover-fg)); background: light-dark(rgba(0,0,0,.05), var(--plan-overlay)); }
   .leg-actions .btn.act-del:hover { color: light-dark(#dc3545, var(--plan-danger)); background: rgba(220,53,69,.1); }
+  .leg-meta .m::before { content: " · "; }
+  /* On a phone the card follows the trips list's: type icon and tick box in a shaded
+     left strip, origin and destination on lines of their own, the times and figures
+     each behind an icon, the service on its own line. The day separator above already
+     gives the start date or day, so the leg leaves it out. */
+  @media (max-width: 575.98px) {
+    .plan-leg { position: relative; display: block; min-height: 84px; padding: .6rem .5rem .6rem calc(36px + .7rem); border-radius: 10px; }
+    .plan-leg.leg-booked, .plan-leg.leg-linked { border-left-width: 1px; }
+    .leg-icon { position: absolute; left: 0; top: 0; bottom: 0; width: 36px; height: auto;
+                border-radius: 9px 0 0 9px; align-items: flex-start; padding-top: .8rem;
+                background: light-dark(#f8f9fa, var(--plan-sunken));
+                border-right: 1px solid light-dark(#eef1f4, var(--plan-hairline)); }
+    .plan-leg.leg-booked .leg-icon { background: light-dark(rgba(25,135,84,.1), rgba(25,135,84,.18)); border-right-color: rgba(25,135,84,.25); }
+    .leg-icon img { height: 22px; }
+    .leg-pick { position: absolute; left: 0; bottom: .8rem; width: 36px; justify-content: center; z-index: 1; }
+    .plan-leg:has(.leg-actions) .leg-body { padding-right: 34px; }
+    .plan-leg .leg-route, .plan-leg .leg-meta { white-space: normal; overflow: visible; }
+    .leg-route { font-weight: 700; font-size: .95rem; line-height: 1.35;
+                 color: light-dark(#4b5563, var(--plan-body)); overflow-wrap: break-word; }
+    .leg-st { display: flex; align-items: baseline; gap: 4px; padding: 1px 0; }
+    .leg-st .st-flag { flex: 0 0 auto; }
+    .leg-arrow { display: none; }
+    .leg-route .booked-pill, .leg-route .linked-pill, .leg-route .logged-pill { margin: .2rem .35rem 0 0; }
+    .leg-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px .85em; margin-top: .3rem; font-size: .8rem; }
+    .leg-meta .m-start { display: none; }
+    .leg-meta .m-when::before, .leg-meta .m::before {
+      display: inline-block; width: 1em; margin-right: .3em; text-align: center;
+      position: relative; top: -1px; color: light-dark(#adb5bd, var(--plan-faint));
+      font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: .78em; line-height: 1; }
+    .leg-meta .m-when::before { content: "\f017"; }
+    .leg-meta .m-dur::before { content: "\f252"; }
+    .leg-meta .m-km::before { content: "\f4d7"; }
+    .leg-meta .m-price::before { content: "\f3d1"; }
+    .leg-meta .m-svc { flex: 0 0 100%; }
+    .leg-meta .m-svc::before { content: "\f02b"; }
+    .leg-actions { position: absolute; top: .4rem; right: .3rem; flex-direction: column; gap: 0 !important; }
+    .leg-actions .btn { padding: .2rem .4rem; }
+  }
   /* Day separators: a labelled divider before the first leg of each new day, so
      the timeline reads as distinct days. Overnight legs stay under their departure
      day; the "→ Day N+1" on the leg itself shows where they cross midnight. */
@@ -362,12 +419,12 @@
   {% if plan_stats.per_type %}
   <div class="breakdown mb-4">
     <table>
-      <thead><tr><th>{{ sortType|default('Type') }}</th><th class="text-end">{{ trips|default('Trips') }}</th><th class="text-end">{{ tripDuration|default('Duration') }}</th><th class="text-end">{{ tripLength|default('Distance') }}</th>{% if plan_stats.has_price %}<th class="text-end">{{ price|default('Price') }}</th>{% endif %}</tr></thead>
+      <thead><tr><th>{{ sortType|default('Type') }}</th><th class="text-end bd-trips">{{ trips|default('Trips') }}</th><th class="text-end">{{ tripDuration|default('Duration') }}</th><th class="text-end">{{ tripLength|default('Distance') }}</th>{% if plan_stats.has_price %}<th class="text-end">{{ price|default('Price') }}</th>{% endif %}</tr></thead>
       <tbody>
         {% for r in plan_stats.per_type %}
         <tr>
-          <td><img src="{{ static_autoversion('images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ type_labels.get(r.type, r.type) }}</td>
-          <td class="text-end"><span class="fmt-num" data-n="{{ r.count }}">{{ r.count }}</span></td>
+          <td class="bd-type" title="{{ type_labels.get(r.type, r.type) }}"><img src="{{ static_autoversion('images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;"><span class="bd-label">{{ type_labels.get(r.type, r.type) }}</span><span class="bd-count">&times;{{ r.count }}</span></td>
+          <td class="text-end bd-trips"><span class="fmt-num" data-n="{{ r.count }}">{{ r.count }}</span></td>
           <td class="text-end"><span class="fmt-dur" data-s="{{ r.duration }}">{{ r.duration_h }}</span></td>
           <td class="text-end">{% if r.distance_km %}<span class="fmt-num" data-n="{{ r.distance_km }}">{{ r.distance_km }}</span> km{% endif %}</td>
           {% if plan_stats.has_price %}<td class="text-end">{% if r.price %}<span class="fmt-num" data-n="{{ r.price|round|int }}">{{ r.price|round|int }}</span> {{ plan_stats.user_currency }}{% endif %}</td>{% endif %}
@@ -388,7 +445,7 @@
         <tr>
           <td><i class="bi bi-tag" style="color:light-dark(#8a909a, var(--plan-faint)); margin-right:8px;"></i>{{ c.name }}</td>
           <td class="text-end text-muted"><span class="fmt-num" data-n="{{ c.leg_count }}">{{ c.leg_count }}</span> {{ costLegs|default('legs') }}</td>
-          <td class="text-end text-muted">{% if c.price_per_leg %}<span class="fmt-num" data-n="{{ c.price_per_leg|round|int }}">{{ c.price_per_leg|round|int }}</span> {{ c.currency }}/{{ costLeg|default('leg') }}{% endif %}</td>
+          <td class="text-end text-muted bd-perleg">{% if c.price_per_leg %}<span class="fmt-num" data-n="{{ c.price_per_leg|round|int }}">{{ c.price_per_leg|round|int }}</span> {{ c.currency }}/{{ costLeg|default('leg') }}{% endif %}</td>
           <td class="text-end"><span class="fmt-num" data-n="{{ c.price|round|int }}">{{ c.price|round|int }}</span> {{ c.currency }}</td>
           <td class="text-end" style="white-space:nowrap;">
             {% if plan_editable %}
@@ -471,7 +528,7 @@
       {% endif %}
       <div class="leg-icon"><img src="{{ static_autoversion('images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
-        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}{% if t.linked_trip_id %}{% if plan_editable %}<a class="linked-pill" href="{{ url_for('public_trip', tripIds=t.linked_trip_id) }}" target="_blank" title="{{ planLinkedHint }}"><i class="bi bi-lock-fill"></i>{{ planLinkedPill }}</a>{% else %}<span class="linked-pill"><i class="bi bi-lock-fill"></i>{{ planLinkedPill }}</span>{% endif %}{% elif t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}{% if t.validated_trip_id %}{% if plan_editable %}<a class="logged-pill" href="{{ url_for('public_trip', tripIds=t.validated_trip_id) }}" target="_blank" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</a>{% else %}<span class="logged-pill" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</span>{% endif %}{% endif %}</div>
+        <div class="leg-route text-truncate">{{ station(t.origin_station) }}{% if t.destination_station %}<span class="leg-arrow"> &rarr; </span>{{ station(t.destination_station) }}{% endif %}{% if t.linked_trip_id %}{% if plan_editable %}<a class="linked-pill" href="{{ url_for('public_trip', tripIds=t.linked_trip_id) }}" target="_blank" title="{{ planLinkedHint }}"><i class="bi bi-lock-fill"></i>{{ planLinkedPill }}</a>{% else %}<span class="linked-pill"><i class="bi bi-lock-fill"></i>{{ planLinkedPill }}</span>{% endif %}{% elif t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}{% if t.validated_trip_id %}{% if plan_editable %}<a class="logged-pill" href="{{ url_for('public_trip', tripIds=t.validated_trip_id) }}" target="_blank" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</a>{% else %}<span class="logged-pill" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</span>{% endif %}{% endif %}</div>
         {% if item.impossible %}
         <div class="leg-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ impossibleConnection|default('Departs before the previous leg arrives') }}</div>
         {% endif %}
@@ -479,24 +536,23 @@
         <div class="leg-warning leg-warning-weekday"><i class="bi bi-calendar-x"></i> {{ planWeekdayMismatch|default('With Day 1 on the chosen date, this leg falls on a day this service does not run') }}</div>
         {% endif %}
         <div class="leg-meta text-truncate">
+          <span class="m-when">
           {% if t.day_number is not none %}
             {# Relative leg: "Day N", optionally with a clock time. Collapse to one
                "Day N" when departure and arrival fall on the same day. #}
-            <span class="day-pill">{{ day|default('Day') }} {{ t.day_number }}</span>{% if t.start_time %}{{ t.start_time }}{% endif %}
+            <span class="day-pill m-start">{{ day|default('Day') }} {{ t.day_number }}</span>{% if t.start_time %}{{ t.start_time }}{% endif %}
             {% if t.end_day_number and t.end_day_number != t.day_number %} &rarr; <i class="bi bi-moon-stars ovn-moon" title="{{ overnight|default('Overnight') }}"></i> <span class="day-pill">{{ day|default('Day') }} {{ t.end_day_number }}</span>{% if t.end_time %}{{ t.end_time }}{% endif %}
             {% elif t.end_time and t.end_time != t.start_time %} &rarr; {{ t.end_time }}{% endif %}
           {% elif t.start_date %}
-            {{ t.start_date }}{% if t.start_time %} {{ t.start_time }}{% endif %}{% if t.end_time and t.end_time != t.start_time %} &rarr; {% if is_overnight %}<i class="bi bi-moon-stars ovn-moon" title="{{ overnight|default('Overnight') }}"></i> {% endif %}{{ t.end_time }}{% endif %}
+            <span class="m-start">{{ t.start_date }}</span>{% if t.start_time %} {{ t.start_time }}{% endif %}{% if t.end_time and t.end_time != t.start_time %} &rarr; {% if is_overnight %}<i class="bi bi-moon-stars ovn-moon" title="{{ overnight|default('Overnight') }}"></i> {% endif %}{{ t.end_time }}{% endif %}
           {% else %}—{% endif %}
           {% if t.weekdays %} <span class="wd-pill fmt-wd" data-wd="{{ t.weekdays }}"></span>{% endif %}
-          {% if t.duration_h %} · <span class="fmt-dur" data-s="{{ t.duration_seconds }}">{{ t.duration_h }}</span>{% endif %}
-          {% if t.trip_length %} · <span class="fmt-num" data-n="{{ (t.trip_length / 1000)|round|int }}">{{ (t.trip_length / 1000)|round|int }}</span> km{% endif %}
-          {% if t.price_in_user_currency %} · <span class="fmt-num" data-n="{{ t.price_in_user_currency|round|int }}">{{ t.price_in_user_currency|round|int }}</span> {{ t.user_currency }}{% endif %}
-          {% if t.operator %} · {{ t.operator }}{% endif %}
-          {% if t.line_name %} · {{ t.line_name }}{% endif %}
-          {% if t.material_type %} · {{ t.material_type }}{% endif %}
-          {% if t.seat %} · {{ seat|default('Seat') }} {{ t.seat }}{% endif %}
-          {% if t.reg %} · {{ t.reg }}{% endif %}
+          </span>
+          {% if t.duration_h %}<span class="m m-dur"><span class="fmt-dur" data-s="{{ t.duration_seconds }}">{{ t.duration_h }}</span></span>{% endif %}
+          {% if t.trip_length %}<span class="m m-km"><span class="fmt-num" data-n="{{ (t.trip_length / 1000)|round|int }}">{{ (t.trip_length / 1000)|round|int }}</span> km</span>{% endif %}
+          {% if t.price_in_user_currency %}<span class="m m-price"><span class="fmt-num" data-n="{{ t.price_in_user_currency|round|int }}">{{ t.price_in_user_currency|round|int }}</span> {{ t.user_currency }}</span>{% endif %}
+          {% set svc = [t.operator, t.line_name, t.material_type, (seat|default('Seat')) ~ ' ' ~ t.seat if t.seat, t.reg]|select|list %}
+          {% if svc %}<span class="m m-svc">{{ svc|join(' · ') }}</span>{% endif %}
         </div>
         {% if t.notes %}
         <div class="leg-meta text-truncate" style="font-style:italic;"><i class="bi bi-sticky" style="margin-right:4px;"></i>{{ t.notes }}</div>
